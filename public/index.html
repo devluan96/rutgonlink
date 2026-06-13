@@ -1202,30 +1202,6 @@ function renderForm(containerId) {
     urlIn.addEventListener('keydown', e => { if(e.key==='Enter') doShorten(containerId); });
   }
 }
-          </div>
-        </div>`}
-      </div>
-    </div>
-
-    <div class="ferr" id="${containerId}_err"></div>
-    <div class="res-card" id="${containerId}_res">
-      <div class="res-lbl">✅ Link rút gọn của bạn</div>
-      <div class="res-row">
-        <a class="res-url" id="${containerId}_resurl" href="#" target="_blank"></a>
-        <button class="btn-cp" id="${containerId}_cpbtn" onclick="copyResult('${containerId}')">Sao chép</button>
-      </div>
-      <div class="res-meta" id="${containerId}_resmeta"></div>
-      <div class="res-dl" id="${containerId}_resdl" style="display:none"></div>
-    </div>
-  </div>`;
-
-  // Attach URL input listener
-  const urlInput = document.getElementById(`${containerId}_url`);
-  if (urlInput) {
-    urlInput.addEventListener('input', () => onUrlInput(containerId));
-    urlInput.addEventListener('keydown', e => { if(e.key==='Enter') doShorten(containerId); });
-  }
-}
 
 function onUrlInput(cid) {
   const url = document.getElementById(`${cid}_url`)?.value.trim() || '';
