@@ -1,0 +1,16 @@
+{
+  "name": "rutgonlink",
+  "version": "1.0.0",
+  "description": "Rút gọn link thông minh với deeplink tự động",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js",
+    "dev": "nodemon api/index.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.3",
+    "dotenv": "^17.4.2",
+    "express": "^4.18.3",
+    "nanoid": "^3.3.7"
+  }
+}

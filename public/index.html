@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RutGonLink – Rút gọn link thông minh</title>
+<meta name="description" content="Rút gọn link Shopee, TikTok với deeplink tự động mở app. Tăng tỷ lệ chuyển đổi cho affiliate."/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔗</text></svg>"/>
+<style>
+/* ── Reset ── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --brand:#6366f1;
+  --brand-dark:#4f46e5;
+  --shopee:#ee4d2d;
+  --tiktok:#010101;
+  --text:#0f172a;
+  --muted:#64748b;
+  --border:#e2e8f0;
+  --bg:#f8fafc;
+  --card:#fff;
+  --radius:16px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── Nav ── */
+nav{background:var(--card);border-bottom:1px solid var(--border);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 1px 8px rgba(0,0,0,.06)}
+.logo{font-size:20px;font-weight:800;color:var(--brand);display:flex;align-items:center;gap:8px;text-decoration:none}
+.logo span{font-weight:400;color:var(--muted);font-size:14px}
+.nav-badge{background:linear-gradient(135deg,var(--shopee),#ff7849);color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px}
+
+/* ── Hero ── */
+.hero{background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 50%,#a78bfa 100%);padding:60px 24px 80px;text-align:center;color:#fff}
+.hero h1{font-size:clamp(26px,5vw,44px);font-weight:800;line-height:1.2;margin-bottom:16px}
+.hero h1 em{font-style:normal;background:linear-gradient(90deg,#fde68a,#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{font-size:clamp(15px,2.5vw,18px);opacity:.9;max-width:560px;margin:0 auto 40px;line-height:1.6}
+.badges{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:48px}
+.badge{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);color:#fff;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;backdrop-filter:blur(4px)}
+
+/* ── Main Card ── */
+.container{max-width:800px;margin:0 auto;padding:0 20px}
+.main-card{background:var(--card);border-radius:var(--radius);box-shadow:0 4px 40px rgba(0,0,0,.1);margin-top:-40px;padding:32px;position:relative}
+
+/* ── Input group ── */
+.input-row{display:flex;gap:10px;margin-bottom:12px}
+.input-wrap{flex:1;position:relative}
+.url-input{width:100%;padding:14px 16px;border:2px solid var(--border);border-radius:12px;font-size:15px;outline:none;transition:border-color .2s;background:#fafafa}
+.url-input:focus{border-color:var(--brand);background:#fff}
+.url-input::placeholder{color:#94a3b8}
+.btn-shorten{padding:14px 24px;background:linear-gradient(135deg,var(--brand),var(--brand-dark));color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;white-space:nowrap;transition:transform .15s,box-shadow .15s}
+.btn-shorten:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(99,102,241,.4)}
+.btn-shorten:active{transform:translateY(0)}
+.btn-shorten:disabled{opacity:.6;cursor:not-allowed;transform:none}
+
+/* ── Alias row ── */
+.alias-row{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.alias-prefix{font-size:13px;color:var(--muted);white-space:nowrap}
+.alias-input{flex:1;padding:9px 12px;border:2px solid var(--border);border-radius:10px;font-size:13px;outline:none;transition:border-color .2s}
+.alias-input:focus{border-color:var(--brand)}
+.alias-input::placeholder{color:#94a3b8}
+
+/* ── Deeplink pills ── */
+.detect-info{display:none;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:16px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+.detect-info.shopee{background:#fff7f5;color:#c2410c;border-color:#fecaca}
+.detect-info.tiktok{background:#f9fafb;color:#111;border-color:#d1d5db}
+.detect-info.visible{display:flex}
+
+/* ── Result ── */
+.result-box{display:none;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:1px solid #bae6fd;border-radius:12px;padding:20px;margin-top:20px}
+.result-box.visible{display:block}
+.result-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0369a1;margin-bottom:8px}
+.result-link-row{display:flex;gap:8px;align-items:center}
+.result-link{flex:1;font-size:18px;font-weight:700;color:var(--brand);text-decoration:none;word-break:break-all}
+.result-link:hover{text-decoration:underline}
+.btn-copy{padding:8px 16px;background:var(--brand);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:background .2s;white-space:nowrap}
+.btn-copy:hover{background:var(--brand-dark)}
+.btn-copy.copied{background:#22c55e}
+.result-original{margin-top:10px;font-size:12px;color:var(--muted);word-break:break-all}
+.result-deeplink-note{margin-top:8px;font-size:12px;color:#0369a1;display:flex;align-items:center;gap:6px}
+
+/* ── Error ── */
+.error-msg{background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:10px;padding:12px 16px;font-size:14px;margin-top:12px;display:none}
+.error-msg.visible{display:block}
+
+/* ── Features ── */
+.features{padding:60px 0;text-align:center}
+.features h2{font-size:28px;font-weight:800;margin-bottom:8px}
+.features .sub{color:var(--muted);font-size:15px;margin-bottom:40px}
+.feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;text-align:left}
+.feature-card{background:var(--card);border-radius:var(--radius);padding:24px;border:1px solid var(--border);transition:box-shadow .2s}
+.feature-card:hover{box-shadow:0 4px 20px rgba(0,0,0,.08)}
+.feature-icon{font-size:28px;margin-bottom:12px}
+.feature-card h3{font-size:16px;font-weight:700;margin-bottom:6px}
+.feature-card p{font-size:13px;color:var(--muted);line-height:1.6}
+
+/* ── How it works ── */
+.howto{background:var(--card);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:60px 0}
+.howto h2{font-size:28px;font-weight:800;text-align:center;margin-bottom:8px}
+.howto .sub{color:var(--muted);font-size:15px;text-align:center;margin-bottom:40px}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;counter-reset:step}
+.step{text-align:center;padding:24px 16px}
+.step-num{width:40px;height:40px;background:linear-gradient(135deg,var(--brand),var(--brand-dark));color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;margin:0 auto 16px}
+.step h3{font-size:15px;font-weight:700;margin-bottom:6px}
+.step p{font-size:13px;color:var(--muted);line-height:1.6}
+
+/* ── Stats ── */
+.stats-row{display:flex;gap:20px;justify-content:center;flex-wrap:wrap;padding:40px 0}
+.stat-card{background:var(--card);border-radius:var(--radius);padding:24px 32px;text-align:center;border:1px solid var(--border);min-width:140px}
+.stat-num{font-size:32px;font-weight:800;color:var(--brand)}
+.stat-label{font-size:13px;color:var(--muted);margin-top:4px}
+
+/* ── Recent Links ── */
+.recent{padding:40px 0 60px}
+.recent h2{font-size:22px;font-weight:800;margin-bottom:20px}
+.link-list{display:flex;flex-direction:column;gap:10px}
+.link-item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.link-short{font-weight:700;color:var(--brand);font-size:14px;text-decoration:none;min-width:140px}
+.link-short:hover{text-decoration:underline}
+.link-orig{flex:1;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.link-clicks{font-size:12px;color:var(--muted);white-space:nowrap}
+.platform-tag{font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap}
+.platform-tag.shopee{background:#fff3f0;color:var(--shopee)}
+.platform-tag.tiktok{background:#f3f4f6;color:var(--tiktok)}
+.platform-tag.generic{background:#ede9fe;color:var(--brand)}
+
+/* ── Footer ── */
+footer{background:var(--text);color:rgba(255,255,255,.6);text-align:center;padding:24px;font-size:13px}
+
+/* ── Responsive ── */
+@media(max-width:600px){
+  .input-row{flex-direction:column}
+  .btn-shorten{width:100%}
+  .result-link-row{flex-direction:column;align-items:stretch}
+  .btn-copy{text-align:center}
+}
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <a class="logo" href="/">🔗 RutGonLink <span>Beta</span></a>
+  <span class="nav-badge">Deeplink Shopee & TikTok</span>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <h1>Rút gọn link<br/><em>mở thẳng app</em> cho khách hàng</h1>
+  <p>Tạo link ngắn thông minh – tự động phát hiện Shopee, TikTok và mở ứng dụng ngay lập tức. Tăng tỷ lệ chuyển đổi cho affiliate.</p>
+  <div class="badges">
+    <span class="badge">🛒 Deeplink Shopee</span>
+    <span class="badge">🎵 Deeplink TikTok</span>
+    <span class="badge">📊 Thống kê click</span>
+    <span class="badge">✂️ Custom alias</span>
+    <span class="badge">⚡ Miễn phí</span>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="container">
+  <div class="main-card">
+    <div class="input-row">
+      <div class="input-wrap">
+        <input type="url" id="urlInput" class="url-input"
+          placeholder="Dán link Shopee, TikTok hoặc bất kỳ URL nào..."
+          autocomplete="off" spellcheck="false"/>
+      </div>
+      <button id="btnShorten" class="btn-shorten">Rút gọn ⚡</button>
+    </div>
+
+    <div class="alias-row">
+      <span class="alias-prefix" id="aliasPrefix">rutgonlink.com/</span>
+      <input type="text" id="aliasInput" class="alias-input"
+        placeholder="custom-alias (tùy chọn)"
+        maxlength="40" autocomplete="off"/>
+    </div>
+
+    <div class="detect-info" id="detectInfo">
+      <span id="detectIcon">✅</span>
+      <span id="detectText">Đã phát hiện link Shopee – sẽ tự động mở app!</span>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="result-box" id="resultBox">
+      <div class="result-label">Link rút gọn của bạn</div>
+      <div class="result-link-row">
+        <a id="resultLink" class="result-link" href="#" target="_blank"></a>
+        <button class="btn-copy" id="btnCopy" onclick="copyLink()">Sao chép</button>
+      </div>
+      <div class="result-original" id="resultOriginal"></div>
+      <div class="result-deeplink-note" id="deeplinkNote" style="display:none">
+        📲 <span id="deeplinkNoteText"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card">
+      <div class="stat-num" id="statLinks">–</div>
+      <div class="stat-label">Link đã tạo</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="statClicks">–</div>
+      <div class="stat-label">Lượt click</div>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <div class="features">
+    <h2>Tính năng nổi bật</h2>
+    <p class="sub">Mọi thứ bạn cần để tối ưu affiliate link</p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🛒</div>
+        <h3>Deeplink Shopee</h3>
+        <p>Tự động phát hiện link sản phẩm Shopee và mở thẳng app – không qua browser, giảm drop-off tối đa.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🎵</div>
+        <h3>Deeplink TikTok</h3>
+        <p>Mở video và profile TikTok trực tiếp trong ứng dụng. Hỗ trợ cả Android và iOS.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">✂️</div>
+        <h3>Custom Alias</h3>
+        <p>Tự đặt tên link dễ nhớ: <strong>rutgonlink.com/tenminhmuon</strong> thay vì mã ngẫu nhiên.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>Thống kê Click</h3>
+        <p>Theo dõi số lượt bấm cho từng link theo thời gian thực.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📱</div>
+        <h3>Smart Redirect</h3>
+        <p>Tự động nhận diện thiết bị – mobile mở app, desktop mở web. Fallback về store nếu chưa cài app.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>Nhanh & Miễn phí</h3>
+        <p>Không cần đăng ký. Tạo link ngay lập tức. Hoàn toàn miễn phí.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- How it works -->
+<div class="howto">
+  <div class="container">
+    <h2>Cách hoạt động</h2>
+    <p class="sub">Chỉ 3 bước đơn giản</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Dán link vào</h3>
+        <p>Copy link sản phẩm Shopee, video TikTok hoặc bất kỳ URL nào.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Tạo link ngắn</h3>
+        <p>Nhấn "Rút gọn" – hệ thống tự phát hiện deeplink phù hợp.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Chia sẻ & kiếm tiền</h3>
+        <p>Share link ngắn – khách bấm vào là mở thẳng app, tăng tỷ lệ mua hàng.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Links -->
+<div class="container">
+  <div class="recent">
+    <h2>Link vừa tạo</h2>
+    <div class="link-list" id="linkList">
+      <p style="color:var(--muted);font-size:14px">Chưa có link nào...</p>
+    </div>
+  </div>
+</div>
+
+<footer>
+  © 2025 RutGonLink · Deeplink thông minh cho Shopee & TikTok
+</footer>
+
+<script>
+const BASE = window.location.origin;
+let currentShortUrl = '';
+
+// ── Detect platform from URL ──────────────────────────────────────────────
+function detectFromUrl(url) {
+  if (!url) return null;
+  if (/shopee\.vn/i.test(url)) {
+    return {
+      type: 'shopee',
+      text: '🛒 Đã phát hiện link Shopee – sẽ tự động mở app!',
+      cssClass: 'shopee',
+    };
+  }
+  if (/tiktok\.com/i.test(url)) {
+    return {
+      type: 'tiktok',
+      text: '🎵 Đã phát hiện link TikTok – sẽ tự động mở app!',
+      cssClass: 'tiktok',
+    };
+  }
+  return null;
+}
+
+// ── Input listener ────────────────────────────────────────────────────────
+document.getElementById('urlInput').addEventListener('input', function() {
+  const info = detectFromUrl(this.value.trim());
+  const el = document.getElementById('detectInfo');
+  if (info) {
+    el.className = 'detect-info visible ' + info.cssClass;
+    document.getElementById('detectText').textContent = info.text;
+  } else {
+    el.className = 'detect-info';
+  }
+  document.getElementById('resultBox').className = 'result-box';
+  document.getElementById('errorMsg').className = 'error-msg';
+});
+
+document.getElementById('urlInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') shortenLink();
+});
+
+// ── Shorten ───────────────────────────────────────────────────────────────
+async function shortenLink() {
+  const url   = document.getElementById('urlInput').value.trim();
+  const alias = document.getElementById('aliasInput').value.trim();
+  const btn   = document.getElementById('btnShorten');
+  const errEl = document.getElementById('errorMsg');
+
+  if (!url) {
+    showError('Vui lòng nhập URL cần rút gọn');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Đang tạo...';
+  errEl.className = 'error-msg';
+
+  try {
+    const res = await fetch('/api/shorten', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, alias }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showError(data.error || 'Có lỗi xảy ra');
+      return;
+    }
+
+    currentShortUrl = data.short_url;
+
+    const resultBox = document.getElementById('resultBox');
+    const linkEl    = document.getElementById('resultLink');
+    linkEl.textContent = data.short_url;
+    linkEl.href = data.short_url;
+
+    document.getElementById('resultOriginal').textContent = '→ ' + data.original_url;
+
+    const info = detectFromUrl(data.original_url);
+    const note = document.getElementById('deeplinkNote');
+    const noteText = document.getElementById('deeplinkNoteText');
+    if (info && info.type !== 'generic') {
+      note.style.display = 'flex';
+      if (info.type === 'shopee') {
+        noteText.textContent = 'Khi khách mở link này trên mobile, ứng dụng Shopee sẽ mở thẳng sản phẩm!';
+      } else {
+        noteText.textContent = 'Khi khách mở link này trên mobile, ứng dụng TikTok sẽ mở ngay!';
+      }
+    } else {
+      note.style.display = 'none';
+    }
+
+    resultBox.className = 'result-box visible';
+    loadStats();
+  } catch(e) {
+    showError('Lỗi kết nối, vui lòng thử lại');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Rút gọn ⚡';
+  }
+}
+
+document.getElementById('btnShorten').onclick = shortenLink;
+
+// ── Copy ──────────────────────────────────────────────────────────────────
+async function copyLink() {
+  if (!currentShortUrl) return;
+  try {
+    await navigator.clipboard.writeText(currentShortUrl);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = currentShortUrl;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  const btn = document.getElementById('btnCopy');
+  btn.textContent = '✓ Đã sao chép!';
+  btn.className = 'btn-copy copied';
+  setTimeout(() => {
+    btn.textContent = 'Sao chép';
+    btn.className = 'btn-copy';
+  }, 2000);
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.className = 'error-msg visible';
+}
+
+// ── Stats & recent links ──────────────────────────────────────────────────
+function getPlatformTag(url) {
+  if (/shopee\.vn/i.test(url)) return '<span class="platform-tag shopee">Shopee</span>';
+  if (/tiktok\.com/i.test(url)) return '<span class="platform-tag tiktok">TikTok</span>';
+  return '<span class="platform-tag generic">Link</span>';
+}
+
+async function loadStats() {
+  try {
+    const res  = await fetch('/api/stats');
+    const data = await res.json();
+
+    document.getElementById('statLinks').textContent  = data.totalLinks.toLocaleString();
+    document.getElementById('statClicks').textContent = data.totalClicks.toLocaleString();
+
+    const list = document.getElementById('linkList');
+    if (!data.recent || data.recent.length === 0) {
+      list.innerHTML = '<p style="color:var(--muted);font-size:14px">Chưa có link nào...</p>';
+      return;
+    }
+
+    list.innerHTML = data.recent.map(l => `
+      <div class="link-item">
+        <a class="link-short" href="${l.short_url}" target="_blank">${l.short_url.replace('https://','').replace('http://','')}</a>
+        ${getPlatformTag(l.original_url)}
+        <span class="link-orig" title="${l.original_url}">${l.original_url}</span>
+        <span class="link-clicks">👁 ${l.clicks}</span>
+      </div>
+    `).join('');
+  } catch(e) { /* silent */ }
+}
+
+// Update alias prefix
+const aliasPrefix = document.getElementById('aliasPrefix');
+aliasPrefix.textContent = window.location.host + '/';
+
+loadStats();
+setInterval(loadStats, 30000);
+</script>
+</body>
+</html>
