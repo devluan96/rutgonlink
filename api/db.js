@@ -18,6 +18,8 @@ function getClient() {
   const url   = process.env.TURSO_DATABASE_URL || 'file:data/links.db';
   const token = process.env.TURSO_AUTH_TOKEN   || '';
 
+  console.log('[db] connecting to:', url.substring(0, 40) + '...');
+
   _client = createClient({ url, authToken: token });
   return _client;
 }

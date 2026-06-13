@@ -6,7 +6,8 @@ const { nanoid } = require('nanoid');
 const { init: initDb } = require('./db');
 
 const app      = express();
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const BASE_URL = (process.env.BASE_URL || '').replace(/\/$/, '') || 
+                 (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -90,8 +91,21 @@ app.post('/api/shorten', async (req, res) => {
     let { url, alias } = req.body;
 
     if (!url) return res.status(400).json({ error: 'URL không hợp lệ' });
+    // Auto-prepend https if missing
     if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-    try { new URL(url); } catch { return res.status(400).json({ error: 'URL không hợp lệ' }); }
+    // Decode nếu bị double-encode, sau đó validate
+    try {
+      // Thử parse thẳng trước
+      new URL(url);
+    } catch {
+      // Thử decode rồi parse lại
+      try {
+        url = decodeURIComponent(url);
+        new URL(url);
+      } catch {
+        return res.status(400).json({ error: 'URL không hợp lệ, vui lòng kiểm tra lại' });
+      }
+    }
 
     if (alias) {
       alias = alias.trim().replace(/[^a-zA-Z0-9_-]/g, '');
@@ -130,8 +144,8 @@ app.get('/api/stats', async (req, res) => {
     }));
     res.json({ ...totals, recent });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Lỗi server' });
+    console.error('stats error:', err);
+    res.status(500).json({ error: 'Lỗi server: ' + err.message });
   }
 });
 
