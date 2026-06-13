@@ -1050,11 +1050,41 @@ function renderForm(containerId) {
         </div>
       </div>
       <div>
-        <label class="fl">Kiểu chuyển hướng</label>
-        <select class="fi" id="${containerId}_rtype">
+        <label class="fl">Kiểu link</label>
+        <select class="fi" id="${containerId}_ltype" onchange="onLinkTypeChange('${containerId}')">
           <option value="direct">🔗 Trực tiếp</option>
           <option value="deeplink">📱 Mở App (Deeplink)</option>
+          <option value="video">🎬 Video + Deeplink Overlay</option>
         </select>
+      </div>
+    </div>
+
+    <!-- VIDEO SECTION – hiện khi chọn kiểu Video -->
+    <div class="video-sec" id="${containerId}_videosec">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🎬 Cài đặt Video</div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label class="fl">Upload video từ máy (MP4/WebM – tối đa 100MB)</label>
+        <div style="border:2px dashed var(--border2);border-radius:8px;padding:14px;text-align:center;cursor:pointer;position:relative;margin-bottom:8px;transition:.2s" id="${containerId}_vuploadarea">
+          <input type="file" id="${containerId}_vfile" accept="video/mp4,video/webm,video/quicktime"
+            style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
+            onchange="handleVideoUpload(event,'${containerId}')"/>
+          <div style="font-size:22px;margin-bottom:4px">🎬</div>
+          <p style="font-size:12px;color:var(--text2)">Kéo thả hoặc bấm để chọn video</p>
+        </div>
+        <video id="${containerId}_vpreview" style="width:100%;max-height:150px;border-radius:8px;display:none;object-fit:cover;background:#000;margin-bottom:8px" muted controls></video>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <span style="font-size:11px;color:var(--text3)">hoặc dán URL</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+        <input type="url" class="fi" id="${containerId}_videourl" placeholder="https://youtube.com/watch?v=... hoặc link mp4"/>
+      </div>
+      <div class="form-group">
+        <label class="fl">Nội dung nút CTA (hiện sau 5 giây)</label>
+        <input type="text" class="fi" id="${containerId}_videotext" placeholder="🛒 Bấm vào đây để ủng hộ và xem sản phẩm →" maxlength="100"/>
+      </div>
+      <div style="margin-top:8px;padding:8px 10px;background:rgba(59,130,246,.08);border-radius:7px;font-size:11px;color:var(--text2)">
+        💡 Video autoplay → sau 5s hiện lớp phủ toàn màn → user bấm bất kỳ đâu → mở App Shopee/TikTok
       </div>
     </div>
 
@@ -1246,6 +1276,9 @@ async function doShorten(cid) {
   const og_title = document.getElementById(`${cid}_ogtitle`)?.value.trim() || '';
   const og_desc  = document.getElementById(`${cid}_ogdesc`)?.value.trim()  || '';
   const og_image = document.getElementById(`${cid}_ogimg`)?.value.trim()   || '';
+  const link_type          = document.getElementById(`${cid}_ltype`)?.value || 'direct';
+  const video_url          = document.getElementById(`${cid}_videourl`)?.value.trim() || '';
+  const video_overlay_text = document.getElementById(`${cid}_videotext`)?.value.trim() || '';
   const btn      = document.getElementById(`${cid}_btn`);
   const errEl    = document.getElementById(`${cid}_err`);
 
@@ -1256,7 +1289,7 @@ async function doShorten(cid) {
   try {
     const r = await fetch('/api/shorten', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ url, alias, og_title, og_desc, og_image }),
+      body:JSON.stringify({ url, alias, og_title, og_desc, og_image, link_type, video_url, video_overlay_text }),
     });
     const data = await r.json();
     if (!r.ok) {
@@ -1269,7 +1302,8 @@ async function doShorten(cid) {
     document.getElementById(`${cid}_resurl`).href        = data.short_url;
     document.getElementById(`${cid}_resmeta`).textContent = '→ ' + data.original_url;
     const dlEl = document.getElementById(`${cid}_resdl`);
-    if (/shopee\.vn/i.test(data.original_url)) { dlEl.style.display='flex'; dlEl.textContent='📲 Mobile → mở thẳng Shopee App'; }
+    if (link_type === 'video') { dlEl.style.display='flex'; dlEl.textContent='🎬 Link video với overlay deeplink'; }
+    else if (/shopee\.vn/i.test(data.original_url)) { dlEl.style.display='flex'; dlEl.textContent='📲 Mobile → mở thẳng Shopee App'; }
     else if (/tiktok\.com/i.test(data.original_url)) { dlEl.style.display='flex'; dlEl.textContent='📲 Mobile → mở thẳng TikTok App'; }
     else dlEl.style.display='none';
     document.getElementById(`${cid}_res`).classList.add('show');
