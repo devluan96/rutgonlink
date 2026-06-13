@@ -965,10 +965,17 @@ function updateTopbar() {
   document.getElementById('tbUname').textContent  = name;
   document.getElementById('ddLogout').style.display = user ? '' : 'none';
   document.getElementById('ddLogin').style.display  = user ? 'none' : '';
-  // Hide upgrade box for pro/business
+
+  const isAdmin = (plan === 'admin' || role === 'admin');
+
+  // Show/hide Admin nav item
+  const adminNav = document.getElementById('adminNavItem');
+  if (adminNav) adminNav.style.display = isAdmin ? '' : 'none';
+
+  // Hide upgrade box for pro/business/admin
   const sf = document.getElementById('sidebarFooter');
-  if (plan==='pro'||plan==='business') sf.style.display='none';
-  else sf.style.display='';
+  sf.style.display = (plan==='pro' || plan==='business' || isAdmin) ? 'none' : '';
+
   // Pricing current plan highlights
   updatePricingUI();
 }
@@ -1012,9 +1019,10 @@ function renderForm(containerId) {
   const c = document.getElementById(containerId);
   if (!c) return;
   const plan    = user?.plan || 'free';
-  const canDeep = plan==='pro' || plan==='business';
-  const canOg   = plan==='pro' || plan==='business';
-  const canUp   = plan==='pro' || plan==='business';
+  const isAdmin = (plan === 'admin' || user?.role === 'admin');
+  const canDeep = plan==='pro' || plan==='business' || isAdmin;
+  const canOg   = plan==='pro' || plan==='business' || isAdmin;
+  const canUp   = plan==='pro' || plan==='business' || isAdmin;
 
   c.innerHTML = `
   <div class="sf-card">
@@ -1224,7 +1232,8 @@ function onLinkTypeChange(cid) {
   if (vidSec) vidSec.className = 'video-sec' + (val === 'video' ? ' show' : '');
   // Check plan for video
   const plan = user?.plan || 'free';
-  if (val === 'video' && plan === 'free') {
+  const isAdm = (plan === 'admin' || user?.role === 'admin');
+  if (val === 'video' && plan === 'free' && !isAdm) {
     toast('🔒 Link Video yêu cầu gói Pro', 'warn');
     const el = document.getElementById(cid + '_ltype');
     if (el) el.value = 'direct';
