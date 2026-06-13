@@ -1020,114 +1020,188 @@ function renderForm(containerId) {
   if (!c) return;
   const plan    = user?.plan || 'free';
   const isAdmin = (plan === 'admin' || user?.role === 'admin');
-  const canDeep = plan==='pro' || plan==='business' || isAdmin;
   const canOg   = plan==='pro' || plan==='business' || isAdmin;
   const canUp   = plan==='pro' || plan==='business' || isAdmin;
 
   c.innerHTML = `
   <div class="sf-card">
-    <h3>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-      Rút gọn liên kết
-    </h3>
 
-    <div class="url-bar">
-      <input type="url" id="${containerId}_url" class="url-bar-input" placeholder="Dán liên kết dài vào đây..." autocomplete="off" spellcheck="false"/>
+    <!-- ① URL + nút rút gọn -->
+    <div class="url-bar" style="margin-bottom:12px">
+      <input type="url" id="${containerId}_url" class="url-bar-input"
+        placeholder="Dán link Shopee, TikTok hoặc bất kỳ URL nào..."
+        autocomplete="off" spellcheck="false"/>
       <button class="btn-go" id="${containerId}_btn" onclick="doShorten('${containerId}')">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        Rút gọn
+        ⚡ Rút gọn
       </button>
     </div>
 
-    <div class="det" id="${containerId}_det"></div>
+    <!-- Detect badge -->
+    <div class="det" id="${containerId}_det" style="margin-bottom:10px"></div>
 
-    <div class="fg">
+    <!-- ② Alias + Kiểu link (2 cột ngang) -->
+    <div style="display:grid;grid-template-columns:1fr 180px;gap:10px;margin-bottom:12px">
       <div>
-        <label class="fl">Alias tùy chỉnh</label>
+        <label class="fl" style="margin-bottom:4px">Alias tùy chỉnh</label>
         <div class="pfx">
-          <span>${window.location.host}/</span>
+          <span style="font-size:12px;color:var(--text3);white-space:nowrap">${window.location.host}/</span>
           <input type="text" id="${containerId}_alias" placeholder="ten-link" maxlength="40" autocomplete="off"/>
         </div>
       </div>
       <div>
-        <label class="fl">Kiểu link</label>
+        <label class="fl" style="margin-bottom:4px">Kiểu link</label>
         <select class="fi" id="${containerId}_ltype" onchange="onLinkTypeChange('${containerId}')">
           <option value="direct">🔗 Trực tiếp</option>
-          <option value="deeplink">📱 Mở App (Deeplink)</option>
-          <option value="video">🎬 Video + Deeplink Overlay</option>
+          <option value="deeplink">📱 Deeplink App</option>
+          <option value="video">🎬 Video Overlay</option>
         </select>
       </div>
     </div>
 
-    <!-- VIDEO SECTION – hiện khi chọn kiểu Video -->
-    <div class="video-sec" id="${containerId}_videosec">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">🎬 Cài đặt Video</div>
-      <div class="form-group" style="margin-bottom:10px">
-        <label class="fl">Upload video từ máy (MP4/WebM – tối đa 100MB)</label>
-        <div style="border:2px dashed var(--border2);border-radius:8px;padding:14px;text-align:center;cursor:pointer;position:relative;margin-bottom:8px;transition:.2s" id="${containerId}_vuploadarea">
-          <input type="file" id="${containerId}_vfile" accept="video/mp4,video/webm,video/quicktime"
-            style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
-            onchange="handleVideoUpload(event,'${containerId}')"/>
-          <div style="font-size:22px;margin-bottom:4px">🎬</div>
-          <p style="font-size:12px;color:var(--text2)">Kéo thả hoặc bấm để chọn video</p>
+    <!-- ③ VIDEO SECTION (hiện khi chọn Video Overlay) -->
+    <div class="video-sec" id="${containerId}_videosec" style="margin-bottom:12px">
+      <!-- 2 cột: upload | URL + CTA -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <!-- Cột trái: upload / preview -->
+        <div>
+          <label class="fl" style="margin-bottom:4px">Video (MP4/WebM)</label>
+          <div id="${containerId}_vuploadarea"
+            style="border:2px dashed var(--border2);border-radius:8px;padding:16px 10px;text-align:center;
+                   cursor:pointer;position:relative;transition:.2s;background:var(--bg4)">
+            <input type="file" id="${containerId}_vfile" accept="video/mp4,video/webm,video/quicktime"
+              style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
+              onchange="handleVideoUpload(event,'${containerId}')"/>
+            <div id="${containerId}_vph">
+              <div style="font-size:24px;margin-bottom:4px">🎬</div>
+              <p style="font-size:11px;color:var(--text2)">Bấm để chọn video<br/><span style="color:var(--text3)">MP4 · WebM · tối đa 200MB</span></p>
+            </div>
+          </div>
+          <video id="${containerId}_vpreview"
+            style="width:100%;max-height:100px;border-radius:7px;display:none;object-fit:cover;background:#000;margin-top:6px"
+            muted controls></video>
         </div>
-        <video id="${containerId}_vpreview" style="width:100%;max-height:150px;border-radius:8px;display:none;object-fit:cover;background:#000;margin-bottom:8px" muted controls></video>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <div style="flex:1;height:1px;background:var(--border)"></div>
-          <span style="font-size:11px;color:var(--text3)">hoặc dán URL</span>
-          <div style="flex:1;height:1px;background:var(--border)"></div>
+        <!-- Cột phải: URL + CTA text -->
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div>
+            <label class="fl" style="margin-bottom:4px">Hoặc URL video</label>
+            <input type="url" class="fi" id="${containerId}_videourl"
+              placeholder="https://youtube.com/watch?v=..." style="font-size:12px"/>
+          </div>
+          <div>
+            <label class="fl" style="margin-bottom:4px">Nội dung nút CTA</label>
+            <input type="text" class="fi" id="${containerId}_videotext"
+              placeholder="🛒 Bấm để xem sản phẩm →" maxlength="80" style="font-size:12px"/>
+          </div>
+          <div style="padding:8px;background:rgba(59,130,246,.07);border-radius:7px;font-size:11px;color:var(--text2);line-height:1.5;margin-top:auto">
+            💡 Video → 5s → lớp phủ toàn màn → bấm → mở App
+          </div>
         </div>
-        <input type="url" class="fi" id="${containerId}_videourl" placeholder="https://youtube.com/watch?v=... hoặc link mp4"/>
-      </div>
-      <div class="form-group">
-        <label class="fl">Nội dung nút CTA (hiện sau 5 giây)</label>
-        <input type="text" class="fi" id="${containerId}_videotext" placeholder="🛒 Bấm vào đây để ủng hộ và xem sản phẩm →" maxlength="100"/>
-      </div>
-      <div style="margin-top:8px;padding:8px 10px;background:rgba(59,130,246,.08);border-radius:7px;font-size:11px;color:var(--text2)">
-        💡 Video autoplay → sau 5s hiện lớp phủ toàn màn → user bấm bất kỳ đâu → mở App Shopee/TikTok
       </div>
     </div>
 
-    <!-- OG META -->
-    <div class="meta-sec">
-      <button class="meta-toggle" type="button" onclick="toggleMeta('${containerId}')">
-        <span>🖼️</span>
-        <span class="mt-label">Thẻ meta tùy chỉnh</span>
-        <span class="mt-badge">Facebook · Zalo · TikTok</span>
-        ${!canOg ? '<span style="font-size:10px;color:var(--yellow)">🔒 Pro</span>' : ''}
-        <span class="mt-arrow" id="${containerId}_arrow">▼</span>
-      </button>
-      <div class="meta-body" id="${containerId}_metabody">
-        ${!canOg ? `<div style="text-align:center;padding:16px;color:var(--text3);font-size:13px">🔒 Tính năng này yêu cầu gói <strong style="color:var(--brand)">Pro</strong>. <span style="color:var(--brand);cursor:pointer;text-decoration:underline" onclick="navigate('pricing')">Nâng cấp ngay</span></div>` : `
-        <div style="margin-bottom:10px">
-          <label class="fl">Ảnh banner preview</label>
-          ${canUp ? `
-          <div class="upload-area" id="${containerId}_uarea" onclick="document.getElementById('${containerId}_fileinput').click()">
-            <input type="file" id="${containerId}_fileinput" accept="image/jpg,image/jpeg,image/png,image/webp" style="display:none" onchange="handleFileUpload(event,'${containerId}')"/>
-            <div class="ua-icon">📷</div>
-            <p>Kéo thả hoặc bấm để chọn ảnh<br/><small>JPG, PNG, WebP – tối đa 2MB</small></p>
-          </div>
-          <img class="upload-preview" id="${containerId}_preview" src="" alt=""/>
-          <div class="or-sep"><span>hoặc</span></div>` : ''}
-          <input type="url" class="fi" id="${containerId}_ogimg" placeholder="https://example.com/anh.jpg" oninput="updateOgPreview('${containerId}')"/>
-        </div>
-        <div class="fg">
-          <div>
-            <label class="fl">Tiêu đề meta</label>
-            <input type="text" class="fi" id="${containerId}_ogtitle" placeholder="Tiêu đề hiện khi share..." maxlength="120" oninput="updateOgPreview('${containerId}')"/>
-          </div>
-          <div>
-            <label class="fl">Mô tả meta</label>
-            <input type="text" class="fi" id="${containerId}_ogdesc" placeholder="Mô tả ngắn..." maxlength="200" oninput="updateOgPreview('${containerId}')"/>
-          </div>
-        </div>
-        <div class="og-prev">
-          <div class="og-prev-ph" id="${containerId}_ogph">📷 Preview ảnh banner</div>
-          <img class="og-prev-img" id="${containerId}_ogprevimg" src="" alt=""/>
-          <div class="og-prev-info">
-            <div class="og-prev-dom" id="${containerId}_ogdom">${window.location.host.toUpperCase()}</div>
-            <div class="og-prev-title" id="${containerId}_ogptitle">Tiêu đề sẽ hiện ở đây</div>
-            <div class="og-prev-desc" id="${containerId}_ogpdesc">Mô tả sẽ hiện ở đây</div>
+    <!-- ④ META SECTION (collapsible) -->
+    <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px">
+      <!-- Header toggle -->
+      <div onclick="toggleMeta('${containerId}')"
+        style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--bg3);
+               user-select:none;transition:.15s" onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background='var(--bg3)'">
+        <span style="font-size:13px">🖼️</span>
+        <span style="font-size:13px;font-weight:700;flex:1">Preview khi share (Facebook · Zalo · TikTok)</span>
+        ${!canOg ? '<span style="font-size:10px;font-weight:700;background:rgba(245,158,11,.15);color:#fcd34d;padding:2px 7px;border-radius:10px">🔒 Pro</span>' : '<span style="font-size:10px;font-weight:700;background:rgba(34,197,94,.1);color:var(--green);padding:2px 7px;border-radius:10px">✓ Active</span>'}
+        <span id="${containerId}_arrow" style="font-size:11px;color:var(--text3);transition:.2s">▼</span>
+      </div>
+
+      <!-- Body -->
+      <div id="${containerId}_metabody" style="display:none;padding:14px;background:var(--bg2)">
+        ${!canOg ? `
+          <div style="text-align:center;padding:12px;color:var(--text3);font-size:13px">
+            🔒 Yêu cầu gói <strong style="color:var(--brand)">Pro</strong>.
+            <span style="color:var(--brand);cursor:pointer;text-decoration:underline" onclick="navigate('pricing')">Nâng cấp →</span>
+          </div>` : `
+          <!-- 2 cột: ảnh | tiêu đề + mô tả + preview -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <!-- Cột trái: ảnh -->
+            <div>
+              <label class="fl" style="margin-bottom:4px">Ảnh preview (1200×630px)</label>
+              ${canUp ? `
+              <div id="${containerId}_uarea"
+                style="border:2px dashed var(--border2);border-radius:8px;padding:14px;text-align:center;
+                       cursor:pointer;position:relative;margin-bottom:8px;transition:.2s;background:var(--bg3)"
+                onclick="document.getElementById('${containerId}_fileinput').click()">
+                <input type="file" id="${containerId}_fileinput"
+                  accept="image/jpg,image/jpeg,image/png,image/webp" style="display:none"
+                  onchange="handleFileUpload(event,'${containerId}')"/>
+                <div style="font-size:20px;margin-bottom:3px">📷</div>
+                <p style="font-size:11px;color:var(--text2)">Bấm để chọn ảnh<br/><span style="color:var(--text3)">JPG · PNG · WebP · 10MB</span></p>
+              </div>
+              <img id="${containerId}_preview" src="" alt=""
+                style="width:100%;border-radius:7px;display:none;object-fit:cover;max-height:100px;margin-bottom:8px"/>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <div style="flex:1;height:1px;background:var(--border)"></div>
+                <span style="font-size:10px;color:var(--text3)">hoặc URL</span>
+                <div style="flex:1;height:1px;background:var(--border)"></div>
+              </div>` : ''}
+              <input type="url" class="fi" id="${containerId}_ogimg"
+                placeholder="https://..." oninput="updateOgPreview('${containerId}')"
+                style="font-size:12px"/>
+            </div>
+
+            <!-- Cột phải: tiêu đề + mô tả + preview card -->
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div>
+                <label class="fl" style="margin-bottom:4px">Tiêu đề</label>
+                <input type="text" class="fi" id="${containerId}_ogtitle"
+                  placeholder="Tiêu đề hiện khi share..." maxlength="120"
+                  oninput="updateOgPreview('${containerId}')" style="font-size:12px"/>
+              </div>
+              <div>
+                <label class="fl" style="margin-bottom:4px">Mô tả</label>
+                <input type="text" class="fi" id="${containerId}_ogdesc"
+                  placeholder="Mô tả ngắn..." maxlength="200"
+                  oninput="updateOgPreview('${containerId}')" style="font-size:12px"/>
+              </div>
+              <!-- Preview card mini -->
+              <div style="border:1px solid var(--border);border-radius:7px;overflow:hidden;margin-top:auto">
+                <div id="${containerId}_ogph"
+                  style="height:60px;background:linear-gradient(135deg,rgba(59,130,246,.06),rgba(139,92,246,.06));
+                         display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text3)">
+                  🖼️ Preview ảnh
+                </div>
+                <img id="${containerId}_ogprevimg" src="" alt=""
+                  style="width:100%;height:60px;object-fit:cover;display:none"/>
+                <div style="padding:7px 9px;background:var(--bg3)">
+                  <div id="${containerId}_ogdom" style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">${window.location.host.toUpperCase()}</div>
+                  <div id="${containerId}_ogptitle" style="font-size:12px;font-weight:700;color:var(--text);line-height:1.3">Tiêu đề sẽ hiện ở đây</div>
+                  <div id="${containerId}_ogpdesc" style="font-size:10px;color:var(--text2);margin-top:2px">Mô tả sẽ hiện ở đây</div>
+                </div>
+              </div>
+            </div>
+          </div>`}
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div class="ferr" id="${containerId}_err"></div>
+
+    <!-- Result -->
+    <div class="res-card" id="${containerId}_res">
+      <div class="res-lbl">✅ Link rút gọn của bạn</div>
+      <div class="res-row">
+        <a class="res-url" id="${containerId}_resurl" href="#" target="_blank"></a>
+        <button class="btn-cp" id="${containerId}_cpbtn" onclick="copyResult('${containerId}')">Sao chép</button>
+      </div>
+      <div class="res-meta" id="${containerId}_resmeta"></div>
+      <div class="res-dl" id="${containerId}_resdl" style="display:none"></div>
+    </div>
+  </div>`;
+
+  // Attach URL input events
+  const urlIn = document.getElementById(`${containerId}_url`);
+  if (urlIn) {
+    urlIn.addEventListener('input', () => onUrlInput(containerId));
+    urlIn.addEventListener('keydown', e => { if(e.key==='Enter') doShorten(containerId); });
+  }
+}
           </div>
         </div>`}
       </div>
@@ -1619,6 +1693,8 @@ async function saveEditLink() {
 </script>
 </body>
 </html>
+
+
 
 
 
