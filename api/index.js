@@ -872,12 +872,28 @@ html,body{height:100%;background:#000;overflow:hidden;
 
   /* ── Go to app (called when user taps overlay OR x-btn) ── */
   function goApp() {
-    // Try deep link
-    window.location.href = deeplink;
-    // Fallback: if still here after 2s, open in browser
-    setTimeout(function() {
-      window.location.href = FALLBACK;
-    }, 2000);
+    var ua = navigator.userAgent.toLowerCase();
+    var isIos = /iphone|ipad|ipod/.test(ua);
+    var isAndroid = /android/.test(ua);
+
+    if (isAndroid && DEEPLINK_ANDROID !== FALLBACK) {
+      // Android: dùng intent:// để mở app không qua dialog
+      var intentUrl = DEEPLINK_ANDROID
+        .replace('shopee://', 'intent://shopee#Intent;scheme=shopee;package=com.shopee.vn;end')
+        .replace('snssdk1233://', 'intent://tiktok#Intent;scheme=snssdk1233;package=com.zhiliaoapp.musically;end');
+      // Thử intent trước
+      window.location.href = intentUrl;
+      // Fallback sau 1.5s nếu app chưa cài
+      setTimeout(function() { window.location.href = FALLBACK; }, 1500);
+    } else if (isIos && DEEPLINK_IOS !== FALLBACK) {
+      // iOS: dùng custom scheme trực tiếp
+      window.location.href = DEEPLINK_IOS;
+      // Fallback App Store sau 2s
+      setTimeout(function() { window.location.href = FALLBACK; }, 2000);
+    } else {
+      // Desktop / unknown
+      window.open(FALLBACK, '_blank');
+    }
   }
   window.goApp = goApp;
 

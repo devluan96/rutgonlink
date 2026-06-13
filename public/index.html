@@ -1060,42 +1060,83 @@ function renderForm(containerId) {
 
     <!-- ③ VIDEO SECTION (hiện khi chọn Video Overlay) -->
     <div class="video-sec" id="${containerId}_videosec" style="margin-bottom:12px">
-      <!-- 2 cột: upload | URL + CTA -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <!-- Cột trái: upload / preview -->
+
+      <!-- Hàng 1: Video upload + URL video -->
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;margin-bottom:10px;align-items:start">
+        <!-- Upload box nhỏ gọn -->
         <div>
-          <label class="fl" style="margin-bottom:4px">Video (MP4/WebM)</label>
+          <label class="fl" style="margin-bottom:4px">Video</label>
           <div id="${containerId}_vuploadarea"
-            style="border:2px dashed var(--border2);border-radius:8px;padding:16px 10px;text-align:center;
-                   cursor:pointer;position:relative;transition:.2s;background:var(--bg4)">
+            style="border:2px dashed var(--border2);border-radius:8px;padding:10px 6px;text-align:center;
+                   cursor:pointer;position:relative;transition:.2s;background:var(--bg4);min-height:72px;
+                   display:flex;flex-direction:column;align-items:center;justify-content:center">
             <input type="file" id="${containerId}_vfile" accept="video/mp4,video/webm,video/quicktime"
               style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
               onchange="handleVideoUpload(event,'${containerId}')"/>
-            <div id="${containerId}_vph">
-              <div style="font-size:24px;margin-bottom:4px">🎬</div>
-              <p style="font-size:11px;color:var(--text2)">Bấm để chọn video<br/><span style="color:var(--text3)">MP4 · WebM · tối đa 200MB</span></p>
-            </div>
+            <div style="font-size:20px">🎬</div>
+            <p style="font-size:10px;color:var(--text3);margin-top:2px">Upload video</p>
           </div>
           <video id="${containerId}_vpreview"
-            style="width:100%;max-height:100px;border-radius:7px;display:none;object-fit:cover;background:#000;margin-top:6px"
-            muted controls></video>
+            style="width:100%;max-height:72px;border-radius:6px;display:none;object-fit:cover;background:#000;margin-top:4px"
+            muted></video>
         </div>
-        <!-- Cột phải: URL + CTA text -->
-        <div style="display:flex;flex-direction:column;gap:8px">
+        <!-- URL + CTA text -->
+        <div style="display:flex;flex-direction:column;gap:7px">
           <div>
-            <label class="fl" style="margin-bottom:4px">Hoặc URL video</label>
-            <input type="url" class="fi" id="${containerId}_videourl"
-              placeholder="https://youtube.com/watch?v=..." style="font-size:12px"/>
+            <label class="fl" style="margin-bottom:3px">URL video (YouTube / MP4)</label>
+            <div style="display:flex;gap:5px">
+              <input type="url" class="fi" id="${containerId}_videourl"
+                placeholder="https://youtube.com/watch?v=..."
+                style="font-size:12px;flex:1"
+                oninput="onVideoUrlInput('${containerId}')"/>
+              <button type="button" onclick="extractThumbFromUrl('${containerId}')"
+                style="padding:0 10px;background:var(--bg4);border:1px solid var(--border);border-radius:7px;
+                       color:var(--text2);font-size:11px;cursor:pointer;white-space:nowrap"
+                title="Lấy thumbnail tự động">🖼️ Thumb</button>
+            </div>
           </div>
           <div>
-            <label class="fl" style="margin-bottom:4px">Nội dung nút CTA</label>
+            <label class="fl" style="margin-bottom:3px">Nội dung CTA (hiện sau 5s)</label>
             <input type="text" class="fi" id="${containerId}_videotext"
               placeholder="🛒 Bấm để xem sản phẩm →" maxlength="80" style="font-size:12px"/>
           </div>
-          <div style="padding:8px;background:rgba(59,130,246,.07);border-radius:7px;font-size:11px;color:var(--text2);line-height:1.5;margin-top:auto">
-            💡 Video → 5s → lớp phủ toàn màn → bấm → mở App
-          </div>
         </div>
+      </div>
+
+      <!-- Hàng 2: Tiêu đề + Mô tả + Ảnh thumb (luôn hiển thị trong video mode) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 120px;gap:8px;align-items:start">
+        <div>
+          <label class="fl" style="margin-bottom:3px">Tiêu đề (OG Title)</label>
+          <input type="text" class="fi" id="${containerId}_ogtitle"
+            placeholder="Tiêu đề khi share Facebook..." maxlength="120"
+            oninput="updateOgPreview('${containerId}')" style="font-size:12px"/>
+        </div>
+        <div>
+          <label class="fl" style="margin-bottom:3px">Mô tả (OG Desc)</label>
+          <input type="text" class="fi" id="${containerId}_ogdesc"
+            placeholder="Mô tả ngắn..." maxlength="200"
+            oninput="updateOgPreview('${containerId}')" style="font-size:12px"/>
+        </div>
+        <div>
+          <label class="fl" style="margin-bottom:3px">Ảnh thumb</label>
+          <div style="position:relative">
+            <input type="url" class="fi" id="${containerId}_ogimg"
+              placeholder="URL ảnh..."
+              oninput="updateVideoThumbPreview('${containerId}')"
+              style="font-size:11px;padding-right:28px"/>
+            <span id="${containerId}_thumbdot"
+              style="position:absolute;right:7px;top:50%;transform:translateY(-50%);
+                     font-size:14px;display:none">✅</span>
+          </div>
+          <img id="${containerId}_thumbpreview"
+            style="width:100%;height:40px;object-fit:cover;border-radius:5px;margin-top:4px;display:none"
+            src="" alt=""/>
+        </div>
+      </div>
+
+      <div style="margin-top:8px;padding:6px 10px;background:rgba(59,130,246,.07);border-radius:6px;
+                  font-size:11px;color:var(--text2)">
+        💡 Video autoplay → 5s → lớp phủ toàn màn hình → user bấm bất kỳ đâu → mở App Shopee/TikTok
       </div>
     </div>
 
@@ -1255,11 +1296,13 @@ function updateOgPreview(cid) {
 async function handleVideoUpload(event, cid) {
   const file = event.target.files[0];
   if (!file) return;
-  // Show local preview immediately
+  // Show local preview immediately + extract thumb via canvas
   const preview = document.getElementById(cid + '_vpreview');
   if (preview) {
     preview.src = URL.createObjectURL(file);
     preview.style.display = 'block';
+    // Auto-extract thumbnail via canvas after video loads
+    preview.onloadeddata = () => extractThumbFromVideoElement(preview, cid);
   }
   // Upload to server
   const area = document.getElementById(cid + '_vuploadarea');
@@ -1274,15 +1317,113 @@ async function handleVideoUpload(event, cid) {
       if (area) area.style.borderColor = 'var(--border2)';
       return;
     }
-    // Set video URL field
+    // Set video URL (Cloudinary URL is absolute, local is relative)
     const urlInput = document.getElementById(cid + '_videourl');
-    if (urlInput) urlInput.value = window.location.origin + d.url;
-    if (area) { area.style.borderColor = 'var(--green)'; }
-    toast('✅ Upload video thành công!', 'ok');
+    if (urlInput) urlInput.value = d.url.startsWith('/') ? window.location.origin + d.url : d.url;
+    // Auto-fill thumbnail from Cloudinary
+    if (d.thumb) {
+      const imgInput = document.getElementById(cid + '_ogimg');
+      if (imgInput && !imgInput.value) {
+        imgInput.value = d.thumb;
+        updateVideoThumbPreview(cid);
+      }
+      toast('✅ Upload xong! Thumbnail đã tự động lấy từ video.', 'ok');
+    } else {
+      toast('✅ Upload video thành công!', 'ok');
+    }
+    if (area) area.style.borderColor = 'var(--green)';
   } catch {
     toast('Lỗi upload video', 'err');
     if (area) area.style.borderColor = 'var(--border2)';
   }
+}
+
+// Extract thumbnail from <video> element via canvas
+function extractThumbFromVideoElement(videoEl, cid) {
+  try {
+    videoEl.currentTime = 1;
+    videoEl.onseeked = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1200; canvas.height = 630;
+        canvas.getContext('2d').drawImage(videoEl, 0, 0, 1200, 630);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const imgInput = document.getElementById(cid + '_ogimg');
+        if (imgInput && !imgInput.value) {
+          imgInput.value = dataUrl;
+          updateVideoThumbPreview(cid);
+        }
+      } catch(_) {}
+    };
+  } catch(_) {}
+}
+
+// Called when user types YouTube/video URL manually
+function onVideoUrlInput(cid) {
+  const url = document.getElementById(cid + '_videourl')?.value.trim() || '';
+  // Auto-extract YouTube thumb
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (ytMatch) {
+    const imgInput = document.getElementById(cid + '_ogimg');
+    if (imgInput && !imgInput.value) {
+      const thumb = `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
+      imgInput.value = thumb;
+      updateVideoThumbPreview(cid);
+    }
+  }
+}
+
+// Nút "🖼️ Thumb" – extract thumb theo URL hiện tại
+async function extractThumbFromUrl(cid) {
+  const url = document.getElementById(cid + '_videourl')?.value.trim() || '';
+  if (!url) { toast('Nhập URL video trước', 'warn'); return; }
+  // YouTube
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (ytMatch) {
+    const thumb = `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
+    const imgInput = document.getElementById(cid + '_ogimg');
+    if (imgInput) { imgInput.value = thumb; updateVideoThumbPreview(cid); }
+    toast('✅ Đã lấy thumbnail YouTube!', 'ok');
+    return;
+  }
+  // Direct video – canvas extract
+  try {
+    toast('⏳ Đang cắt thumbnail...', 'ok');
+    const vid = document.createElement('video');
+    vid.src = url; vid.crossOrigin = 'anonymous'; vid.muted = true;
+    vid.currentTime = 1;
+    await new Promise((res, rej) => {
+      vid.onseeked = res;
+      vid.onerror  = rej;
+      setTimeout(rej, 8000);
+      vid.load();
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200; canvas.height = 630;
+    canvas.getContext('2d').drawImage(vid, 0, 0, 1200, 630);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const imgInput = document.getElementById(cid + '_ogimg');
+    if (imgInput) { imgInput.value = dataUrl; updateVideoThumbPreview(cid); }
+    toast('✅ Đã cắt thumbnail từ video!', 'ok');
+  } catch(e) { toast('Không lấy được thumbnail: ' + (e?.message||'lỗi'), 'err'); }
+}
+
+// Update small thumb preview in video section
+function updateVideoThumbPreview(cid) {
+  const url   = document.getElementById(cid + '_ogimg')?.value.trim() || '';
+  const img   = document.getElementById(cid + '_thumbpreview');
+  const dot   = document.getElementById(cid + '_thumbdot');
+  if (!img) return;
+  if (url) {
+    img.src = url; img.style.display = 'block';
+    img.onerror = () => { img.style.display = 'none'; };
+    if (dot) dot.style.display = 'block';
+  } else {
+    img.style.display = 'none';
+    if (dot) dot.style.display = 'none';
+  }
+  // Also update the main OG preview if it exists
+  updateOgPreview(cid);
 }
 async function handleFileUpload(event, cid) {
   const file = event.target.files[0];
@@ -1298,7 +1439,7 @@ async function handleFileUpload(event, cid) {
     if (preview) { preview.src=d.url; preview.style.display='block'; }
     // Set image URL
     const imgInput = document.getElementById(`${cid}_ogimg`);
-    if (imgInput) imgInput.value = window.location.origin + d.url;
+    if (imgInput) imgInput.value = d.url.startsWith("/") ? window.location.origin + d.url : d.url;
     updateOgPreview(cid);
     toast('✅ Upload ảnh thành công!','ok');
   } catch { toast('Lỗi upload','err'); }
@@ -1669,6 +1810,7 @@ async function saveEditLink() {
 </script>
 </body>
 </html>
+
 
 
 
