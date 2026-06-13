@@ -15,10 +15,17 @@ let _client = null;
 function getClient() {
   if (_client) return _client;
 
-  const url   = process.env.TURSO_DATABASE_URL || 'file:data/links.db';
+  let url     = process.env.TURSO_DATABASE_URL || '';
   const token = process.env.TURSO_AUTH_TOKEN   || '';
 
-  console.log('[db] connecting to:', url.substring(0, 40) + '...');
+  if (!url) {
+    throw new Error('TURSO_DATABASE_URL chưa được set');
+  }
+
+  // @libsql/client/http chỉ nhận https://, đổi libsql:// → https://
+  url = url.replace(/^libsql:\/\//, 'https://');
+
+  console.log('[db] connecting to:', url.substring(0, 45));
 
   _client = createClient({ url, authToken: token });
   return _client;
