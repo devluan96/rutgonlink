@@ -1,4 +1,7 @@
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+// Load .env khi chạy local (Vercel tự inject env vars, không cần dotenv)
+try {
+  require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+} catch (_) { /* bỏ qua nếu không có file .env */ }
 
 const express = require('express');
 const path    = require('path');
@@ -83,7 +86,18 @@ function buildDeeplink(originalUrl, platform) {
   return { deeplink: null, fallback: originalUrl, platform_name: 'generic' };
 }
 
-// ─── API: Shorten ────────────────────────────────────────────────────────────
+// ─── Debug (xóa sau khi confirm OK) ─────────────────────────────────────────
+app.get('/api/debug', (req, res) => {
+  res.json({
+    has_turso_url:   !!process.env.TURSO_DATABASE_URL,
+    has_turso_token: !!process.env.TURSO_AUTH_TOKEN,
+    base_url:        process.env.BASE_URL || '(not set)',
+    turso_url_prefix: (process.env.TURSO_DATABASE_URL || '').substring(0, 30) || '(not set)',
+    node_env:        process.env.NODE_ENV || '(not set)',
+  });
+});
+
+// ─── API: Shorten ─────────────────────────────────────────────────────────────
 
 app.post('/api/shorten', async (req, res) => {
   try {
