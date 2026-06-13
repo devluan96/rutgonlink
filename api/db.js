@@ -8,7 +8,7 @@
  *   TURSO_DATABASE_URL=file:data/links.db
  *   TURSO_AUTH_TOKEN=  (để trống)
  */
-const { createClient } = require('@libsql/client');
+const { createClient } = require('@libsql/client/http');
 
 let _client = null;
 
