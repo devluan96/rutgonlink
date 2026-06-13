@@ -98,7 +98,11 @@ function getMobilePlatform(ua='') {
 }
 
 function isSocialBot(ua='') {
-  return /facebookexternalhit|facebot|facebookcatalog|twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|vkshare|zalo|vibebot|line[\s/]|baiduspider|googlebot|applebot|bingbot|yandexbot|pinterestbot|snapchat|ia_archiver/i.test(ua);
+  if (!ua) return false;
+  // Facebook crawlers specifically
+  if (/facebookexternalhit|facebot|facebook|FBID|FBAV/i.test(ua)) return true;
+  // Other social bots
+  return /twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|vkshare|zalo|vibebot|line[\s/]|baiduspider|googlebot|applebot|bingbot|yandexbot|pinterestbot|snapchat|ia_archiver|AhrefsBot|SemrushBot|rogerbot/i.test(ua);
 }
 
 function detectPlatformDeep(originalUrl, platform) {
@@ -128,6 +132,21 @@ function detectPlatformDeep(originalUrl, platform) {
       play_store:'https://play.google.com/store/apps/details?id=com.zhiliaoapp.musically' };
   return { deeplink:null, platform_name:'generic', fallback:originalUrl };
 }
+
+// ─── OG DEFAULT IMAGE ─────────────────────────────────────────────────────────
+app.get('/og-default.png', (_,res) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+    <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#1e2535"/><stop offset="100%" style="stop-color:#0d1117"/></linearGradient></defs>
+    <rect width="1200" height="630" fill="url(#g)"/>
+    <rect x="80" y="200" width="1040" height="8" rx="4" fill="#2a3347"/>
+    <text x="600" y="280" font-family="Arial,sans-serif" font-size="72" font-weight="bold" fill="#3b82f6" text-anchor="middle">🔗 RutGonLink</text>
+    <text x="600" y="370" font-family="Arial,sans-serif" font-size="32" fill="#64748b" text-anchor="middle">Rút gọn link thông minh</text>
+    <text x="600" y="430" font-family="Arial,sans-serif" font-size="24" fill="#334155" text-anchor="middle">Deeplink Shopee &amp; TikTok · Custom Preview</text>
+  </svg>`;
+  res.set('Content-Type','image/svg+xml');
+  res.set('Cache-Control','public, max-age=86400');
+  res.send(svg);
+});
 
 // ─── DEBUG ────────────────────────────────────────────────────────────────────
 app.get('/api/debug', (req,res) => res.json({
@@ -439,15 +458,24 @@ app.get('/:code', async (req,res) => {
 
     const ua = req.headers['user-agent'] || '';
 
-    // Bot → OG page
-    if (isSocialBot(ua)) return res.send(buildOgPage(link, BASE_URL));
+    // ── Social bot → OG page (NO redirect, return HTML with meta tags) ──────
+    if (isSocialBot(ua)) {
+      res.set({
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Content-Type': 'text/html; charset=utf-8',
+      });
+      return res.send(buildOgPage(link, BASE_URL));
+    }
 
     // Count click
     const ip = (req.headers['x-forwarded-for']||'').split(',')[0].trim() || req.socket?.remoteAddress||'';
     await database.recordClick(link.id, ip, ua, req.headers['referer']||'');
 
-    // ── Video link type ──────────────────────────────────────────
-    if (link.link_type === 'video' && link.video_url) {
+    // ── Video link → ALWAYS show video page (desktop + mobile) ─────────────
+    const linkType = (link.link_type || 'direct').trim();
+    if (linkType === 'video') {
+      // Even if no video_url, show video page (will show "no video" message)
       return res.send(buildVideoPage(link));
     }
 
@@ -469,12 +497,21 @@ app.get('/:code', async (req,res) => {
 
 function buildOgPage(link, baseUrl) {
   const shortUrl = `${baseUrl}/${link.alias||link.short_code}`;
-  const title    = esc(link.og_title || link.original_url);
-  const desc     = esc(link.og_desc  || 'Liên kết được rút gọn bởi RutGonLink');
-  const image    = esc(link.og_image || `${baseUrl}/og-default.png`);
-  return `<!DOCTYPE html><html lang="vi"><head>
-<meta charset="UTF-8"/><title>${title}</title>
+  // Use custom OG data if set, otherwise use defaults (NOT Shopee/TikTok data)
+  const title = esc(link.og_title || 'Link rút gọn – RutGonLink');
+  const desc  = esc(link.og_desc  || 'Nhấn vào link để xem nội dung');
+  // IMPORTANT: only use og_image if explicitly set – do NOT fallback to original page
+  const image = link.og_image ? esc(link.og_image) : `${baseUrl}/og-default.png`;
+  const dest  = link.original_url;
+
+  return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<title>${title}</title>
 <meta name="description" content="${desc}"/>
+
+<!-- Open Graph – these override Shopee/TikTok meta -->
 <meta property="og:type"         content="website"/>
 <meta property="og:url"          content="${esc(shortUrl)}"/>
 <meta property="og:title"        content="${title}"/>
@@ -482,13 +519,26 @@ function buildOgPage(link, baseUrl) {
 <meta property="og:image"        content="${image}"/>
 <meta property="og:image:width"  content="1200"/>
 <meta property="og:image:height" content="630"/>
+<meta property="og:image:type"   content="image/jpeg"/>
 <meta property="og:site_name"    content="RutGonLink"/>
+
+<!-- Twitter Card -->
 <meta name="twitter:card"        content="summary_large_image"/>
 <meta name="twitter:title"       content="${title}"/>
 <meta name="twitter:description" content="${desc}"/>
 <meta name="twitter:image"       content="${image}"/>
-<meta http-equiv="refresh" content="0;url=${esc(link.original_url)}"/>
-</head><body><script>window.location.replace(${JSON.stringify(link.original_url)});</script></body></html>`;
+
+<!-- NO meta refresh – bot reads THIS page's OG tags -->
+<!-- Redirect via JS only (bots don't run JS) -->
+</head>
+<body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div style="text-align:center">
+  <p style="font-size:16px;margin-bottom:16px">${title}</p>
+  <a href="${esc(dest)}" style="color:#3b82f6;font-size:14px">Nhấn để xem →</a>
+</div>
+<script>window.location.replace(${JSON.stringify(dest)});</script>
+</body>
+</html>`;
 }
 
 // ─── UPLOAD VIDEO ─────────────────────────────────────────────────────────────
