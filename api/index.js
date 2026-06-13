@@ -8,14 +8,30 @@ const bcrypt       = require('bcryptjs');
 const jwt          = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const multer       = require('multer');
+const cloudinary   = require('cloudinary').v2;
 const { init: initDb } = require('./db');
 
 const app        = express();
 const BASE_URL   = (process.env.BASE_URL||'').replace(/\/$/,'') ||
                    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-const JWT_SECRET = process.env.JWT_SECRET || 'rutgonlink-secret-2025';
-// Email của admin (set trong .env hoặc mặc định)
+const JWT_SECRET  = process.env.JWT_SECRET  || 'rutgonlink-secret-2025';
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@rutgonlink.com').toLowerCase();
+
+// ── Cloudinary config ────────────────────────────────────────────────────────
+const CLOUDINARY_OK = !!(process.env.CLOUDINARY_CLOUD_NAME &&
+                         process.env.CLOUDINARY_API_KEY    &&
+                         process.env.CLOUDINARY_API_SECRET);
+if (CLOUDINARY_OK) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key:    process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure:     true,
+  });
+  console.log('[cloudinary] configured ✅');
+} else {
+  console.warn('[cloudinary] NOT configured – using local disk fallback');
+}
 
 const PLANS = {
   free:     { dailyLimit: 10,  deeplink: false, ogMeta: false, upload: false, videoLink: false },
@@ -29,17 +45,55 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// File upload
+// ── Multer: memory storage (for Cloudinary upload) ───────────────────────────
+// Falls back to disk if Cloudinary not configured
 const uploadsDir = path.join(__dirname, '..', 'public', 'uploads');
 try { if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true }); } catch(_){}
+
+// Use memoryStorage so we can pipe to Cloudinary on Vercel (no disk)
+const memStorage = multer.memoryStorage();
+
 const upload = multer({
-  storage: multer.diskStorage({
+  storage: CLOUDINARY_OK ? memStorage : multer.diskStorage({
     destination: (_,__,cb) => cb(null, uploadsDir),
-    filename: (_,file,cb) => cb(null, nanoid(12) + path.extname(file.originalname).toLowerCase()),
+    filename:    (_,file,cb) => cb(null, nanoid(12) + path.extname(file.originalname).toLowerCase()),
   }),
-  limits: { fileSize: 2 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB for images
   fileFilter: (_,file,cb) => cb(null, /\.(jpg|jpeg|png|webp|gif)$/i.test(file.originalname)),
 });
+
+const videoUploadMw = multer({
+  storage: CLOUDINARY_OK ? memStorage : multer.diskStorage({
+    destination: (_,__,cb) => cb(null, uploadsDir),
+    filename:    (_,file,cb) => cb(null, nanoid(12) + path.extname(file.originalname).toLowerCase()),
+  }),
+  limits: { fileSize: 200 * 1024 * 1024 }, // 200MB for video
+  fileFilter: (_,file,cb) => cb(null, /\.(mp4|webm|mov|avi|mkv)$/i.test(file.originalname)),
+});
+
+// ── Upload helper (Cloudinary or local disk) ─────────────────────────────────
+async function uploadToCloudinary(fileBuffer, originalName, resourceType = 'image') {
+  return new Promise((resolve, reject) => {
+    const ext    = path.extname(originalName).toLowerCase();
+    const folder = 'rutgonlink/' + (resourceType === 'video' ? 'videos' : 'images');
+    const opts   = {
+      folder,
+      resource_type: resourceType,
+      public_id:     nanoid(12),
+      // For video: generate thumbnail automatically
+      ...(resourceType === 'video' ? { eager: [{ format:'jpg', transformation:[{width:1200,height:630,crop:'fill'}] }] } : {}),
+    };
+    const stream = cloudinary.uploader.upload_stream(opts, (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
+    });
+    const { Readable } = require('stream');
+    const readable = new Readable();
+    readable.push(fileBuffer);
+    readable.push(null);
+    readable.pipe(stream);
+  });
+}
 
 let db = null;
 async function getDb() { if (!db) db = await initDb(); return db; }
@@ -223,7 +277,24 @@ app.post('/api/upload-image', requireAuth, upload.single('image'), async (req,re
   const plan = user?.plan || 'free';
   if (!PLANS[plan]?.upload) return res.status(403).json({ error:'Tính năng này yêu cầu gói Pro', upgrade:true });
   if (!req.file) return res.status(400).json({ error:'Không có file hoặc định dạng không hợp lệ' });
-  res.json({ url:`/uploads/${req.file.filename}` });
+
+  try {
+    if (CLOUDINARY_OK && req.file.buffer) {
+      // Upload to Cloudinary
+      const result = await uploadToCloudinary(req.file.buffer, req.file.originalname, 'image');
+      return res.json({
+        url:       result.secure_url,
+        public_id: result.public_id,
+        source:    'cloudinary',
+      });
+    } else {
+      // Disk fallback (local dev without Cloudinary)
+      return res.json({ url:`/uploads/${req.file.filename}`, source:'local' });
+    }
+  } catch(e) {
+    console.error('[upload-image]', e.message);
+    return res.status(500).json({ error:'Upload thất bại: ' + e.message });
+  }
 });
 
 // ─── ADMIN INIT (fix admin user in DB) ───────────────────────────────────────
@@ -556,12 +627,34 @@ const videoUpload = multer({
   fileFilter: (_,file,cb) => cb(null, /\.(mp4|webm|mov|avi|mkv)$/i.test(file.originalname)),
 });
 
-app.post('/api/upload-video', requireAuth, videoUpload.single('video'), async (req,res) => {
+// ─── UPLOAD VIDEO ─────────────────────────────────────────────────────────────
+app.post('/api/upload-video', requireAuth, videoUploadMw.single('video'), async (req,res) => {
   const user = await resolveUser(req);
   const plan = user?.plan || 'free';
   if (!PLANS[plan]?.videoLink) return res.status(403).json({ error:'Tính năng này yêu cầu gói Pro', upgrade:true });
   if (!req.file) return res.status(400).json({ error:'Không có file hoặc định dạng không hợp lệ (mp4, webm, mov)' });
-  res.json({ url:`/uploads/${req.file.filename}` });
+
+  try {
+    if (CLOUDINARY_OK && req.file.buffer) {
+      // Upload video to Cloudinary, auto-generate thumbnail
+      const result = await uploadToCloudinary(req.file.buffer, req.file.originalname, 'video');
+      // Cloudinary auto thumbnail URL
+      const thumbUrl = result.eager?.[0]?.secure_url ||
+        result.secure_url.replace('/upload/', '/upload/so_0,w_1200,h_630,c_fill,f_jpg/').replace(/\.[^.]+$/, '.jpg');
+      return res.json({
+        url:       result.secure_url,
+        thumb:     thumbUrl,
+        public_id: result.public_id,
+        source:    'cloudinary',
+        duration:  result.duration,
+      });
+    } else {
+      return res.json({ url:`/uploads/${req.file.filename}`, thumb:null, source:'local' });
+    }
+  } catch(e) {
+    console.error('[upload-video]', e.message);
+    return res.status(500).json({ error:'Upload video thất bại: ' + e.message });
+  }
 });
 
 
