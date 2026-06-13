@@ -198,16 +198,19 @@ app.post('/api/upload-image', requireAuth, upload.single('image'), async (req,re
 });
 
 // ─── ADMIN INIT (fix admin user in DB) ───────────────────────────────────────
-app.post('/api/admin/init', async (req,res) => {
+// Supports both GET and POST so admin can open in browser
+async function handleAdminInit(req, res) {
   const user = await resolveUser(req);
   if (!user || user.email.toLowerCase() !== ADMIN_EMAIL) {
-    return res.status(403).json({ error:'Không có quyền' });
+    return res.status(403).json({ error: 'Không có quyền – cần đăng nhập bằng admin email trước' });
   }
   const database = await getDb();
   await database.updateUserRole(user.id, 'admin');
   await database.updateUserPlan(user.id, 'admin');
-  res.json({ ok:true, message:`User ${user.email} đã được set role=admin, plan=admin` });
-});
+  res.json({ ok: true, message: `✅ User ${user.email} đã được set role=admin, plan=admin` });
+}
+app.get('/api/admin/init',  handleAdminInit);
+app.post('/api/admin/init', handleAdminInit);
 
 // ─── ADMIN APIs ───────────────────────────────────────────────────────────────
 
@@ -433,222 +436,262 @@ function buildOgPage(link, baseUrl) {
 </head><body><script>window.location.replace(${JSON.stringify(link.original_url)});</script></body></html>`;
 }
 
-// ─── VIDEO PAGE ───────────────────────────────────────────────────────────────
+// ─── UPLOAD VIDEO ─────────────────────────────────────────────────────────────
+// NOTE: On Vercel serverless, filesystem is ephemeral – use S3/Cloudinary for production
+const videoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_,__,cb) => {
+      const dir = require('path').join(__dirname,'..','public','uploads');
+      try { if (!require('fs').existsSync(dir)) require('fs').mkdirSync(dir,{recursive:true}); } catch(_){}
+      cb(null, dir);
+    },
+    filename: (_,file,cb) => cb(null, nanoid(12) + require('path').extname(file.originalname).toLowerCase()),
+  }),
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
+  fileFilter: (_,file,cb) => cb(null, /\.(mp4|webm|mov|avi|mkv)$/i.test(file.originalname)),
+});
+
+app.post('/api/upload-video', requireAuth, videoUpload.single('video'), async (req,res) => {
+  const user = await resolveUser(req);
+  const plan = user?.plan || 'free';
+  if (!PLANS[plan]?.videoLink) return res.status(403).json({ error:'Tính năng này yêu cầu gói Pro', upgrade:true });
+  if (!req.file) return res.status(400).json({ error:'Không có file hoặc định dạng không hợp lệ (mp4, webm, mov)' });
+  res.json({ url:`/uploads/${req.file.filename}` });
+});
+
 
 function buildVideoPage(link) {
-  const deeplinkInfo = detectPlatformDeep(link.original_url, 'android');
-  const deeplink     = deeplinkInfo.deeplink || link.original_url;
+  const ua           = 'android'; // detect at server level not needed – JS handles it
+  const iosInfo      = detectPlatformDeep(link.original_url, 'ios');
+  const androidInfo  = detectPlatformDeep(link.original_url, 'android');
   const fallback     = link.original_url;
   const overlayText  = esc(link.video_overlay_text || '🛒 Bấm vào đây để ủng hộ và xem sản phẩm →');
   const ogTitle      = esc(link.og_title || 'Xem video');
   const ogImage      = esc(link.og_image || '');
 
-  // Detect if video URL is YouTube, TikTok embed, or direct mp4
-  const videoUrl  = link.video_url || '';
-  let   videoHtml = '';
+  const videoUrl = link.video_url || '';
+  let videoHtml  = '';
 
+  // YouTube
   const ytMatch = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
   const ytEmbed = videoUrl.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{11})/);
-
   if (ytMatch || ytEmbed) {
     const vid = ytMatch ? ytMatch[1] : ytEmbed[1];
-    videoHtml = `<iframe id="videoEl" src="https://www.youtube.com/embed/${vid}?autoplay=1&mute=1&enablejsapi=1"
-      frameborder="0" allow="autoplay;encrypted-media" allowfullscreen
-      style="width:100%;height:100%;position:absolute;top:0;left:0"></iframe>`;
-  } else {
-    // Direct video file or TikTok/other embed
-    videoHtml = `<video id="videoEl" src="${esc(videoUrl)}" autoplay muted playsinline
+    videoHtml = `<iframe id="videoEl"
+      src="https://www.youtube.com/embed/${vid}?autoplay=1&mute=1&enablejsapi=1&rel=0&modestbranding=1"
+      frameborder="0" allow="autoplay;encrypted-media;gyroscope" allowfullscreen
+      style="width:100%;height:100%;position:absolute;top:0;left:0;border:0"></iframe>`;
+  } else if (videoUrl) {
+    // Direct mp4 / webm / uploaded file
+    videoHtml = `<video id="videoEl" src="${esc(videoUrl)}"
+      autoplay muted playsinline loop
       style="width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0"></video>`;
+  } else {
+    videoHtml = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.4);font-size:14px">Không có video</div>`;
   }
 
   return `<!DOCTYPE html>
 <html lang="vi">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <title>${ogTitle}</title>
 ${ogImage ? `<meta property="og:image" content="${ogImage}"/>` : ''}
 <meta property="og:title" content="${ogTitle}"/>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:#000;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#000;overflow:hidden;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;touch-action:none}
 
-/* Video container */
-.video-wrap{position:relative;width:100vw;height:100vh;background:#000}
+.video-wrap{position:relative;width:100vw;height:100vh;background:#000;overflow:hidden}
 
-/* Overlay */
+/* ── Countdown ring (top-right) ── */
+.cd-wrap{
+  position:absolute;top:18px;right:16px;z-index:20;
+  display:flex;align-items:center;justify-content:center;
+}
+.cd-svg{width:46px;height:46px}
+.cd-bg{fill:none;stroke:rgba(255,255,255,.15);stroke-width:3}
+.cd-prog{
+  fill:none;stroke:rgba(255,255,255,.9);stroke-width:3;stroke-linecap:round;
+  stroke-dasharray:120.6;stroke-dashoffset:0;
+  transform:rotate(-90deg);transform-origin:50% 50%;
+  transition:stroke-dashoffset 0.05s linear;
+}
+.cd-num{
+  position:absolute;font-size:15px;font-weight:800;color:#fff;
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  text-shadow:0 1px 3px rgba(0,0,0,.5);
+}
+
+/* ── Overlay – covers ENTIRE screen, cursor pointer everywhere ── */
 .overlay{
-  position:absolute;inset:0;z-index:10;
-  background:linear-gradient(to bottom,rgba(0,0,0,.15) 0%,rgba(0,0,0,.0) 40%,rgba(0,0,0,.0) 55%,rgba(0,0,0,.75) 100%);
+  position:absolute;inset:0;z-index:30;
+  cursor:pointer;
   display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
-  padding-bottom:60px;
-  opacity:0;pointer-events:none;transition:opacity .4s;
+  padding-bottom:clamp(40px,10vh,80px);
+  /* gradient from transparent top → dark bottom */
+  background:linear-gradient(
+    to bottom,
+    rgba(0,0,0,0)   0%,
+    rgba(0,0,0,0)   45%,
+    rgba(0,0,0,.55) 70%,
+    rgba(0,0,0,.82) 100%
+  );
+  opacity:0;pointer-events:none;
+  transition:opacity .35s ease;
 }
 .overlay.show{opacity:1;pointer-events:all}
 
-/* CTA button */
+/* ── CTA button (inside overlay, also triggers deeplink) ── */
 .cta-btn{
-  background:linear-gradient(135deg,#ee4d2d,#ff7849);
-  color:#fff;border:none;border-radius:50px;
-  padding:16px 36px;font-size:17px;font-weight:800;
-  cursor:pointer;letter-spacing:.02em;
-  box-shadow:0 6px 28px rgba(238,77,45,.55);
-  animation:pulse 2s infinite;
+  background:linear-gradient(135deg,#ee4d2d 0%,#ff6b35 100%);
+  color:#fff;border:none;border-radius:100px;
+  padding:15px 32px;font-size:16px;font-weight:800;
+  cursor:pointer;pointer-events:none; /* overlay handles click */
+  letter-spacing:.02em;
+  box-shadow:0 6px 28px rgba(238,77,45,.5);
   display:flex;align-items:center;gap:10px;
-  max-width:88vw;text-align:center;
+  max-width:88vw;text-align:center;line-height:1.3;
+  animation:pulse 2s ease-in-out infinite;
+  position:relative;z-index:1;
 }
-@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+@keyframes pulse{0%,100%{box-shadow:0 6px 28px rgba(238,77,45,.5)}
+  50%{box-shadow:0 8px 36px rgba(238,77,45,.75);transform:scale(1.03)}}
 
-.cta-sub{
-  color:rgba(255,255,255,.75);font-size:12px;margin-top:10px;text-align:center;
+.cta-hint{
+  color:rgba(255,255,255,.65);font-size:11px;
+  margin-top:10px;text-align:center;line-height:1.5;
+  pointer-events:none;
 }
 
-/* Countdown ring */
-.countdown-wrap{position:absolute;top:20px;right:16px;z-index:11;display:flex;align-items:center;gap:6px}
-.countdown-ring{width:42px;height:42px}
-.ring-bg{fill:none;stroke:rgba(255,255,255,.2);stroke-width:3}
-.ring-progress{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;
-  stroke-dasharray:113;stroke-dashoffset:113;transform:rotate(-90deg);transform-origin:50% 50%;
-  transition:stroke-dashoffset .9s linear}
-.countdown-num{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  font-size:14px;font-weight:800;color:#fff}
-
-/* Back button */
-.back-btn{
-  position:absolute;top:16px;left:14px;z-index:11;
-  background:rgba(0,0,0,.45);border:none;border-radius:50%;
-  width:38px;height:38px;display:flex;align-items:center;justify-content:center;
-  cursor:pointer;color:#fff;font-size:18px;backdrop-filter:blur(4px);
+/* ── Nút X góc trái – BẤM VÀO CŨNG NHẢY APP ── */
+.x-btn{
+  position:absolute;top:16px;left:14px;z-index:31;
+  width:38px;height:38px;border-radius:50%;
+  background:rgba(0,0,0,.5);border:1.5px solid rgba(255,255,255,.25);
+  color:#fff;font-size:16px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;backdrop-filter:blur(6px);
   opacity:0;pointer-events:none;transition:opacity .3s;
 }
-.back-btn.show{opacity:1;pointer-events:all}
+.x-btn.show{opacity:1;pointer-events:all}
+.x-btn:hover{background:rgba(255,255,255,.15)}
 
-/* Pause indicator */
-.pause-icon{
+/* ── Pause flash ── */
+.pause-flash{
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  z-index:5;font-size:52px;opacity:0;pointer-events:none;transition:opacity .2s;
+  z-index:29;font-size:56px;
+  opacity:0;pointer-events:none;
+  transition:opacity .15s;
+  filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));
 }
-.pause-icon.show{opacity:1}
+.pause-flash.show{opacity:1}
 </style>
 </head>
 <body>
-<div class="video-wrap" id="videoWrap">
+<div class="video-wrap" id="wrap">
   ${videoHtml}
 
   <!-- Countdown -->
-  <div class="countdown-wrap" id="countdownWrap">
-    <div style="position:relative;width:42px;height:42px">
-      <svg class="countdown-ring" viewBox="0 0 42 42">
-        <circle class="ring-bg" cx="21" cy="21" r="18"/>
-        <circle class="ring-progress" id="ringProgress" cx="21" cy="21" r="18"/>
-      </svg>
-      <div class="countdown-num" id="countdownNum">5</div>
+  <div class="cd-wrap" id="cdWrap">
+    <svg class="cd-svg" viewBox="0 0 42 42">
+      <circle class="cd-bg"   cx="21" cy="21" r="19.2"/>
+      <circle class="cd-prog" cx="21" cy="21" r="19.2" id="cdProg"/>
+    </svg>
+    <span class="cd-num" id="cdNum">5</span>
+  </div>
+
+  <!-- Pause flash -->
+  <div class="pause-flash" id="pauseFlash">⏸</div>
+
+  <!-- Full-screen overlay (bấm bất kỳ đâu = nhảy app) -->
+  <div class="overlay" id="overlay" onclick="goApp()">
+    <div class="cta-btn">
+      <span style="font-size:20px">🛒</span>
+      <span>${overlayText}</span>
     </div>
+    <div class="cta-hint">Bấm vào bất kỳ đâu để mở ứng dụng</div>
   </div>
 
-  <!-- Pause icon -->
-  <div class="pause-icon" id="pauseIcon">⏸</div>
-
-  <!-- Overlay CTA -->
-  <div class="overlay" id="overlay">
-    <button class="cta-btn" id="ctaBtn">
-      <span>🛒</span>
-      <span id="ctaText">${overlayText}</span>
-    </button>
-    <div class="cta-sub">Bấm để mở Shopee / TikTok · Video sẽ tiếp tục khi quay lại</div>
-  </div>
-
-  <!-- Back button (after overlay shown) -->
-  <button class="back-btn" id="backBtn" onclick="resumeVideo()">✕</button>
+  <!-- Nút X góc trái – bấm cũng nhảy app -->
+  <div class="x-btn" id="xBtn" onclick="goApp()">✕</div>
 </div>
 
 <script>
 (function(){
-  var DEEPLINK  = ${JSON.stringify(deeplink)};
-  var FALLBACK  = ${JSON.stringify(fallback)};
-  var OVERLAY_DELAY = 5000; // ms
-  var videoEl   = document.getElementById('videoEl');
-  var overlay   = document.getElementById('overlay');
-  var backBtn   = document.getElementById('backBtn');
-  var ctaBtn    = document.getElementById('ctaBtn');
-  var pauseIcon = document.getElementById('pauseIcon');
-  var ringProg  = document.getElementById('ringProgress');
-  var countNum  = document.getElementById('countdownNum');
-  var countWrap = document.getElementById('countdownWrap');
-  var overlayShown = false;
-  var paused = false;
+  var DEEPLINK_IOS     = ${JSON.stringify(iosInfo.deeplink || fallback)};
+  var DEEPLINK_ANDROID = ${JSON.stringify(androidInfo.deeplink || fallback)};
+  var FALLBACK         = ${JSON.stringify(fallback)};
+  var CIRCUMFERENCE    = 120.6; // 2π × 19.2
+  var DELAY_MS         = 5000;
 
-  // Countdown: 5 → 0 then show overlay
-  var remaining = 5;
-  var circumference = 113;
+  var videoEl    = document.getElementById('videoEl');
+  var overlay    = document.getElementById('overlay');
+  var xBtn       = document.getElementById('xBtn');
+  var cdWrap     = document.getElementById('cdWrap');
+  var cdProg     = document.getElementById('cdProg');
+  var cdNum      = document.getElementById('cdNum');
+  var pauseFlash = document.getElementById('pauseFlash');
+  var shown      = false;
 
-  function updateRing(secs) {
-    var frac = secs / 5;
-    ringProg.style.strokeDashoffset = circumference * (1 - frac);
-    countNum.textContent = Math.ceil(secs);
-  }
+  /* ── Detect iOS ── */
+  var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var deeplink = isIos ? DEEPLINK_IOS : DEEPLINK_ANDROID;
 
-  var startTime = Date.now();
-  var rafId;
+  /* ── Countdown animation ── */
+  var t0 = Date.now();
   function tick() {
-    var elapsed = (Date.now() - startTime) / 1000;
-    var left = Math.max(0, 5 - elapsed);
-    updateRing(left);
-    if (left > 0) {
-      rafId = requestAnimationFrame(tick);
-    } else {
-      showOverlay();
-    }
+    var elapsed = Date.now() - t0;
+    var left    = Math.max(0, DELAY_MS - elapsed);
+    var frac    = left / DELAY_MS; // 1 → 0
+    cdProg.style.strokeDashoffset = CIRCUMFERENCE * (1 - frac);
+    cdNum.textContent = Math.ceil(left / 1000);
+    if (left > 0) requestAnimationFrame(tick);
+    else          showOverlay();
   }
-  rafId = requestAnimationFrame(tick);
+  requestAnimationFrame(tick);
 
+  /* ── Show overlay ── */
   function showOverlay() {
-    if (overlayShown) return;
-    overlayShown = true;
+    if (shown) return;
+    shown = true;
     // Pause video
     try {
-      if (videoEl.tagName === 'VIDEO') { videoEl.pause(); paused = true; }
-      else if (videoEl.tagName === 'IFRAME') {
-        videoEl.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}','*');
-        paused = true;
-      }
-    } catch(e){}
+      if (videoEl && videoEl.tagName === 'VIDEO') videoEl.pause();
+      else if (videoEl && videoEl.tagName === 'IFRAME')
+        videoEl.contentWindow.postMessage(
+          '{"event":"command","func":"pauseVideo","args":""}','*');
+    } catch(_){}
+    // Show pause flash briefly
+    pauseFlash.classList.add('show');
+    setTimeout(function(){ pauseFlash.classList.remove('show'); }, 700);
+    // Fade in overlay + X button
+    cdWrap.style.display = 'none';
     overlay.classList.add('show');
-    backBtn.classList.add('show');
-    countWrap.style.display = 'none';
-    pauseIcon.classList.add('show');
-    setTimeout(function(){ pauseIcon.classList.remove('show'); }, 800);
+    xBtn.classList.add('show');
   }
 
-  function resumeVideo() {
-    overlay.classList.remove('show');
-    backBtn.classList.remove('show');
-    try {
-      if (videoEl.tagName === 'VIDEO') { videoEl.play(); paused = false; }
-      else if (videoEl.tagName === 'IFRAME') {
-        videoEl.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}','*');
-        paused = false;
-      }
-    } catch(e){}
-  }
-  window.resumeVideo = resumeVideo;
-
-  // CTA click → deeplink
-  ctaBtn.addEventListener('click', function() {
-    var ua = navigator.userAgent.toLowerCase();
-    var isIos = /iphone|ipad|ipod/.test(ua);
-    // Try app deeplink first
-    window.location.href = DEEPLINK;
+  /* ── Go to app (called when user taps overlay OR x-btn) ── */
+  function goApp() {
+    // Try deep link
+    window.location.href = deeplink;
+    // Fallback: if still here after 2s, open in browser
     setTimeout(function() {
-      // If still here after 2s → open in browser
       window.location.href = FALLBACK;
     }, 2000);
-  });
+  }
+  window.goApp = goApp;
 
-  // Handle visibility change (user returns from app)
+  /* ── Resume video when user returns from app ── */
   document.addEventListener('visibilitychange', function() {
-    if (!document.hidden && overlayShown && paused) {
-      resumeVideo();
+    if (!document.hidden && shown) {
+      try {
+        if (videoEl && videoEl.tagName === 'VIDEO') videoEl.play();
+        else if (videoEl && videoEl.tagName === 'IFRAME')
+          videoEl.contentWindow.postMessage(
+            '{"event":"command","func":"playVideo","args":""}','*');
+      } catch(_){}
     }
   });
 })();

@@ -873,6 +873,39 @@ function updateOgPreview(cid) {
   }
 }
 
+
+async function handleVideoUpload(event, cid) {
+  const file = event.target.files[0];
+  if (!file) return;
+  // Show local preview immediately
+  const preview = document.getElementById(cid + '_vpreview');
+  if (preview) {
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = 'block';
+  }
+  // Upload to server
+  const area = document.getElementById(cid + '_vuploadarea');
+  if (area) area.style.borderColor = 'var(--brand)';
+  const fd = new FormData();
+  fd.append('video', file);
+  try {
+    const r = await fetch('/api/upload-video', { method:'POST', body:fd });
+    const d = await r.json();
+    if (!r.ok) {
+      toast(d.error || 'Upload video thất bại', 'err');
+      if (area) area.style.borderColor = 'var(--border2)';
+      return;
+    }
+    // Set video URL field
+    const urlInput = document.getElementById(cid + '_videourl');
+    if (urlInput) urlInput.value = window.location.origin + d.url;
+    if (area) { area.style.borderColor = 'var(--green)'; }
+    toast('✅ Upload video thành công!', 'ok');
+  } catch {
+    toast('Lỗi upload video', 'err');
+    if (area) area.style.borderColor = 'var(--border2)';
+  }
+}
 async function handleFileUpload(event, cid) {
   const file = event.target.files[0];
   if (!file) return;
@@ -1122,6 +1155,8 @@ function toast(msg,type='ok') {
 </script>
 </body>
 </html>
+
+
 
 
 
