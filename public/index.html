@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
 <meta charset="UTF-8"/>
@@ -301,7 +301,17 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
   .content{padding:14px}
   .sf-grid{grid-template-columns:1fr}
 }
-</style>
+/* ADMIN */
+.plan-select{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;outline:none;cursor:pointer}
+.plan-select:focus{border-color:var(--brand)}
+.btn-del{padding:4px 10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;color:#fca5a5;font-size:11px;font-weight:700;cursor:pointer;transition:.15s}
+.btn-del:hover{background:rgba(239,68,68,.2)}
+.badge-role{font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px}
+.badge-role.admin{background:rgba(245,158,11,.15);color:#fcd34d}
+.badge-role.user{background:rgba(100,116,139,.1);color:var(--text3)}
+/* VIDEO FORM */
+.video-sec{background:var(--bg3);border:1.5px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;display:none}
+.video-sec.show{display:block}</style>
 </head>
 <body>
 
@@ -403,6 +413,10 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
         <div class="sitem" onclick="navigate('pricing',this)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           <span class="slabel">Gói dịch vụ</span>
+        </div>
+        <div class="sitem" id="adminNavItem" style="display:none" onclick="navigate('admin',this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span class="slabel">Quản trị</span>
         </div>
       </nav>
       <div class="sfooter" id="sidebarFooter">
@@ -529,6 +543,30 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
         <p style="text-align:center;color:var(--text3);font-size:12px;margin-top:16px">Liên hệ nâng cấp qua Zalo: <a href="#" style="color:var(--brand)">0123.456.789</a></p>
       </div>
 
+
+      <!-- ADMIN PAGE -->
+      <div class="page" id="page-admin">
+        <div class="ph"><h1>🛡️ Quản trị hệ thống</h1><p>Quản lý người dùng, link và thống kê toàn bộ hệ thống</p></div>
+        <div class="sg" id="adminStatsRow">
+          <div class="sc"><div class="sc-top"><span class="sc-lbl">Tổng người dùng</span><div class="sc-icon" style="background:rgba(139,92,246,.12)">👥</div></div><div class="sc-val" id="adTotalUsers">–</div></div>
+          <div class="sc"><div class="sc-top"><span class="sc-lbl">Tổng link</span><div class="sc-icon" style="background:rgba(59,130,246,.12)">🔗</div></div><div class="sc-val" id="adTotalLinks">–</div></div>
+          <div class="sc"><div class="sc-top"><span class="sc-lbl">Tổng lượt click</span><div class="sc-icon" style="background:rgba(34,197,94,.12)">📊</div></div><div class="sc-val" id="adTotalClicks">–</div></div>
+        </div>
+        <div class="tbl-card" style="margin-bottom:18px">
+          <div class="tbl-head"><h3>👥 Người dùng (<span id="adUserCount">0</span>)</h3><input type="text" class="tbl-search" id="adUserSearch" placeholder="Tìm email..." oninput="filterAdminUsers(this.value)"/></div>
+          <div style="overflow-x:auto"><table>
+            <thead><tr><th>ID</th><th>Email</th><th>Tên</th><th>Gói hiện tại</th><th>Role</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead>
+            <tbody id="adUserBody"><tr><td colspan="7" class="tbl-empty">⏳ Đang tải...</td></tr></tbody>
+          </table></div>
+        </div>
+        <div class="tbl-card">
+          <div class="tbl-head"><h3>🔗 Tất cả liên kết (<span id="adLinkCount">0</span>)</h3><input type="text" class="tbl-search" id="adLinkSearch" placeholder="Tìm link..." oninput="filterAdminLinks(this.value)"/></div>
+          <div style="overflow-x:auto"><table>
+            <thead><tr><th>Link rút gọn</th><th>Link gốc</th><th>Loại</th><th>Chủ sở hữu</th><th>Clicks</th><th>Ngày tạo</th><th></th></tr></thead>
+            <tbody id="adLinkBody"><tr><td colspan="7" class="tbl-empty">⏳ Đang tải...</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
     </div><!-- /content -->
   </div><!-- /app-body -->
 </div><!-- /appScreen -->
@@ -628,6 +666,7 @@ async function doLogout() {
 
 function updateTopbar() {
   const plan = user?.plan || 'guest';
+  const role = user?.role || 'user';
   const name = user?.name || user?.email?.split('@')[0] || 'Khách';
   const badge = document.getElementById('tbPlanBadge');
   badge.textContent = plan === 'guest' ? 'GUEST' : plan.toUpperCase();
@@ -854,6 +893,21 @@ async function handleFileUpload(event, cid) {
   } catch { toast('Lỗi upload','err'); }
 }
 
+function onLinkTypeChange(cid) {
+  const val     = document.getElementById(cid + '_ltype')?.value;
+  const vidSec  = document.getElementById(cid + '_videosec');
+  const metaSec = document.querySelector('#' + cid + ' .meta-sec') ||
+                  document.getElementById(cid + '_metabody')?.parentElement;
+  if (vidSec) vidSec.className = 'video-sec' + (val === 'video' ? ' show' : '');
+  // Check plan for video
+  const plan = user?.plan || 'free';
+  if (val === 'video' && plan === 'free') {
+    toast('🔒 Link Video yêu cầu gói Pro', 'warn');
+    const el = document.getElementById(cid + '_ltype');
+    if (el) el.value = 'direct';
+    if (vidSec) vidSec.className = 'video-sec';
+  }
+}
 async function doShorten(cid) {
   const url      = document.getElementById(`${cid}_url`)?.value.trim();
   const alias    = document.getElementById(`${cid}_alias`)?.value.trim();
@@ -1068,3 +1122,8 @@ function toast(msg,type='ok') {
 </script>
 </body>
 </html>
+
+
+
+
+
