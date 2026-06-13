@@ -59,12 +59,12 @@ async function resolveUser(req) {
   const token = parseToken(req);
   if (!token) return null;
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
+    const payload  = jwt.verify(token, JWT_SECRET);
     const database = await getDb();
-    const user = await database.getUserById(payload.id);
+    const user     = await database.getUserById(payload.id);
     if (!user) return null;
-    // Admin email always gets admin plan
-    if (user.email.toLowerCase() === ADMIN_EMAIL) {
+    // Admin email ALWAYS gets admin plan+role regardless of DB value
+    if (user.email.toLowerCase() === ADMIN_EMAIL || user.role === 'admin') {
       user.plan = 'admin';
       user.role = 'admin';
     }
@@ -168,12 +168,22 @@ app.post('/api/auth/login', async (req,res) => {
     if (!user) return res.status(401).json({ error:'Email hoặc mật khẩu không đúng' });
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(401).json({ error:'Email hoặc mật khẩu không đúng' });
+
     const isAdmin = user.email.toLowerCase() === ADMIN_EMAIL || user.role === 'admin';
-    const effectivePlan = isAdmin ? 'admin' : user.plan;
-    // Store only id in JWT – plan/role always fetched from DB
+
+    // Auto-fix admin role/plan in DB on every login
+    if (isAdmin && (user.role !== 'admin' || user.plan !== 'admin')) {
+      await database.updateUserRole(user.id, 'admin');
+      await database.updateUserPlan(user.id, 'admin');
+      user.role = 'admin';
+      user.plan = 'admin';
+    }
+
     const token = jwt.sign({ id:user.id, email:user.email }, JWT_SECRET, { expiresIn:'30d' });
     res.cookie('token', token, { httpOnly:true, maxAge:30*24*3600*1000, sameSite:'lax' });
-    res.json({ user:{ id:user.id, email:user.email, name:user.name, plan:effectivePlan, role:isAdmin?'admin':user.role||'user' } });
+    res.json({ user:{ id:user.id, email:user.email, name:user.name,
+                      plan: isAdmin ? 'admin' : user.plan,
+                      role: isAdmin ? 'admin' : (user.role||'user') } });
   } catch(e) { console.error(e); res.status(500).json({ error:'Lỗi server: '+e.message }); }
 });
 
@@ -354,6 +364,51 @@ app.post('/api/shorten', async (req,res) => {
     console.error(e);
     return res.status(500).json({ error:'Lỗi server: '+e.message });
   }
+});
+
+// ─── API: Edit Link ───────────────────────────────────────────────────────────
+
+app.get('/api/links/:id', async (req,res) => {
+  try {
+    const database = await getDb();
+    const user     = await resolveUser(req);
+    const link     = await database.getLinkById(Number(req.params.id));
+    if (!link) return res.status(404).json({ error:'Không tìm thấy link' });
+    const isAdmin = user?.role==='admin' || user?.email?.toLowerCase()===ADMIN_EMAIL;
+    if (!isAdmin && link.user_id && link.user_id !== user?.id)
+      return res.status(403).json({ error:'Không có quyền' });
+    res.json({ link:{ ...link, short_url:`${BASE_URL}/${link.alias||link.short_code}` } });
+  } catch(e) { res.status(500).json({ error:e.message }); }
+});
+
+app.patch('/api/links/:id', async (req,res) => {
+  try {
+    const database = await getDb();
+    const user     = await resolveUser(req);
+    if (!user) return res.status(401).json({ error:'Chưa đăng nhập' });
+    const link = await database.getLinkById(Number(req.params.id));
+    if (!link) return res.status(404).json({ error:'Không tìm thấy link' });
+    const isAdmin = user.role==='admin' || user.email?.toLowerCase()===ADMIN_EMAIL;
+    if (!isAdmin && link.user_id !== user.id)
+      return res.status(403).json({ error:'Không có quyền chỉnh sửa link này' });
+    const { og_title, og_desc, og_image, link_type, video_url, video_overlay_text } = req.body;
+    await database.updateLink(Number(req.params.id), {
+      og_title, og_desc, og_image, link_type, video_url, video_overlay_text,
+    });
+    const updated = await database.getLinkById(Number(req.params.id));
+    res.json({ link:{ ...updated, short_url:`${BASE_URL}/${updated.alias||updated.short_code}` } });
+  } catch(e) { res.status(500).json({ error:e.message }); }
+});
+
+// Extract YouTube thumbnail server-side; local video thumbnail via client canvas
+app.post('/api/extract-thumb', requireAuth, async (req,res) => {
+  const { video_url } = req.body;
+  if (!video_url) return res.status(400).json({ error:'Thiếu video_url' });
+  const ytMatch = video_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (ytMatch) {
+    return res.json({ thumb:`https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`, source:'youtube' });
+  }
+  res.json({ thumb:null, source:'local' });
 });
 
 // ─── STATS ────────────────────────────────────────────────────────────────────

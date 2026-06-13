@@ -141,6 +141,22 @@ async function init() {
     async deleteLink(linkId) {
       await ex(`DELETE FROM links WHERE id=?`,[linkId]);
     },
+    async updateLink(linkId, fields) {
+      // fields: { original_url, alias, og_title, og_desc, og_image, link_type, video_url, video_overlay_text }
+      const allowed = ['original_url','alias','og_title','og_desc','og_image',
+                       'link_type','video_url','video_overlay_text'];
+      const sets = [];
+      const args = [];
+      for (const [k,v] of Object.entries(fields)) {
+        if (allowed.includes(k)) { sets.push(`${k}=?`); args.push(v ?? null); }
+      }
+      if (!sets.length) return;
+      args.push(linkId);
+      await ex(`UPDATE links SET ${sets.join(',')} WHERE id=?`, args);
+    },
+    async getLinkById(id) {
+      return one(`SELECT * FROM links WHERE id=?`,[id]);
+    },
     async getTotals(userId) {
       const where = userId ? `WHERE user_id=${Number(userId)}` : '';
       const r1 = await one(`SELECT COUNT(*) as c FROM links ${where}`);
