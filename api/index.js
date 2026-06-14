@@ -207,7 +207,8 @@ const TIKTOK_ANDROID_PACKAGE = 'com.ss.android.ugc.trill';
 const TIKTOK_APP_STORE_ID    = '1235601864';
 const SHOPEE_ANDROID_PACKAGE = 'com.shopee.vn';
 const SHOPEE_APP_STORE_ID    = '959841449';
-const FACEBOOK_APP_ID        = process.env.FACEBOOK_APP_ID || '1609970790226254';
+// Dùng đúng FB App ID như boclink (1862952583919182) hoặc từ env
+const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID || '1862952583919182';
 
 // ─── BUILD TIKTOK APP SCHEME ─────────────────────────────────────────────────
 function buildTikTokAppScheme(destinationUrl) {
@@ -729,51 +730,63 @@ function buildAppLinkMeta(originalUrl) {
 
 function buildOgPage(link, baseUrl, isHumanFbUser = false) {
   const shortUrl = `${baseUrl}/${link.alias||link.short_code}`;
-  const title = esc(link.og_title || 'Link rút gọn – RutGonLink');
+  const title = esc(link.og_title || 'RutGonLink');
   const desc  = esc(link.og_desc  || 'Nhấn vào link để xem nội dung');
   const image = link.og_image ? esc(link.og_image) : `${baseUrl}/og-default.png`;
   const dest  = link.original_url;
-  const appLinkMeta = buildAppLinkMeta(dest);
 
-  // Với FB user (không phải bot): KHÔNG auto redirect bằng JS
-  // để App Links meta hoạt động – FB sẽ tự mở app theo al:ios:url
-  // Với bot: không chạy JS anyway, chỉ đọc meta tags
+  // Build deeplink schemes
+  const info        = detectPlatformDeep(dest, 'ios');
+  const iosUrl      = info.deeplink_ios     || dest;
+  const androidUrl  = info.deeplink_android || dest;
+  const platform    = info.platform_name;
+
+  // App Links meta (copy chính xác pattern boclink)
+  let appLinkMeta = '';
+  if (platform === 'tiktok' || platform === 'shopee') {
+    const pkgAndroid = platform === 'tiktok' ? TIKTOK_ANDROID_PACKAGE : SHOPEE_ANDROID_PACKAGE;
+    const storeId    = platform === 'tiktok' ? TIKTOK_APP_STORE_ID    : SHOPEE_APP_STORE_ID;
+    const appName    = platform === 'tiktok' ? 'TIKTOK' : 'Shopee';
+
+    appLinkMeta = `
+<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="${platform === 'tiktok' ? 'TikTok Shop' : 'Shopee'}" />
+<meta property="al:android:url" content="${esc(androidUrl)}" />
+<meta property="al:android:package" content="${pkgAndroid}" />
+<meta property="al:android:app_name" content="${appName}" />
+<meta property="al:ios:app_name" content="${appName}" />
+<meta property="al:ios:app_store_id" content="${storeId}" />
+<meta property="al:web:should_fallback" content="True" />
+<meta property="al:ios:url" content="${esc(iosUrl)}" />`;
+  }
+
+  // Với FB user: KHÔNG redirect bằng JS — để App Links tự xử lý
+  // Với non-FB user (bot, desktop): redirect bằng window.location.href
   const bodyScript = isHumanFbUser
-    ? `<!-- FB App Links active – no JS redirect needed -->`
-    : `<script>window.location.replace(${JSON.stringify(dest)});</script>`;
+    ? `<script>/* FB App Links active */</script>`
+    : `<script>window.location.href = ${JSON.stringify(dest)};</script>`;
 
   return `<!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+${appLinkMeta}
 <title>${title}</title>
 <meta name="description" content="${desc}"/>
-
-<!-- Open Graph -->
-<meta property="og:type"         content="website"/>
 <meta property="og:url"          content="${esc(shortUrl)}"/>
 <meta property="og:title"        content="${title}"/>
 <meta property="og:description"  content="${desc}"/>
 <meta property="og:image"        content="${image}"/>
 <meta property="og:image:width"  content="1200"/>
 <meta property="og:image:height" content="630"/>
-<meta property="og:image:type"   content="image/jpeg"/>
-<meta property="og:site_name"    content="RutGonLink"/>
-
-<!-- Twitter Card -->
 <meta name="twitter:card"        content="summary_large_image"/>
 <meta name="twitter:title"       content="${title}"/>
 <meta name="twitter:description" content="${desc}"/>
 <meta name="twitter:image"       content="${image}"/>
-
-<!-- Facebook App Links: tự mở app khi click trong FB -->
-${appLinkMeta}
 </head>
-<body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-<div style="text-align:center">
-  <p style="font-size:16px;margin-bottom:16px">${title}</p>
-  <a href="${esc(dest)}" style="color:#3b82f6;font-size:14px">Nhấn để xem →</a>
-</div>
+<body>
 ${bodyScript}
 </body>
 </html>`;
