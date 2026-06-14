@@ -194,26 +194,23 @@ app.get('/:code', async (req, res) => {
 
     const info = detectPlatformDeep(link.original_url, platform);
 
-    // Desktop → redirect thẳng
+    // ── Desktop → redirect thẳng ─────────────────────────────────────────
     if (platform === 'desktop') return res.redirect(302, link.original_url);
 
-    // ── MOBILE ──────────────────────────────────────────────────────────────
-
-    // Shopee → 301 qua domain trung gian → Universal Link → OS mở app
+    // ── Shopee mobile → 301 qua new-express.xyz ──────────────────────────
     if (info.platform_name === 'shopee') {
-      const universalLink = info.deeplink; // https://shopee.vn/universal-link/...
-      const middleUrl = `${MIDDLE_DOMAIN}/go?u=${encodeURIComponent(universalLink)}`;
+      const middleUrl = `https://new-express.xyz/go?u=${encodeURIComponent(info.deeplink || link.original_url)}`;
       return res.redirect(301, middleUrl);
     }
 
-    // TikTok → giữ bridge page vì đã hoạt động
+    // ── TikTok + deeplink → bridge page ──────────────────────────────────
     if (info.deeplink || linkType === 'deeplink') {
       const shortUrl = `${BASE_URL}/${link.alias||link.short_code}`;
-      res.set({ 'Cache-Control': 'no-cache,no-store,must-revalidate', 'Pragma': 'no-cache' });
+      res.set({ 'Cache-Control':'no-cache,no-store,must-revalidate', 'Pragma':'no-cache' });
       return res.send(buildDirectBridgePage(link, shortUrl, info));
     }
 
-    // Generic mobile → redirect thẳng
+    // ── Mobile không có deeplink → redirect thẳng ────────────────────────
     return res.redirect(302, link.original_url);
 
   } catch(e) {
