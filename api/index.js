@@ -767,18 +767,19 @@ function buildDirectBridgePage(link, canonicalUrl, info) {
     ${ogImageTag}
     </head>
     <body>
-    <script>
+   <script>
     (() => {
-      const appUrl     = "${escJs(appScheme)}";
-      const iosUrl     = "${escJs(iosScheme)}";
-      const androidUrl = "${escJs(andScheme)}";
-      const webUrl     = "${escJs(dest)}";
-      const androidPkg = "${escJs(androidPkg)}";
+      const appUrl      = "${escJs(appScheme)}";
+      const iosUrl      = "${escJs(iosScheme)}";
+      const androidUrl  = "${escJs(andScheme)}";
+      const webUrl      = "${escJs(dest)}";
+      const canonical   = "${escJs(canonicalUrl)}";
+      const androidPkg  = "${escJs(androidPkg)}";
+      const platform    = "${escJs(platform)}";
 
       // Tránh loop: chỉ chạy redirect 1 lần per session
       const flagKey = 'rgl_redirected_' + location.pathname;
-      if (sessionStorage.getItem(flagKey)) return;
-      sessionStorage.setItem(flagKey, '1');
+      const escapedFlag = 'rgl_escaped_' + location.pathname;
 
       const ua         = navigator.userAgent || '';
       const isIOS      = /iphone|ipad|ipod/i.test(ua);
@@ -787,21 +788,52 @@ function buildDirectBridgePage(link, canonicalUrl, info) {
       const isZalo     = /ZaloApp/i.test(ua);
       const isInApp    = isFacebook || isZalo;
 
-      // ── Android in-app (FB/Zalo) → Intent URL mở Chrome rồi deeplink ──────────
+      // ── Android in-app (FB/Zalo) ──────────────────────────────────────────
       if (isInApp && isAndroid) {
+        if (sessionStorage.getItem(escapedFlag)) {
+          // Đã escape 1 lần rồi nhưng vẫn còn trong FB (escape fail) → fallback webUrl
+          window.location.replace(webUrl);
+          return;
+        }
+        sessionStorage.setItem(escapedFlag, '1');
+
+        if (platform === 'tiktok') {
+          // TikTok: domain đã verify App Links → escape thẳng ra webUrl (giữ nguyên, đang chạy tốt)
+          const intentUrl = 'intent://' +
+            webUrl.replace(/^https?:\\/\\//, '') +
+            '#Intent;scheme=https;package=' + (androidPkg || 'com.ss.android.ugc.trill') +
+            ';S.browser_fallback_url=' + encodeURIComponent(webUrl) + ';end';
+          window.location.href = intentUrl;
+          setTimeout(() => { if (!document.hidden) window.location.replace(webUrl); }, 2000);
+          return;
+        }
+
+        // Shopee (và generic): escape ra lại trang bridge (canonical) trong Chrome
+        // → ở đó nhánh "Android bình thường" sẽ thử custom scheme shopee://...
         const intentUrl = 'intent://' +
-          webUrl.replace(/^https?:\\/\\//, '') +
-          '#Intent;scheme=https;package=' + (androidPkg || 'com.ss.android.ugc.trill') +
-          ';S.browser_fallback_url=' + encodeURIComponent(webUrl) + ';end';
+          canonical.replace(/^https?:\\/\\//, '') +
+          '#Intent;scheme=https;package=com.android.chrome' +
+          ';S.browser_fallback_url=' + encodeURIComponent(canonical) + ';end';
         window.location.href = intentUrl;
-        setTimeout(() => { if (!document.hidden) window.location.replace(webUrl); }, 2000);
+        setTimeout(() => { if (!document.hidden) window.location.replace(canonical); }, 1500);
         return;
       }
 
-      // ── iOS in-app (FB/Zalo) → thoát qua _blank, để Safari xử lý Universal Link ──
+      // ── iOS in-app (FB/Zalo) ───────────────────────────────────────────────
       if (isInApp && isIOS) {
+        if (sessionStorage.getItem(escapedFlag)) {
+          window.location.replace(webUrl);
+          return;
+        }
+        sessionStorage.setItem(escapedFlag, '1');
+
+        // TikTok: Universal Link của tiktok.com đã verify → escape ra webUrl (giữ nguyên)
+        // Shopee/generic: escape ra lại trang bridge (canonical) để nhánh "iOS bình thường"
+        //                 thử custom scheme shopee://... bên Safari
+        const target = (platform === 'tiktok') ? webUrl : canonical;
+
         const a = document.createElement('a');
-        a.href = webUrl;            // dùng webUrl (https), KHÔNG dùng custom scheme
+        a.href = target;
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
         document.body.appendChild(a);
@@ -810,6 +842,9 @@ function buildDirectBridgePage(link, canonicalUrl, info) {
         setTimeout(() => { window.location.replace(webUrl); }, 1500);
         return;
       }
+
+      if (sessionStorage.getItem(flagKey)) return;
+      sessionStorage.setItem(flagKey, '1');
 
       // ── iOS bình thường (Safari, Chrome iOS...) → thử scheme trực tiếp ────────
       if (isIOS) {
