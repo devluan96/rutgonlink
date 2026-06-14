@@ -160,7 +160,7 @@ function isSocialBot(ua='') {
 }
 
 function detectPlatformDeep(originalUrl, platform) {
-  // Shopee product URL: shopee.vn/...-i.<shopId>.<itemId>
+  // ── Shopee product URL: shopee.vn/...-i.<shopId>.<itemId> ─────────────────
   const sp = originalUrl.match(/shopee\.vn\/.*?-i\.(\d+)\.(\d+)/i);
   if (sp) {
     const [,shopId,itemId] = sp;
@@ -173,7 +173,7 @@ function detectPlatformDeep(originalUrl, platform) {
       play_store:'https://play.google.com/store/apps/details?id=com.shopee.vn',
     };
   }
-  // Shopee generic: shopee.vn, s.shopee.vn, shopee.co.id, etc.
+  // ── Shopee generic: shopee.vn, s.shopee.vn, etc. ─────────────────────────
   if (/(?:^|\.)shopee\./i.test(originalUrl))
     return {
       deeplink:'shopee://home', deeplink_ios:'shopee://home', deeplink_android:'shopee://home',
@@ -181,28 +181,24 @@ function detectPlatformDeep(originalUrl, platform) {
       ios_store:'https://apps.apple.com/vn/app/shopee-vn/id959841854',
       play_store:'https://play.google.com/store/apps/details?id=com.shopee.vn',
     };
-  // TikTok video
-  const tv = originalUrl.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/i);
-  if (tv)
+
+  // ── TikTok: dùng Universal Link (https://tiktok.com/...) cho mọi loại ─────
+  // iOS/Android Universal Link tự mở TikTok app nếu đã cài, không cần scheme
+  // snssdk1233:// scheme bị TikTok security check chặn từ web
+  if (/tiktok\.com/i.test(originalUrl)) {
+    // Normalize URL về tiktok.com (bỏ www. nếu có)
+    const cleanUrl = originalUrl.replace(/^https?:\/\/(www\.)?tiktok\.com/i, 'https://www.tiktok.com');
     return {
-      deeplink:`snssdk1233://aweme/detail?aweme_id=${tv[1]}`,
-      deeplink_ios:`snssdk1233://aweme/detail?aweme_id=${tv[1]}`,
-      deeplink_android:`snssdk1233://aweme/detail?aweme_id=${tv[1]}`,
+      // Universal Link = chính URL gốc, iOS/Android tự intercept mở app
+      deeplink: cleanUrl,
+      deeplink_ios: cleanUrl,
+      deeplink_android: cleanUrl,
       platform_name:'tiktok', fallback:originalUrl,
       ios_store:'https://apps.apple.com/vn/app/tiktok/id1235601864',
       play_store:'https://play.google.com/store/apps/details?id=com.zhiliaoapp.musically',
     };
-  // TikTok profile
-  const tu = originalUrl.match(/tiktok\.com\/@([^/?&#]+)/i);
-  if (tu)
-    return {
-      deeplink:`snssdk1233://user/profile?uniqueId=${tu[1]}`,
-      deeplink_ios:`snssdk1233://user/profile?uniqueId=${tu[1]}`,
-      deeplink_android:`snssdk1233://user/profile?uniqueId=${tu[1]}`,
-      platform_name:'tiktok', fallback:originalUrl,
-      ios_store:'https://apps.apple.com/vn/app/tiktok/id1235601864',
-      play_store:'https://play.google.com/store/apps/details?id=com.zhiliaoapp.musically',
-    };
+  }
+
   return { deeplink:null, deeplink_ios:null, deeplink_android:null, platform_name:'generic', fallback:originalUrl };
 }
 
@@ -963,14 +959,9 @@ function buildRedirectPage(link, info, platform) {
     else
       intentAndroid = `intent://home#Intent;scheme=shopee;package=com.shopee.vn;S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
   } else if (platform_name === 'tiktok') {
-    const ttMatch = dlAndroid.match(/^snssdk1233:\/\/aweme\/detail\?aweme_id=(\d+)/);
-    if (ttMatch)
-      intentAndroid = `intent://aweme/detail?aweme_id=${ttMatch[1]}#Intent;scheme=snssdk1233;package=com.zhiliaoapp.musically;S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
-    else {
-      const ttUser = dlAndroid.match(/^snssdk1233:\/\/user\/profile\?uniqueId=(.+)/);
-      if (ttUser)
-        intentAndroid = `intent://user/profile?uniqueId=${ttUser[1]}#Intent;scheme=snssdk1233;package=com.zhiliaoapp.musically;S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
-    }
+    // TikTok dùng Universal Link (https://www.tiktok.com/...) → Android App Links tự mở app
+    // Không cần intent scheme, dùng thẳng URL https
+    intentAndroid = dlAndroid; // đã là https://www.tiktok.com/...
   }
 
   const shortUrl = `${BASE_URL}/${link.alias||link.short_code}`;
