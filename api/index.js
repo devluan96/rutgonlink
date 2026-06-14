@@ -153,53 +153,8 @@ function getMobilePlatform(ua='') {
 
 function isSocialBot(ua='') {
   if (!ua) return false;
-  // Chỉ match bot/crawler thực sự – KHÔNG match FB iOS/Android app user
-  // facebookexternalhit = FB crawler (bot), KHÔNG phải user
   if (/facebookexternalhit|facebot/i.test(ua)) return true;
   return /twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|vkshare|zalo|vibebot|line[\s/]|baiduspider|googlebot|applebot|bingbot|yandexbot|pinterestbot|snapchat|ia_archiver|AhrefsBot|SemrushBot|rogerbot/i.test(ua);
-}
-
-function detectPlatformDeep(originalUrl, platform) {
-  // ── Shopee product URL: shopee.vn/...-i.<shopId>.<itemId> ─────────────────
-  const sp = originalUrl.match(/shopee\.vn\/.*?-i\.(\d+)\.(\d+)/i);
-  if (sp) {
-    const [,shopId,itemId] = sp;
-    return {
-      deeplink: platform==='ios' ? `shopee://i.${shopId}.${itemId}` : `shopee://product/${shopId}/${itemId}`,
-      deeplink_ios: `shopee://i.${shopId}.${itemId}`,
-      deeplink_android: `shopee://product/${shopId}/${itemId}`,
-      platform_name:'shopee', fallback:originalUrl,
-      ios_store:'https://apps.apple.com/vn/app/shopee-vn/id959841854',
-      play_store:'https://play.google.com/store/apps/details?id=com.shopee.vn',
-    };
-  }
-  // ── Shopee generic: shopee.vn, s.shopee.vn, etc. ─────────────────────────
-  if (/(?:^|\.)shopee\./i.test(originalUrl))
-    return {
-      deeplink:'shopee://home', deeplink_ios:'shopee://home', deeplink_android:'shopee://home',
-      platform_name:'shopee', fallback:originalUrl,
-      ios_store:'https://apps.apple.com/vn/app/shopee-vn/id959841854',
-      play_store:'https://play.google.com/store/apps/details?id=com.shopee.vn',
-    };
-
-  // ── TikTok: iOS dùng tiktok:// scheme, Android dùng snssdk1233:// ─────────
-  if (/tiktok\.com/i.test(originalUrl)) {
-    const iosScheme     = buildTikTokAppScheme(originalUrl);
-    const androidScheme = buildTikTokAppScheme(originalUrl);
-
-    return {
-      deeplink:         iosScheme,
-      deeplink_ios:     iosScheme,
-      deeplink_android: androidScheme,
-      universal_link:   originalUrl,
-      platform_name:   'tiktok',
-      fallback:         originalUrl,
-      ios_store:  `https://apps.apple.com/vn/app/tiktok/id${TIKTOK_APP_STORE_ID}`,
-      play_store: `https://play.google.com/store/apps/details?id=${TIKTOK_ANDROID_PACKAGE}`,
-    };
-  }
-
-  return { deeplink:null, deeplink_ios:null, deeplink_android:null, platform_name:'generic', fallback:originalUrl };
 }
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -207,10 +162,9 @@ const TIKTOK_ANDROID_PACKAGE = 'com.ss.android.ugc.trill';
 const TIKTOK_APP_STORE_ID    = '1235601864';
 const SHOPEE_ANDROID_PACKAGE = 'com.shopee.vn';
 const SHOPEE_APP_STORE_ID    = '959841449';
-// Dùng đúng FB App ID từ env hoặc app ID của bạn
-const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID || '1609970790226254';
+const FACEBOOK_APP_ID        = process.env.FACEBOOK_APP_ID || '1609970790226254';
 
-// ─── BUILD TIKTOK APP SCHEME ─────────────────────────────────────────────────
+// ─── BUILD TIKTOK APP SCHEME (copy từ hotsnew.click / boclink) ───────────────
 function buildTikTokAppScheme(destinationUrl) {
   try {
     const url  = new URL(destinationUrl);
@@ -218,44 +172,68 @@ function buildTikTokAppScheme(destinationUrl) {
 
     // Video: tiktok.com/@user/video/123
     const videoMatch = path.match(/\/video\/(\d+)/);
-    if (videoMatch) {
-      return `snssdk1233://aweme/detail/?aweme_id=${videoMatch[1]}`;
-    }
+    if (videoMatch) return `snssdk1233://aweme/detail/?aweme_id=${videoMatch[1]}`;
 
     // Profile: tiktok.com/@username
     const profileMatch = path.match(/\/@([\w.]+)/);
-    if (profileMatch) {
-      return `snssdk1233://user/profile/?uniqueId=${profileMatch[1]}`;
-    }
+    if (profileMatch) return `snssdk1233://user/profile/?uniqueId=${profileMatch[1]}`;
 
-    // TikTok Shop product: tiktok.com/view/product/123
+    // TikTok Shop product: /view/product/123
     if (path.includes('/view/product/') || url.hostname.includes('shop')) {
-      const productMatch  = path.match(/\/view\/product\/(\d+)/);
-      const productId     = productMatch?.[1] || '';
-      const encodedUrl    = encodeURIComponent(destinationUrl);
-      const chainKey      = url.searchParams.get('chain_key')      || '';
-      const trackParams   = url.searchParams.get('trackParams')     || '';
-      const encodeParams  = url.searchParams.get('encode_params')   || '';
-
+      const productMatch = path.match(/\/view\/product\/(\d+)/);
+      const productId    = productMatch?.[1] || '';
+      const encodedUrl   = encodeURIComponent(destinationUrl);
+      const chainKey     = url.searchParams.get('chain_key')     || '';
+      const trackParams  = url.searchParams.get('trackParams')   || '';
+      const encodeParams = url.searchParams.get('encode_params') || '';
       return `snssdk1180://ec/pdp` +
-        `?biz_type=0` +
-        `&gd_label=share_from_pdp_auto` +
-        `&need_mall=1&needlaunchlog=1&page_name=reflow_pdp` +
-        `&params_url=${encodedUrl}` +
-        `&refer=web&scene=pdp` +
-        `&use_land_page=1` +
-        `&is_commerce=1` +
-        `&_svg=1` +
-        (productId   ? `&requestParams=${encodeURIComponent(JSON.stringify({ product_id: [productId] }))}` : '') +
-        (chainKey    ? `&chain_key=${encodeURIComponent(chainKey)}`       : '') +
-        (trackParams ? `&trackParams=${encodeURIComponent(trackParams)}`   : '') +
-        (encodeParams? `&encode_params=${encodeURIComponent(encodeParams)}`: '');
+        `?biz_type=0&gd_label=share_from_pdp_auto&need_mall=1&needlaunchlog=1&page_name=reflow_pdp` +
+        `&params_url=${encodedUrl}&refer=web&scene=pdp&use_land_page=1&is_commerce=1&_svg=1` +
+        (productId    ? `&requestParams=${encodeURIComponent(JSON.stringify({product_id:[productId]}))}` : '') +
+        (chainKey     ? `&chain_key=${encodeURIComponent(chainKey)}`       : '') +
+        (trackParams  ? `&trackParams=${encodeURIComponent(trackParams)}`   : '') +
+        (encodeParams ? `&encode_params=${encodeURIComponent(encodeParams)}`: '');
     }
+    return destinationUrl;
+  } catch { return destinationUrl; }
+}
 
-    return destinationUrl;
-  } catch {
-    return destinationUrl;
+function detectPlatformDeep(originalUrl, platform) {
+  // ── Shopee product URL ─────────────────────────────────────────────────────
+  const sp = originalUrl.match(/shopee\.vn\/.*?-i\.(\d+)\.(\d+)/i);
+  if (sp) {
+    const [,shopId,itemId] = sp;
+    return {
+      deeplink:         platform==='ios' ? `shopee://i.${shopId}.${itemId}` : `shopee://product/${shopId}/${itemId}`,
+      deeplink_ios:     `shopee://i.${shopId}.${itemId}`,
+      deeplink_android: `shopee://product/${shopId}/${itemId}`,
+      platform_name:'shopee', fallback:originalUrl,
+      ios_store:`https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
+      play_store:`https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
+    };
   }
+  // ── Shopee generic ─────────────────────────────────────────────────────────
+  if (/(?:^|\.)shopee\./i.test(originalUrl))
+    return {
+      deeplink:'shopee://home', deeplink_ios:'shopee://home', deeplink_android:'shopee://home',
+      platform_name:'shopee', fallback:originalUrl,
+      ios_store:`https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
+      play_store:`https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
+    };
+  // ── TikTok ─────────────────────────────────────────────────────────────────
+  if (/tiktok\.com/i.test(originalUrl)) {
+    const scheme = buildTikTokAppScheme(originalUrl);
+    return {
+      deeplink:         scheme,
+      deeplink_ios:     scheme,
+      deeplink_android: scheme,
+      universal_link:   originalUrl,
+      platform_name:   'tiktok', fallback:originalUrl,
+      ios_store:`https://apps.apple.com/vn/app/tiktok/id${TIKTOK_APP_STORE_ID}`,
+      play_store:`https://play.google.com/store/apps/details?id=${TIKTOK_ANDROID_PACKAGE}`,
+    };
+  }
+  return { deeplink:null, deeplink_ios:null, deeplink_android:null, platform_name:'generic', fallback:originalUrl };
 }
 
 
