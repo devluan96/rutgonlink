@@ -778,6 +778,9 @@ ${ogImageTag}
   const isZalo     = /ZaloApp/i.test(ua);
   const isInApp    = isFacebook || isZalo;
 
+  // Tránh chạy lại nếu đang quay về từ app (tab bị ẩn)
+  if (document.hidden) return;
+
   // Android in-app (FB/Zalo) → Intent URL mở Chrome rồi deeplink
   if (isInApp && isAndroid) {
     const intentUrl = 'intent://' +
@@ -785,31 +788,20 @@ ${ogImageTag}
       '#Intent;scheme=https;package=' + (androidPkg || 'com.ss.android.ugc.trill') +
       ';S.browser_fallback_url=' + encodeURIComponent(webUrl) + ';end';
     window.location.href = intentUrl;
-    setTimeout(() => window.location.replace(webUrl), 2000);
+    setTimeout(() => { if (!document.hidden) window.location.replace(webUrl); }, 2000);
     return;
   }
 
-  // iOS (kể cả FB iOS) → thử app scheme, fallback webUrl
+  // iOS (kể cả FB iOS) → thử app scheme trực tiếp
+  // FB iOS đọc al:ios:url từ meta → show popup trước khi JS chạy
+  // JS là fallback nếu meta không được đọc
   if (isIOS) {
     if (appUrl && appUrl !== webUrl) {
-      // FB iOS: dùng _blank trick để thoát WebView rồi mở app scheme
-      if (isInApp) {
-        const a = document.createElement('a');
-        a.href = iosUrl;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => {
-          if (!document.hidden) window.location.replace(webUrl);
-        }, 2500);
-      } else {
-        window.location.href = iosUrl;
-        setTimeout(() => {
-          if (!document.hidden) window.location.replace(webUrl);
-        }, 2500);
-      }
+      window.location.href = iosUrl;
+      // Sau 2.5s nếu vẫn ở trang (chưa vào app) → fallback web
+      setTimeout(() => {
+        if (!document.hidden) window.location.replace(webUrl);
+      }, 2500);
     } else {
       window.location.replace(webUrl);
     }
