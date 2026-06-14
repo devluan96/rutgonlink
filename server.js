@@ -161,28 +161,65 @@ app.get('/api/stats', (req, res) => {
 
 // ─── Redirect ────────────────────────────────────────────────────────────────
 
-app.get('/:code', (req, res) => {
+const MIDDLE_DOMAIN = process.env.MIDDLE_DOMAIN || 'https://new-express.xyz';
+
+app.get('/:code', async (req, res) => {
   const { code } = req.params;
-  if (code.includes('.')) return res.status(404).send('Not found');
+  if (code.includes('.') || /^(api|uploads|admin)/.test(code)) 
+    return res.status(404).send('Not found');
 
-  const link = db.getLinkByAlias(code) || db.getLinkByCode(code);
-  if (!link) {
-    return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
-  }
+  try {
+    const database = await getDb();
+    const link = await database.getLinkByAlias(code) || await database.getLinkByCode(code);
+    if (!link) return res.status(404).sendFile(path.join(__dirname,'..','public','404.html'));
 
-  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
-           || req.socket.remoteAddress;
-  db.recordClick(link.id, ip, req.headers['user-agent'] || '', req.headers['referer'] || '');
+    const ua = req.headers['user-agent'] || '';
+    const platform = getMobilePlatform(ua);
 
-  const platform    = detectPlatform(req.headers['user-agent']);
-  const deeplinkInfo = buildDeeplink(link.original_url, platform);
+    // Bot → OG page, không redirect, không count click
+    if (isSocialBot(ua)) {
+      res.set({ 'Cache-Control': 'no-cache,no-store,must-revalidate' });
+      return res.send(buildOgPage(link, BASE_URL));
+    }
 
-  // Desktop or no deeplink → straight redirect
-  if (platform === 'desktop' || !deeplinkInfo.deeplink) {
+    // Count click
+    const ip = (req.headers['x-forwarded-for']||'').split(',')[0].trim() 
+             || req.socket?.remoteAddress || '';
+    await database.recordClick(link.id, ip, ua, req.headers['referer']||'');
+
+    const linkType = (link.link_type || 'direct').trim();
+    
+    // Video link
+    if (linkType === 'video') return res.send(buildVideoPage(link));
+
+    const info = detectPlatformDeep(link.original_url, platform);
+
+    // Desktop → redirect thẳng
+    if (platform === 'desktop') return res.redirect(302, link.original_url);
+
+    // ── MOBILE ──────────────────────────────────────────────────────────────
+
+    // Shopee → 301 qua domain trung gian → Universal Link → OS mở app
+    if (info.platform_name === 'shopee') {
+      const universalLink = info.deeplink; // https://shopee.vn/universal-link/...
+      const middleUrl = `${MIDDLE_DOMAIN}/go?u=${encodeURIComponent(universalLink)}`;
+      return res.redirect(301, middleUrl);
+    }
+
+    // TikTok → giữ bridge page vì đã hoạt động
+    if (info.deeplink || linkType === 'deeplink') {
+      const shortUrl = `${BASE_URL}/${link.alias||link.short_code}`;
+      res.set({ 'Cache-Control': 'no-cache,no-store,must-revalidate', 'Pragma': 'no-cache' });
+      return res.send(buildDirectBridgePage(link, shortUrl, info));
+    }
+
+    // Generic mobile → redirect thẳng
     return res.redirect(302, link.original_url);
-  }
 
-  return res.send(buildRedirectPage(link.original_url, deeplinkInfo, platform));
+  } catch(e) {
+    console.error(e);
+    res.status(500).send('Server error');
+  }
 });
 
 // ─── Redirect Page ───────────────────────────────────────────────────────────
