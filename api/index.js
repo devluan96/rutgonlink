@@ -714,8 +714,7 @@ function buildAppLinkMetaTags(canonicalUrl, webFallbackUrl, appLinkOverrideUrl, 
   return tags.join('\n');
 }
 
-// ─── DIRECT BRIDGE PAGE (theo hotsnew renderDirectBridgePage) ────────────────
-// Serve cho mọi mobile request — chứa App Links meta + JS xử lý mọi UA
+// ─── DIRECT BRIDGE PAGE (đồng bộ theo hotsnew renderDirectBridgePage) ────────
 function buildDirectBridgePage(link, canonicalUrl, info) {
   const title   = link.og_title?.trim() || 'RutGonLink';
   const desc    = link.og_desc?.trim()  || 'Đang mở ứng dụng gốc để tiếp tục xem nội dung.';
@@ -745,90 +744,103 @@ function buildDirectBridgePage(link, canonicalUrl, info) {
   const ogImageTag = image ? `<meta property="og:image" content="${esc(image)}" />` : '';
 
   return `<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>${esc(title)}</title>
-<meta name="description" content="${esc(desc)}" />
-<meta name="robots" content="noindex, nofollow" />
-<link rel="canonical" href="${esc(canonicalUrl)}" />
-<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
-${appLinkMeta}
-<meta property="og:locale" content="vi_VN" />
-<meta property="og:type" content="website" />
-<meta property="og:title" content="${esc(title)}" />
-<meta property="og:description" content="${esc(desc)}" />
-<meta property="og:url" content="${esc(canonicalUrl)}" />
-<meta property="og:site_name" content="RutGonLink" />
-${ogImageTag}
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="${esc(title)}" />
-<meta name="twitter:description" content="${esc(desc)}" />
-${ogImageTag}
-</head>
-<body>
-<script>
-(() => {
-  const appUrl     = "${escJs(appScheme)}";
-  const iosUrl     = "${escJs(iosScheme)}";
-  const androidUrl = "${escJs(andScheme)}";
-  const webUrl     = "${escJs(dest)}";
-  const androidPkg = "${escJs(androidPkg)}";
+    <html lang="vi">
+    <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${esc(title)}</title>
+    <meta name="description" content="${esc(desc)}" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="canonical" href="${esc(canonicalUrl)}" />
+    <meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
+    ${appLinkMeta}
+    <meta property="og:locale" content="vi_VN" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${esc(title)}" />
+    <meta property="og:description" content="${esc(desc)}" />
+    <meta property="og:url" content="${esc(canonicalUrl)}" />
+    <meta property="og:site_name" content="RutGonLink" />
+    ${ogImageTag}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${esc(title)}" />
+    <meta name="twitter:description" content="${esc(desc)}" />
+    ${ogImageTag}
+    </head>
+    <body>
+    <script>
+    (() => {
+      const appUrl     = "${escJs(appScheme)}";
+      const iosUrl     = "${escJs(iosScheme)}";
+      const androidUrl = "${escJs(andScheme)}";
+      const webUrl     = "${escJs(dest)}";
+      const androidPkg = "${escJs(androidPkg)}";
 
-  // Tránh loop: chỉ chạy redirect 1 lần per session
-  const flagKey = 'rgl_redirected_' + location.pathname;
-  if (sessionStorage.getItem(flagKey)) return;
-  sessionStorage.setItem(flagKey, '1');
+      // Tránh loop: chỉ chạy redirect 1 lần per session
+      const flagKey = 'rgl_redirected_' + location.pathname;
+      if (sessionStorage.getItem(flagKey)) return;
+      sessionStorage.setItem(flagKey, '1');
 
-  const ua         = navigator.userAgent || '';
-  const isIOS      = /iphone|ipad|ipod/i.test(ua);
-  const isAndroid  = /android/i.test(ua);
-  const isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
-  const isZalo     = /ZaloApp/i.test(ua);
-  const isInApp    = isFacebook || isZalo;
+      const ua         = navigator.userAgent || '';
+      const isIOS      = /iphone|ipad|ipod/i.test(ua);
+      const isAndroid  = /android/i.test(ua);
+      const isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
+      const isZalo     = /ZaloApp/i.test(ua);
+      const isInApp    = isFacebook || isZalo;
 
-  // Android in-app (FB/Zalo) → Intent URL mở Chrome rồi deeplink
-  if (isInApp && isAndroid) {
-    const intentUrl = 'intent://' +
-      webUrl.replace(/^https?:\\/\\//, '') +
-      '#Intent;scheme=https;package=' + (androidPkg || 'com.ss.android.ugc.trill') +
-      ';S.browser_fallback_url=' + encodeURIComponent(webUrl) + ';end';
-    window.location.href = intentUrl;
-    setTimeout(() => { if (!document.hidden) window.location.replace(webUrl); }, 2000);
-    return;
-  }
+      // ── Android in-app (FB/Zalo) → Intent URL mở Chrome rồi deeplink ──────────
+      if (isInApp && isAndroid) {
+        const intentUrl = 'intent://' +
+          webUrl.replace(/^https?:\\/\\//, '') +
+          '#Intent;scheme=https;package=' + (androidPkg || 'com.ss.android.ugc.trill') +
+          ';S.browser_fallback_url=' + encodeURIComponent(webUrl) + ';end';
+        window.location.href = intentUrl;
+        setTimeout(() => { if (!document.hidden) window.location.replace(webUrl); }, 2000);
+        return;
+      }
 
-  // iOS (kể cả FB iOS)
-  if (isIOS) {
-    if (appUrl && appUrl !== webUrl) {
-      window.location.href = iosUrl;
-      setTimeout(() => {
-        if (!document.hidden) window.location.replace(webUrl);
-      }, 2500);
-    } else {
+      // ── iOS in-app (FB/Zalo) → thoát qua _blank, để Safari xử lý Universal Link ──
+      if (isInApp && isIOS) {
+        const a = document.createElement('a');
+        a.href = webUrl;            // dùng webUrl (https), KHÔNG dùng custom scheme
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => { window.location.replace(webUrl); }, 1500);
+        return;
+      }
+
+      // ── iOS bình thường (Safari, Chrome iOS...) → thử scheme trực tiếp ────────
+      if (isIOS) {
+        if (appUrl && appUrl !== webUrl) {
+          window.location.href = iosUrl;
+          setTimeout(() => {
+            if (!document.hidden) window.location.replace(webUrl);
+          }, 2500);
+        } else {
+          window.location.replace(webUrl);
+        }
+        return;
+      }
+
+      // ── Android bình thường ────────────────────────────────────────────────
+      if (isAndroid) {
+        if (androidUrl && androidUrl !== webUrl) {
+          let didLeave = false;
+          window.addEventListener('blur', () => { didLeave = true; }, { once: true });
+          setTimeout(() => {
+            if (!didLeave && !document.hidden) window.location.replace(webUrl);
+          }, 1800);
+          window.location.href = androidUrl;
+        } else {
+          window.location.replace(webUrl);
+        }
+        return;
+      }
+
+      // ── Desktop ───────────────────────────────────────────────────────────
       window.location.replace(webUrl);
-    }
-    return;
-  }
-
-  // Android thường
-  if (isAndroid) {
-    if (androidUrl && androidUrl !== webUrl) {
-      let didLeave = false;
-      window.addEventListener('blur', () => { didLeave = true; }, { once: true });
-      setTimeout(() => {
-        if (!didLeave && !document.hidden) window.location.replace(webUrl);
-      }, 1800);
-      window.location.href = androidUrl;
-    } else {
-      window.location.replace(webUrl);
-    }
-    return;
-  }
-
-  // Desktop
-  window.location.replace(webUrl);
 })();
 </script>
 </body>
