@@ -190,27 +190,33 @@ function buildTikTokAppScheme(destinationUrl) {
 }
 
 function detectPlatformDeep(originalUrl, platform) {
+   // ── Shopee product: -i.<shopId>.<itemId>
   const sp = originalUrl.match(/shopee\.vn\/.*?-i\.(\d+)\.(\d+)/i);
   if (sp) {
-    const [,shopId,itemId] = sp;
+    const [, shopId, itemId] = sp;
+    // Universal Link – OS tự mở app, không cần JS trick
+    const universalLink = `https://shopee.vn/universal-link/product/${shopId}/${itemId}`;
     return {
-      deeplink:         platform==='ios' ? `shopee://i.${shopId}.${itemId}` : `shopee://product/${shopId}/${itemId}`,
-      deeplink_ios:     `shopee://i.${shopId}.${itemId}`,
-      deeplink_android: `shopee://product/${shopId}/${itemId}`,
-      platform_name:'shopee', fallback:originalUrl,
-      ios_store:`https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
-      play_store:`https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
+      deeplink:         universalLink,   // dùng Universal Link thay custom scheme
+      deeplink_ios:     universalLink,
+      deeplink_android: universalLink,
+      platform_name: 'shopee', fallback: originalUrl,
+      ios_store:  `https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
+      play_store: `https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
     };
   }
+
+  // ── Shopee generic (shop page, search, v.v.)
   if (/(?:^|\.)shopee\./i.test(originalUrl)) {
-    const deepLinkUrl = `shopee://deep_link?url=${encodeURIComponent(originalUrl)}`;
+    // Redirect thẳng về original – Shopee đã cấu hình App Links
+    // Browser/OS sẽ tự mở app nếu đã cài
     return {
-      deeplink:         deepLinkUrl,
-      deeplink_ios:     deepLinkUrl,
-      deeplink_android: deepLinkUrl,
-      platform_name:'shopee', fallback:originalUrl,
-      ios_store:`https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
-      play_store:`https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
+      deeplink:         originalUrl,  // <-- redirect thẳng, không cần trick
+      deeplink_ios:     originalUrl,
+      deeplink_android: originalUrl,
+      platform_name: 'shopee', fallback: originalUrl,
+      ios_store:  `https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
+      play_store: `https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
     };
   }
   if (/tiktok\.com/i.test(originalUrl)) {
@@ -649,21 +655,28 @@ function buildDirectBridgePage(link, canonicalUrl, info) {
   const andScheme  = info.deeplink_android || appScheme;
   const platform   = info.platform_name;
 
-  const appMeta = platform === 'tiktok' ? {
-    androidUrl: andScheme, androidPackage: TIKTOK_ANDROID_PACKAGE, androidAppName: 'TikTok',
-    iosUrl: iosScheme, iosAppName: 'TikTok', iosAppStoreId: TIKTOK_APP_STORE_ID,
-  } : platform === 'shopee' ? {
-    androidUrl: andScheme, androidPackage: SHOPEE_ANDROID_PACKAGE, androidAppName: 'Shopee',
-    iosUrl: iosScheme, iosAppName: 'Shopee', iosAppStoreId: SHOPEE_APP_STORE_ID,
-  } : undefined;
+  // Shopee dùng Universal Link → không cần khai báo al:android/ios:url riêng
+// vì al:web:url đã đủ để OS intercept và mở app
+const appMeta = platform === 'tiktok' ? {
+  androidUrl: andScheme, androidPackage: TIKTOK_ANDROID_PACKAGE, androidAppName: 'TikTok',
+  iosUrl: iosScheme, iosAppName: 'TikTok', iosAppStoreId: TIKTOK_APP_STORE_ID,
+} : platform === 'shopee' ? {
+  // Universal Link: dùng chung 1 URL cho cả iOS lẫn Android
+  androidUrl:      andScheme,
+  androidPackage:  SHOPEE_ANDROID_PACKAGE,
+  androidAppName:  'Shopee',
+  iosUrl:          iosScheme,
+  iosAppName:      'Shopee',
+  iosAppStoreId:   SHOPEE_APP_STORE_ID,
+} : undefined;
 
-  const appLinkMeta = buildAppLinkMetaTags(canonicalUrl, dest, appScheme, appMeta);
-  const androidPkg  = platform === 'tiktok' ? TIKTOK_ANDROID_PACKAGE
-                    : platform === 'shopee'  ? SHOPEE_ANDROID_PACKAGE : '';
+const appLinkMeta = buildAppLinkMetaTags(canonicalUrl, dest, appScheme, appMeta);
+// Shopee Universal Link → không cần intent:// trick nên androidPkg để trống
+const androidPkg  = platform === 'tiktok' ? TIKTOK_ANDROID_PACKAGE : '';
 
-  const escJs = s => (s||'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,'\\r');
+const escJs = s => (s||'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,'\\r');
 
-  const ogImageTag = image ? `<meta property="og:image" content="${esc(image)}" />` : '';
+const ogImageTag = image ? `<meta property="og:image" content="${esc(image)}" />` : '';
 
   return `<!DOCTYPE html>
 <html lang="vi">
