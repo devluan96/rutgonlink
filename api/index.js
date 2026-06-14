@@ -207,8 +207,8 @@ const TIKTOK_ANDROID_PACKAGE = 'com.ss.android.ugc.trill';
 const TIKTOK_APP_STORE_ID    = '1235601864';
 const SHOPEE_ANDROID_PACKAGE = 'com.shopee.vn';
 const SHOPEE_APP_STORE_ID    = '959841449';
-// Dùng đúng FB App ID như boclink (1862952583919182) hoặc từ env
-const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID || '1862952583919182';
+// Dùng đúng FB App ID từ env hoặc app ID của bạn
+const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID || '1609970790226254';
 
 // ─── BUILD TIKTOK APP SCHEME ─────────────────────────────────────────────────
 function buildTikTokAppScheme(destinationUrl) {
