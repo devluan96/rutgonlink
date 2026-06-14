@@ -636,16 +636,46 @@ app.get('/:code', async (req,res) => {
   }
 });
 
+// ─── FACEBOOK APP LINKS META TAGS ────────────────────────────────────────────
+// Facebook đọc các tag này để tự mở app khi user click link trong FB WebView
+function buildAppLinkMeta(originalUrl) {
+  const info = detectPlatformDeep(originalUrl, 'ios');
+  if (!info.deeplink || info.platform_name === 'generic') return '';
+
+  const tags = [
+    `<meta property="al:web:url" content="${esc(originalUrl)}" />`,
+    `<meta property="al:web:should_fallback" content="true" />`,
+  ];
+
+  if (info.platform_name === 'shopee') {
+    tags.push(`<meta property="al:ios:url" content="${esc(info.deeplink_ios || info.deeplink)}" />`);
+    tags.push(`<meta property="al:ios:app_store_id" content="959841854" />`);
+    tags.push(`<meta property="al:ios:app_name" content="Shopee" />`);
+    tags.push(`<meta property="al:android:url" content="${esc(info.deeplink_android || info.deeplink)}" />`);
+    tags.push(`<meta property="al:android:package" content="com.shopee.vn" />`);
+    tags.push(`<meta property="al:android:app_name" content="Shopee" />`);
+  } else if (info.platform_name === 'tiktok') {
+    // TikTok dùng Universal Link – al:ios:url = URL gốc https://www.tiktok.com/...
+    tags.push(`<meta property="al:ios:url" content="${esc(info.deeplink_ios || originalUrl)}" />`);
+    tags.push(`<meta property="al:ios:app_store_id" content="1235601864" />`);
+    tags.push(`<meta property="al:ios:app_name" content="TikTok" />`);
+    tags.push(`<meta property="al:android:url" content="${esc(info.deeplink_android || originalUrl)}" />`);
+    tags.push(`<meta property="al:android:package" content="com.zhiliaoapp.musically" />`);
+    tags.push(`<meta property="al:android:app_name" content="TikTok" />`);
+  }
+
+  return tags.join('\n');
+}
+
 // ─── OG PAGE ──────────────────────────────────────────────────────────────────
 
 function buildOgPage(link, baseUrl) {
   const shortUrl = `${baseUrl}/${link.alias||link.short_code}`;
-  // Use custom OG data if set, otherwise use defaults (NOT Shopee/TikTok data)
   const title = esc(link.og_title || 'Link rút gọn – RutGonLink');
   const desc  = esc(link.og_desc  || 'Nhấn vào link để xem nội dung');
-  // IMPORTANT: only use og_image if explicitly set – do NOT fallback to original page
   const image = link.og_image ? esc(link.og_image) : `${baseUrl}/og-default.png`;
   const dest  = link.original_url;
+  const appLinkMeta = buildAppLinkMeta(dest);
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -654,7 +684,7 @@ function buildOgPage(link, baseUrl) {
 <title>${title}</title>
 <meta name="description" content="${desc}"/>
 
-<!-- Open Graph – these override Shopee/TikTok meta -->
+<!-- Open Graph -->
 <meta property="og:type"         content="website"/>
 <meta property="og:url"          content="${esc(shortUrl)}"/>
 <meta property="og:title"        content="${title}"/>
@@ -671,8 +701,8 @@ function buildOgPage(link, baseUrl) {
 <meta name="twitter:description" content="${desc}"/>
 <meta name="twitter:image"       content="${image}"/>
 
-<!-- NO meta refresh – bot reads THIS page's OG tags -->
-<!-- Redirect via JS only (bots don't run JS) -->
+<!-- Facebook App Links: tự mở app khi click trong FB WebView -->
+${appLinkMeta}
 </head>
 <body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
 <div style="text-align:center">
@@ -965,11 +995,14 @@ function buildRedirectPage(link, info, platform) {
   }
 
   const shortUrl = `${BASE_URL}/${link.alias||link.short_code}`;
+  const appLinkMeta = buildAppLinkMeta(fallback);
 
   return `<!DOCTYPE html><html lang="vi"><head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
 <title>${esc(link.og_title||(label?'Mở '+label:'Đang mở...'))}</title>
+<!-- Facebook App Links: FB WebView tự mở app không cần JS -->
+${appLinkMeta}
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
