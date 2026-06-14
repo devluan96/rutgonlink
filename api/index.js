@@ -160,31 +160,50 @@ function isSocialBot(ua='') {
 }
 
 function detectPlatformDeep(originalUrl, platform) {
+  // Shopee product URL: shopee.vn/...-i.<shopId>.<itemId>
   const sp = originalUrl.match(/shopee\.vn\/.*?-i\.(\d+)\.(\d+)/i);
   if (sp) {
     const [,shopId,itemId] = sp;
     return {
       deeplink: platform==='ios' ? `shopee://i.${shopId}.${itemId}` : `shopee://product/${shopId}/${itemId}`,
+      deeplink_ios: `shopee://i.${shopId}.${itemId}`,
+      deeplink_android: `shopee://product/${shopId}/${itemId}`,
       platform_name:'shopee', fallback:originalUrl,
       ios_store:'https://apps.apple.com/vn/app/shopee-vn/id959841854',
       play_store:'https://play.google.com/store/apps/details?id=com.shopee.vn',
     };
   }
-  if (/shopee\.vn/i.test(originalUrl))
-    return { deeplink:'shopee://home', platform_name:'shopee', fallback:originalUrl,
+  // Shopee generic: shopee.vn, s.shopee.vn, shopee.co.id, etc.
+  if (/(?:^|\.)shopee\./i.test(originalUrl))
+    return {
+      deeplink:'shopee://home', deeplink_ios:'shopee://home', deeplink_android:'shopee://home',
+      platform_name:'shopee', fallback:originalUrl,
       ios_store:'https://apps.apple.com/vn/app/shopee-vn/id959841854',
-      play_store:'https://play.google.com/store/apps/details?id=com.shopee.vn' };
+      play_store:'https://play.google.com/store/apps/details?id=com.shopee.vn',
+    };
+  // TikTok video
   const tv = originalUrl.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/i);
   if (tv)
-    return { deeplink:`snssdk1233://aweme/detail?aweme_id=${tv[1]}`, platform_name:'tiktok', fallback:originalUrl,
+    return {
+      deeplink:`snssdk1233://aweme/detail?aweme_id=${tv[1]}`,
+      deeplink_ios:`snssdk1233://aweme/detail?aweme_id=${tv[1]}`,
+      deeplink_android:`snssdk1233://aweme/detail?aweme_id=${tv[1]}`,
+      platform_name:'tiktok', fallback:originalUrl,
       ios_store:'https://apps.apple.com/vn/app/tiktok/id1235601864',
-      play_store:'https://play.google.com/store/apps/details?id=com.zhiliaoapp.musically' };
+      play_store:'https://play.google.com/store/apps/details?id=com.zhiliaoapp.musically',
+    };
+  // TikTok profile
   const tu = originalUrl.match(/tiktok\.com\/@([^/?&#]+)/i);
   if (tu)
-    return { deeplink:`snssdk1233://user/profile?uniqueId=${tu[1]}`, platform_name:'tiktok', fallback:originalUrl,
+    return {
+      deeplink:`snssdk1233://user/profile?uniqueId=${tu[1]}`,
+      deeplink_ios:`snssdk1233://user/profile?uniqueId=${tu[1]}`,
+      deeplink_android:`snssdk1233://user/profile?uniqueId=${tu[1]}`,
+      platform_name:'tiktok', fallback:originalUrl,
       ios_store:'https://apps.apple.com/vn/app/tiktok/id1235601864',
-      play_store:'https://play.google.com/store/apps/details?id=com.zhiliaoapp.musically' };
-  return { deeplink:null, platform_name:'generic', fallback:originalUrl };
+      play_store:'https://play.google.com/store/apps/details?id=com.zhiliaoapp.musically',
+    };
+  return { deeplink:null, deeplink_ios:null, deeplink_android:null, platform_name:'generic', fallback:originalUrl };
 }
 
 // ─── OG DEFAULT IMAGE ─────────────────────────────────────────────────────────
@@ -923,7 +942,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
 // ─── MOBILE REDIRECT PAGE ─────────────────────────────────────────────────────
 
 function buildRedirectPage(link, info, platform) {
-  const { deeplink, fallback, platform_name, ios_store, play_store } = info;
+  const { deeplink_ios, deeplink_android, deeplink, fallback, platform_name, ios_store, play_store } = info;
   const colors    = { shopee:'#ee4d2d', tiktok:'#010101', generic:'#6366f1' };
   const labels    = { shopee:'Shopee',  tiktok:'TikTok',  generic:''        };
   const color     = colors[platform_name]||'#6366f1';
@@ -933,6 +952,10 @@ function buildRedirectPage(link, info, platform) {
   const ogImg   = link.og_image ? `<img src="${esc(link.og_image)}" style="width:100%;border-radius:10px;margin-bottom:12px;max-height:180px;object-fit:cover" onerror="this.style.display='none'"/>` : '';
   const ogTitle = link.og_title ? `<p style="font-size:14px;font-weight:700;color:#1f2937;margin-bottom:4px;text-align:left">${esc(link.og_title)}</p>` : '';
   const ogDesc  = link.og_desc  ? `<p style="font-size:12px;color:#6b7280;margin-bottom:14px;text-align:left;line-height:1.5">${esc(link.og_desc)}</p>` : '';
+
+  // Ưu tiên deeplink theo platform, fallback về deeplink chung
+  const dlIos     = deeplink_ios     || deeplink || fallback;
+  const dlAndroid = deeplink_android || deeplink || fallback;
 
   return `<!DOCTYPE html><html lang="vi"><head>
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
@@ -960,19 +983,45 @@ h1{font-size:18px;font-weight:800;color:#111;margin-bottom:6px}
   ${ogImg}${ogTitle}${ogDesc}
   <h1 id="t">Đang mở${label?' '+label:''}...</h1>
   <p class="sub" id="d">Chờ một chút...</p>
-  <a href="${deeplink}" class="btn btn-app" id="btnApp">Mở trong ${label||'ứng dụng'}</a>
-  <a href="${fallback}" class="btn btn-web">Xem trên trình duyệt</a>
+  <a href="#" class="btn btn-app" id="btnApp">Mở trong ${label||'ứng dụng'}</a>
+  <a href="${esc(fallback)}" class="btn btn-web">Xem trên trình duyệt</a>
   <div class="sep">Chưa cài ứng dụng?</div>
-  <a href="${storeUrl}" class="btn btn-store">${storeText}</a>
+  <a href="${esc(ios_store||fallback)}" class="btn btn-store" id="btnStore">${storeText}</a>
 </div>
 <script>
 (function(){
-  var dl=${JSON.stringify(deeplink)},done=false;
-  function go(){if(done)return;done=true;window.location.href=dl;
-    setTimeout(function(){document.getElementById('t').textContent='Không mở được?';
-    document.getElementById('d').textContent='Xem trên trình duyệt hoặc tải ứng dụng.';},2500);}
-  setTimeout(go,300);
-  document.getElementById('btnApp').onclick=function(e){e.preventDefault();done=false;go();};
+  var DL_IOS     = ${JSON.stringify(dlIos)};
+  var DL_ANDROID = ${JSON.stringify(dlAndroid)};
+  var FALLBACK   = ${JSON.stringify(fallback)};
+  var IOS_STORE  = ${JSON.stringify(ios_store||fallback)};
+  var PLAY_STORE = ${JSON.stringify(play_store||fallback)};
+
+  var isIos     = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var isAndroid = /android/i.test(navigator.userAgent);
+  var dl        = isIos ? DL_IOS : (isAndroid ? DL_ANDROID : DL_IOS);
+  var store     = isIos ? IOS_STORE : PLAY_STORE;
+
+  // Cập nhật nút Store đúng platform
+  document.getElementById('btnStore').href = store;
+  document.getElementById('btnStore').textContent = isIos ? 'Tải trên App Store' : 'Tải trên Google Play';
+  document.getElementById('btnApp').href = dl;
+
+  var done = false;
+  function go() {
+    if (done) return; done = true;
+    window.location.href = dl;
+    setTimeout(function() {
+      document.getElementById('t').textContent = 'Không mở được ứng dụng?';
+      document.getElementById('d').textContent = 'Xem trên trình duyệt hoặc tải ứng dụng.';
+    }, 2500);
+  }
+
+  // Auto-try sau 300ms
+  setTimeout(go, 300);
+
+  document.getElementById('btnApp').onclick = function(e) {
+    e.preventDefault(); done = false; go();
+  };
 })();
 </script></body></html>`;
 }
