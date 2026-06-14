@@ -740,6 +740,16 @@ ${ogImageTag}
     try { localStorage.removeItem(key); } catch(_) {}
   }
 
+  // ── Shopee Universal Link: redirect thẳng, OS tự mở app ──────────────────
+  // Không cần intent://, không cần trick gì cả
+  if (platform === 'shopee') {
+    window.location.href = appUrl;  // appUrl = Universal Link
+    setTimeout(function() {
+      if (!document.hidden) window.location.replace(webUrl);
+    }, 2500);
+    return;
+  }
+
   // ── Android trong FB/Zalo in-app browser ────────────────────────────────
   if (isInApp && isAndroid) {
     if (hasFlag(escapedKey)) {
