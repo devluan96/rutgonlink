@@ -629,170 +629,254 @@ app.get('/:code', async (req,res) => {
     const ua = req.headers['user-agent'] || '';
     const platform = getMobilePlatform(ua);
 
-    // ── Social bot → OG page với App Links (no redirect) ──────────────────
+    // ── Social bot → OG page với App Links (no redirect, bot đọc meta) ────
     if (isSocialBot(ua)) {
-      res.set({
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Content-Type': 'text/html; charset=utf-8',
-      });
-      return res.send(buildOgPage(link, BASE_URL, false));
-    }
-
-    // ── FB iOS/Android user → 301 → OG page với App Links ────────────────
-    // Facebook iOS intercept 301 redirect ở network layer → đọc App Links
-    // → tự mở app KHÔNG cần JS, KHÔNG cần user bấm gì
-    const isFbUser = /FBAN|FBAV|FBIOS|FB4A|Instagram/i.test(ua);
-    if (isFbUser) {
-      const ogUrl = `${BASE_URL}/_og/${link.alias || link.short_code}`;
-      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-      return res.redirect(301, ogUrl);
+      res.set({ 'Cache-Control':'no-cache,no-store,must-revalidate', 'Pragma':'no-cache', 'Content-Type':'text/html;charset=utf-8' });
+      return res.send(buildOgPage(link, BASE_URL));
     }
 
     // Count click
     const ip = (req.headers['x-forwarded-for']||'').split(',')[0].trim() || req.socket?.remoteAddress||'';
     await database.recordClick(link.id, ip, ua, req.headers['referer']||'');
 
-    // ── Video link → show video page ──────────────────────────────────────
+    // ── Video link ─────────────────────────────────────────────────────────
     const linkType = (link.link_type || 'direct').trim();
-    if (linkType === 'video') {
-      return res.send(buildVideoPage(link));
-    }
+    if (linkType === 'video') return res.send(buildVideoPage(link));
 
     const info = detectPlatformDeep(link.original_url, platform);
 
-    // ── Deeplink type → redirect page ─────────────────────────────────────
-    if (linkType === 'deeplink') {
-      if (info.deeplink) return res.send(buildRedirectPage(link, info, platform));
-      return res.redirect(302, link.original_url);
+    // ── Desktop → redirect thẳng ──────────────────────────────────────────
+    if (platform === 'desktop') return res.redirect(302, link.original_url);
+
+    // ── Mobile (iOS/Android, mọi app kể cả FB/Zalo) → DirectBridgePage ───
+    // Giống hotsnew: serve HTML 200 với App Links meta + JS xử lý mọi case
+    if (info.deeplink || linkType === 'deeplink') {
+      const shortUrl = `${BASE_URL}/${link.alias||link.short_code}`;
+      res.set({ 'Cache-Control':'no-cache,no-store,must-revalidate', 'Pragma':'no-cache' });
+      return res.send(buildDirectBridgePage(link, shortUrl, info));
     }
 
-    // ── Direct / desktop → redirect thẳng ────────────────────────────────
-    if (platform === 'desktop' || !info.deeplink)
-      return res.redirect(302, link.original_url);
-
-    return res.send(buildRedirectPage(link, info, platform));
+    // ── Direct non-deeplink mobile → redirect thẳng ────────────────────────
+    return res.redirect(302, link.original_url);
   } catch(e) {
     console.error(e);
     res.status(500).send('Server error');
   }
 });
 
-// ─── OG REDIRECT TARGET (App Links page) ────────────────────────────────────
-// Trang này được serve SAU khi FB follow 301 redirect
-// FB đọc al:ios:url tại đây → tự mở app
+// ─── OG REDIRECT TARGET ───────────────────────────────────────────────────────
 app.get('/_og/:code', async (req, res) => {
   try {
     const database = await getDb();
     const { code } = req.params;
     const link = await database.getLinkByAlias(code) || await database.getLinkByCode(code);
     if (!link) return res.status(404).send('Not found');
-
-    res.set({
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Content-Type': 'text/html; charset=utf-8',
-    });
-    return res.send(buildOgPage(link, BASE_URL, true));
-  } catch(e) {
-    res.status(500).send('Server error');
-  }
+    res.set({ 'Cache-Control':'no-cache,no-store,must-revalidate', 'Pragma':'no-cache', 'Content-Type':'text/html;charset=utf-8' });
+    return res.send(buildOgPage(link, BASE_URL));
+  } catch(e) { res.status(500).send('Server error'); }
 });
 
-// ─── FACEBOOK APP LINKS META TAGS ────────────────────────────────────────────
-// Facebook đọc các tag này để tự mở app khi user click link trong FB WebView
-function buildAppLinkMeta(originalUrl) {
-  const info = detectPlatformDeep(originalUrl, 'ios');
-  if (!info.deeplink || info.platform_name === 'generic') return '';
+// ─── BUILD APP LINK META TAGS (theo hotsnew buildAppLinkMetaTags) ────────────
+function buildAppLinkMetaTags(canonicalUrl, webFallbackUrl, appLinkOverrideUrl, options) {
+  const webUrl     = webFallbackUrl || canonicalUrl;
+  const fallbackApp = appLinkOverrideUrl || webFallbackUrl || '';
+  const androidUrl = options?.androidUrl || fallbackApp;
+  const iosUrl     = options?.iosUrl     || fallbackApp;
+  const hasAndroid = Boolean(androidUrl);
+  const hasIos     = Boolean(iosUrl);
 
   const tags = [
-    // fb:app_id bắt buộc để Facebook trust App Links
-    `<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />`,
-    `<meta property="al:web:url" content="${esc(originalUrl)}" />`,
+    `<meta property="al:web:url" content="${esc(webUrl)}" />`,
     `<meta property="al:web:should_fallback" content="true" />`,
   ];
 
-  if (info.platform_name === 'shopee') {
-    tags.push(`<meta property="al:ios:url" content="${esc(info.deeplink_ios)}" />`);
-    tags.push(`<meta property="al:ios:app_store_id" content="${SHOPEE_APP_STORE_ID}" />`);
-    tags.push(`<meta property="al:ios:app_name" content="Shopee" />`);
-    tags.push(`<meta property="al:android:url" content="${esc(info.deeplink_android)}" />`);
-    tags.push(`<meta property="al:android:package" content="${SHOPEE_ANDROID_PACKAGE}" />`);
-    tags.push(`<meta property="al:android:app_name" content="Shopee" />`);
-  } else if (info.platform_name === 'tiktok') {
-    tags.push(`<meta property="al:ios:url" content="${esc(info.deeplink_ios)}" />`);
-    tags.push(`<meta property="al:ios:app_store_id" content="${TIKTOK_APP_STORE_ID}" />`);
-    tags.push(`<meta property="al:ios:app_name" content="TikTok" />`);
-    tags.push(`<meta property="al:android:url" content="${esc(info.deeplink_android)}" />`);
-    tags.push(`<meta property="al:android:package" content="${TIKTOK_ANDROID_PACKAGE}" />`);
-    tags.push(`<meta property="al:android:app_name" content="TikTok" />`);
+  if (hasAndroid || hasIos) {
+    if (hasAndroid) {
+      tags.push(`<meta property="al:android:url" content="${esc(androidUrl)}" />`);
+      if (options?.androidPackage)
+        tags.push(`<meta property="al:android:package" content="${esc(options.androidPackage)}" />`);
+      if (options?.androidAppName)
+        tags.push(`<meta property="al:android:app_name" content="${esc(options.androidAppName)}" />`);
+    }
+    if (hasIos) {
+      tags.push(`<meta property="al:ios:url" content="${esc(iosUrl)}" />`);
+      if (options?.iosAppName)
+        tags.push(`<meta property="al:ios:app_name" content="${esc(options.iosAppName)}" />`);
+      if (options?.iosAppStoreId)
+        tags.push(`<meta property="al:ios:app_store_id" content="${esc(options.iosAppStoreId)}" />`);
+    }
   }
-
   return tags.join('\n');
 }
 
-// ─── OG PAGE ──────────────────────────────────────────────────────────────────
+// ─── DIRECT BRIDGE PAGE (theo hotsnew renderDirectBridgePage) ────────────────
+// Serve cho mọi mobile request — chứa App Links meta + JS xử lý mọi UA
+function buildDirectBridgePage(link, canonicalUrl, info) {
+  const title   = link.og_title?.trim() || 'RutGonLink';
+  const desc    = link.og_desc?.trim()  || 'Đang mở ứng dụng gốc để tiếp tục xem nội dung.';
+  const image   = link.og_image || '';
+  const dest    = link.original_url;
 
-function buildOgPage(link, baseUrl, isHumanFbUser = false) {
+  const appScheme  = info.deeplink || dest;
+  const iosScheme  = info.deeplink_ios  || appScheme;
+  const andScheme  = info.deeplink_android || appScheme;
+  const platform   = info.platform_name; // 'tiktok' | 'shopee' | 'generic'
+
+  // App meta options
+  const appMeta = platform === 'tiktok' ? {
+    androidUrl: andScheme, androidPackage: TIKTOK_ANDROID_PACKAGE, androidAppName: 'TikTok',
+    iosUrl: iosScheme, iosAppName: 'TikTok', iosAppStoreId: TIKTOK_APP_STORE_ID,
+  } : platform === 'shopee' ? {
+    androidUrl: andScheme, androidPackage: SHOPEE_ANDROID_PACKAGE, androidAppName: 'Shopee',
+    iosUrl: iosScheme, iosAppName: 'Shopee', iosAppStoreId: SHOPEE_APP_STORE_ID,
+  } : undefined;
+
+  const appLinkMeta = buildAppLinkMetaTags(canonicalUrl, dest, appScheme, appMeta);
+  const androidPkg  = platform === 'tiktok' ? TIKTOK_ANDROID_PACKAGE
+                    : platform === 'shopee'  ? SHOPEE_ANDROID_PACKAGE : '';
+
+  const escJs = s => (s||'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,'\\r');
+
+  const ogImageTag = image ? `<meta property="og:image" content="${esc(image)}" />` : '';
+
+  return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}" />
+<meta name="robots" content="noindex, nofollow" />
+<link rel="canonical" href="${esc(canonicalUrl)}" />
+<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
+${appLinkMeta}
+<meta property="og:locale" content="vi_VN" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="${esc(title)}" />
+<meta property="og:description" content="${esc(desc)}" />
+<meta property="og:url" content="${esc(canonicalUrl)}" />
+<meta property="og:site_name" content="RutGonLink" />
+${ogImageTag}
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${esc(title)}" />
+<meta name="twitter:description" content="${esc(desc)}" />
+${ogImageTag}
+</head>
+<body>
+<script>
+(() => {
+  const appUrl     = "${escJs(appScheme)}";
+  const iosUrl     = "${escJs(iosScheme)}";
+  const androidUrl = "${escJs(andScheme)}";
+  const webUrl     = "${escJs(dest)}";
+  const androidPkg = "${escJs(androidPkg)}";
+
+  const ua         = navigator.userAgent || '';
+  const isIOS      = /iphone|ipad|ipod/i.test(ua);
+  const isAndroid  = /android/i.test(ua);
+  const isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
+  const isZalo     = /ZaloApp/i.test(ua);
+  const isInApp    = isFacebook || isZalo;
+
+  // Android in-app (FB/Zalo) → Intent URL mở Chrome rồi deeplink
+  if (isInApp && isAndroid) {
+    const intentUrl = 'intent://' +
+      webUrl.replace(/^https?:\\/\\//, '') +
+      '#Intent;scheme=https;package=' + (androidPkg || 'com.ss.android.ugc.trill') +
+      ';S.browser_fallback_url=' + encodeURIComponent(webUrl) + ';end';
+    window.location.href = intentUrl;
+    setTimeout(() => window.location.replace(webUrl), 2000);
+    return;
+  }
+
+  // iOS (kể cả FB iOS) → thử app scheme, fallback webUrl
+  if (isIOS) {
+    if (appUrl && appUrl !== webUrl) {
+      // FB iOS: dùng _blank trick để thoát WebView rồi mở app scheme
+      if (isInApp) {
+        const a = document.createElement('a');
+        a.href = iosUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => {
+          if (!document.hidden) window.location.replace(webUrl);
+        }, 2500);
+      } else {
+        window.location.href = iosUrl;
+        setTimeout(() => {
+          if (!document.hidden) window.location.replace(webUrl);
+        }, 2500);
+      }
+    } else {
+      window.location.replace(webUrl);
+    }
+    return;
+  }
+
+  // Android thường (không phải in-app)
+  if (isAndroid) {
+    if (androidUrl && androidUrl !== webUrl) {
+      let didLeave = false;
+      window.addEventListener('blur', () => { didLeave = true; }, { once: true });
+      setTimeout(() => {
+        if (!didLeave && !document.hidden) window.location.replace(webUrl);
+      }, 1800);
+      window.location.href = androidUrl;
+    } else {
+      window.location.replace(webUrl);
+    }
+    return;
+  }
+
+  // Desktop fallback
+  window.location.replace(webUrl);
+})();
+</script>
+</body>
+</html>`;
+}
+
+// ─── OG PAGE (cho bot crawler) ───────────────────────────────────────────────
+function buildOgPage(link, baseUrl) {
   const shortUrl = `${baseUrl}/${link.alias||link.short_code}`;
   const title = esc(link.og_title || 'RutGonLink');
   const desc  = esc(link.og_desc  || 'Nhấn vào link để xem nội dung');
   const image = link.og_image ? esc(link.og_image) : `${baseUrl}/og-default.png`;
   const dest  = link.original_url;
-
-  // Build deeplink schemes
-  const info        = detectPlatformDeep(dest, 'ios');
-  const iosUrl      = info.deeplink_ios     || dest;
-  const androidUrl  = info.deeplink_android || dest;
-  const platform    = info.platform_name;
-
-  // App Links meta (copy chính xác pattern boclink)
-  let appLinkMeta = '';
-  if (platform === 'tiktok' || platform === 'shopee') {
-    const pkgAndroid = platform === 'tiktok' ? TIKTOK_ANDROID_PACKAGE : SHOPEE_ANDROID_PACKAGE;
-    const storeId    = platform === 'tiktok' ? TIKTOK_APP_STORE_ID    : SHOPEE_APP_STORE_ID;
-    const appName    = platform === 'tiktok' ? 'TIKTOK' : 'Shopee';
-
-    appLinkMeta = `
-<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
-<meta property="og:type" content="website" />
-<meta property="og:site_name" content="${platform === 'tiktok' ? 'TikTok Shop' : 'Shopee'}" />
-<meta property="al:android:url" content="${esc(androidUrl)}" />
-<meta property="al:android:package" content="${pkgAndroid}" />
-<meta property="al:android:app_name" content="${appName}" />
-<meta property="al:ios:app_name" content="${appName}" />
-<meta property="al:ios:app_store_id" content="${storeId}" />
-<meta property="al:web:should_fallback" content="True" />
-<meta property="al:ios:url" content="${esc(iosUrl)}" />`;
-  }
-
-  // Với FB user: KHÔNG redirect bằng JS — để App Links tự xử lý
-  // Với non-FB user (bot, desktop): redirect bằng window.location.href
-  const bodyScript = isHumanFbUser
-    ? `<script>/* FB App Links active */</script>`
-    : `<script>window.location.href = ${JSON.stringify(dest)};</script>`;
+  const info  = detectPlatformDeep(dest, 'ios');
+  const appMeta = info.platform_name !== 'generic' ? buildAppLinkMetaTags(shortUrl, dest, info.deeplink_ios,
+    info.platform_name === 'tiktok'
+      ? { androidUrl:info.deeplink_android, androidPackage:TIKTOK_ANDROID_PACKAGE, androidAppName:'TikTok', iosUrl:info.deeplink_ios, iosAppName:'TikTok', iosAppStoreId:TIKTOK_APP_STORE_ID }
+      : { androidUrl:info.deeplink_android, androidPackage:SHOPEE_ANDROID_PACKAGE, androidAppName:'Shopee', iosUrl:info.deeplink_ios, iosAppName:'Shopee', iosAppStoreId:SHOPEE_APP_STORE_ID }
+  ) : '';
 
   return `<!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-${appLinkMeta}
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
+${appMeta}
 <title>${title}</title>
-<meta name="description" content="${desc}"/>
-<meta property="og:url"          content="${esc(shortUrl)}"/>
-<meta property="og:title"        content="${title}"/>
-<meta property="og:description"  content="${desc}"/>
-<meta property="og:image"        content="${image}"/>
-<meta property="og:image:width"  content="1200"/>
-<meta property="og:image:height" content="630"/>
-<meta name="twitter:card"        content="summary_large_image"/>
-<meta name="twitter:title"       content="${title}"/>
-<meta name="twitter:description" content="${desc}"/>
-<meta name="twitter:image"       content="${image}"/>
+<meta name="description" content="${desc}" />
+<meta property="og:type"         content="website" />
+<meta property="og:url"          content="${esc(shortUrl)}" />
+<meta property="og:title"        content="${title}" />
+<meta property="og:description"  content="${desc}" />
+<meta property="og:image"        content="${image}" />
+<meta property="og:image:width"  content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:site_name"    content="RutGonLink" />
+<meta name="twitter:card"        content="summary_large_image" />
+<meta name="twitter:title"       content="${title}" />
+<meta name="twitter:description" content="${desc}" />
+<meta name="twitter:image"       content="${image}" />
 </head>
 <body>
-${bodyScript}
+<script>window.location.href = ${JSON.stringify(dest)};</script>
 </body>
 </html>`;
 }
