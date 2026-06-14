@@ -1,235 +1,267 @@
-const { createClient } = require('@libsql/client/http');
+const { createClient } = require('@supabase/supabase-js');
 
 let _client = null;
 
 function getClient() {
   if (_client) return _client;
-  let url     = process.env.TURSO_DATABASE_URL || '';
-  const token = process.env.TURSO_AUTH_TOKEN   || '';
-  if (!url) throw new Error('TURSO_DATABASE_URL chưa được set');
-  url = url.replace(/^libsql:\/\//, 'https://');
-  console.log('[db] connecting:', url.substring(0, 50));
-  _client = createClient({ url, authToken: token });
+  const url = process.env.SUPABASE_URL || '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!url || !key) throw new Error('SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY chưa được set');
+  _client = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  console.log('[db] Supabase connected:', url.substring(0, 40));
   return _client;
 }
 
-async function init() {
-  const c = getClient();
-
-  const ddl = [
-    `CREATE TABLE IF NOT EXISTS users (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      email      TEXT UNIQUE NOT NULL,
-      password   TEXT NOT NULL,
-      name       TEXT,
-      plan       TEXT DEFAULT 'free',
-      role       TEXT DEFAULT 'user',
-      created_at TEXT DEFAULT (datetime('now'))
-    )`,
-    `CREATE TABLE IF NOT EXISTS links (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      short_code   TEXT UNIQUE NOT NULL,
-      original_url TEXT NOT NULL,
-      alias        TEXT UNIQUE,
-      link_type    TEXT DEFAULT 'direct',
-      og_title     TEXT,
-      og_desc      TEXT,
-      og_image     TEXT,
-      video_url    TEXT,
-      video_overlay_text TEXT,
-      user_id      INTEGER,
-      created_at   TEXT DEFAULT (datetime('now')),
-      clicks       INTEGER DEFAULT 0
-    )`,
-    `CREATE TABLE IF NOT EXISTS clicks (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      link_id    INTEGER,
-      ip         TEXT,
-      user_agent TEXT,
-      referrer   TEXT,
-      clicked_at TEXT DEFAULT (datetime('now'))
-    )`,
-    `CREATE INDEX IF NOT EXISTS idx_short_code ON links(short_code)`,
-    `CREATE INDEX IF NOT EXISTS idx_alias      ON links(alias)`,
-    `CREATE INDEX IF NOT EXISTS idx_links_user ON links(user_id)`,
-    // Migrations – ignored if column/table already exists
-    `ALTER TABLE links ADD COLUMN og_title  TEXT`,
-    `ALTER TABLE links ADD COLUMN og_desc   TEXT`,
-    `ALTER TABLE links ADD COLUMN og_image  TEXT`,
-    `ALTER TABLE links ADD COLUMN user_id   INTEGER`,
-    `ALTER TABLE links ADD COLUMN link_type TEXT DEFAULT 'direct'`,
-    `ALTER TABLE links ADD COLUMN video_url TEXT`,
-    `ALTER TABLE links ADD COLUMN video_overlay_text TEXT`,
-    `ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'`,
-    // Uploads dedup table
-    `CREATE TABLE IF NOT EXISTS uploads (
-      id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      hash          TEXT UNIQUE NOT NULL,
-      url           TEXT NOT NULL,
-      thumb         TEXT,
-      resource_type TEXT DEFAULT 'video',
-      public_id     TEXT,
-      created_at    TEXT DEFAULT (datetime('now'))
-    )`,
-    `CREATE INDEX IF NOT EXISTS idx_uploads_hash ON uploads(hash)`,
-  ];
-
-  for (const sql of ddl) {
-    try { await c.execute({ sql, args: [] }); }
-    catch (e) {
-      if (e.code === 'SQL_INPUT_ERROR' ||
-          /already exists|duplicate column|no such column/i.test(e.message)) continue;
-      throw e;
-    }
+// ── Helper: ném lỗi nếu Supabase trả error ──────────────────────────────────
+function check(error, context='') {
+  if (!error) return;
+  // Unique violation
+  if (error.code === '23505') {
+    if (context === 'user') throw new Error('EMAIL_EXISTS');
+    throw new Error('SHORT_CODE_EXISTS');
   }
+  throw new Error(error.message || JSON.stringify(error));
+}
 
-  const ex  = (sql, args=[]) => c.execute({ sql, args });
-  const one = async (sql, args=[]) => { const r = await ex(sql,args); return r.rows[0]||null; };
-  const all = async (sql, args=[]) => { const r = await ex(sql,args); return r.rows; };
+async function init() {
+  const sb = getClient();
+
+  // Supabase dùng PostgreSQL – tạo bảng qua SQL Editor hoặc migration
+  // Không cần tự CREATE TABLE ở đây vì Supabase có UI migration
+  // Xem file supabase/schema.sql để tạo bảng
 
   return {
     // ── Users ──────────────────────────────────────────────────────────
-    async createUser(email, hashedPwd, name, role='user') {
-      try {
-        await ex(`INSERT INTO users (email,password,name,role) VALUES (?,?,?,?)`,
-          [email, hashedPwd, name||null, role]);
-        return await this.getUserByEmail(email);
-      } catch(e) {
-        if (/UNIQUE/.test(e.message)) throw new Error('EMAIL_EXISTS');
-        throw e;
-      }
+    async createUser(email, hashedPwd, name, role = 'user') {
+      const { data, error } = await sb
+        .from('users')
+        .insert({ email, password: hashedPwd, name: name || null, role })
+        .select()
+        .single();
+      check(error, 'user');
+      return data;
     },
-    async getUserByEmail(email) { return one(`SELECT * FROM users WHERE email=?`,[email]); },
-    async getUserById(id)       { return one(`SELECT * FROM users WHERE id=?`,[id]); },
+
+    async getUserByEmail(email) {
+      const { data } = await sb.from('users').select('*').eq('email', email).maybeSingle();
+      return data;
+    },
+
+    async getUserById(id) {
+      const { data } = await sb.from('users').select('*').eq('id', id).maybeSingle();
+      return data;
+    },
+
     async updateUserPlan(userId, plan) {
-      await ex(`UPDATE users SET plan=? WHERE id=?`,[plan, userId]);
+      const { error } = await sb.from('users').update({ plan }).eq('id', userId);
+      check(error);
     },
+
     async updateUserRole(userId, role) {
-      await ex(`UPDATE users SET role=? WHERE id=?`,[role, userId]);
+      const { error } = await sb.from('users').update({ role }).eq('id', userId);
+      check(error);
     },
+
     async deleteUser(userId) {
-      await ex(`DELETE FROM users WHERE id=?`,[userId]);
+      const { error } = await sb.from('users').delete().eq('id', userId);
+      check(error);
     },
+
     async getAllUsers() {
-      return all(`SELECT id,email,name,plan,role,created_at FROM users ORDER BY created_at DESC`);
+      const { data, error } = await sb
+        .from('users')
+        .select('id,email,name,plan,role,created_at')
+        .order('created_at', { ascending: false });
+      check(error);
+      return data || [];
     },
+
     async countUsers() {
-      const r = await one(`SELECT COUNT(*) as c FROM users`);
-      return Number(r?.c||0);
+      const { count, error } = await sb.from('users').select('*', { count: 'exact', head: true });
+      check(error);
+      return count || 0;
     },
 
     // ── Links ──────────────────────────────────────────────────────────
     async createLink(shortCode, originalUrl, alias, ogTitle, ogDesc, ogImage, userId, linkType, videoUrl, videoOverlayText) {
-      try {
-        await ex(
-          `INSERT INTO links (short_code,original_url,alias,og_title,og_desc,og_image,user_id,link_type,video_url,video_overlay_text)
-           VALUES (?,?,?,?,?,?,?,?,?,?)`,
-          [shortCode, originalUrl, alias||null, ogTitle||null, ogDesc||null, ogImage||null,
-           userId||null, linkType||'direct', videoUrl||null, videoOverlayText||null]
-        );
-        const r = await one(`SELECT last_insert_rowid() as id`);
-        return { id: r.id, shortCode, originalUrl, alias };
-      } catch(e) {
-        if (/UNIQUE/.test(e.message)) throw new Error('SHORT_CODE_EXISTS');
-        throw e;
-      }
+      const { data, error } = await sb
+        .from('links')
+        .insert({
+          short_code: shortCode,
+          original_url: originalUrl,
+          alias: alias || null,
+          og_title: ogTitle || null,
+          og_desc: ogDesc || null,
+          og_image: ogImage || null,
+          user_id: userId || null,
+          link_type: linkType || 'direct',
+          video_url: videoUrl || null,
+          video_overlay_text: videoOverlayText || null,
+          clicks: 0,
+        })
+        .select()
+        .single();
+      check(error, 'link');
+      return data;
     },
-    async getLinkByCode(code)  { return one(`SELECT * FROM links WHERE short_code=?`,[code]); },
-    async getLinkByAlias(alias){ if(!alias) return null; return one(`SELECT * FROM links WHERE alias=?`,[alias]); },
-    async getLinkByUrl(url)    { return one(`SELECT * FROM links WHERE original_url=?`,[url]); },
+
+    async getLinkByCode(code) {
+      const { data } = await sb.from('links').select('*').eq('short_code', code).maybeSingle();
+      return data;
+    },
+
+    async getLinkByAlias(alias) {
+      if (!alias) return null;
+      const { data } = await sb.from('links').select('*').eq('alias', alias).maybeSingle();
+      return data;
+    },
+
+    async getLinkByUrl(url) {
+      const { data } = await sb.from('links').select('*').eq('original_url', url).maybeSingle();
+      return data;
+    },
+
+    async getLinkById(id) {
+      const { data } = await sb.from('links').select('*').eq('id', id).maybeSingle();
+      return data;
+    },
+
     async recordClick(linkId, ip, ua, ref) {
-      await ex(`UPDATE links SET clicks=clicks+1 WHERE id=?`,[linkId]);
-      await ex(`INSERT INTO clicks (link_id,ip,user_agent,referrer) VALUES (?,?,?,?)`,
-        [linkId, ip||'', ua||'', ref||'']);
+      // Tăng click counter
+      await sb.rpc('increment_clicks', { link_id: linkId });
+      // Ghi click log
+      await sb.from('clicks').insert({
+        link_id: linkId,
+        ip: ip || '',
+        user_agent: ua || '',
+        referrer: ref || '',
+      });
     },
+
     async getRecentLinks(userId) {
-      if (userId) return all(`SELECT * FROM links WHERE user_id=? ORDER BY created_at DESC LIMIT 100`,[userId]);
-      return all(`SELECT * FROM links ORDER BY created_at DESC LIMIT 20`);
+      let query = sb.from('links').select('*').order('created_at', { ascending: false });
+      if (userId) {
+        query = query.eq('user_id', userId).limit(100);
+      } else {
+        query = query.limit(20);
+      }
+      const { data, error } = await query;
+      check(error);
+      return data || [];
     },
+
     async getAllLinks() {
-      return all(`SELECT l.*,u.email as owner_email FROM links l LEFT JOIN users u ON l.user_id=u.id ORDER BY l.created_at DESC LIMIT 200`);
+      const { data, error } = await sb
+        .from('links')
+        .select('*, users(email)')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      check(error);
+      // Flatten user email
+      return (data || []).map(l => ({
+        ...l,
+        user_email: l.users?.email || null,
+        users: undefined,
+      }));
     },
+
     async deleteLink(linkId) {
-      await ex(`DELETE FROM links WHERE id=?`,[linkId]);
+      const { error } = await sb.from('links').delete().eq('id', linkId);
+      check(error);
     },
+
     async updateLink(linkId, fields) {
-      // fields: { original_url, alias, og_title, og_desc, og_image, link_type, video_url, video_overlay_text }
       const allowed = ['original_url','alias','og_title','og_desc','og_image',
                        'link_type','video_url','video_overlay_text'];
-      const sets = [];
-      const args = [];
-      for (const [k,v] of Object.entries(fields)) {
-        if (allowed.includes(k)) { sets.push(`${k}=?`); args.push(v ?? null); }
+      const updates = {};
+      for (const [k, v] of Object.entries(fields)) {
+        if (allowed.includes(k)) updates[k] = v ?? null;
       }
-      if (!sets.length) return;
-      args.push(linkId);
-      await ex(`UPDATE links SET ${sets.join(',')} WHERE id=?`, args);
+      if (!Object.keys(updates).length) return;
+      const { error } = await sb.from('links').update(updates).eq('id', linkId);
+      check(error);
     },
-    async getLinkById(id) {
-      return one(`SELECT * FROM links WHERE id=?`,[id]);
-    },
+
     async getTotals(userId) {
-      const where = userId ? `WHERE user_id=${Number(userId)}` : '';
-      const r1 = await one(`SELECT COUNT(*) as c FROM links ${where}`);
-      const r2 = await one(`SELECT SUM(clicks) as t FROM links ${where}`);
-      return { totalLinks: Number(r1?.c||0), totalClicks: Number(r2?.t||0) };
+      let q1 = sb.from('links').select('*', { count: 'exact', head: true });
+      let q2 = sb.from('links').select('clicks');
+      if (userId) {
+        q1 = q1.eq('user_id', userId);
+        q2 = q2.eq('user_id', userId);
+      }
+      const [{ count }, { data: clickData }] = await Promise.all([q1, q2]);
+      const totalClicks = (clickData || []).reduce((s, l) => s + (l.clicks || 0), 0);
+      return { totalLinks: count || 0, totalClicks };
     },
+
     async getAdminTotals() {
-      const r1 = await one(`SELECT COUNT(*) as c FROM links`);
-      const r2 = await one(`SELECT SUM(clicks) as t FROM links`);
-      const r3 = await one(`SELECT COUNT(*) as c FROM users`);
-      return {
-        totalLinks:  Number(r1?.c||0),
-        totalClicks: Number(r2?.t||0),
-        totalUsers:  Number(r3?.c||0),
-      };
+      const [
+        { count: totalLinks },
+        { data: clickData },
+        { count: totalUsers },
+      ] = await Promise.all([
+        sb.from('links').select('*', { count: 'exact', head: true }),
+        sb.from('links').select('clicks'),
+        sb.from('users').select('*', { count: 'exact', head: true }),
+      ]);
+      const totalClicks = (clickData || []).reduce((s, l) => s + (l.clicks || 0), 0);
+      return { totalLinks: totalLinks || 0, totalClicks, totalUsers: totalUsers || 0 };
     },
+
     async countTodayLinks(userId) {
-      const where = userId ? `AND user_id=${Number(userId)}` : `AND user_id IS NULL`;
-      const r = await one(`SELECT COUNT(*) as c FROM links WHERE date(created_at)=date('now') ${where}`);
-      return Number(r?.c||0);
+      const today = new Date().toISOString().slice(0, 10);
+      let q = sb.from('links')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', today + 'T00:00:00.000Z')
+        .lt('created_at',  today + 'T23:59:59.999Z');
+      if (userId) q = q.eq('user_id', userId);
+      else        q = q.is('user_id', null);
+      const { count } = await q;
+      return count || 0;
     },
+
     async getTodayStats(userId) {
-      const wToday = userId
-        ? `WHERE date(created_at)=date('now') AND user_id=${Number(userId)}`
-        : `WHERE date(created_at)=date('now')`;
-      const r1 = await one(`SELECT COUNT(*) as c FROM links ${wToday}`);
-      const whereClicks = userId
-        ? `WHERE date(c.clicked_at)=date('now') AND l.user_id=${Number(userId)}`
-        : `WHERE date(c.clicked_at)=date('now')`;
-      const r2 = await one(
-        `SELECT COUNT(*) as c FROM clicks c JOIN links l ON c.link_id=l.id ${whereClicks}`
-      );
-      return { linksToday: Number(r1?.c||0), clicksToday: Number(r2?.c||0) };
+      const today = new Date().toISOString().slice(0, 10);
+      // Links today
+      let q1 = sb.from('links')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', today + 'T00:00:00.000Z')
+        .lt('created_at',  today + 'T23:59:59.999Z');
+      if (userId) q1 = q1.eq('user_id', userId);
+
+      // Clicks today
+      let q2 = sb.from('clicks')
+        .select('*', { count: 'exact', head: true })
+        .gte('clicked_at', today + 'T00:00:00.000Z')
+        .lt('clicked_at',  today + 'T23:59:59.999Z');
+      if (userId) {
+        // join qua link
+        q2 = sb.from('clicks')
+          .select('links!inner(user_id)', { count: 'exact', head: true })
+          .eq('links.user_id', userId)
+          .gte('clicked_at', today + 'T00:00:00.000Z')
+          .lt('clicked_at',  today + 'T23:59:59.999Z');
+      }
+
+      const [{ count: linksToday }, { count: clicksToday }] = await Promise.all([q1, q2]);
+      return { linksToday: linksToday || 0, clicksToday: clicksToday || 0 };
     },
+
     // ── Upload dedup ────────────────────────────────────────────────────────
     async getUploadByHash(hash) {
-      return one(`SELECT * FROM uploads WHERE hash=?`, [hash]);
+      const { data } = await sb.from('uploads').select('*').eq('hash', hash).maybeSingle();
+      return data;
     },
+
     async saveUpload(hash, url, thumb, resource_type, public_id) {
-      try {
-        await ex(
-          `INSERT INTO uploads (hash,url,thumb,resource_type,public_id) VALUES (?,?,?,?,?)`,
-          [hash, url, thumb||null, resource_type||'video', public_id||null]
-        );
-      } catch(e) {
-        if (!/UNIQUE/i.test(e.message)) throw e;
-      }
-    },
-    // ── Delete link ─────────────────────────────────────────────────────────
-    async updateLink(linkId, fields) {
-      const allowed = ['original_url','alias','og_title','og_desc','og_image',
-                       'link_type','video_url','video_overlay_text'];
-      const sets = [], args = [];
-      for (const [k,v] of Object.entries(fields)) {
-        if (allowed.includes(k)) { sets.push(`${k}=?`); args.push(v??null); }
-      }
-      if (!sets.length) return;
-      args.push(linkId);
-      await ex(`UPDATE links SET ${sets.join(',')} WHERE id=?`, args);
-    },
-    async getLinkById(id) {
-      return one(`SELECT * FROM links WHERE id=?`, [id]);
+      const { error } = await sb.from('uploads').upsert({
+        hash, url, thumb: thumb || null,
+        resource_type: resource_type || 'video',
+        public_id: public_id || null,
+      }, { onConflict: 'hash', ignoreDuplicates: true });
+      if (error && !/duplicate|unique/i.test(error.message)) check(error);
     },
   };
 }
