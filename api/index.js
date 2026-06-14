@@ -212,14 +212,19 @@ function detectPlatformDeep(originalUrl, platform) {
       play_store:`https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
     };
   }
-  // ── Shopee generic ─────────────────────────────────────────────────────────
-  if (/(?:^|\.)shopee\./i.test(originalUrl))
+  // ── Shopee generic: shopee.vn, s.shopee.vn, etc. ─────────────────────────
+  if (/(?:^|\.)shopee\./i.test(originalUrl)) {
+    // Dùng deep_link scheme để Shopee app tự resolve URL (kể cả short link)
+    const deepLinkUrl = `shopee://deep_link?url=${encodeURIComponent(originalUrl)}`;
     return {
-      deeplink:'shopee://home', deeplink_ios:'shopee://home', deeplink_android:'shopee://home',
+      deeplink:         deepLinkUrl,
+      deeplink_ios:     deepLinkUrl,
+      deeplink_android: deepLinkUrl,
       platform_name:'shopee', fallback:originalUrl,
       ios_store:`https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
       play_store:`https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
     };
+  }
   // ── TikTok ─────────────────────────────────────────────────────────────────
   if (/tiktok\.com/i.test(originalUrl)) {
     const scheme = buildTikTokAppScheme(originalUrl);
@@ -771,15 +776,17 @@ ${ogImageTag}
   const webUrl     = "${escJs(dest)}";
   const androidPkg = "${escJs(androidPkg)}";
 
+  // Tránh loop: chỉ chạy redirect 1 lần per session
+  const flagKey = 'rgl_redirected_' + location.pathname;
+  if (sessionStorage.getItem(flagKey)) return;
+  sessionStorage.setItem(flagKey, '1');
+
   const ua         = navigator.userAgent || '';
   const isIOS      = /iphone|ipad|ipod/i.test(ua);
   const isAndroid  = /android/i.test(ua);
   const isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
   const isZalo     = /ZaloApp/i.test(ua);
   const isInApp    = isFacebook || isZalo;
-
-  // Tránh chạy lại nếu đang quay về từ app (tab bị ẩn)
-  if (document.hidden) return;
 
   // Android in-app (FB/Zalo) → Intent URL mở Chrome rồi deeplink
   if (isInApp && isAndroid) {
@@ -792,13 +799,10 @@ ${ogImageTag}
     return;
   }
 
-  // iOS (kể cả FB iOS) → thử app scheme trực tiếp
-  // FB iOS đọc al:ios:url từ meta → show popup trước khi JS chạy
-  // JS là fallback nếu meta không được đọc
+  // iOS (kể cả FB iOS)
   if (isIOS) {
     if (appUrl && appUrl !== webUrl) {
       window.location.href = iosUrl;
-      // Sau 2.5s nếu vẫn ở trang (chưa vào app) → fallback web
       setTimeout(() => {
         if (!document.hidden) window.location.replace(webUrl);
       }, 2500);
@@ -808,7 +812,7 @@ ${ogImageTag}
     return;
   }
 
-  // Android thường (không phải in-app)
+  // Android thường
   if (isAndroid) {
     if (androidUrl && androidUrl !== webUrl) {
       let didLeave = false;
@@ -823,7 +827,7 @@ ${ogImageTag}
     return;
   }
 
-  // Desktop fallback
+  // Desktop
   window.location.replace(webUrl);
 })();
 </script>
