@@ -184,38 +184,80 @@ function detectPlatformDeep(originalUrl, platform) {
 
   // ── TikTok: iOS dùng tiktok:// scheme, Android dùng snssdk1233:// ─────────
   if (/tiktok\.com/i.test(originalUrl)) {
-    // Lấy path từ URL gốc để build deeplink
-    let iosDeeplink   = originalUrl;
-    let androidDeeplink = originalUrl;
-
-    try {
-      const u = new URL(originalUrl);
-      const pathAndQuery = u.pathname + u.search;
-
-      // TikTok iOS Universal Link scheme: tiktok://
-      // iOS: tiktok:// scheme được Shopee/TikTok app đăng ký
-      iosDeeplink = `tiktok:/${pathAndQuery}`;
-
-      // Android: snssdk1233:// scheme
-      androidDeeplink = `snssdk1233:/${pathAndQuery}`;
-    } catch(_) {}
+    const iosScheme     = buildTikTokAppScheme(originalUrl);
+    const androidScheme = buildTikTokAppScheme(originalUrl);
 
     return {
-      deeplink: iosDeeplink,
-      deeplink_ios: iosDeeplink,
-      deeplink_android: androidDeeplink,
-      // Universal Link fallback nếu scheme không work
-      universal_link: originalUrl,
-      platform_name:'tiktok', fallback:originalUrl,
-      ios_store:'https://apps.apple.com/vn/app/tiktok/id1235601864',
-      play_store:'https://play.google.com/store/apps/details?id=com.zhiliaoapp.musically',
+      deeplink:         iosScheme,
+      deeplink_ios:     iosScheme,
+      deeplink_android: androidScheme,
+      universal_link:   originalUrl,
+      platform_name:   'tiktok',
+      fallback:         originalUrl,
+      ios_store:  `https://apps.apple.com/vn/app/tiktok/id${TIKTOK_APP_STORE_ID}`,
+      play_store: `https://play.google.com/store/apps/details?id=${TIKTOK_ANDROID_PACKAGE}`,
     };
   }
 
   return { deeplink:null, deeplink_ios:null, deeplink_android:null, platform_name:'generic', fallback:originalUrl };
 }
 
-// ─── OG DEFAULT IMAGE ─────────────────────────────────────────────────────────
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const TIKTOK_ANDROID_PACKAGE = 'com.ss.android.ugc.trill';
+const TIKTOK_APP_STORE_ID    = '1235601864';
+const SHOPEE_ANDROID_PACKAGE = 'com.shopee.vn';
+const SHOPEE_APP_STORE_ID    = '959841449';
+const FACEBOOK_APP_ID        = process.env.FACEBOOK_APP_ID || '1609970790226254';
+
+// ─── BUILD TIKTOK APP SCHEME ─────────────────────────────────────────────────
+function buildTikTokAppScheme(destinationUrl) {
+  try {
+    const url  = new URL(destinationUrl);
+    const path = url.pathname;
+
+    // Video: tiktok.com/@user/video/123
+    const videoMatch = path.match(/\/video\/(\d+)/);
+    if (videoMatch) {
+      return `snssdk1233://aweme/detail/?aweme_id=${videoMatch[1]}`;
+    }
+
+    // Profile: tiktok.com/@username
+    const profileMatch = path.match(/\/@([\w.]+)/);
+    if (profileMatch) {
+      return `snssdk1233://user/profile/?uniqueId=${profileMatch[1]}`;
+    }
+
+    // TikTok Shop product: tiktok.com/view/product/123
+    if (path.includes('/view/product/') || url.hostname.includes('shop')) {
+      const productMatch  = path.match(/\/view\/product\/(\d+)/);
+      const productId     = productMatch?.[1] || '';
+      const encodedUrl    = encodeURIComponent(destinationUrl);
+      const chainKey      = url.searchParams.get('chain_key')      || '';
+      const trackParams   = url.searchParams.get('trackParams')     || '';
+      const encodeParams  = url.searchParams.get('encode_params')   || '';
+
+      return `snssdk1180://ec/pdp` +
+        `?biz_type=0` +
+        `&gd_label=share_from_pdp_auto` +
+        `&need_mall=1&needlaunchlog=1&page_name=reflow_pdp` +
+        `&params_url=${encodedUrl}` +
+        `&refer=web&scene=pdp` +
+        `&use_land_page=1` +
+        `&is_commerce=1` +
+        `&_svg=1` +
+        (productId   ? `&requestParams=${encodeURIComponent(JSON.stringify({ product_id: [productId] }))}` : '') +
+        (chainKey    ? `&chain_key=${encodeURIComponent(chainKey)}`       : '') +
+        (trackParams ? `&trackParams=${encodeURIComponent(trackParams)}`   : '') +
+        (encodeParams? `&encode_params=${encodeURIComponent(encodeParams)}`: '');
+    }
+
+    return destinationUrl;
+  } catch {
+    return destinationUrl;
+  }
+}
+
+
 app.get('/og-default.png', (_,res) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
     <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#1e2535"/><stop offset="100%" style="stop-color:#0d1117"/></linearGradient></defs>
@@ -658,25 +700,25 @@ function buildAppLinkMeta(originalUrl) {
   if (!info.deeplink || info.platform_name === 'generic') return '';
 
   const tags = [
+    // fb:app_id bắt buộc để Facebook trust App Links
+    `<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />`,
     `<meta property="al:web:url" content="${esc(originalUrl)}" />`,
     `<meta property="al:web:should_fallback" content="true" />`,
   ];
 
   if (info.platform_name === 'shopee') {
-    tags.push(`<meta property="al:ios:url" content="${esc(info.deeplink_ios || info.deeplink)}" />`);
-    tags.push(`<meta property="al:ios:app_store_id" content="959841854" />`);
+    tags.push(`<meta property="al:ios:url" content="${esc(info.deeplink_ios)}" />`);
+    tags.push(`<meta property="al:ios:app_store_id" content="${SHOPEE_APP_STORE_ID}" />`);
     tags.push(`<meta property="al:ios:app_name" content="Shopee" />`);
-    tags.push(`<meta property="al:android:url" content="${esc(info.deeplink_android || info.deeplink)}" />`);
-    tags.push(`<meta property="al:android:package" content="com.shopee.vn" />`);
+    tags.push(`<meta property="al:android:url" content="${esc(info.deeplink_android)}" />`);
+    tags.push(`<meta property="al:android:package" content="${SHOPEE_ANDROID_PACKAGE}" />`);
     tags.push(`<meta property="al:android:app_name" content="Shopee" />`);
   } else if (info.platform_name === 'tiktok') {
-    // al:ios:url dùng tiktok:// scheme
-    tags.push(`<meta property="al:ios:url" content="${esc(info.deeplink_ios || info.deeplink)}" />`);
-    tags.push(`<meta property="al:ios:app_store_id" content="1235601864" />`);
+    tags.push(`<meta property="al:ios:url" content="${esc(info.deeplink_ios)}" />`);
+    tags.push(`<meta property="al:ios:app_store_id" content="${TIKTOK_APP_STORE_ID}" />`);
     tags.push(`<meta property="al:ios:app_name" content="TikTok" />`);
-    // al:android:url dùng snssdk1233:// scheme
-    tags.push(`<meta property="al:android:url" content="${esc(info.deeplink_android || info.deeplink)}" />`);
-    tags.push(`<meta property="al:android:package" content="com.zhiliaoapp.musically" />`);
+    tags.push(`<meta property="al:android:url" content="${esc(info.deeplink_android)}" />`);
+    tags.push(`<meta property="al:android:package" content="${TIKTOK_ANDROID_PACKAGE}" />`);
     tags.push(`<meta property="al:android:app_name" content="TikTok" />`);
   }
 
