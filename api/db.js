@@ -61,6 +61,17 @@ async function init() {
     `ALTER TABLE links ADD COLUMN video_url TEXT`,
     `ALTER TABLE links ADD COLUMN video_overlay_text TEXT`,
     `ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'`,
+    // Uploads dedup table
+    `CREATE TABLE IF NOT EXISTS uploads (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      hash          TEXT UNIQUE NOT NULL,
+      url           TEXT NOT NULL,
+      thumb         TEXT,
+      resource_type TEXT DEFAULT 'video',
+      public_id     TEXT,
+      created_at    TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_uploads_hash ON uploads(hash)`,
   ];
 
   for (const sql of ddl) {
@@ -177,6 +188,48 @@ async function init() {
       const where = userId ? `AND user_id=${Number(userId)}` : `AND user_id IS NULL`;
       const r = await one(`SELECT COUNT(*) as c FROM links WHERE date(created_at)=date('now') ${where}`);
       return Number(r?.c||0);
+    },
+    async getTodayStats(userId) {
+      const wToday = userId
+        ? `WHERE date(created_at)=date('now') AND user_id=${Number(userId)}`
+        : `WHERE date(created_at)=date('now')`;
+      const r1 = await one(`SELECT COUNT(*) as c FROM links ${wToday}`);
+      const whereClicks = userId
+        ? `WHERE date(c.clicked_at)=date('now') AND l.user_id=${Number(userId)}`
+        : `WHERE date(c.clicked_at)=date('now')`;
+      const r2 = await one(
+        `SELECT COUNT(*) as c FROM clicks c JOIN links l ON c.link_id=l.id ${whereClicks}`
+      );
+      return { linksToday: Number(r1?.c||0), clicksToday: Number(r2?.c||0) };
+    },
+    // ── Upload dedup ────────────────────────────────────────────────────────
+    async getUploadByHash(hash) {
+      return one(`SELECT * FROM uploads WHERE hash=?`, [hash]);
+    },
+    async saveUpload(hash, url, thumb, resource_type, public_id) {
+      try {
+        await ex(
+          `INSERT INTO uploads (hash,url,thumb,resource_type,public_id) VALUES (?,?,?,?,?)`,
+          [hash, url, thumb||null, resource_type||'video', public_id||null]
+        );
+      } catch(e) {
+        if (!/UNIQUE/i.test(e.message)) throw e;
+      }
+    },
+    // ── Delete link ─────────────────────────────────────────────────────────
+    async updateLink(linkId, fields) {
+      const allowed = ['original_url','alias','og_title','og_desc','og_image',
+                       'link_type','video_url','video_overlay_text'];
+      const sets = [], args = [];
+      for (const [k,v] of Object.entries(fields)) {
+        if (allowed.includes(k)) { sets.push(`${k}=?`); args.push(v??null); }
+      }
+      if (!sets.length) return;
+      args.push(linkId);
+      await ex(`UPDATE links SET ${sets.join(',')} WHERE id=?`, args);
+    },
+    async getLinkById(id) {
+      return one(`SELECT * FROM links WHERE id=?`, [id]);
     },
   };
 }

@@ -508,12 +508,62 @@ app.get('/api/stats', async (req,res) => {
     const database = await getDb();
     const user   = await resolveUser(req);
     const userId = user?.id || null;
-    const totals = await database.getTotals(userId);
-    const recent = (await database.getRecentLinks(userId)).map(l => ({
+    const totals  = await database.getTotals(userId);
+    const today   = await database.getTodayStats(userId);
+    const recent  = (await database.getRecentLinks(userId)).map(l => ({
       ...l, short_url:`${BASE_URL}/${l.alias||l.short_code}`,
     }));
-    res.json({ ...totals, recent, plan: user?.plan||'guest' });
+    res.json({ ...totals, ...today, recent, plan: user?.plan||'guest' });
   } catch(e) { console.error(e); res.status(500).json({ error:e.message }); }
+});
+
+// ─── DELETE OWN LINK ─────────────────────────────────────────────────────────
+app.delete('/api/links/:id', async (req,res) => {
+  const user = await resolveUser(req);
+  if (!user) return res.status(401).json({ error:'Chưa đăng nhập' });
+  try {
+    const database = await getDb();
+    const link = await database.getLinkById(Number(req.params.id));
+    if (!link) return res.status(404).json({ error:'Không tìm thấy link' });
+    const isAdmin = user.role==='admin' || user.email?.toLowerCase()===ADMIN_EMAIL;
+    if (!isAdmin && link.user_id !== user.id)
+      return res.status(403).json({ error:'Không có quyền xóa link này' });
+    await database.deleteLink(Number(req.params.id));
+    res.json({ ok:true });
+  } catch(e) { res.status(500).json({ error:e.message }); }
+});
+
+// ─── EDIT LINK ────────────────────────────────────────────────────────────────
+app.get('/api/links/:id', async (req,res) => {
+  try {
+    const database = await getDb();
+    const user = await resolveUser(req);
+    const link = await database.getLinkById(Number(req.params.id));
+    if (!link) return res.status(404).json({ error:'Không tìm thấy link' });
+    const isAdmin = user?.role==='admin' || user?.email?.toLowerCase()===ADMIN_EMAIL;
+    if (!isAdmin && link.user_id && link.user_id !== user?.id)
+      return res.status(403).json({ error:'Không có quyền' });
+    res.json({ link:{ ...link, short_url:`${BASE_URL}/${link.alias||link.short_code}` } });
+  } catch(e) { res.status(500).json({ error:e.message }); }
+});
+
+app.patch('/api/links/:id', async (req,res) => {
+  try {
+    const database = await getDb();
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error:'Chưa đăng nhập' });
+    const link = await database.getLinkById(Number(req.params.id));
+    if (!link) return res.status(404).json({ error:'Không tìm thấy link' });
+    const isAdmin = user.role==='admin' || user.email?.toLowerCase()===ADMIN_EMAIL;
+    if (!isAdmin && link.user_id !== user.id)
+      return res.status(403).json({ error:'Không có quyền chỉnh sửa' });
+    const { og_title, og_desc, og_image, link_type, video_url, video_overlay_text } = req.body;
+    await database.updateLink(Number(req.params.id), {
+      og_title, og_desc, og_image, link_type, video_url, video_overlay_text,
+    });
+    const updated = await database.getLinkById(Number(req.params.id));
+    res.json({ link:{ ...updated, short_url:`${BASE_URL}/${updated.alias||updated.short_code}` } });
+  } catch(e) { res.status(500).json({ error:e.message }); }
 });
 
 // ─── REDIRECT ─────────────────────────────────────────────────────────────────
@@ -543,17 +593,24 @@ app.get('/:code', async (req,res) => {
     const ip = (req.headers['x-forwarded-for']||'').split(',')[0].trim() || req.socket?.remoteAddress||'';
     await database.recordClick(link.id, ip, ua, req.headers['referer']||'');
 
-    // ── Video link → ALWAYS show video page (desktop + mobile) ─────────────
+    // ── Video link → show video page ──────────────────────────────────────
     const linkType = (link.link_type || 'direct').trim();
     if (linkType === 'video') {
-      // Even if no video_url, show video page (will show "no video" message)
       return res.send(buildVideoPage(link));
     }
 
-    // ── Normal deeplink ──────────────────────────────────────────
+    // ── Deeplink type: luôn mở app, kể cả desktop ─────────────────────────
     const platform = getMobilePlatform(ua);
     const info     = detectPlatformDeep(link.original_url, platform);
 
+    if (linkType === 'deeplink') {
+      // Luôn show redirect page (cả desktop), tự detect iOS/Android bằng JS
+      if (info.deeplink) return res.send(buildRedirectPage(link, info, platform));
+      // Không có deeplink → redirect thẳng
+      return res.redirect(302, link.original_url);
+    }
+
+    // ── Direct: redirect thẳng (desktop), redirect page (mobile) ──────────
     if (platform === 'desktop' || !info.deeplink)
       return res.redirect(302, link.original_url);
 

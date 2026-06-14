@@ -4,135 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>RutGonLink – Rút gọn link Shopee & TikTok thông minh</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js">
-// ══════════════════════════════════════════════════
-//  EDIT LINK MODAL
-// ══════════════════════════════════════════════════
-
-function openEditModal(linkId) {
-  // Find link in cache
-  const link = links.find(l => l.id == linkId) || adminLinks.find(l => l.id == linkId);
-  if (!link) { toast('Không tìm thấy link', 'err'); return; }
-
-  document.getElementById('editLinkId').value   = link.id;
-  document.getElementById('editShortUrl').textContent = (link.short_url||'').replace(/^https?:\/\//,'');
-  document.getElementById('editOrigUrl').textContent  = (link.original_url||'').substring(0,60);
-  document.getElementById('editLinkType').value  = link.link_type || 'direct';
-  document.getElementById('editOgTitle').value   = link.og_title || '';
-  document.getElementById('editOgDesc').value    = link.og_desc  || '';
-  document.getElementById('editOgImage').value   = link.og_image || '';
-  document.getElementById('editVideoUrl').value  = link.video_url || '';
-  document.getElementById('editVideoText').value = link.video_overlay_text || '';
-
-  onEditLinkTypeChange();
-  updateEditThumbPreview();
-  document.getElementById('editErr').classList.remove('show');
-  document.getElementById('editModal').classList.remove('hidden');
-}
-
-function closeEditModal() {
-  document.getElementById('editModal').classList.add('hidden');
-}
-
-function onEditLinkTypeChange() {
-  const t = document.getElementById('editLinkType').value;
-  document.getElementById('editVideoFields').style.display = (t === 'video') ? 'block' : 'none';
-}
-
-function updateEditThumbPreview() {
-  const img    = document.getElementById('editThumbPreview');
-  const imgUrl = document.getElementById('editOgImage').value.trim();
-  if (imgUrl) {
-    img.src = imgUrl; img.style.display = 'block';
-    img.onerror = () => { img.style.display = 'none'; };
-  } else {
-    img.style.display = 'none';
-  }
-}
-
-async function autoExtractThumb() {
-  const videoUrl = document.getElementById('editVideoUrl').value.trim() ||
-                   links.find(l => l.id == document.getElementById('editLinkId').value)?.video_url;
-  if (!videoUrl) { toast('Nhập URL video trước', 'warn'); return; }
-
-  // YouTube: get thumbnail from API
-  const ytMatch = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-  if (ytMatch) {
-    const thumb = `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
-    document.getElementById('editOgImage').value = thumb;
-    updateEditThumbPreview();
-    toast('✅ Đã lấy thumbnail YouTube!', 'ok');
-    return;
-  }
-
-  // Local/MP4: use canvas to extract frame at 1s
-  try {
-    const vidEl = document.createElement('video');
-    vidEl.src         = videoUrl;
-    vidEl.crossOrigin = 'anonymous';
-    vidEl.muted       = true;
-    vidEl.currentTime = 1;
-    vidEl.style.display = 'none';
-    document.body.appendChild(vidEl);
-    toast('⏳ Đang lấy thumbnail...', 'ok');
-    await new Promise((resolve, reject) => {
-      vidEl.addEventListener('seeked', () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width  = 1200;
-          canvas.height = 630;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(vidEl, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-          document.getElementById('editOgImage').value = dataUrl;
-          updateEditThumbPreview();
-          toast('✅ Đã cắt thumbnail từ video!', 'ok');
-          resolve();
-        } catch(e) { reject(e); }
-      });
-      vidEl.addEventListener('error', reject);
-      setTimeout(() => reject(new Error('timeout')), 8000);
-      vidEl.load();
-    });
-    document.body.removeChild(vidEl);
-  } catch(e) {
-    toast('Không thể lấy thumbnail: ' + e.message, 'err');
-  }
-}
-
-async function saveEditLink() {
-  const id    = document.getElementById('editLinkId').value;
-  const btn   = document.getElementById('editSaveBtn');
-  const errEl = document.getElementById('editErr');
-  errEl.classList.remove('show');
-  btn.disabled = true; btn.textContent = '⏳ Đang lưu...';
-
-  try {
-    const r = await fetch('/api/links/' + id, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        og_title:            document.getElementById('editOgTitle').value.trim(),
-        og_desc:             document.getElementById('editOgDesc').value.trim(),
-        og_image:            document.getElementById('editOgImage').value.trim(),
-        link_type:           document.getElementById('editLinkType').value,
-        video_url:           document.getElementById('editVideoUrl').value.trim(),
-        video_overlay_text:  document.getElementById('editVideoText').value.trim(),
-      }),
-    });
-    const d = await r.json();
-    if (!r.ok) { errEl.textContent = d.error || 'Lỗi lưu'; errEl.classList.add('show'); return; }
-    toast('✅ Đã lưu thay đổi!', 'ok');
-    closeEditModal();
-    loadData();
-    if (adminLinks.length) loadAdminData();
-  } catch(e) {
-    errEl.textContent = 'Lỗi kết nối'; errEl.classList.add('show');
-  } finally {
-    btn.disabled = false; btn.textContent = '💾 Lưu thay đổi';
-  }
-}
-</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 /* ══ RESET ══ */
 *{box-sizing:border-box;margin:0;padding:0}
@@ -553,6 +425,10 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
           <span class="slabel">Tạo liên kết</span>
         </div>
+        <div class="sitem" onclick="navigate('stats',this)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span class="slabel">Thống kê</span>
+        </div>
         <div class="sgroup" style="margin-top:6px">Tài khoản</div>
         <div class="sitem" onclick="navigate('pricing',this)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -580,7 +456,9 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
         <div class="ph"><h1>Bảng điều khiển</h1><p>Tổng quan lưu lượng & hoạt động</p></div>
         <div class="sg">
           <div class="sc"><div class="sc-top"><span class="sc-lbl">Tổng lượt nhấp</span><div class="sc-icon" style="background:rgba(59,130,246,.12)">📊</div></div><div class="sc-val" id="dClicks">0</div><div class="sc-sub">Tất cả thời gian</div></div>
+          <div class="sc"><div class="sc-top"><span class="sc-lbl">Click hôm nay</span><div class="sc-icon" style="background:rgba(34,197,94,.12)">🔥</div></div><div class="sc-val" id="dClicksToday">0</div><div class="sc-sub">Trong ngày</div></div>
           <div class="sc"><div class="sc-top"><span class="sc-lbl">Link đã tạo</span><div class="sc-icon" style="background:rgba(139,92,246,.12)">🔗</div></div><div class="sc-val" id="dLinks">0</div><div class="sc-sub">Tổng số liên kết</div></div>
+          <div class="sc"><div class="sc-top"><span class="sc-lbl">Link hôm nay</span><div class="sc-icon" style="background:rgba(245,158,11,.12)">📅</div></div><div class="sc-val" id="dLinksToday">0</div><div class="sc-sub">Tạo trong ngày</div></div>
           <div class="sc"><div class="sc-top"><span class="sc-lbl">Shopee deeplink</span><div class="sc-icon" style="background:rgba(238,77,45,.1)">🛒</div></div><div class="sc-val" id="dShopee">0</div><div class="sc-sub">Link Shopee</div></div>
           <div class="sc"><div class="sc-top"><span class="sc-lbl">TikTok deeplink</span><div class="sc-icon" style="background:rgba(105,201,208,.08)">🎵</div></div><div class="sc-val" id="dTiktok">0</div><div class="sc-sub">Link TikTok</div></div>
         </div>
@@ -688,6 +566,32 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
       </div>
 
 
+      <!-- STATS PAGE -->
+      <div class="page" id="page-stats">
+        <div class="ph"><h1>Thống kê</h1><p>Phân tích lưu lượng chi tiết</p></div>
+        <div class="sg">
+          <div class="sc"><div class="sc-top"><span class="sc-lbl">Tổng lượt click</span><div class="sc-icon" style="background:rgba(59,130,246,.12)">📊</div></div><div class="sc-val" id="stTotalClicks">0</div><div class="sc-sub">Tất cả thời gian</div></div>
+          <div class="sc"><div class="sc-top"><span class="sc-lbl">Click hôm nay</span><div class="sc-icon" style="background:rgba(34,197,94,.12)">🔥</div></div><div class="sc-val" id="stClicksToday">0</div><div class="sc-sub">Trong ngày</div></div>
+          <div class="sc"><div class="sc-top"><span class="sc-lbl">Tổng link</span><div class="sc-icon" style="background:rgba(139,92,246,.12)">🔗</div></div><div class="sc-val" id="stTotalLinks">0</div><div class="sc-sub">Đã tạo</div></div>
+          <div class="sc"><div class="sc-top"><span class="sc-lbl">Link hôm nay</span><div class="sc-icon" style="background:rgba(245,158,11,.12)">📅</div></div><div class="sc-val" id="stLinksToday">0</div><div class="sc-sub">Tạo trong ngày</div></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head">
+            <h3>Lượt click theo thời gian</h3>
+            <div class="chart-filters">
+              <button class="cf active" onclick="setChartDays(7,this)">7N</button>
+              <button class="cf" onclick="setChartDays(14,this)">14N</button>
+              <button class="cf" onclick="setChartDays(30,this)">30N</button>
+            </div>
+          </div>
+          <div class="ch-wrap"><canvas id="statsChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head"><h3>Phân bố nền tảng</h3></div>
+          <div style="height:220px"><canvas id="platformChart"></canvas></div>
+        </div>
+      </div>
+
       <!-- ADMIN PAGE -->
       <div class="page" id="page-admin">
         <div class="ph"><h1>🛡️ Quản trị hệ thống</h1><p>Quản lý người dùng, link và thống kê toàn bộ hệ thống</p></div>
@@ -714,83 +618,6 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
     </div><!-- /content -->
   </div><!-- /app-body -->
 
-<!-- EDIT LINK MODAL -->
-<div class="modal-backdrop hidden" id="editModal">
-  <div class="modal">
-    <div class="modal-head">
-      <h3>✏️ Chỉnh sửa liên kết</h3>
-      <div class="modal-close" onclick="closeEditModal()">✕</div>
-    </div>
-    <input type="hidden" id="editLinkId"/>
-
-    <div style="margin-bottom:10px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Link rút gọn</div>
-      <div style="font-size:14px;font-weight:700;color:var(--brand)" id="editShortUrl"></div>
-    </div>
-
-    <div class="form-group" style="margin-bottom:10px">
-      <label class="fl">Kiểu link</label>
-      <select class="fi" id="editLinkType" onchange="onEditTypeChange()">
-        <option value="direct">🔗 Trực tiếp</option>
-        <option value="deeplink">📱 Mở App (Deeplink)</option>
-        <option value="video">🎬 Video + Deeplink</option>
-      </select>
-    </div>
-
-    <!-- Video fields -->
-    <div id="editVideoFields" style="display:none">
-      <div class="form-group" style="margin-bottom:10px">
-        <label class="fl">URL Video</label>
-        <div style="display:flex;gap:8px">
-          <input type="url" class="fi" id="editVideoUrl" placeholder="https://youtube.com/watch?v=... hoặc link mp4" style="flex:1" oninput="onEditVideoUrlInput()"/>
-          <button class="btn-thumb" onclick="extractEditThumb()" title="Lấy thumbnail">🖼️ Lấy thumb</button>
-        </div>
-        <!-- Local video upload -->
-        <div style="margin-top:8px;border:2px dashed var(--border2);border-radius:8px;padding:12px;text-align:center;cursor:pointer;position:relative;transition:.2s" id="editVUploadArea">
-          <input type="file" id="editVFile" accept="video/mp4,video/webm,video/quicktime"
-            style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
-            onchange="handleEditVideoUpload(event)"/>
-          <span style="font-size:11px;color:var(--text3)">📁 Hoặc upload video từ máy (MP4/WebM – 100MB)</span>
-        </div>
-        <video id="editVPreview" style="width:100%;max-height:120px;border-radius:7px;display:none;margin-top:6px;object-fit:cover;background:#000" muted controls></video>
-      </div>
-      <div class="form-group" style="margin-bottom:10px">
-        <label class="fl">Nội dung nút CTA (hiện sau 5 giây)</label>
-        <input type="text" class="fi" id="editVideoText" placeholder="🛒 Bấm vào đây để xem sản phẩm →" maxlength="100"/>
-      </div>
-    </div>
-
-    <!-- OG Meta fields -->
-    <div style="margin-bottom:10px">
-      <label class="fl" style="margin-bottom:5px">Ảnh preview (OG Image)</label>
-      <img id="editThumbPreview" class="thumb-preview" src="" alt=""/>
-      <div style="display:flex;gap:8px;margin-bottom:6px">
-        <input type="url" class="fi" id="editOgImage" placeholder="https://example.com/anh.jpg" style="flex:1" oninput="onEditImageInput()"/>
-        <button class="btn-thumb" onclick="autoCaptureDomThumb()" title="Chụp từ video">🎬 Từ video</button>
-      </div>
-    </div>
-    <div class="fg" style="margin-bottom:10px">
-      <div class="form-group">
-        <label class="fl">Tiêu đề meta</label>
-        <input type="text" class="fi" id="editOgTitle" placeholder="Tiêu đề khi share..." maxlength="120"/>
-      </div>
-      <div class="form-group">
-        <label class="fl">Mô tả meta</label>
-        <input type="text" class="fi" id="editOgDesc" placeholder="Mô tả ngắn..." maxlength="200"/>
-      </div>
-    </div>
-
-    <!-- Hidden canvas for thumb extraction -->
-    <canvas id="thumbCanvas" style="display:none"></canvas>
-    <video id="thumbVideoEl" style="display:none" muted crossorigin="anonymous"></video>
-
-    <div class="form-error" id="editErr" style="margin-bottom:0"></div>
-    <div class="modal-footer">
-      <button class="btn-cancel" onclick="closeEditModal()">Hủy</button>
-      <button class="btn-save" id="editSaveBtn" onclick="saveEditLink()">💾 Lưu thay đổi</button>
-    </div>
-  </div>
-</div>
 </div><!-- /appScreen -->
 
 <!-- ══ EDIT LINK MODAL ══ -->
@@ -835,7 +662,7 @@ tbody tr:hover td{background:rgba(255,255,255,.015)}
       <div style="display:flex;gap:8px;margin-bottom:8px">
         <input type="url" class="fi" id="editOgImage" placeholder="https://example.com/anh.jpg" oninput="updateEditThumbPreview()"/>
         <button class="btn-thumb" onclick="autoExtractThumb()" title="Tự động lấy thumbnail từ video">
-          ��️ Auto
+          🖼️ Auto
         </button>
       </div>
     </div>
@@ -871,18 +698,6 @@ let user   = null; // { id, email, name, plan }
 let links  = [];
 let chart  = null;
 let chartDays = 7;
-
-// ══════════════════════════════════════════════════
-//  INIT
-// ══════════════════════════════════════════════════
-(async () => {
-  try {
-    const r = await fetch('/api/auth/me');
-    const d = await r.json();
-    if (d.user) { user = d.user; showApp(); }
-    else        { showAuthScreen(); }
-  } catch { showAuthScreen(); }
-})();
 
 // ══════════════════════════════════════════════════
 //  AUTH
@@ -997,7 +812,9 @@ function navigate(page, el) {
   document.querySelectorAll('.sitem').forEach(s=>s.classList.remove('active'));
   document.getElementById('page-'+page)?.classList.add('active');
   if (el) el.classList.add('active');
-  if (page==='links') renderTable(links);
+  if (page==='links')  renderTable(links);
+  if (page==='admin')  loadAdminData();
+  if (page==='stats')  renderStatsPage();
   document.getElementById('sidebar').classList.remove('mob-open');
 }
 
@@ -1270,8 +1087,9 @@ function toggleMeta(cid) {
   const body  = document.getElementById(`${cid}_metabody`);
   const arrow = document.getElementById(`${cid}_arrow`);
   if (!body) return;
-  const open = body.classList.toggle('open');
-  if (arrow) arrow.classList.toggle('open', open);
+  const isOpen = body.style.display !== 'none' && body.style.display !== '';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.style.transform = isOpen ? '' : 'rotate(180deg)';
 }
 
 function updateOgPreview(cid) {
@@ -1446,19 +1264,32 @@ async function handleFileUpload(event, cid) {
 }
 
 function onLinkTypeChange(cid) {
-  const val     = document.getElementById(cid + '_ltype')?.value;
-  const vidSec  = document.getElementById(cid + '_videosec');
-  const metaSec = document.querySelector('#' + cid + ' .meta-sec') ||
-                  document.getElementById(cid + '_metabody')?.parentElement;
-  if (vidSec) vidSec.className = 'video-sec' + (val === 'video' ? ' show' : '');
-  // Check plan for video
-  const plan = user?.plan || 'free';
-  const isAdm = (plan === 'admin' || user?.role === 'admin');
+  const val    = document.getElementById(cid + '_ltype')?.value;
+  const vidSec = document.getElementById(cid + '_videosec');
+  const plan   = user?.plan || 'free';
+  const isAdm  = (plan === 'admin' || user?.role === 'admin');
+  const canOg  = plan === 'pro' || plan === 'business' || isAdm;
+
+  // Kiểm tra quyền Video
   if (val === 'video' && plan === 'free' && !isAdm) {
     toast('🔒 Link Video yêu cầu gói Pro', 'warn');
     const el = document.getElementById(cid + '_ltype');
     if (el) el.value = 'direct';
     if (vidSec) vidSec.className = 'video-sec';
+    return;
+  }
+
+  // Hiện/ẩn video section
+  if (vidSec) vidSec.className = 'video-sec' + (val === 'video' ? ' show' : '');
+
+  // Với deeplink và video: tự động mở meta section nếu có quyền
+  if ((val === 'deeplink' || val === 'video') && canOg) {
+    const metaBody = document.getElementById(cid + '_metabody');
+    const arrow    = document.getElementById(cid + '_arrow');
+    if (metaBody && metaBody.style.display === 'none') {
+      metaBody.style.display = 'block';
+      if (arrow) arrow.style.transform = 'rotate(180deg)';
+    }
   }
 }
 async function doShorten(cid) {
@@ -1524,6 +1355,13 @@ async function loadData() {
     links = d.recent || [];
     document.getElementById('dClicks').textContent  = (d.totalClicks||0).toLocaleString();
     document.getElementById('dLinks').textContent   = (d.totalLinks||0).toLocaleString();
+    if (document.getElementById('dClicksToday')) document.getElementById('dClicksToday').textContent = (d.clicksToday||0).toLocaleString();
+    if (document.getElementById('dLinksToday'))  document.getElementById('dLinksToday').textContent  = (d.linksToday||0).toLocaleString();
+    // Stats page
+    if (document.getElementById('stTotalClicks'))  document.getElementById('stTotalClicks').textContent  = (d.totalClicks||0).toLocaleString();
+    if (document.getElementById('stClicksToday'))  document.getElementById('stClicksToday').textContent  = (d.clicksToday||0).toLocaleString();
+    if (document.getElementById('stTotalLinks'))   document.getElementById('stTotalLinks').textContent   = (d.totalLinks||0).toLocaleString();
+    if (document.getElementById('stLinksToday'))   document.getElementById('stLinksToday').textContent   = (d.linksToday||0).toLocaleString();
     document.getElementById('navCount').textContent = d.totalLinks||0;
     document.getElementById('linkCountLabel').textContent = d.totalLinks||0;
     document.getElementById('dShopee').textContent  = links.filter(l=>/shopee\.vn/i.test(l.original_url)).length;
@@ -1568,9 +1406,10 @@ function renderTable(arr) {
       <td>${l.og_title?`<span style="font-size:11px;color:var(--green)">✅ ${esc(l.og_title).substring(0,20)}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
       <td style="font-weight:700;color:var(--text)">${l.clicks||0}</td>
       <td style="color:var(--text3)">${date}</td>
-      <td style="display:flex;gap:6px">
-        <button class="btn-cp" onclick="copyClip('${l.short_url||''}')">Sao chép</button>
+      <td style="display:flex;gap:5px">
+        <button class="btn-cp" onclick="copyClip('${l.short_url||''}')">📋</button>
         <button class="btn-cp" onclick="openEditModal(${l.id})" style="color:var(--brand)" title="Chỉnh sửa">✏️</button>
+        <button class="btn-cp" onclick="deleteMyLink(${l.id},'${(l.short_url||'').replace(/^https?:\/\//,'')}')" style="color:var(--red);border-color:rgba(239,68,68,.2)" title="Xóa">🗑️</button>
       </td>
     </tr>`;
   }).join('');
@@ -1680,15 +1519,209 @@ function toast(msg,type='ok') {
   setTimeout(()=>t.className='toast',2600);
 }
 
-// ══════════════════════════════════════════════════
-//  EDIT LINK MODAL
-// ══════════════════════════════════════════════════
+// Ctrl+K
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey||e.metaKey)&&e.key==='k') { e.preventDefault(); document.getElementById('tbSearch').focus(); }
+});
+document.getElementById('tbSearch').addEventListener('input', function() {
+  const q = this.value.trim();
+  if (q && !document.getElementById('page-links').classList.contains('active'))
+    navigate('links', document.querySelector('[onclick*="navigate(\'links\'"]'));
+  filterTable(q);
+});
 
+// ══════════════════════════════════════════════════
+//  STATS PAGE
+// ══════════════════════════════════════════════════
+let statsChartInst = null;
+let platformChartInst = null;
+
+function renderStatsPage() {
+  // Numbers already filled by loadData()
+  // Render chart on statsChart canvas
+  const ctx = document.getElementById('statsChart');
+  if (ctx) {
+    const labels=[], vals=[];
+    const now=new Date();
+    for (let i=chartDays-1;i>=0;i--) {
+      const d=new Date(now); d.setDate(d.getDate()-i);
+      labels.push(d.toLocaleDateString('vi',{day:'2-digit',month:'2-digit'}));
+      vals.push(0);
+    }
+    links.forEach(l=>{
+      if (!l.created_at) return;
+      const diff=Math.floor((now-new Date(l.created_at))/(86400000));
+      const idx=chartDays-1-diff;
+      if (idx>=0&&idx<chartDays) vals[idx]+=(l.clicks||0);
+    });
+    if (statsChartInst) statsChartInst.destroy();
+    statsChartInst=new Chart(ctx,{
+      type:'line',
+      data:{ labels, datasets:[{ data:vals, borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.08)', fill:true, tension:0.4, pointBackgroundColor:'#3b82f6', pointRadius:3, pointHoverRadius:5, borderWidth:2 }]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false} },
+        scales:{
+          x:{grid:{color:'rgba(255,255,255,.03)'},ticks:{color:'#4b5563',font:{size:11}}},
+          y:{grid:{color:'rgba(255,255,255,.03)'},ticks:{color:'#4b5563',font:{size:11},stepSize:1},beginAtZero:true}
+        }
+      }
+    });
+  }
+  // Platform chart
+  const ctx2 = document.getElementById('platformChart');
+  if (ctx2) {
+    const shopee = links.filter(l=>/shopee\.vn/i.test(l.original_url)).length;
+    const tiktok = links.filter(l=>/tiktok\.com/i.test(l.original_url)).length;
+    const generic = links.length - shopee - tiktok;
+    if (platformChartInst) platformChartInst.destroy();
+    platformChartInst=new Chart(ctx2,{
+      type:'doughnut',
+      data:{
+        labels:['Shopee','TikTok','Khác'],
+        datasets:[{ data:[shopee,tiktok,generic], backgroundColor:['#ee4d2d','#69c9d0','#6366f1'], borderWidth:0 }]
+      },
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:12}}} }
+      }
+    });
+  }
+}
+
+// ══════════════════════════════════════════════════
+//  DELETE OWN LINK
+// ══════════════════════════════════════════════════
+async function deleteMyLink(id, shortDisplay) {
+  if (!confirm(`Xóa link "${shortDisplay}"?\nHành động này không thể hoàn tác.`)) return;
+  try {
+    const r = await fetch('/api/links/' + id, { method:'DELETE' });
+    const d = await r.json();
+    if (!r.ok) { toast(d.error||'Xóa thất bại','err'); return; }
+    toast('🗑️ Đã xóa link','ok');
+    loadData();
+  } catch { toast('Lỗi kết nối','err'); }
+}
+
+// ══════════════════════════════════════════════════
+//  ADMIN DATA
+// ══════════════════════════════════════════════════
+let adminLinks = [];
+let adminUsers = [];
+
+async function loadAdminData() {
+  try {
+    const [sr, lr, ur] = await Promise.all([
+      fetch('/api/admin/stats'),
+      fetch('/api/admin/links'),
+      fetch('/api/admin/users'),
+    ]);
+    if (sr.ok) {
+      const s = await sr.json();
+      document.getElementById('adTotalUsers').textContent  = s.totalUsers  || 0;
+      document.getElementById('adTotalLinks').textContent  = s.totalLinks  || 0;
+      document.getElementById('adTotalClicks').textContent = s.totalClicks || 0;
+    }
+    if (lr.ok) {
+      const l = await lr.json();
+      adminLinks = l.links || [];
+      renderAdminLinks(adminLinks);
+    }
+    if (ur.ok) {
+      const u = await ur.json();
+      adminUsers = u.users || [];
+      renderAdminUsers(adminUsers);
+    }
+  } catch(e) { console.error('loadAdminData', e); }
+}
+
+function renderAdminUsers(arr) {
+  const tb = document.getElementById('adUserBody');
+  if (!tb) return;
+  document.getElementById('adUserCount').textContent = arr.length;
+  if (!arr.length) { tb.innerHTML='<tr><td colspan="7" class="tbl-empty">Không có người dùng</td></tr>'; return; }
+  tb.innerHTML = arr.map(u => `<tr>
+    <td style="color:var(--text3)">${u.id}</td>
+    <td style="font-weight:600">${esc(u.email)}</td>
+    <td>${esc(u.name||'—')}</td>
+    <td>
+      <select class="plan-select" onchange="adminSetPlan(${u.id},this.value)">
+        ${['free','pro','business','admin'].map(p=>`<option value="${p}"${u.plan===p?' selected':''}>${p}</option>`).join('')}
+      </select>
+    </td>
+    <td><span class="badge-role ${u.role||'user'}">${u.role||'user'}</span></td>
+    <td style="color:var(--text3);font-size:11px">${(u.created_at||'').substring(0,10)}</td>
+    <td><button class="btn-del" onclick="adminDeleteUser(${u.id},'${esc(u.email)}')">Xóa</button></td>
+  </tr>`).join('');
+}
+
+function renderAdminLinks(arr) {
+  const tb = document.getElementById('adLinkBody');
+  if (!tb) return;
+  document.getElementById('adLinkCount').textContent = arr.length;
+  if (!arr.length) { tb.innerHTML='<tr><td colspan="7" class="tbl-empty">Không có link</td></tr>'; return; }
+  const lbl = { shopee:'🛒 Shopee', tiktok:'🎵 TikTok', generic:'🔗 Generic' };
+  tb.innerHTML = arr.map(l => {
+    const p = pt(l.original_url);
+    const short = (l.short_url||'').replace(/^https?:\/\//,'');
+    return `<tr>
+      <td><a class="td-link" href="${l.short_url||'#'}" target="_blank">${short}</a></td>
+      <td class="td-orig" title="${l.original_url||''}">${l.original_url||''}</td>
+      <td><span class="pill ${p}">${lbl[p]}</span></td>
+      <td style="font-size:11px;color:var(--text3)">${esc(l.user_email||'guest')}</td>
+      <td style="font-weight:700">${l.clicks||0}</td>
+      <td style="color:var(--text3);font-size:11px">${(l.created_at||'').substring(0,10)}</td>
+      <td style="display:flex;gap:5px">
+        <button class="btn-cp" onclick="copyClip('${l.short_url||''}')">📋</button>
+        <button class="btn-del" onclick="adminDeleteLink(${l.id},'${short}')">Xóa</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterAdminUsers(q) {
+  q=q.toLowerCase();
+  renderAdminUsers(adminUsers.filter(u=>(u.email||'').toLowerCase().includes(q)||(u.name||'').toLowerCase().includes(q)));
+}
+
+function filterAdminLinks(q) {
+  q=q.toLowerCase();
+  renderAdminLinks(adminLinks.filter(l=>(l.short_url||'').toLowerCase().includes(q)||(l.original_url||'').toLowerCase().includes(q)));
+}
+
+async function adminSetPlan(userId, plan) {
+  try {
+    const r = await fetch('/api/admin/users/'+userId, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({plan})
+    });
+    if (r.ok) toast(`✅ Đã cập nhật gói → ${plan}`,'ok');
+    else { const d=await r.json(); toast(d.error||'Lỗi','err'); }
+  } catch { toast('Lỗi kết nối','err'); }
+}
+
+async function adminDeleteUser(userId, email) {
+  if (!confirm(`Xóa người dùng "${email}"?\nTất cả link của họ cũng bị xóa.`)) return;
+  try {
+    const r = await fetch('/api/admin/users/'+userId, { method:'DELETE' });
+    if (r.ok) { toast('🗑️ Đã xóa người dùng','ok'); loadAdminData(); }
+    else { const d=await r.json(); toast(d.error||'Lỗi','err'); }
+  } catch { toast('Lỗi kết nối','err'); }
+}
+
+async function adminDeleteLink(linkId, shortDisplay) {
+  if (!confirm(`Xóa link "${shortDisplay}"?`)) return;
+  try {
+    const r = await fetch('/api/admin/links/'+linkId, { method:'DELETE' });
+    if (r.ok) { toast('🗑️ Đã xóa link','ok'); loadAdminData(); }
+    else { const d=await r.json(); toast(d.error||'Lỗi','err'); }
+  } catch { toast('Lỗi kết nối','err'); }
+}
+
+// ══════════════════════════════════════════════════
+//  EDIT MODAL
+// ══════════════════════════════════════════════════
 function openEditModal(linkId) {
-  // Find link in cache
   const link = links.find(l => l.id == linkId) || adminLinks.find(l => l.id == linkId);
   if (!link) { toast('Không tìm thấy link', 'err'); return; }
-
   document.getElementById('editLinkId').value   = link.id;
   document.getElementById('editShortUrl').textContent = (link.short_url||'').replace(/^https?:\/\//,'');
   document.getElementById('editOrigUrl').textContent  = (link.original_url||'').substring(0,60);
@@ -1698,7 +1731,6 @@ function openEditModal(linkId) {
   document.getElementById('editOgImage').value   = link.og_image || '';
   document.getElementById('editVideoUrl').value  = link.video_url || '';
   document.getElementById('editVideoText').value = link.video_overlay_text || '';
-
   onEditLinkTypeChange();
   updateEditThumbPreview();
   document.getElementById('editErr').classList.remove('show');
@@ -1726,11 +1758,8 @@ function updateEditThumbPreview() {
 }
 
 async function autoExtractThumb() {
-  const videoUrl = document.getElementById('editVideoUrl').value.trim() ||
-                   links.find(l => l.id == document.getElementById('editLinkId').value)?.video_url;
+  const videoUrl = document.getElementById('editVideoUrl').value.trim();
   if (!videoUrl) { toast('Nhập URL video trước', 'warn'); return; }
-
-  // YouTube: get thumbnail from API
   const ytMatch = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
   if (ytMatch) {
     const thumb = `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`;
@@ -1739,40 +1768,29 @@ async function autoExtractThumb() {
     toast('✅ Đã lấy thumbnail YouTube!', 'ok');
     return;
   }
-
-  // Local/MP4: use canvas to extract frame at 1s
   try {
     const vidEl = document.createElement('video');
-    vidEl.src         = videoUrl;
-    vidEl.crossOrigin = 'anonymous';
-    vidEl.muted       = true;
-    vidEl.currentTime = 1;
-    vidEl.style.display = 'none';
-    document.body.appendChild(vidEl);
+    vidEl.src = videoUrl; vidEl.crossOrigin='anonymous'; vidEl.muted=true; vidEl.currentTime=1;
+    vidEl.style.display='none'; document.body.appendChild(vidEl);
     toast('⏳ Đang lấy thumbnail...', 'ok');
     await new Promise((resolve, reject) => {
       vidEl.addEventListener('seeked', () => {
         try {
-          const canvas = document.createElement('canvas');
-          canvas.width  = 1200;
-          canvas.height = 630;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(vidEl, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-          document.getElementById('editOgImage').value = dataUrl;
+          const canvas=document.createElement('canvas');
+          canvas.width=1200; canvas.height=630;
+          canvas.getContext('2d').drawImage(vidEl,0,0,1200,630);
+          document.getElementById('editOgImage').value = canvas.toDataURL('image/jpeg',0.85);
           updateEditThumbPreview();
           toast('✅ Đã cắt thumbnail từ video!', 'ok');
           resolve();
-        } catch(e) { reject(e); }
+        } catch(e){reject(e);}
       });
       vidEl.addEventListener('error', reject);
-      setTimeout(() => reject(new Error('timeout')), 8000);
+      setTimeout(()=>reject(new Error('timeout')),8000);
       vidEl.load();
     });
     document.body.removeChild(vidEl);
-  } catch(e) {
-    toast('Không thể lấy thumbnail: ' + e.message, 'err');
-  }
+  } catch(e) { toast('Không thể lấy thumbnail: '+e.message,'err'); }
 }
 
 async function saveEditLink() {
@@ -1780,51 +1798,40 @@ async function saveEditLink() {
   const btn   = document.getElementById('editSaveBtn');
   const errEl = document.getElementById('editErr');
   errEl.classList.remove('show');
-  btn.disabled = true; btn.textContent = '⏳ Đang lưu...';
-
+  btn.disabled=true; btn.textContent='⏳ Đang lưu...';
   try {
-    const r = await fetch('/api/links/' + id, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        og_title:            document.getElementById('editOgTitle').value.trim(),
-        og_desc:             document.getElementById('editOgDesc').value.trim(),
-        og_image:            document.getElementById('editOgImage').value.trim(),
-        link_type:           document.getElementById('editLinkType').value,
-        video_url:           document.getElementById('editVideoUrl').value.trim(),
-        video_overlay_text:  document.getElementById('editVideoText').value.trim(),
+    const r = await fetch('/api/links/'+id, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        og_title:           document.getElementById('editOgTitle').value.trim(),
+        og_desc:            document.getElementById('editOgDesc').value.trim(),
+        og_image:           document.getElementById('editOgImage').value.trim(),
+        link_type:          document.getElementById('editLinkType').value,
+        video_url:          document.getElementById('editVideoUrl').value.trim(),
+        video_overlay_text: document.getElementById('editVideoText').value.trim(),
       }),
     });
     const d = await r.json();
-    if (!r.ok) { errEl.textContent = d.error || 'Lỗi lưu'; errEl.classList.add('show'); return; }
-    toast('✅ Đã lưu thay đổi!', 'ok');
+    if (!r.ok) { errEl.textContent=d.error||'Lỗi lưu'; errEl.classList.add('show'); return; }
+    toast('✅ Đã lưu thay đổi!','ok');
     closeEditModal();
     loadData();
     if (adminLinks.length) loadAdminData();
-  } catch(e) {
-    errEl.textContent = 'Lỗi kết nối'; errEl.classList.add('show');
-  } finally {
-    btn.disabled = false; btn.textContent = '💾 Lưu thay đổi';
-  }
+  } catch { errEl.textContent='Lỗi kết nối'; errEl.classList.add('show'); }
+  finally { btn.disabled=false; btn.textContent='💾 Lưu thay đổi'; }
 }
+
+// ══════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════
+(async () => {
+  try {
+    const r = await fetch('/api/auth/me');
+    const d = await r.json();
+    if (d.user) { user = d.user; showApp(); }
+    else        { showAuthScreen(); }
+  } catch { showAuthScreen(); }
+})();
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
