@@ -943,68 +943,145 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
 
 function buildRedirectPage(link, info, platform) {
   const { deeplink_ios, deeplink_android, deeplink, fallback, platform_name, ios_store, play_store } = info;
-  const colors    = { shopee:'#ee4d2d', tiktok:'#010101', generic:'#6366f1' };
-  const labels    = { shopee:'Shopee',  tiktok:'TikTok',  generic:''        };
-  const color     = colors[platform_name]||'#6366f1';
-  const label     = labels[platform_name]||'';
-  const storeUrl  = platform==='ios' ? (ios_store||fallback) : (play_store||fallback);
-  const storeText = platform==='ios' ? 'Tải trên App Store' : 'Tải trên Google Play';
+  const colors = { shopee:'#ee4d2d', tiktok:'#010101', generic:'#6366f1' };
+  const labels = { shopee:'Shopee',  tiktok:'TikTok',  generic:'' };
+  const color  = colors[platform_name] || '#6366f1';
+  const label  = labels[platform_name] || '';
   const ogImg   = link.og_image ? `<img src="${esc(link.og_image)}" style="width:100%;border-radius:10px;margin-bottom:12px;max-height:180px;object-fit:cover" onerror="this.style.display='none'"/>` : '';
   const ogTitle = link.og_title ? `<p style="font-size:14px;font-weight:700;color:#1f2937;margin-bottom:4px;text-align:left">${esc(link.og_title)}</p>` : '';
   const ogDesc  = link.og_desc  ? `<p style="font-size:12px;color:#6b7280;margin-bottom:14px;text-align:left;line-height:1.5">${esc(link.og_desc)}</p>` : '';
 
-  // Ưu tiên deeplink theo platform, fallback về deeplink chung
   const dlIos     = deeplink_ios     || deeplink || fallback;
   const dlAndroid = deeplink_android || deeplink || fallback;
 
+  // Android Intent URI (bypass WebView, mở thẳng app không qua browser)
+  let intentAndroid = dlAndroid;
+  if (platform_name === 'shopee') {
+    const spMatch = dlAndroid.match(/^shopee:\/\/product\/(\d+)\/(\d+)/);
+    if (spMatch)
+      intentAndroid = `intent://product/${spMatch[1]}/${spMatch[2]}#Intent;scheme=shopee;package=com.shopee.vn;S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
+    else
+      intentAndroid = `intent://home#Intent;scheme=shopee;package=com.shopee.vn;S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
+  } else if (platform_name === 'tiktok') {
+    const ttMatch = dlAndroid.match(/^snssdk1233:\/\/aweme\/detail\?aweme_id=(\d+)/);
+    if (ttMatch)
+      intentAndroid = `intent://aweme/detail?aweme_id=${ttMatch[1]}#Intent;scheme=snssdk1233;package=com.zhiliaoapp.musically;S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
+    else {
+      const ttUser = dlAndroid.match(/^snssdk1233:\/\/user\/profile\?uniqueId=(.+)/);
+      if (ttUser)
+        intentAndroid = `intent://user/profile?uniqueId=${ttUser[1]}#Intent;scheme=snssdk1233;package=com.zhiliaoapp.musically;S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
+    }
+  }
+
+  const shortUrl = `${BASE_URL}/${link.alias||link.short_code}`;
+
   return `<!DOCTYPE html><html lang="vi"><head>
-<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
 <title>${esc(link.og_title||(label?'Mở '+label:'Đang mở...'))}</title>
-<meta property="og:title" content="${esc(link.og_title||'')}"/>
-<meta property="og:image" content="${esc(link.og_image||'')}"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(135deg,#f0f4ff,#faf0ff);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
-.card{background:#fff;border-radius:20px;padding:28px;max-width:380px;width:100%;text-align:center;box-shadow:0 12px 60px rgba(0,0,0,.12)}
-.progress{width:56px;height:4px;background:#e5e7eb;border-radius:2px;margin:0 auto 18px;overflow:hidden}
-.bar{height:100%;background:${color};border-radius:2px;animation:p 2.5s ease forwards}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:linear-gradient(135deg,#f0f4ff,#faf0ff);
+  display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.card{background:#fff;border-radius:20px;padding:28px;max-width:380px;width:100%;
+  text-align:center;box-shadow:0 12px 60px rgba(0,0,0,.12)}
+.prog{width:56px;height:4px;background:#e5e7eb;border-radius:2px;margin:0 auto 18px;overflow:hidden}
+.bar{height:100%;background:${color};border-radius:2px;animation:p 2s ease forwards}
 @keyframes p{from{width:0}to{width:100%}}
-h1{font-size:18px;font-weight:800;color:#111;margin-bottom:6px}
-.sub{font-size:13px;color:#6b7280;margin-bottom:20px}
-.btn{display:block;padding:13px 20px;border-radius:12px;font-size:14px;font-weight:700;text-decoration:none;margin-bottom:9px;transition:.15s}
+h1{font-size:17px;font-weight:800;color:#111;margin-bottom:5px}
+.sub{font-size:12px;color:#6b7280;margin-bottom:18px;line-height:1.5}
+.btn{display:block;padding:13px 18px;border-radius:12px;font-size:14px;font-weight:700;
+  text-decoration:none;margin-bottom:8px;transition:.15s;cursor:pointer}
 .btn:active{transform:scale(.97)}
 .btn-app{background:${color};color:#fff}
+.btn-ext{background:#f59e0b;color:#fff}
 .btn-web{background:#f3f4f6;color:#374151}
 .btn-store{background:#111;color:#fff;font-size:13px}
-.sep{font-size:11px;color:#9ca3af;margin:4px 0 9px}
-</style></head><body>
+.sep{font-size:11px;color:#9ca3af;margin:3px 0 8px}
+/* Facebook WebView warning */
+.fb-warn{background:#fff3cd;border:1px solid #ffc107;border-radius:10px;
+  padding:12px 14px;margin-bottom:14px;font-size:12px;color:#856404;
+  text-align:left;line-height:1.5;display:none}
+.fb-warn.show{display:block}
+.fb-warn strong{display:block;margin-bottom:3px;font-size:13px}
+</style>
+</head>
+<body>
 <div class="card">
-  <div class="progress"><div class="bar"></div></div>
+  <div class="prog"><div class="bar"></div></div>
   ${ogImg}${ogTitle}${ogDesc}
+
+  <!-- Cảnh báo Facebook WebView (hiện khi detect FB browser) -->
+  <div class="fb-warn" id="fbWarn">
+    <strong>⚠️ Đang mở trong trình duyệt Facebook</strong>
+    Để mở ứng dụng, bấm <strong>"Mở bằng trình duyệt"</strong> rồi bấm lại link.
+  </div>
+
   <h1 id="t">Đang mở${label?' '+label:''}...</h1>
   <p class="sub" id="d">Chờ một chút...</p>
+
+  <!-- Nút mở external browser (chỉ hiện trong FB WebView) -->
+  <a href="${esc(shortUrl)}" class="btn btn-ext" id="btnExt"
+     style="display:none">🌐 Mở bằng trình duyệt Chrome/Safari</a>
+
   <a href="#" class="btn btn-app" id="btnApp">Mở trong ${label||'ứng dụng'}</a>
   <a href="${esc(fallback)}" class="btn btn-web">Xem trên trình duyệt</a>
   <div class="sep">Chưa cài ứng dụng?</div>
-  <a href="${esc(ios_store||fallback)}" class="btn btn-store" id="btnStore">${storeText}</a>
+  <a href="#" class="btn btn-store" id="btnStore">Tải ứng dụng</a>
 </div>
+
 <script>
 (function(){
-  var DL_IOS     = ${JSON.stringify(dlIos)};
-  var DL_ANDROID = ${JSON.stringify(dlAndroid)};
-  var FALLBACK   = ${JSON.stringify(fallback)};
-  var IOS_STORE  = ${JSON.stringify(ios_store||fallback)};
-  var PLAY_STORE = ${JSON.stringify(play_store||fallback)};
+  var DL_IOS      = ${JSON.stringify(dlIos)};
+  var DL_ANDROID  = ${JSON.stringify(dlAndroid)};
+  var INTENT_AND  = ${JSON.stringify(intentAndroid)};
+  var FALLBACK    = ${JSON.stringify(fallback)};
+  var SHORT_URL   = ${JSON.stringify(shortUrl)};
+  var IOS_STORE   = ${JSON.stringify(ios_store||fallback)};
+  var PLAY_STORE  = ${JSON.stringify(play_store||fallback)};
 
-  var isIos     = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  var isAndroid = /android/i.test(navigator.userAgent);
-  var dl        = isIos ? DL_IOS : (isAndroid ? DL_ANDROID : DL_IOS);
-  var store     = isIos ? IOS_STORE : PLAY_STORE;
+  var ua        = navigator.userAgent || '';
+  var isIos     = /iphone|ipad|ipod/i.test(ua);
+  var isAndroid = /android/i.test(ua);
+  // Detect Facebook in-app browser
+  var isFbApp   = /FBAN|FBAV|FB_IAB|FB4A|FBIOS|facebookexternalhit/i.test(ua)
+                  || (typeof window.FB !== 'undefined');
+  // Detect any WebView (Instagram, Zalo, Messenger, Line...)
+  var isWebView = isFbApp
+    || /Instagram|ZaloApp|Line\/|Messenger|KAKAOTALK|MicroMessenger/i.test(ua)
+    || (isAndroid && /wv\b|Version\/[\d.]+ Chrome\/[\d.]+ Mobile/i.test(ua) && !/Chrome\/[\d.]+ Mobile Safari/i.test(ua));
 
-  // Cập nhật nút Store đúng platform
+  var dl    = isIos ? DL_IOS : (isAndroid ? INTENT_AND : DL_IOS);
+  var store = isIos ? IOS_STORE : PLAY_STORE;
+
+  // Cập nhật UI
   document.getElementById('btnStore').href = store;
-  document.getElementById('btnStore').textContent = isIos ? 'Tải trên App Store' : 'Tải trên Google Play';
+  document.getElementById('btnStore').textContent = isIos ? '⬇️ Tải trên App Store' : '⬇️ Tải trên Google Play';
   document.getElementById('btnApp').href = dl;
+
+  if (isWebView) {
+    // Trong WebView: custom scheme bị chặn → hướng dẫn mở external browser
+    document.getElementById('fbWarn').classList.add('show');
+    document.getElementById('btnExt').style.display = 'block';
+    // Thử intent scheme cho Android (có thể work trong một số WebView)
+    if (isAndroid) {
+      document.getElementById('btnApp').href = INTENT_AND;
+    }
+    // Nút mở external browser: dùng intent VIEW cho Android, window.open cho iOS
+    document.getElementById('btnExt').onclick = function(e) {
+      e.preventDefault();
+      if (isAndroid) {
+        // Intent ACTION_VIEW mở Chrome
+        window.location.href = 'intent://' + SHORT_URL.replace(/^https?:\/\//,'')
+          + '#Intent;scheme=https;action=android.intent.action.VIEW;'
+          + 'category=android.intent.category.BROWSABLE;package=com.android.chrome;'
+          + 'S.browser_fallback_url=' + encodeURIComponent(SHORT_URL) + ';end';
+      } else {
+        window.open(SHORT_URL, '_system') || (window.location.href = SHORT_URL);
+      }
+    };
+  }
 
   var done = false;
   function go() {
@@ -1012,18 +1089,21 @@ h1{font-size:18px;font-weight:800;color:#111;margin-bottom:6px}
     window.location.href = dl;
     setTimeout(function() {
       document.getElementById('t').textContent = 'Không mở được ứng dụng?';
-      document.getElementById('d').textContent = 'Xem trên trình duyệt hoặc tải ứng dụng.';
+      document.getElementById('d').textContent = 'Bấm "Xem trên trình duyệt" hoặc tải ứng dụng.';
     }, 2500);
   }
 
-  // Auto-try sau 300ms
-  setTimeout(go, 300);
+  // Chỉ auto-try nếu KHÔNG phải WebView (tránh lỗi permission error)
+  if (!isWebView) {
+    setTimeout(go, 300);
+  }
 
-  document.getElementById('btnApp').onclick = function(e) {
+  document.getElementById('btnApp').addEventListener('click', function(e) {
     e.preventDefault(); done = false; go();
-  };
+  });
 })();
-</script></body></html>`;
+</script>
+</body></html>`;
 }
 
 // ─── EXPORT ───────────────────────────────────────────────────────────────────
