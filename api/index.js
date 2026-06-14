@@ -1037,12 +1037,6 @@ h1{font-size:17px;font-weight:800;color:#111;margin-bottom:5px}
 .btn-web{background:#f3f4f6;color:#374151}
 .btn-store{background:#111;color:#fff;font-size:13px}
 .sep{font-size:11px;color:#9ca3af;margin:3px 0 8px}
-/* Facebook WebView warning */
-.fb-warn{background:#fff3cd;border:1px solid #ffc107;border-radius:10px;
-  padding:12px 14px;margin-bottom:14px;font-size:12px;color:#856404;
-  text-align:left;line-height:1.5;display:none}
-.fb-warn.show{display:block}
-.fb-warn strong{display:block;margin-bottom:3px;font-size:13px}
 </style>
 </head>
 <body>
@@ -1050,18 +1044,8 @@ h1{font-size:17px;font-weight:800;color:#111;margin-bottom:5px}
   <div class="prog"><div class="bar"></div></div>
   ${ogImg}${ogTitle}${ogDesc}
 
-  <!-- Cảnh báo Facebook WebView (hiện khi detect FB browser) -->
-  <div class="fb-warn" id="fbWarn">
-    <strong>⚠️ Đang mở trong trình duyệt Facebook</strong>
-    Để mở ứng dụng, bấm <strong>"Mở bằng trình duyệt"</strong> rồi bấm lại link.
-  </div>
-
   <h1 id="t">Đang mở${label?' '+label:''}...</h1>
-  <p class="sub" id="d">Chờ một chút...</p>
-
-  <!-- Nút mở external browser (chỉ hiện trong FB WebView) -->
-  <a href="${esc(shortUrl)}" class="btn btn-ext" id="btnExt"
-     style="display:none">🌐 Mở bằng trình duyệt Chrome/Safari</a>
+  <p class="sub" id="d">Bấm <strong>"Mở"</strong> khi iOS hỏi để vào ${label||'ứng dụng'} ngay.</p>
 
   <a href="#" class="btn btn-app" id="btnApp">Mở trong ${label||'ứng dụng'}</a>
   <a href="${esc(fallback)}" class="btn btn-web">Xem trên trình duyệt</a>
@@ -1083,16 +1067,7 @@ h1{font-size:17px;font-weight:800;color:#111;margin-bottom:5px}
   var isIos     = /iphone|ipad|ipod/i.test(ua);
   var isAndroid = /android/i.test(ua);
 
-  // iOS FB WebView cho phép custom scheme (tiktok://, shopee://)
-  // Chỉ block Android WebView của một số app
-  var isAndroidWebView = isAndroid && (
-    /wv\b/i.test(ua) ||
-    /Instagram|ZaloApp|Messenger|KAKAOTALK|MicroMessenger/i.test(ua)
-  );
-  var isBlockedWebView = isAndroidWebView;
-
-  // Với TikTok iOS: thử tiktok:// scheme trước, nếu fail thì Universal Link
-  var DL_IOS_SCHEME = DL_IOS; // tiktok:// hoặc shopee://
+  var DL_IOS_SCHEME = DL_IOS;
   var DL_IOS_UNIV   = ${JSON.stringify(info.universal_link || dlIos)};
 
   var dl    = isIos ? DL_IOS_SCHEME : (isAndroid ? INTENT_AND : DL_IOS_SCHEME);
@@ -1102,38 +1077,23 @@ h1{font-size:17px;font-weight:800;color:#111;margin-bottom:5px}
   document.getElementById('btnStore').textContent = isIos ? '⬇️ Tải trên App Store' : '⬇️ Tải trên Google Play';
   document.getElementById('btnApp').href = dl;
 
-  if (isBlockedWebView) {
-    document.getElementById('fbWarn').classList.add('show');
-    document.getElementById('btnExt').style.display = 'block';
-    document.getElementById('btnApp').href = INTENT_AND;
-    document.getElementById('btnExt').onclick = function(e) {
-      e.preventDefault();
-      window.location.href = 'intent://' + SHORT_URL.replace(/^https?:\/\//, '')
-        + '#Intent;scheme=https;action=android.intent.action.VIEW;'
-        + 'category=android.intent.category.BROWSABLE;package=com.android.chrome;'
-        + 'S.browser_fallback_url=' + encodeURIComponent(SHORT_URL) + ';end';
-    };
-  }
-
   var done = false;
   function go() {
     if (done) return; done = true;
     window.location.href = dl;
-    // Nếu sau 2s vẫn ở trang này → có thể scheme không work → thử Universal Link
+    // Nếu sau 2s vẫn ở đây (scheme fail) → thử Universal Link
     setTimeout(function() {
       if (isIos && DL_IOS_UNIV && DL_IOS_UNIV !== dl) {
         window.location.href = DL_IOS_UNIV;
       }
       setTimeout(function() {
         document.getElementById('t').textContent = 'Không mở được ứng dụng?';
-        document.getElementById('d').textContent = 'Bấm "Xem trên trình duyệt" hoặc tải ứng dụng.';
-      }, 1000);
+        document.getElementById('d').textContent = 'Bấm nút bên dưới hoặc tải ứng dụng.';
+      }, 1500);
     }, 2000);
   }
 
-  if (!isBlockedWebView) {
-    setTimeout(go, 300);
-  }
+  setTimeout(go, 300);
 
   document.getElementById('btnApp').addEventListener('click', function(e) {
     e.preventDefault(); done = false; go();
