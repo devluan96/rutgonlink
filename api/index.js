@@ -649,17 +649,26 @@ app.get('/:code', async (req,res) => {
     if (!link) return res.status(404).sendFile(path.join(__dirname,'..','public','404.html'));
 
     const ua = req.headers['user-agent'] || '';
+    const platform = getMobilePlatform(ua);
 
-    // ── Social bot hoặc Facebook iOS/Android user → OG page với App Links ──
-    // Facebook đọc al:ios:url từ trang này → tự mở app không cần JS
-    const isFbUser = /FBAN|FBAV|FBIOS|FB4A|Instagram/i.test(ua);
-    if (isSocialBot(ua) || isFbUser) {
+    // ── Social bot → OG page với App Links (no redirect) ──────────────────
+    if (isSocialBot(ua)) {
       res.set({
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
         'Content-Type': 'text/html; charset=utf-8',
       });
-      return res.send(buildOgPage(link, BASE_URL, isFbUser));
+      return res.send(buildOgPage(link, BASE_URL, false));
+    }
+
+    // ── FB iOS/Android user → 301 → OG page với App Links ────────────────
+    // Facebook iOS intercept 301 redirect ở network layer → đọc App Links
+    // → tự mở app KHÔNG cần JS, KHÔNG cần user bấm gì
+    const isFbUser = /FBAN|FBAV|FBIOS|FB4A|Instagram/i.test(ua);
+    if (isFbUser) {
+      const ogUrl = `${BASE_URL}/_og/${link.alias || link.short_code}`;
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      return res.redirect(301, ogUrl);
     }
 
     // Count click
@@ -672,24 +681,42 @@ app.get('/:code', async (req,res) => {
       return res.send(buildVideoPage(link));
     }
 
-    // ── Deeplink type: luôn mở app, kể cả desktop ─────────────────────────
-    const platform = getMobilePlatform(ua);
-    const info     = detectPlatformDeep(link.original_url, platform);
+    const info = detectPlatformDeep(link.original_url, platform);
 
+    // ── Deeplink type → redirect page ─────────────────────────────────────
     if (linkType === 'deeplink') {
-      // Luôn show redirect page (cả desktop), tự detect iOS/Android bằng JS
       if (info.deeplink) return res.send(buildRedirectPage(link, info, platform));
-      // Không có deeplink → redirect thẳng
       return res.redirect(302, link.original_url);
     }
 
-    // ── Direct: redirect thẳng (desktop), redirect page (mobile) ──────────
+    // ── Direct / desktop → redirect thẳng ────────────────────────────────
     if (platform === 'desktop' || !info.deeplink)
       return res.redirect(302, link.original_url);
 
     return res.send(buildRedirectPage(link, info, platform));
   } catch(e) {
     console.error(e);
+    res.status(500).send('Server error');
+  }
+});
+
+// ─── OG REDIRECT TARGET (App Links page) ────────────────────────────────────
+// Trang này được serve SAU khi FB follow 301 redirect
+// FB đọc al:ios:url tại đây → tự mở app
+app.get('/_og/:code', async (req, res) => {
+  try {
+    const database = await getDb();
+    const { code } = req.params;
+    const link = await database.getLinkByAlias(code) || await database.getLinkByCode(code);
+    if (!link) return res.status(404).send('Not found');
+
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Content-Type': 'text/html; charset=utf-8',
+    });
+    return res.send(buildOgPage(link, BASE_URL, true));
+  } catch(e) {
     res.status(500).send('Server error');
   }
 });
