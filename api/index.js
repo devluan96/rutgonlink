@@ -607,14 +607,16 @@ app.get('/:code', async (req,res) => {
 
     const ua = req.headers['user-agent'] || '';
 
-    // ── Social bot → OG page (NO redirect, return HTML with meta tags) ──────
-    if (isSocialBot(ua)) {
+    // ── Social bot hoặc Facebook iOS/Android user → OG page với App Links ──
+    // Facebook đọc al:ios:url từ trang này → tự mở app không cần JS
+    const isFbUser = /FBAN|FBAV|FBIOS|FB4A|Instagram/i.test(ua);
+    if (isSocialBot(ua) || isFbUser) {
       res.set({
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
         'Content-Type': 'text/html; charset=utf-8',
       });
-      return res.send(buildOgPage(link, BASE_URL));
+      return res.send(buildOgPage(link, BASE_URL, isFbUser));
     }
 
     // Count click
@@ -683,13 +685,20 @@ function buildAppLinkMeta(originalUrl) {
 
 // ─── OG PAGE ──────────────────────────────────────────────────────────────────
 
-function buildOgPage(link, baseUrl) {
+function buildOgPage(link, baseUrl, isHumanFbUser = false) {
   const shortUrl = `${baseUrl}/${link.alias||link.short_code}`;
   const title = esc(link.og_title || 'Link rút gọn – RutGonLink');
   const desc  = esc(link.og_desc  || 'Nhấn vào link để xem nội dung');
   const image = link.og_image ? esc(link.og_image) : `${baseUrl}/og-default.png`;
   const dest  = link.original_url;
   const appLinkMeta = buildAppLinkMeta(dest);
+
+  // Với FB user (không phải bot): KHÔNG auto redirect bằng JS
+  // để App Links meta hoạt động – FB sẽ tự mở app theo al:ios:url
+  // Với bot: không chạy JS anyway, chỉ đọc meta tags
+  const bodyScript = isHumanFbUser
+    ? `<!-- FB App Links active – no JS redirect needed -->`
+    : `<script>window.location.replace(${JSON.stringify(dest)});</script>`;
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -715,7 +724,7 @@ function buildOgPage(link, baseUrl) {
 <meta name="twitter:description" content="${desc}"/>
 <meta name="twitter:image"       content="${image}"/>
 
-<!-- Facebook App Links: tự mở app khi click trong FB WebView -->
+<!-- Facebook App Links: tự mở app khi click trong FB -->
 ${appLinkMeta}
 </head>
 <body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
@@ -723,7 +732,7 @@ ${appLinkMeta}
   <p style="font-size:16px;margin-bottom:16px">${title}</p>
   <a href="${esc(dest)}" style="color:#3b82f6;font-size:14px">Nhấn để xem →</a>
 </div>
-<script>window.location.replace(${JSON.stringify(dest)});</script>
+${bodyScript}
 </body>
 </html>`;
 }
