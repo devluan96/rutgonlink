@@ -153,9 +153,9 @@ function getMobilePlatform(ua='') {
 
 function isSocialBot(ua='') {
   if (!ua) return false;
-  // Facebook crawlers specifically
-  if (/facebookexternalhit|facebot|facebook|FBID|FBAV/i.test(ua)) return true;
-  // Other social bots
+  // Chỉ match bot/crawler thực sự – KHÔNG match FB iOS/Android app user
+  // facebookexternalhit = FB crawler (bot), KHÔNG phải user
+  if (/facebookexternalhit|facebot/i.test(ua)) return true;
   return /twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|vkshare|zalo|vibebot|line[\s/]|baiduspider|googlebot|applebot|bingbot|yandexbot|pinterestbot|snapchat|ia_archiver|AhrefsBot|SemrushBot|rogerbot/i.test(ua);
 }
 
@@ -1044,42 +1044,33 @@ h1{font-size:17px;font-weight:800;color:#111;margin-bottom:5px}
   var ua        = navigator.userAgent || '';
   var isIos     = /iphone|ipad|ipod/i.test(ua);
   var isAndroid = /android/i.test(ua);
-  // Detect Facebook in-app browser
-  var isFbApp   = /FBAN|FBAV|FB_IAB|FB4A|FBIOS|facebookexternalhit/i.test(ua)
-                  || (typeof window.FB !== 'undefined');
-  // Detect any WebView (Instagram, Zalo, Messenger, Line...)
-  var isWebView = isFbApp
-    || /Instagram|ZaloApp|Line\/|Messenger|KAKAOTALK|MicroMessenger/i.test(ua)
-    || (isAndroid && /wv\b|Version\/[\d.]+ Chrome\/[\d.]+ Mobile/i.test(ua) && !/Chrome\/[\d.]+ Mobile Safari/i.test(ua));
+
+  // Facebook iOS app (FBIOS/FBAV): cho phép shopee:// → KHÔNG block
+  // Chỉ block Android WebView của một số app
+  var isFbIos = isIos && /FBAN|FBAV|FBIOS|FB4A/i.test(ua);
+  var isAndroidWebView = isAndroid && (
+    /wv\b/i.test(ua) ||
+    /Instagram|ZaloApp|Messenger|KAKAOTALK|MicroMessenger/i.test(ua)
+  );
+  var isBlockedWebView = isAndroidWebView;
 
   var dl    = isIos ? DL_IOS : (isAndroid ? INTENT_AND : DL_IOS);
   var store = isIos ? IOS_STORE : PLAY_STORE;
 
-  // Cập nhật UI
   document.getElementById('btnStore').href = store;
   document.getElementById('btnStore').textContent = isIos ? '⬇️ Tải trên App Store' : '⬇️ Tải trên Google Play';
   document.getElementById('btnApp').href = dl;
 
-  if (isWebView) {
-    // Trong WebView: custom scheme bị chặn → hướng dẫn mở external browser
+  if (isBlockedWebView) {
     document.getElementById('fbWarn').classList.add('show');
     document.getElementById('btnExt').style.display = 'block';
-    // Thử intent scheme cho Android (có thể work trong một số WebView)
-    if (isAndroid) {
-      document.getElementById('btnApp').href = INTENT_AND;
-    }
-    // Nút mở external browser: dùng intent VIEW cho Android, window.open cho iOS
+    document.getElementById('btnApp').href = INTENT_AND;
     document.getElementById('btnExt').onclick = function(e) {
       e.preventDefault();
-      if (isAndroid) {
-        // Intent ACTION_VIEW mở Chrome
-        window.location.href = 'intent://' + SHORT_URL.replace(/^https?:\/\//,'')
-          + '#Intent;scheme=https;action=android.intent.action.VIEW;'
-          + 'category=android.intent.category.BROWSABLE;package=com.android.chrome;'
-          + 'S.browser_fallback_url=' + encodeURIComponent(SHORT_URL) + ';end';
-      } else {
-        window.open(SHORT_URL, '_system') || (window.location.href = SHORT_URL);
-      }
+      window.location.href = 'intent://' + SHORT_URL.replace(/^https?:\/\//, '')
+        + '#Intent;scheme=https;action=android.intent.action.VIEW;'
+        + 'category=android.intent.category.BROWSABLE;package=com.android.chrome;'
+        + 'S.browser_fallback_url=' + encodeURIComponent(SHORT_URL) + ';end';
     };
   }
 
@@ -1093,8 +1084,8 @@ h1{font-size:17px;font-weight:800;color:#111;margin-bottom:5px}
     }, 2500);
   }
 
-  // Chỉ auto-try nếu KHÔNG phải WebView (tránh lỗi permission error)
-  if (!isWebView) {
+  // Auto-try mọi trường hợp trừ Android WebView bị block
+  if (!isBlockedWebView) {
     setTimeout(go, 300);
   }
 
