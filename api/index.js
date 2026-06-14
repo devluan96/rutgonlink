@@ -182,17 +182,30 @@ function detectPlatformDeep(originalUrl, platform) {
       play_store:'https://play.google.com/store/apps/details?id=com.shopee.vn',
     };
 
-  // ── TikTok: dùng Universal Link (https://tiktok.com/...) cho mọi loại ─────
-  // iOS/Android Universal Link tự mở TikTok app nếu đã cài, không cần scheme
-  // snssdk1233:// scheme bị TikTok security check chặn từ web
+  // ── TikTok: iOS dùng tiktok:// scheme, Android dùng snssdk1233:// ─────────
   if (/tiktok\.com/i.test(originalUrl)) {
-    // Normalize URL về tiktok.com (bỏ www. nếu có)
-    const cleanUrl = originalUrl.replace(/^https?:\/\/(www\.)?tiktok\.com/i, 'https://www.tiktok.com');
+    // Lấy path từ URL gốc để build deeplink
+    let iosDeeplink   = originalUrl;
+    let androidDeeplink = originalUrl;
+
+    try {
+      const u = new URL(originalUrl);
+      const pathAndQuery = u.pathname + u.search;
+
+      // TikTok iOS Universal Link scheme: tiktok://
+      // iOS: tiktok:// scheme được Shopee/TikTok app đăng ký
+      iosDeeplink = `tiktok:/${pathAndQuery}`;
+
+      // Android: snssdk1233:// scheme
+      androidDeeplink = `snssdk1233:/${pathAndQuery}`;
+    } catch(_) {}
+
     return {
-      // Universal Link = chính URL gốc, iOS/Android tự intercept mở app
-      deeplink: cleanUrl,
-      deeplink_ios: cleanUrl,
-      deeplink_android: cleanUrl,
+      deeplink: iosDeeplink,
+      deeplink_ios: iosDeeplink,
+      deeplink_android: androidDeeplink,
+      // Universal Link fallback nếu scheme không work
+      universal_link: originalUrl,
       platform_name:'tiktok', fallback:originalUrl,
       ios_store:'https://apps.apple.com/vn/app/tiktok/id1235601864',
       play_store:'https://play.google.com/store/apps/details?id=com.zhiliaoapp.musically',
@@ -655,11 +668,12 @@ function buildAppLinkMeta(originalUrl) {
     tags.push(`<meta property="al:android:package" content="com.shopee.vn" />`);
     tags.push(`<meta property="al:android:app_name" content="Shopee" />`);
   } else if (info.platform_name === 'tiktok') {
-    // TikTok dùng Universal Link – al:ios:url = URL gốc https://www.tiktok.com/...
-    tags.push(`<meta property="al:ios:url" content="${esc(info.deeplink_ios || originalUrl)}" />`);
+    // al:ios:url dùng tiktok:// scheme
+    tags.push(`<meta property="al:ios:url" content="${esc(info.deeplink_ios || info.deeplink)}" />`);
     tags.push(`<meta property="al:ios:app_store_id" content="1235601864" />`);
     tags.push(`<meta property="al:ios:app_name" content="TikTok" />`);
-    tags.push(`<meta property="al:android:url" content="${esc(info.deeplink_android || originalUrl)}" />`);
+    // al:android:url dùng snssdk1233:// scheme
+    tags.push(`<meta property="al:android:url" content="${esc(info.deeplink_android || info.deeplink)}" />`);
     tags.push(`<meta property="al:android:package" content="com.zhiliaoapp.musically" />`);
     tags.push(`<meta property="al:android:app_name" content="TikTok" />`);
   }
@@ -1069,16 +1083,19 @@ h1{font-size:17px;font-weight:800;color:#111;margin-bottom:5px}
   var isIos     = /iphone|ipad|ipod/i.test(ua);
   var isAndroid = /android/i.test(ua);
 
-  // Facebook iOS app (FBIOS/FBAV): cho phép shopee:// → KHÔNG block
+  // iOS FB WebView cho phép custom scheme (tiktok://, shopee://)
   // Chỉ block Android WebView của một số app
-  var isFbIos = isIos && /FBAN|FBAV|FBIOS|FB4A/i.test(ua);
   var isAndroidWebView = isAndroid && (
     /wv\b/i.test(ua) ||
     /Instagram|ZaloApp|Messenger|KAKAOTALK|MicroMessenger/i.test(ua)
   );
   var isBlockedWebView = isAndroidWebView;
 
-  var dl    = isIos ? DL_IOS : (isAndroid ? INTENT_AND : DL_IOS);
+  // Với TikTok iOS: thử tiktok:// scheme trước, nếu fail thì Universal Link
+  var DL_IOS_SCHEME = DL_IOS; // tiktok:// hoặc shopee://
+  var DL_IOS_UNIV   = ${JSON.stringify(info.universal_link || dlIos)};
+
+  var dl    = isIos ? DL_IOS_SCHEME : (isAndroid ? INTENT_AND : DL_IOS_SCHEME);
   var store = isIos ? IOS_STORE : PLAY_STORE;
 
   document.getElementById('btnStore').href = store;
@@ -1102,13 +1119,18 @@ h1{font-size:17px;font-weight:800;color:#111;margin-bottom:5px}
   function go() {
     if (done) return; done = true;
     window.location.href = dl;
+    // Nếu sau 2s vẫn ở trang này → có thể scheme không work → thử Universal Link
     setTimeout(function() {
-      document.getElementById('t').textContent = 'Không mở được ứng dụng?';
-      document.getElementById('d').textContent = 'Bấm "Xem trên trình duyệt" hoặc tải ứng dụng.';
-    }, 2500);
+      if (isIos && DL_IOS_UNIV && DL_IOS_UNIV !== dl) {
+        window.location.href = DL_IOS_UNIV;
+      }
+      setTimeout(function() {
+        document.getElementById('t').textContent = 'Không mở được ứng dụng?';
+        document.getElementById('d').textContent = 'Bấm "Xem trên trình duyệt" hoặc tải ứng dụng.';
+      }, 1000);
+    }, 2000);
   }
 
-  // Auto-try mọi trường hợp trừ Android WebView bị block
   if (!isBlockedWebView) {
     setTimeout(go, 300);
   }
