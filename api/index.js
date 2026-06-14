@@ -1,4 +1,4 @@
-try { require('dotenv').config({ path: require('path').join(__dirname,'..', '.env') }); } catch(_){}
+﻿try { require('dotenv').config({ path: require('path').join(__dirname,'..', '.env') }); } catch(_){}
 
 const express      = require('express');
 const path         = require('path');
@@ -40,8 +40,8 @@ const PLANS = {
   admin:    { dailyLimit: 0,   deeplink: true,  ogMeta: true,  upload: true,  videoLink: true  },
 };
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -659,33 +659,30 @@ app.post('/api/upload-video', requireAuth, videoUploadMw.single('video'), async 
 
 
 function buildVideoPage(link) {
-  const ua           = 'android'; // detect at server level not needed – JS handles it
-  const iosInfo      = detectPlatformDeep(link.original_url, 'ios');
-  const androidInfo  = detectPlatformDeep(link.original_url, 'android');
-  const fallback     = link.original_url;
-  const overlayText  = esc(link.video_overlay_text || '🛒 Bấm vào đây để ủng hộ và xem sản phẩm →');
-  const ogTitle      = esc(link.og_title || 'Xem video');
-  const ogImage      = esc(link.og_image || '');
+  const iosInfo     = detectPlatformDeep(link.original_url, 'ios');
+  const androidInfo = detectPlatformDeep(link.original_url, 'android');
+  const fallback    = link.original_url;
+  const overlayText = esc(link.video_overlay_text || 'Bấm vào đây để ủng hộ và xem sản phẩm →');
+  const ogTitle     = esc(link.og_title || 'Xem video');
+  const ogImage     = esc(link.og_image || '');
+  const videoUrl    = link.video_url || '';
 
-  const videoUrl = link.video_url || '';
-  let videoHtml  = '';
-
-  // YouTube
+  let videoHtml = '';
   const ytMatch = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
   const ytEmbed = videoUrl.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{11})/);
   if (ytMatch || ytEmbed) {
     const vid = ytMatch ? ytMatch[1] : ytEmbed[1];
     videoHtml = `<iframe id="videoEl"
-      src="https://www.youtube.com/embed/${vid}?autoplay=1&mute=1&enablejsapi=1&rel=0&modestbranding=1"
-      frameborder="0" allow="autoplay;encrypted-media;gyroscope" allowfullscreen
-      style="width:100%;height:100%;position:absolute;top:0;left:0;border:0"></iframe>`;
+      src="https://www.youtube.com/embed/${vid}?autoplay=1&mute=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1"
+      frameborder="0" allow="autoplay;encrypted-media;gyroscope;fullscreen"
+      style="position:absolute;top:0;left:0;width:100%;height:100%;border:0"></iframe>`;
   } else if (videoUrl) {
-    // Direct mp4 / webm / uploaded file
     videoHtml = `<video id="videoEl" src="${esc(videoUrl)}"
-      autoplay muted playsinline loop
-      style="width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0"></video>`;
+      autoplay muted playsinline
+      style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#000"
+      onloadedmetadata="fitVideo(this)"></video>`;
   } else {
-    videoHtml = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.4);font-size:14px">Không có video</div>`;
+    videoHtml = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.4);font-size:16px">Không có video</div>`;
   }
 
   return `<!DOCTYPE html>
@@ -698,214 +695,166 @@ ${ogImage ? `<meta property="og:image" content="${ogImage}"/>` : ''}
 <meta property="og:title" content="${ogTitle}"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:#000;overflow:hidden;
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;touch-action:none}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif}
 
-.video-wrap{position:relative;width:100vw;height:100vh;background:#000;overflow:hidden}
+/* Scene: full screen black bg */
+.scene{position:relative;width:100vw;height:100dvh;
+  background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
 
-/* ── Countdown ring (top-right) ── */
-.cd-wrap{
-  position:absolute;top:18px;right:16px;z-index:20;
-  display:flex;align-items:center;justify-content:center;
-}
-.cd-svg{width:46px;height:46px}
-.cd-bg{fill:none;stroke:rgba(255,255,255,.15);stroke-width:3}
-.cd-prog{
-  fill:none;stroke:rgba(255,255,255,.9);stroke-width:3;stroke-linecap:round;
+/* Video box – sized to video's natural aspect ratio */
+.vbox{position:relative;width:100%;height:100%}
+
+/* Countdown – top right */
+.cd-wrap{position:absolute;top:14px;right:14px;z-index:30;
+  display:flex;align-items:center;justify-content:center}
+.cd-svg{width:44px;height:44px}
+.cd-bg{fill:none;stroke:rgba(255,255,255,.2);stroke-width:3}
+.cd-prog{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;
   stroke-dasharray:120.6;stroke-dashoffset:0;
-  transform:rotate(-90deg);transform-origin:50% 50%;
-  transition:stroke-dashoffset 0.05s linear;
-}
-.cd-num{
-  position:absolute;font-size:15px;font-weight:800;color:#fff;
-  top:50%;left:50%;transform:translate(-50%,-50%);
-  text-shadow:0 1px 3px rgba(0,0,0,.5);
-}
+  transform:rotate(-90deg);transform-origin:50% 50%}
+.cd-num{position:absolute;font-size:14px;font-weight:800;color:#fff;
+  top:50%;left:50%;transform:translate(-50%,-50%)}
 
-/* ── Overlay – covers ENTIRE screen, cursor pointer everywhere ── */
-.overlay{
-  position:absolute;inset:0;z-index:30;
-  cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
-  padding-bottom:clamp(40px,10vh,80px);
-  /* gradient from transparent top → dark bottom */
-  background:linear-gradient(
-    to bottom,
-    rgba(0,0,0,0)   0%,
-    rgba(0,0,0,0)   45%,
-    rgba(0,0,0,.55) 70%,
-    rgba(0,0,0,.82) 100%
-  );
-  opacity:0;pointer-events:none;
-  transition:opacity .35s ease;
-}
+/* X button – top RIGHT, bấm cũng nhảy app */
+.x-btn{position:absolute;top:14px;right:14px;z-index:40;
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(0,0,0,.6);border:1.5px solid rgba(255,255,255,.3);
+  color:#fff;font-size:15px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;backdrop-filter:blur(6px);
+  opacity:0;pointer-events:none;transition:opacity .25s}
+.x-btn.show{opacity:1;pointer-events:all}
+
+/* Overlay: full screen click target */
+.overlay{position:absolute;inset:0;z-index:31;cursor:pointer;
+  display:flex;align-items:flex-end;justify-content:center;
+  padding-bottom:clamp(28px,7vh,70px);
+  background:linear-gradient(to bottom,
+    rgba(0,0,0,0) 0%,rgba(0,0,0,0) 40%,
+    rgba(0,0,0,.5) 65%,rgba(0,0,0,.82) 100%);
+  opacity:0;pointer-events:none;transition:opacity .3s}
 .overlay.show{opacity:1;pointer-events:all}
 
-/* ── CTA button (inside overlay, also triggers deeplink) ── */
-.cta-btn{
-  background:linear-gradient(135deg,#ee4d2d 0%,#ff6b35 100%);
+/* CTA button – no icon duplication */
+.cta-btn{background:linear-gradient(135deg,#ee4d2d,#ff6b35);
   color:#fff;border:none;border-radius:100px;
-  padding:15px 32px;font-size:16px;font-weight:800;
-  cursor:pointer;pointer-events:none; /* overlay handles click */
-  letter-spacing:.02em;
-  box-shadow:0 6px 28px rgba(238,77,45,.5);
-  display:flex;align-items:center;gap:10px;
-  max-width:88vw;text-align:center;line-height:1.3;
-  animation:pulse 2s ease-in-out infinite;
-  position:relative;z-index:1;
-}
-@keyframes pulse{0%,100%{box-shadow:0 6px 28px rgba(238,77,45,.5)}
-  50%{box-shadow:0 8px 36px rgba(238,77,45,.75);transform:scale(1.03)}}
-
-.cta-hint{
-  color:rgba(255,255,255,.65);font-size:11px;
-  margin-top:10px;text-align:center;line-height:1.5;
+  padding:14px 28px;font-size:15px;font-weight:800;
   pointer-events:none;
-}
+  box-shadow:0 6px 28px rgba(238,77,45,.55);
+  max-width:84vw;text-align:center;line-height:1.4;
+  animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
 
-/* ── Nút X góc trái – BẤM VÀO CŨNG NHẢY APP ── */
-.x-btn{
-  position:absolute;top:16px;left:14px;z-index:31;
-  width:38px;height:38px;border-radius:50%;
-  background:rgba(0,0,0,.5);border:1.5px solid rgba(255,255,255,.25);
-  color:#fff;font-size:16px;font-weight:700;
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;backdrop-filter:blur(6px);
-  opacity:0;pointer-events:none;transition:opacity .3s;
-}
-.x-btn.show{opacity:1;pointer-events:all}
-.x-btn:hover{background:rgba(255,255,255,.15)}
-
-/* ── Pause flash ── */
-.pause-flash{
-  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  z-index:29;font-size:56px;
-  opacity:0;pointer-events:none;
-  transition:opacity .15s;
-  filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));
-}
-.pause-flash.show{opacity:1}
+/* Pause flash */
+.pf{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:29;font-size:52px;opacity:0;pointer-events:none;transition:opacity .15s}
+.pf.show{opacity:1}
 </style>
 </head>
 <body>
-<div class="video-wrap" id="wrap">
-  ${videoHtml}
+<div class="scene">
+  <div class="vbox" id="vbox">
+    ${videoHtml}
+    <div class="pf" id="pf">⏸</div>
 
-  <!-- Countdown -->
-  <div class="cd-wrap" id="cdWrap">
-    <svg class="cd-svg" viewBox="0 0 42 42">
-      <circle class="cd-bg"   cx="21" cy="21" r="19.2"/>
-      <circle class="cd-prog" cx="21" cy="21" r="19.2" id="cdProg"/>
-    </svg>
-    <span class="cd-num" id="cdNum">5</span>
-  </div>
-
-  <!-- Pause flash -->
-  <div class="pause-flash" id="pauseFlash">⏸</div>
-
-  <!-- Full-screen overlay (bấm bất kỳ đâu = nhảy app) -->
-  <div class="overlay" id="overlay" onclick="goApp()">
-    <div class="cta-btn">
-      <span style="font-size:20px">🛒</span>
-      <span>${overlayText}</span>
+    <!-- Countdown top-right -->
+    <div class="cd-wrap" id="cdWrap">
+      <svg class="cd-svg" viewBox="0 0 42 42">
+        <circle class="cd-bg" cx="21" cy="21" r="19.2"/>
+        <circle class="cd-prog" cx="21" cy="21" r="19.2" id="cdProg"/>
+      </svg>
+      <span class="cd-num" id="cdNum">5</span>
     </div>
-    <div class="cta-hint">Bấm vào bất kỳ đâu để mở ứng dụng</div>
+
+    <!-- Full-screen overlay: bấm bất kỳ đâu = nhảy app -->
+    <div class="overlay" id="overlay" onclick="goApp()">
+      <div class="cta-btn">${overlayText}</div>
+    </div>
+
+    <!-- X góc phải: bấm cũng nhảy app -->
+    <div class="x-btn" id="xBtn" onclick="goApp()">✕</div>
   </div>
-
-  <!-- Nút X góc trái – bấm cũng nhảy app -->
-  <div class="x-btn" id="xBtn" onclick="goApp()">✕</div>
 </div>
-
 <script>
 (function(){
-  var DEEPLINK_IOS     = ${JSON.stringify(iosInfo.deeplink || fallback)};
-  var DEEPLINK_ANDROID = ${JSON.stringify(androidInfo.deeplink || fallback)};
-  var FALLBACK         = ${JSON.stringify(fallback)};
-  var CIRCUMFERENCE    = 120.6; // 2π × 19.2
-  var DELAY_MS         = 5000;
+  var DL_IOS     = ${JSON.stringify(iosInfo.deeplink || fallback)};
+  var DL_ANDROID = ${JSON.stringify(androidInfo.deeplink || fallback)};
+  var FALLBACK   = ${JSON.stringify(fallback)};
+  var CIRC = 120.6, DELAY = 5000;
 
-  var videoEl    = document.getElementById('videoEl');
-  var overlay    = document.getElementById('overlay');
-  var xBtn       = document.getElementById('xBtn');
-  var cdWrap     = document.getElementById('cdWrap');
-  var cdProg     = document.getElementById('cdProg');
-  var cdNum      = document.getElementById('cdNum');
-  var pauseFlash = document.getElementById('pauseFlash');
-  var shown      = false;
+  var videoEl = document.getElementById('videoEl');
+  var overlay = document.getElementById('overlay');
+  var xBtn    = document.getElementById('xBtn');
+  var cdWrap  = document.getElementById('cdWrap');
+  var cdProg  = document.getElementById('cdProg');
+  var cdNum   = document.getElementById('cdNum');
+  var pf      = document.getElementById('pf');
+  var shown   = false;
 
-  /* ── Detect iOS ── */
-  var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  var deeplink = isIos ? DEEPLINK_IOS : DEEPLINK_ANDROID;
+  var isIos     = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var isAndroid = /android/i.test(navigator.userAgent);
 
-  /* ── Countdown animation ── */
-  var t0 = Date.now();
-  function tick() {
-    var elapsed = Date.now() - t0;
-    var left    = Math.max(0, DELAY_MS - elapsed);
-    var frac    = left / DELAY_MS; // 1 → 0
-    cdProg.style.strokeDashoffset = CIRCUMFERENCE * (1 - frac);
-    cdNum.textContent = Math.ceil(left / 1000);
-    if (left > 0) requestAnimationFrame(tick);
-    else          showOverlay();
+  /* Fit video to natural aspect ratio */
+  window.fitVideo = function(v) {
+    if (!v.videoWidth) return;
+    var sw=window.innerWidth, sh=window.innerHeight;
+    var scale = Math.min(sw/v.videoWidth, sh/v.videoHeight);
+    var w = v.videoWidth*scale, h = v.videoHeight*scale;
+    var box = document.getElementById('vbox');
+    box.style.width = w+'px'; box.style.height = h+'px';
+    v.style.width='100%'; v.style.height='100%';
+  };
+  window.addEventListener('resize', function(){
+    if(videoEl && videoEl.tagName==='VIDEO') fitVideo(videoEl);
+  });
+
+  /* Countdown */
+  var t0=Date.now();
+  function tick(){
+    var left=Math.max(0,DELAY-(Date.now()-t0));
+    cdProg.style.strokeDashoffset=CIRC*(1-left/DELAY);
+    cdNum.textContent=Math.ceil(left/1000);
+    if(left>0) requestAnimationFrame(tick); else showOverlay();
   }
   requestAnimationFrame(tick);
 
-  /* ── Show overlay ── */
-  function showOverlay() {
-    if (shown) return;
-    shown = true;
-    // Pause video
-    try {
-      if (videoEl && videoEl.tagName === 'VIDEO') videoEl.pause();
-      else if (videoEl && videoEl.tagName === 'IFRAME')
-        videoEl.contentWindow.postMessage(
-          '{"event":"command","func":"pauseVideo","args":""}','*');
-    } catch(_){}
-    // Show pause flash briefly
-    pauseFlash.classList.add('show');
-    setTimeout(function(){ pauseFlash.classList.remove('show'); }, 700);
-    // Fade in overlay + X button
-    cdWrap.style.display = 'none';
-    overlay.classList.add('show');
+  function showOverlay(){
+    if(shown)return; shown=true;
+    try{
+      if(videoEl&&videoEl.tagName==='VIDEO') videoEl.pause();
+      else if(videoEl&&videoEl.tagName==='IFRAME')
+        videoEl.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}','*');
+    }catch(_){}
+    pf.classList.add('show');
+    setTimeout(function(){pf.classList.remove('show');},600);
+    cdWrap.style.display='none';
     xBtn.classList.add('show');
+    overlay.classList.add('show');
   }
 
-  /* ── Go to app (called when user taps overlay OR x-btn) ── */
-  function goApp() {
-    var ua = navigator.userAgent.toLowerCase();
-    var isIos = /iphone|ipad|ipod/.test(ua);
-    var isAndroid = /android/.test(ua);
-
-    if (isAndroid && DEEPLINK_ANDROID !== FALLBACK) {
-      // Android: dùng intent:// để mở app không qua dialog
-      var intentUrl = DEEPLINK_ANDROID
-        .replace('shopee://', 'intent://shopee#Intent;scheme=shopee;package=com.shopee.vn;end')
-        .replace('snssdk1233://', 'intent://tiktok#Intent;scheme=snssdk1233;package=com.zhiliaoapp.musically;end');
-      // Thử intent trước
-      window.location.href = intentUrl;
-      // Fallback sau 1.5s nếu app chưa cài
-      setTimeout(function() { window.location.href = FALLBACK; }, 1500);
-    } else if (isIos && DEEPLINK_IOS !== FALLBACK) {
-      // iOS: dùng custom scheme trực tiếp
-      window.location.href = DEEPLINK_IOS;
-      // Fallback App Store sau 2s
-      setTimeout(function() { window.location.href = FALLBACK; }, 2000);
+  function goApp(){
+    if(isAndroid&&DL_ANDROID!==FALLBACK){
+      var u=DL_ANDROID
+        .replace('shopee://','intent://shopee#Intent;scheme=shopee;package=com.shopee.vn;end')
+        .replace('snssdk1233://','intent://tiktok#Intent;scheme=snssdk1233;package=com.zhiliaoapp.musically;end');
+      window.location.href=u;
+      setTimeout(function(){window.location.href=FALLBACK;},1500);
+    } else if(isIos&&DL_IOS!==FALLBACK){
+      window.location.href=DL_IOS;
+      setTimeout(function(){window.location.href=FALLBACK;},2000);
     } else {
-      // Desktop / unknown
-      window.open(FALLBACK, '_blank');
+      window.open(FALLBACK,'_blank');
     }
   }
-  window.goApp = goApp;
+  window.goApp=goApp;
 
-  /* ── Resume video when user returns from app ── */
-  document.addEventListener('visibilitychange', function() {
-    if (!document.hidden && shown) {
-      try {
-        if (videoEl && videoEl.tagName === 'VIDEO') videoEl.play();
-        else if (videoEl && videoEl.tagName === 'IFRAME')
-          videoEl.contentWindow.postMessage(
-            '{"event":"command","func":"playVideo","args":""}','*');
-      } catch(_){}
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden&&shown){
+      try{
+        if(videoEl&&videoEl.tagName==='VIDEO') videoEl.play();
+        else if(videoEl&&videoEl.tagName==='IFRAME')
+          videoEl.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}','*');
+      }catch(_){}
     }
   });
 })();
