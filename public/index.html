@@ -920,40 +920,10 @@ function renderForm(containerId) {
         </div>
       </div>
 
-      <!-- Hàng 2: Tiêu đề + Mô tả + Ảnh thumb (luôn hiển thị trong video mode) -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 120px;gap:8px;align-items:start">
-        <div>
-          <label class="fl" style="margin-bottom:3px">Tiêu đề (OG Title)</label>
-          <input type="text" class="fi" id="${containerId}_ogtitle"
-            placeholder="Tiêu đề khi share Facebook..." maxlength="120"
-            oninput="updateOgPreview('${containerId}')" style="font-size:12px"/>
-        </div>
-        <div>
-          <label class="fl" style="margin-bottom:3px">Mô tả (OG Desc)</label>
-          <input type="text" class="fi" id="${containerId}_ogdesc"
-            placeholder="Mô tả ngắn..." maxlength="200"
-            oninput="updateOgPreview('${containerId}')" style="font-size:12px"/>
-        </div>
-        <div>
-          <label class="fl" style="margin-bottom:3px">Ảnh thumb</label>
-          <div style="position:relative">
-            <input type="url" class="fi" id="${containerId}_ogimg"
-              placeholder="URL ảnh..."
-              oninput="updateVideoThumbPreview('${containerId}')"
-              style="font-size:11px;padding-right:28px"/>
-            <span id="${containerId}_thumbdot"
-              style="position:absolute;right:7px;top:50%;transform:translateY(-50%);
-                     font-size:14px;display:none">✅</span>
-          </div>
-          <img id="${containerId}_thumbpreview"
-            style="width:100%;height:40px;object-fit:cover;border-radius:5px;margin-top:4px;display:none"
-            src="" alt=""/>
-        </div>
-      </div>
-
       <div style="margin-top:8px;padding:6px 10px;background:rgba(59,130,246,.07);border-radius:6px;
                   font-size:11px;color:var(--text2)">
-        💡 Video autoplay → 5s → lớp phủ toàn màn hình → user bấm bất kỳ đâu → mở App Shopee/TikTok
+        💡 Video autoplay → 5s → lớp phủ toàn màn hình → user bấm bất kỳ đâu → mở App Shopee/TikTok.<br/>
+        ✏️ Tiêu đề, mô tả và ảnh preview nhập ở phần <strong>Preview khi share</strong> bên dưới.
       </div>
     </div>
 
@@ -1226,21 +1196,19 @@ async function extractThumbFromUrl(cid) {
   } catch(e) { toast('Không lấy được thumbnail: ' + (e?.message||'lỗi'), 'err'); }
 }
 
-// Update small thumb preview in video section
+// Update thumb preview – now only in meta section (single source of truth)
 function updateVideoThumbPreview(cid) {
-  const url   = document.getElementById(cid + '_ogimg')?.value.trim() || '';
-  const img   = document.getElementById(cid + '_thumbpreview');
-  const dot   = document.getElementById(cid + '_thumbdot');
-  if (!img) return;
+  const url = document.getElementById(cid + '_ogimg')?.value.trim() || '';
+  // Open meta section if it has content so user can see the preview
   if (url) {
-    img.src = url; img.style.display = 'block';
-    img.onerror = () => { img.style.display = 'none'; };
-    if (dot) dot.style.display = 'block';
-  } else {
-    img.style.display = 'none';
-    if (dot) dot.style.display = 'none';
+    const metaBody = document.getElementById(cid + '_metabody');
+    if (metaBody && metaBody.style.display === 'none') {
+      metaBody.style.display = 'block';
+      const arrow = document.getElementById(cid + '_arrow');
+      if (arrow) arrow.style.transform = 'rotate(180deg)';
+    }
   }
-  // Also update the main OG preview if it exists
+  // Sync to OG preview card
   updateOgPreview(cid);
 }
 async function handleFileUpload(event, cid) {
