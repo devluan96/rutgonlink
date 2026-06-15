@@ -190,6 +190,26 @@ async function getDb() {
   return db;
 }
 
+async function getPublicBaseUrl() {
+  const database = await getDb();
+  const primary = await database.getPrimaryDomain();
+  if (primary?.hostname) return `https://${primary.hostname}`;
+  return BASE_URL;
+}
+
+function buildShortUrl(baseUrl, code) {
+  return `${baseUrl}/${code}`;
+}
+
+function normalizeDomainHost(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+  const normalized = /^https?:\/\//i.test(raw)
+    ? new URL(raw)
+    : new URL(`https://${raw}`);
+  return normalized.hostname.toLowerCase();
+}
+
 function esc(s) {
   return (s || "")
     .replace(/&/g, "&amp;")
@@ -501,6 +521,32 @@ app.get("/api/auth/me", async (req, res) => {
   });
 });
 
+app.patch("/api/auth/me", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const name = String(req.body?.name || "").trim().slice(0, 80);
+    await database.updateUserName(user.id, name || null);
+    const updated = await database.getUserById(user.id);
+    if (updated.email.toLowerCase() === ADMIN_EMAIL || updated.role === "admin") {
+      updated.plan = "admin";
+      updated.role = "admin";
+    }
+    res.json({
+      user: {
+        id: updated.id,
+        email: updated.email,
+        name: updated.name,
+        plan: updated.plan,
+        role: updated.role || "user",
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Lỗi server: " + e.message });
+  }
+});
+
 app.post(
   "/api/upload-image",
   requireAuth,
@@ -623,9 +669,10 @@ app.get("/api/admin/links", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
     const links = (await database.getAllLinks()).map((l) => ({
       ...l,
-      short_url: `${BASE_URL}/${l.alias || l.short_code}`,
+      short_url: buildShortUrl(publicBaseUrl, l.alias || l.short_code),
     }));
     res.json({ links });
   } catch (e) {
@@ -655,9 +702,98 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
   }
 });
 
+app.get("/api/admin/domains", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
+  try {
+    const database = await getDb();
+    const domains = await database.getDomains();
+    res.json({ domains });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/admin/domains", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
+  try {
+    const database = await getDb();
+    const hostname = normalizeDomainHost(req.body?.hostname);
+    const label = String(req.body?.label || "").trim().slice(0, 80);
+    const isPrimary = req.body?.is_primary === true || req.body?.is_primary === "true";
+    if (!hostname)
+      return res.status(400).json({ error: "Domain không hợp lệ" });
+    const existing = (await database.getDomains()).find((d) => d.hostname === hostname);
+    if (existing)
+      return res.status(400).json({ error: "Domain này đã tồn tại" });
+    const domain = await database.addDomain({
+      hostname,
+      label,
+      isPrimary,
+    });
+    if (domain.is_primary) {
+      await database.setPrimaryDomain(domain.id);
+    } else {
+      const primary = await database.getPrimaryDomain();
+      if (!primary) await database.setPrimaryDomain(domain.id);
+    }
+    const domains = await database.getDomains();
+    res.json({ domain, domains });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch("/api/admin/domains/:id", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
+  try {
+    const database = await getDb();
+    const domainId = Number(req.params.id);
+    const updates = {};
+    if (typeof req.body?.label === "string") {
+      updates.label = req.body.label.trim().slice(0, 80) || null;
+    }
+    if (typeof req.body?.is_active === "boolean") {
+      updates.is_active = req.body.is_active;
+    }
+    if (req.body?.hostname) {
+      const hostname = normalizeDomainHost(req.body.hostname);
+      if (!hostname) return res.status(400).json({ error: "Domain không hợp lệ" });
+      updates.hostname = hostname;
+    }
+    const makePrimary = req.body?.is_primary === true || req.body?.is_primary === "true";
+    if (makePrimary) {
+      const domain = await database.setPrimaryDomain(domainId);
+      if (!domain) return res.status(404).json({ error: "Không tìm thấy domain" });
+      if (updates.label || updates.hostname || typeof updates.is_active === "boolean") {
+        await database.updateDomain(domainId, updates);
+      }
+    } else if (Object.keys(updates).length) {
+      const domain = await database.updateDomain(domainId, updates);
+      if (!domain) return res.status(404).json({ error: "Không tìm thấy domain" });
+    }
+    const domains = await database.getDomains();
+    res.json({ domains });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/api/admin/domains/:id", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
+  try {
+    const database = await getDb();
+    await database.deleteDomain(Number(req.params.id));
+    const domains = await database.getDomains();
+    res.json({ ok: true, domains });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post("/api/shorten", async (req, res) => {
   try {
     const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
     const user = await resolveUser(req);
     const guestSessionId = user ? null : req.guestSessionId;
     let {
@@ -762,7 +898,7 @@ app.post("/api/shorten", async (req, res) => {
     );
     const code = alias || shortCode;
     return res.json({
-      short_url: `${BASE_URL}/${code}`,
+      short_url: buildShortUrl(publicBaseUrl, code),
       short_code: code,
       original_url: url,
       clicks: 0,
@@ -777,6 +913,7 @@ app.post("/api/shorten", async (req, res) => {
 app.get("/api/links/:id", async (req, res) => {
   try {
     const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
     const user = await resolveUser(req);
     const guestSessionId = user ? null : req.guestSessionId;
     const link = await database.getLinkById(Number(req.params.id));
@@ -791,7 +928,7 @@ app.get("/api/links/:id", async (req, res) => {
     res.json({
       link: {
         ...link,
-        short_url: `${BASE_URL}/${link.alias || link.short_code}`,
+        short_url: buildShortUrl(publicBaseUrl, link.alias || link.short_code),
       },
     });
   } catch (e) {
@@ -802,6 +939,7 @@ app.get("/api/links/:id", async (req, res) => {
 app.patch("/api/links/:id", async (req, res) => {
   try {
     const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
     const user = await resolveUser(req);
     const guestSessionId = user ? null : req.guestSessionId;
     if (!user && !guestSessionId)
@@ -837,7 +975,7 @@ app.patch("/api/links/:id", async (req, res) => {
     res.json({
       link: {
         ...updated,
-        short_url: `${BASE_URL}/${updated.alias || updated.short_code}`,
+        short_url: buildShortUrl(publicBaseUrl, updated.alias || updated.short_code),
       },
     });
   } catch (e) {
@@ -863,6 +1001,7 @@ app.post("/api/extract-thumb", requireAuth, async (req, res) => {
 app.get("/api/stats", async (req, res) => {
   try {
     const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
     const user = await resolveUser(req);
     const userId = user?.id || null;
     const guestSessionId = user ? null : req.guestSessionId;
@@ -871,7 +1010,7 @@ app.get("/api/stats", async (req, res) => {
     const recent = (await database.getRecentLinks(userId, guestSessionId)).map(
       (l) => ({
         ...l,
-        short_url: `${BASE_URL}/${l.alias || l.short_code}`,
+        short_url: buildShortUrl(publicBaseUrl, l.alias || l.short_code),
       }),
     );
     res.json({ ...totals, ...today, recent, plan: user?.plan || "guest" });
@@ -913,6 +1052,7 @@ app.get("/:code", async (req, res) => {
 
   try {
     const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
     const link =
       (await database.getLinkByAlias(code)) ||
       (await database.getLinkByCode(code));
@@ -933,7 +1073,7 @@ app.get("/:code", async (req, res) => {
         // Quan trọng: cho phép Facebook đọc App Links meta
         "X-Frame-Options": "SAMEORIGIN",
       });
-      return res.send(buildOgPage(link, BASE_URL));
+      return res.send(buildOgPage(link, publicBaseUrl));
       // NOTE: Không recordClick ở đây → tránh đếm lượt click ảo từ bot
     }
 
@@ -961,7 +1101,7 @@ app.get("/:code", async (req, res) => {
 
     // ── Mobile có deeplink → DirectBridgePage ────────────────────────────
     if (info.deeplink || linkType === "deeplink") {
-      const shortUrl = `${BASE_URL}/${link.alias || link.short_code}`;
+      const shortUrl = buildShortUrl(publicBaseUrl, link.alias || link.short_code);
       res.set({
         "Cache-Control": "no-cache,no-store,must-revalidate",
         Pragma: "no-cache",
@@ -980,6 +1120,7 @@ app.get("/:code", async (req, res) => {
 app.get("/_og/:code", async (req, res) => {
   try {
     const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
     const { code } = req.params;
     const link =
       (await database.getLinkByAlias(code)) ||
@@ -990,7 +1131,7 @@ app.get("/_og/:code", async (req, res) => {
       Pragma: "no-cache",
       "Content-Type": "text/html;charset=utf-8",
     });
-    return res.send(buildOgPage(link, BASE_URL));
+    return res.send(buildOgPage(link, publicBaseUrl));
   } catch (e) {
     res.status(500).send("Server error");
   }

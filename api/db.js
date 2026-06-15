@@ -81,6 +81,11 @@ async function init() {
       check(error);
     },
 
+    async updateUserName(userId, name) {
+      const { error } = await sb.from('users').update({ name: name || null }).eq('id', userId);
+      check(error);
+    },
+
     async deleteUser(userId) {
       const { error } = await sb.from('users').delete().eq('id', userId);
       check(error);
@@ -304,6 +309,85 @@ async function init() {
         .from('links')
         .update({ user_id: userId, guest_session_id: null })
         .eq('guest_session_id', guestSessionId);
+      check(error);
+    },
+
+    async getDomains() {
+      const { data, error } = await sb
+        .from('domains')
+        .select('*')
+        .order('is_primary', { ascending: false })
+        .order('created_at', { ascending: false });
+      check(error);
+      return data || [];
+    },
+
+    async getPrimaryDomain() {
+      const { data } = await sb
+        .from('domains')
+        .select('*')
+        .eq('is_active', true)
+        .eq('is_primary', true)
+        .maybeSingle();
+      return data;
+    },
+
+    async addDomain({ hostname, label, isPrimary = false }) {
+      const payload = {
+        hostname,
+        label: label || null,
+        is_primary: !!isPrimary,
+        is_active: true,
+      };
+      const { data, error } = await sb.from('domains').insert(payload).select().single();
+      check(error);
+      return data;
+    },
+
+    async setPrimaryDomain(domainId) {
+      const { data: current } = await sb
+        .from('domains')
+        .select('id')
+        .eq('id', domainId)
+        .maybeSingle();
+      if (!current) return null;
+      const { error: clearError } = await sb
+        .from('domains')
+        .update({ is_primary: false })
+        .eq('is_primary', true);
+      check(clearError);
+      const { data, error } = await sb
+        .from('domains')
+        .update({ is_primary: true, is_active: true })
+        .eq('id', domainId)
+        .select()
+        .single();
+      check(error);
+      return data;
+    },
+
+    async updateDomain(domainId, fields) {
+      const allowed = ['hostname', 'label', 'is_primary', 'is_active'];
+      const updates = {};
+      for (const [k, v] of Object.entries(fields || {})) {
+        if (allowed.includes(k)) updates[k] = v;
+      }
+      if (!Object.keys(updates).length) return null;
+      if (updates.is_primary) {
+        await sb.from('domains').update({ is_primary: false }).eq('is_primary', true);
+      }
+      const { data, error } = await sb
+        .from('domains')
+        .update(updates)
+        .eq('id', domainId)
+        .select()
+        .single();
+      check(error);
+      return data;
+    },
+
+    async deleteDomain(domainId) {
+      const { error } = await sb.from('domains').delete().eq('id', domainId);
       check(error);
     },
 
