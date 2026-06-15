@@ -27,13 +27,17 @@ CREATE TABLE IF NOT EXISTS links (
   video_url          TEXT,
   video_overlay_text TEXT,
   user_id            BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  guest_session_id   TEXT,
   created_at         TIMESTAMPTZ DEFAULT NOW(),
   clicks             INTEGER DEFAULT 0
 );
 
+ALTER TABLE links ADD COLUMN IF NOT EXISTS guest_session_id TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_links_short_code ON links(short_code);
 CREATE INDEX IF NOT EXISTS idx_links_alias      ON links(alias);
 CREATE INDEX IF NOT EXISTS idx_links_user_id    ON links(user_id);
+CREATE INDEX IF NOT EXISTS idx_links_guest_session_id ON links(guest_session_id);
 
 -- ── Clicks ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS clicks (

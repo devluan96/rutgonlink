@@ -1,6 +1,23 @@
 const { createClient } = require('@supabase/supabase-js');
+const rawTimeZoneOffset = Number(process.env.APP_TIME_ZONE_OFFSET_MINUTES);
+const APP_TIME_ZONE_OFFSET_MINUTES = Number.isFinite(rawTimeZoneOffset) ? rawTimeZoneOffset : 420;
 
 let _client = null;
+
+function getDayWindowUtc(date = new Date(), offsetMinutes = APP_TIME_ZONE_OFFSET_MINUTES) {
+  const shifted = new Date(date.getTime() + offsetMinutes * 60 * 1000);
+  const startUtcMs = Date.UTC(
+    shifted.getUTCFullYear(),
+    shifted.getUTCMonth(),
+    shifted.getUTCDate(),
+    0, 0, 0, 0,
+  ) - offsetMinutes * 60 * 1000;
+  const endUtcMs = startUtcMs + 24 * 60 * 60 * 1000 - 1;
+  return {
+    start: new Date(startUtcMs).toISOString(),
+    end: new Date(endUtcMs).toISOString(),
+  };
+}
 
 function getClient() {
   if (_client) return _client;
@@ -85,7 +102,7 @@ async function init() {
     },
 
     // ── Links ──────────────────────────────────────────────────────────
-    async createLink(shortCode, originalUrl, alias, ogTitle, ogDesc, ogImage, userId, linkType, videoUrl, videoOverlayText) {
+    async createLink(shortCode, originalUrl, alias, ogTitle, ogDesc, ogImage, userId, linkType, videoUrl, videoOverlayText, guestSessionId) {
       const { data, error } = await sb
         .from('links')
         .insert({
@@ -99,6 +116,7 @@ async function init() {
           link_type: linkType || 'direct',
           video_url: videoUrl || null,
           video_overlay_text: videoOverlayText || null,
+          guest_session_id: guestSessionId || null,
           clicks: 0,
         })
         .select()
@@ -118,8 +136,16 @@ async function init() {
       return data;
     },
 
-    async getLinkByUrl(url) {
-      const { data } = await sb.from('links').select('*').eq('original_url', url).maybeSingle();
+    async getLinkByUrl(url, userId, guestSessionId) {
+      let query = sb.from('links').select('*').eq('original_url', url);
+      if (userId) {
+        query = query.eq('user_id', userId);
+      } else if (guestSessionId) {
+        query = query.eq('guest_session_id', guestSessionId);
+      } else {
+        query = query.is('user_id', null).is('guest_session_id', null);
+      }
+      const { data } = await query.maybeSingle();
       return data;
     },
 
@@ -140,12 +166,14 @@ async function init() {
       });
     },
 
-    async getRecentLinks(userId) {
+    async getRecentLinks(userId, guestSessionId) {
       let query = sb.from('links').select('*').order('created_at', { ascending: false });
       if (userId) {
         query = query.eq('user_id', userId).limit(100);
+      } else if (guestSessionId) {
+        query = query.eq('guest_session_id', guestSessionId).limit(100);
       } else {
-        query = query.limit(20);
+        query = query.is('user_id', null).is('guest_session_id', null).limit(20);
       }
       const { data, error } = await query;
       check(error);
@@ -184,12 +212,18 @@ async function init() {
       check(error);
     },
 
-    async getTotals(userId) {
+    async getTotals(userId, guestSessionId) {
       let q1 = sb.from('links').select('*', { count: 'exact', head: true });
       let q2 = sb.from('links').select('clicks');
       if (userId) {
         q1 = q1.eq('user_id', userId);
         q2 = q2.eq('user_id', userId);
+      } else if (guestSessionId) {
+        q1 = q1.eq('guest_session_id', guestSessionId);
+        q2 = q2.eq('guest_session_id', guestSessionId);
+      } else {
+        q1 = q1.is('user_id', null).is('guest_session_id', null);
+        q2 = q2.is('user_id', null).is('guest_session_id', null);
       }
       const [{ count }, { data: clickData }] = await Promise.all([q1, q2]);
       const totalClicks = (clickData || []).reduce((s, l) => s + (l.clicks || 0), 0);
@@ -210,43 +244,67 @@ async function init() {
       return { totalLinks: totalLinks || 0, totalClicks, totalUsers: totalUsers || 0 };
     },
 
-    async countTodayLinks(userId) {
-      const today = new Date().toISOString().slice(0, 10);
+    async countTodayLinks(userId, guestSessionId) {
+      const { start, end } = getDayWindowUtc();
       let q = sb.from('links')
         .select('*', { count: 'exact', head: true })
-        .gte('created_at', today + 'T00:00:00.000Z')
-        .lt('created_at',  today + 'T23:59:59.999Z');
+        .gte('created_at', start)
+        .lt('created_at',  end);
       if (userId) q = q.eq('user_id', userId);
-      else        q = q.is('user_id', null);
+      else if (guestSessionId) q = q.eq('guest_session_id', guestSessionId);
+      else q = q.is('user_id', null).is('guest_session_id', null);
       const { count } = await q;
       return count || 0;
     },
 
-    async getTodayStats(userId) {
-      const today = new Date().toISOString().slice(0, 10);
+    async getTodayStats(userId, guestSessionId) {
+      const { start, end } = getDayWindowUtc();
       // Links today
       let q1 = sb.from('links')
         .select('*', { count: 'exact', head: true })
-        .gte('created_at', today + 'T00:00:00.000Z')
-        .lt('created_at',  today + 'T23:59:59.999Z');
+        .gte('created_at', start)
+        .lt('created_at',  end);
       if (userId) q1 = q1.eq('user_id', userId);
+      else if (guestSessionId) q1 = q1.eq('guest_session_id', guestSessionId);
+      else q1 = q1.is('user_id', null).is('guest_session_id', null);
 
       // Clicks today
       let q2 = sb.from('clicks')
         .select('*', { count: 'exact', head: true })
-        .gte('clicked_at', today + 'T00:00:00.000Z')
-        .lt('clicked_at',  today + 'T23:59:59.999Z');
+        .gte('clicked_at', start)
+        .lt('clicked_at',  end);
       if (userId) {
         // join qua link
         q2 = sb.from('clicks')
           .select('links!inner(user_id)', { count: 'exact', head: true })
           .eq('links.user_id', userId)
-          .gte('clicked_at', today + 'T00:00:00.000Z')
-          .lt('clicked_at',  today + 'T23:59:59.999Z');
+          .gte('clicked_at', start)
+          .lt('clicked_at',  end);
+      } else if (guestSessionId) {
+        q2 = sb.from('clicks')
+          .select('links!inner(guest_session_id)', { count: 'exact', head: true })
+          .eq('links.guest_session_id', guestSessionId)
+          .gte('clicked_at', start)
+          .lt('clicked_at',  end);
+      } else {
+        q2 = sb.from('clicks')
+          .select('*', { count: 'exact', head: true })
+          .eq('link_id', -1)
+          .gte('clicked_at', start)
+          .lt('clicked_at',  end);
       }
 
       const [{ count: linksToday }, { count: clicksToday }] = await Promise.all([q1, q2]);
       return { linksToday: linksToday || 0, clicksToday: clicksToday || 0 };
+    },
+
+    async claimGuestLinks(guestSessionId, userId) {
+      if (!guestSessionId || !userId) return;
+      const { error } = await sb
+        .from('links')
+        .update({ user_id: userId, guest_session_id: null })
+        .eq('guest_session_id', guestSessionId);
+      check(error);
     },
 
     // ── Upload dedup ────────────────────────────────────────────────────────

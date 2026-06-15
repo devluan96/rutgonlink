@@ -1,95 +1,182 @@
-﻿try { require('dotenv').config({ path: require('path').join(__dirname,'..', '.env') }); } catch(_){}
+﻿try {
+  require("dotenv").config({
+    path: require("path").join(__dirname, "..", ".env"),
+  });
+} catch (_) {}
 
-const express      = require('express');
-const path         = require('path');
-const fs           = require('fs');
-const { nanoid }   = require('nanoid');
-const bcrypt       = require('bcryptjs');
-const jwt          = require('jsonwebtoken');
-const cookieParser = require('cookie-parser');
-const multer       = require('multer');
-const cloudinary   = require('cloudinary').v2;
-const { init: initDb } = require('./db');
+const express = require("express");
+const crypto = require("crypto");
+const path = require("path");
+const fs = require("fs");
+const { nanoid } = require("nanoid");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
+const multer = require("multer");
+const cloudinary = require("cloudinary").v2;
+const { init: initDb } = require("./db");
 
-const app        = express();
-const BASE_URL   = (process.env.BASE_URL||'').replace(/\/$/,'') ||
-                   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-const JWT_SECRET  = process.env.JWT_SECRET  || 'rutgonlink-secret-2025';
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@rutgonlink.com').toLowerCase();
+const app = express();
+const BASE_URL =
+  (process.env.BASE_URL || "").replace(/\/$/, "") ||
+  (process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000");
+const JWT_SECRET =
+  process.env.JWT_SECRET ||
+  (process.env.NODE_ENV === "production"
+    ? null
+    : crypto.randomBytes(32).toString("hex"));
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET is required in production");
+}
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL
+  ? process.env.ADMIN_EMAIL.toLowerCase()
+  : null;
+const GUEST_SESSION_COOKIE = "guest_session";
+const GUEST_SESSION_MAX_AGE = 30 * 24 * 3600 * 1000;
 
 // ── Cloudinary config ────────────────────────────────────────────────────────
-const CLOUDINARY_OK = !!(process.env.CLOUDINARY_CLOUD_NAME &&
-                         process.env.CLOUDINARY_API_KEY    &&
-                         process.env.CLOUDINARY_API_SECRET);
+const CLOUDINARY_OK = !!(
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_API_KEY &&
+  process.env.CLOUDINARY_API_SECRET
+);
 if (CLOUDINARY_OK) {
   cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key:    process.env.CLOUDINARY_API_KEY,
+    api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
-    secure:     true,
+    secure: true,
   });
-  console.log('[cloudinary] configured ✅');
+  console.log("[cloudinary] configured ✅");
 } else {
-  console.warn('[cloudinary] NOT configured – using local disk fallback');
+  console.warn("[cloudinary] NOT configured – using local disk fallback");
 }
 
 const PLANS = {
-  free:     { dailyLimit: 10,  deeplink: false, ogMeta: false, upload: false, videoLink: false },
-  pro:      { dailyLimit: 500, deeplink: true,  ogMeta: true,  upload: true,  videoLink: true  },
-  business: { dailyLimit: 0,   deeplink: true,  ogMeta: true,  upload: true,  videoLink: true  },
-  admin:    { dailyLimit: 0,   deeplink: true,  ogMeta: true,  upload: true,  videoLink: true  },
+  free: {
+    dailyLimit: 10,
+    deeplink: false,
+    ogMeta: false,
+    upload: false,
+    videoLink: false,
+  },
+  pro: {
+    dailyLimit: 500,
+    deeplink: true,
+    ogMeta: true,
+    upload: true,
+    videoLink: true,
+  },
+  business: {
+    dailyLimit: 0,
+    deeplink: true,
+    ogMeta: true,
+    upload: true,
+    videoLink: true,
+  },
+  admin: {
+    dailyLimit: 0,
+    deeplink: true,
+    ogMeta: true,
+    upload: true,
+    videoLink: true,
+  },
 };
 
-app.use(express.json({ limit: '5mb' }));
-app.use(express.urlencoded({ extended: true, limit: '5mb' }));
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use((req, res, next) => {
+  if (req.cookies?.token) return next();
+
+  const guestSessionId = req.cookies?.[GUEST_SESSION_COOKIE];
+  if (guestSessionId) {
+    req.guestSessionId = guestSessionId;
+    return next();
+  }
+
+  req.guestSessionId = nanoid(24);
+  res.cookie(GUEST_SESSION_COOKIE, req.guestSessionId, {
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: GUEST_SESSION_MAX_AGE,
+    path: "/",
+  });
+  next();
+});
+app.use(express.static(path.join(__dirname, "..", "public")));
 
 // ── FIX 1: Thêm /robots.txt để tránh 404 và ngăn bot crawl ──────────────────
-app.get('/robots.txt', (_,res) => {
-  res.set('Content-Type', 'text/plain');
-  res.set('Cache-Control', 'public, max-age=86400');
-  res.send('User-agent: *\nDisallow: /api/\nAllow: /\n');
+app.get("/robots.txt", (_, res) => {
+  res.set("Content-Type", "text/plain");
+  res.set("Cache-Control", "public, max-age=86400");
+  res.send("User-agent: *\nDisallow: /api/\nAllow: /\n");
 });
 
 // ── Multer ───────────────────────────────────────────────────────────────────
-const uploadsDir = path.join(__dirname, '..', 'public', 'uploads');
-try { if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true }); } catch(_){}
+const uploadsDir = path.join(__dirname, "..", "public", "uploads");
+try {
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+} catch (_) {}
 
 const memStorage = multer.memoryStorage();
 
 const upload = multer({
-  storage: CLOUDINARY_OK ? memStorage : multer.diskStorage({
-    destination: (_,__,cb) => cb(null, uploadsDir),
-    filename:    (_,file,cb) => cb(null, nanoid(12) + path.extname(file.originalname).toLowerCase()),
-  }),
+  storage: CLOUDINARY_OK
+    ? memStorage
+    : multer.diskStorage({
+        destination: (_, __, cb) => cb(null, uploadsDir),
+        filename: (_, file, cb) =>
+          cb(null, nanoid(12) + path.extname(file.originalname).toLowerCase()),
+      }),
   limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_,file,cb) => cb(null, /\.(jpg|jpeg|png|webp|gif)$/i.test(file.originalname)),
+  fileFilter: (_, file, cb) =>
+    cb(null, /\.(jpg|jpeg|png|webp|gif)$/i.test(file.originalname)),
 });
 
 const videoUploadMw = multer({
-  storage: CLOUDINARY_OK ? memStorage : multer.diskStorage({
-    destination: (_,__,cb) => cb(null, uploadsDir),
-    filename:    (_,file,cb) => cb(null, nanoid(12) + path.extname(file.originalname).toLowerCase()),
-  }),
+  storage: CLOUDINARY_OK
+    ? memStorage
+    : multer.diskStorage({
+        destination: (_, __, cb) => cb(null, uploadsDir),
+        filename: (_, file, cb) =>
+          cb(null, nanoid(12) + path.extname(file.originalname).toLowerCase()),
+      }),
   limits: { fileSize: 200 * 1024 * 1024 },
-  fileFilter: (_,file,cb) => cb(null, /\.(mp4|webm|mov|avi|mkv)$/i.test(file.originalname)),
+  fileFilter: (_, file, cb) =>
+    cb(null, /\.(mp4|webm|mov|avi|mkv)$/i.test(file.originalname)),
 });
 
-async function uploadToCloudinary(fileBuffer, originalName, resourceType = 'image') {
+async function uploadToCloudinary(
+  fileBuffer,
+  originalName,
+  resourceType = "image",
+) {
   return new Promise((resolve, reject) => {
-    const folder = 'rutgonlink/' + (resourceType === 'video' ? 'videos' : 'images');
-    const opts   = {
+    const folder =
+      "rutgonlink/" + (resourceType === "video" ? "videos" : "images");
+    const opts = {
       folder,
       resource_type: resourceType,
-      public_id:     nanoid(12),
-      ...(resourceType === 'video' ? { eager: [{ format:'jpg', transformation:[{width:1200,height:630,crop:'fill'}] }] } : {}),
+      public_id: nanoid(12),
+      ...(resourceType === "video"
+        ? {
+            eager: [
+              {
+                format: "jpg",
+                transformation: [{ width: 1200, height: 630, crop: "fill" }],
+              },
+            ],
+          }
+        : {}),
     };
     const stream = cloudinary.uploader.upload_stream(opts, (err, result) => {
       if (err) return reject(err);
       resolve(result);
     });
-    const { Readable } = require('stream');
+    const { Readable } = require("stream");
     const readable = new Readable();
     readable.push(fileBuffer);
     readable.push(null);
@@ -98,110 +185,146 @@ async function uploadToCloudinary(fileBuffer, originalName, resourceType = 'imag
 }
 
 let db = null;
-async function getDb() { if (!db) db = await initDb(); return db; }
+async function getDb() {
+  if (!db) db = await initDb();
+  return db;
+}
 
 function esc(s) {
-  return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return (s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function isAdminEmail(email) {
+  return !!ADMIN_EMAIL && email?.toLowerCase() === ADMIN_EMAIL;
 }
 
 function parseToken(req) {
-  return req.cookies?.token || (req.headers.authorization||'').replace('Bearer ','') || null;
+  return (
+    req.cookies?.token ||
+    (req.headers.authorization || "").replace("Bearer ", "") ||
+    null
+  );
 }
 
 async function resolveUser(req) {
   const token = parseToken(req);
   if (!token) return null;
   try {
-    const payload  = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET);
     const database = await getDb();
-    const user     = await database.getUserById(payload.id);
+    const user = await database.getUserById(payload.id);
     if (!user) return null;
-    if (user.email.toLowerCase() === ADMIN_EMAIL || user.role === 'admin') {
-      user.plan = 'admin';
-      user.role = 'admin';
+    if (user.role === "admin" || isAdminEmail(user.email)) {
+      user.plan = "admin";
+      user.role = "admin";
     }
     return user;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function requireAuth(req, res, next) {
   const token = parseToken(req);
-  if (!token) return res.status(401).json({ error: 'Chưa đăng nhập' });
-  try { req._tokenPayload = jwt.verify(token, JWT_SECRET); next(); }
-  catch { return res.status(401).json({ error: 'Token không hợp lệ' }); }
+  if (!token) return res.status(401).json({ error: "Chưa đăng nhập" });
+  try {
+    req._tokenPayload = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ error: "Token không hợp lệ" });
+  }
 }
 
 function requireAdmin(req, res, next) {
   const token = parseToken(req);
-  if (!token) return res.status(401).json({ error: 'Chưa đăng nhập' });
+  if (!token) return res.status(401).json({ error: "Chưa đăng nhập" });
   try {
     const p = jwt.verify(token, JWT_SECRET);
     req._tokenPayload = p;
     next();
-  } catch { return res.status(401).json({ error: 'Token không hợp lệ' }); }
+  } catch {
+    return res.status(401).json({ error: "Token không hợp lệ" });
+  }
 }
 
-function getMobilePlatform(ua='') {
+function getMobilePlatform(ua = "") {
   const u = ua.toLowerCase();
-  if (/iphone|ipad|ipod/.test(u)) return 'ios';
-  if (/android/.test(u)) return 'android';
-  return 'desktop';
+  if (/iphone|ipad|ipod/.test(u)) return "ios";
+  if (/android/.test(u)) return "android";
+  return "desktop";
 }
 
 // ── FIX 2: Nhận diện Facebook bot CHÍNH XÁC hơn, tách khỏi Facebook in-app browser ──
-function isSocialBot(ua='') {
+function isSocialBot(ua = "") {
   if (!ua) return false;
   // Facebook crawler bot (KHÔNG phải user dùng FB app)
   if (/facebookexternalhit|facebot/i.test(ua)) return true;
-  return /twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|vkshare|zalo|vibebot|line[\s/]|baiduspider|googlebot|applebot|bingbot|yandexbot|pinterestbot|snapchat|ia_archiver|AhrefsBot|SemrushBot|rogerbot/i.test(ua);
+  return /twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|vkshare|zalo|vibebot|line[\s/]|baiduspider|googlebot|applebot|bingbot|yandexbot|pinterestbot|snapchat|ia_archiver|AhrefsBot|SemrushBot|rogerbot/i.test(
+    ua,
+  );
 }
 
-const TIKTOK_ANDROID_PACKAGE = 'com.ss.android.ugc.trill';
-const TIKTOK_APP_STORE_ID    = '1235601864';
-const SHOPEE_ANDROID_PACKAGE = 'com.shopee.vn';
-const SHOPEE_APP_STORE_ID    = '959841449';
-const FACEBOOK_APP_ID        = process.env.FACEBOOK_APP_ID || '1609970790226254';
+const TIKTOK_ANDROID_PACKAGE = "com.ss.android.ugc.trill";
+const TIKTOK_APP_STORE_ID = "1235601864";
+const SHOPEE_ANDROID_PACKAGE = "com.shopee.vn";
+const SHOPEE_APP_STORE_ID = "959841449";
+const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID || "1609970790226254";
 
 function buildTikTokAppScheme(destinationUrl) {
   try {
-    const url  = new URL(destinationUrl);
+    const url = new URL(destinationUrl);
     const path = url.pathname;
     const videoMatch = path.match(/\/video\/(\d+)/);
-    if (videoMatch) return `snssdk1233://aweme/detail/?aweme_id=${videoMatch[1]}`;
+    if (videoMatch)
+      return `snssdk1233://aweme/detail/?aweme_id=${videoMatch[1]}`;
     const profileMatch = path.match(/\/@([\w.]+)/);
-    if (profileMatch) return `snssdk1233://user/profile/?uniqueId=${profileMatch[1]}`;
-    if (path.includes('/view/product/') || url.hostname.includes('shop')) {
+    if (profileMatch)
+      return `snssdk1233://user/profile/?uniqueId=${profileMatch[1]}`;
+    if (path.includes("/view/product/") || url.hostname.includes("shop")) {
       const productMatch = path.match(/\/view\/product\/(\d+)/);
-      const productId    = productMatch?.[1] || '';
-      const encodedUrl   = encodeURIComponent(destinationUrl);
-      const chainKey     = url.searchParams.get('chain_key')     || '';
-      const trackParams  = url.searchParams.get('trackParams')   || '';
-      const encodeParams = url.searchParams.get('encode_params') || '';
-      return `snssdk1180://ec/pdp` +
+      const productId = productMatch?.[1] || "";
+      const encodedUrl = encodeURIComponent(destinationUrl);
+      const chainKey = url.searchParams.get("chain_key") || "";
+      const trackParams = url.searchParams.get("trackParams") || "";
+      const encodeParams = url.searchParams.get("encode_params") || "";
+      return (
+        `snssdk1180://ec/pdp` +
         `?biz_type=0&gd_label=share_from_pdp_auto&need_mall=1&needlaunchlog=1&page_name=reflow_pdp` +
         `&params_url=${encodedUrl}&refer=web&scene=pdp&use_land_page=1&is_commerce=1&_svg=1` +
-        (productId    ? `&requestParams=${encodeURIComponent(JSON.stringify({product_id:[productId]}))}` : '') +
-        (chainKey     ? `&chain_key=${encodeURIComponent(chainKey)}`       : '') +
-        (trackParams  ? `&trackParams=${encodeURIComponent(trackParams)}`   : '') +
-        (encodeParams ? `&encode_params=${encodeURIComponent(encodeParams)}`: '');
+        (productId
+          ? `&requestParams=${encodeURIComponent(JSON.stringify({ product_id: [productId] }))}`
+          : "") +
+        (chainKey ? `&chain_key=${encodeURIComponent(chainKey)}` : "") +
+        (trackParams ? `&trackParams=${encodeURIComponent(trackParams)}` : "") +
+        (encodeParams
+          ? `&encode_params=${encodeURIComponent(encodeParams)}`
+          : "")
+      );
     }
     return destinationUrl;
-  } catch { return destinationUrl; }
+  } catch {
+    return destinationUrl;
+  }
 }
 
 function detectPlatformDeep(originalUrl, platform) {
-   // ── Shopee product: -i.<shopId>.<itemId>
+  // ── Shopee product: -i.<shopId>.<itemId>
   const sp = originalUrl.match(/shopee\.vn\/.*?-i\.(\d+)\.(\d+)/i);
   if (sp) {
     const [, shopId, itemId] = sp;
     // Universal Link – OS tự mở app, không cần JS trick
     const universalLink = `https://shopee.vn/universal-link/product/${shopId}/${itemId}`;
     return {
-      deeplink:         universalLink,   // dùng Universal Link thay custom scheme
-      deeplink_ios:     universalLink,
+      deeplink: universalLink, // dùng Universal Link thay custom scheme
+      deeplink_ios: universalLink,
       deeplink_android: universalLink,
-      platform_name: 'shopee', fallback: originalUrl,
-      ios_store:  `https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
+      platform_name: "shopee",
+      fallback: originalUrl,
+      ios_store: `https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
       play_store: `https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
     };
   }
@@ -211,31 +334,38 @@ function detectPlatformDeep(originalUrl, platform) {
     // Redirect thẳng về original – Shopee đã cấu hình App Links
     // Browser/OS sẽ tự mở app nếu đã cài
     return {
-      deeplink:         originalUrl,  // <-- redirect thẳng, không cần trick
-      deeplink_ios:     originalUrl,
+      deeplink: originalUrl, // <-- redirect thẳng, không cần trick
+      deeplink_ios: originalUrl,
       deeplink_android: originalUrl,
-      platform_name: 'shopee', fallback: originalUrl,
-      ios_store:  `https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
+      platform_name: "shopee",
+      fallback: originalUrl,
+      ios_store: `https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
       play_store: `https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
     };
   }
   if (/tiktok\.com/i.test(originalUrl)) {
     const scheme = buildTikTokAppScheme(originalUrl);
     return {
-      deeplink:         scheme,
-      deeplink_ios:     scheme,
+      deeplink: scheme,
+      deeplink_ios: scheme,
       deeplink_android: scheme,
-      universal_link:   originalUrl,
-      platform_name:   'tiktok', fallback:originalUrl,
-      ios_store:`https://apps.apple.com/vn/app/tiktok/id${TIKTOK_APP_STORE_ID}`,
-      play_store:`https://play.google.com/store/apps/details?id=${TIKTOK_ANDROID_PACKAGE}`,
+      universal_link: originalUrl,
+      platform_name: "tiktok",
+      fallback: originalUrl,
+      ios_store: `https://apps.apple.com/vn/app/tiktok/id${TIKTOK_APP_STORE_ID}`,
+      play_store: `https://play.google.com/store/apps/details?id=${TIKTOK_ANDROID_PACKAGE}`,
     };
   }
-  return { deeplink:null, deeplink_ios:null, deeplink_android:null, platform_name:'generic', fallback:originalUrl };
+  return {
+    deeplink: null,
+    deeplink_ios: null,
+    deeplink_android: null,
+    platform_name: "generic",
+    fallback: originalUrl,
+  };
 }
 
-
-app.get('/og-default.png', (_,res) => {
+app.get("/og-default.png", (_, res) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
     <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#1e2535"/><stop offset="100%" style="stop-color:#0d1117"/></linearGradient></defs>
     <rect width="1200" height="630" fill="url(#g)"/>
@@ -244,131 +374,218 @@ app.get('/og-default.png', (_,res) => {
     <text x="600" y="370" font-family="Arial,sans-serif" font-size="32" fill="#64748b" text-anchor="middle">Rút gọn link thông minh</text>
     <text x="600" y="430" font-family="Arial,sans-serif" font-size="24" fill="#334155" text-anchor="middle">Deeplink Shopee &amp; TikTok · Custom Preview</text>
   </svg>`;
-  res.set('Content-Type','image/svg+xml');
-  res.set('Cache-Control','public, max-age=86400');
+  res.set("Content-Type", "image/svg+xml");
+  res.set("Cache-Control", "public, max-age=86400");
   res.send(svg);
 });
 
-app.get('/api/debug', (req,res) => res.json({
-  has_turso_url: !!process.env.TURSO_DATABASE_URL,
-  base_url: BASE_URL,
-  admin_email: ADMIN_EMAIL,
-}));
+app.get("/api/debug", (req, res) =>
+  res.json({
+    has_turso_url: !!process.env.TURSO_DATABASE_URL,
+    base_url: BASE_URL,
+    admin_email: ADMIN_EMAIL,
+  }),
+);
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 
-app.post('/api/auth/register', async (req,res) => {
+app.post("/api/auth/register", async (req, res) => {
   try {
     const database = await getDb();
     const { email, password, name } = req.body;
-    if (!email||!password) return res.status(400).json({ error:'Email và mật khẩu là bắt buộc' });
-    if (password.length < 6) return res.status(400).json({ error:'Mật khẩu phải có ít nhất 6 ký tự' });
+    if (!email || !password)
+      return res.status(400).json({ error: "Email và mật khẩu là bắt buộc" });
+    if (password.length < 6)
+      return res
+        .status(400)
+        .json({ error: "Mật khẩu phải có ít nhất 6 ký tự" });
     const normalEmail = email.toLowerCase().trim();
     const hashed = await bcrypt.hash(password, 10);
-    const isAdmin = normalEmail === ADMIN_EMAIL;
-    const user = await database.createUser(normalEmail, hashed, name, isAdmin ? 'admin' : 'user');
-    const effectivePlan = isAdmin ? 'admin' : user.plan;
-    const token = jwt.sign({ id:user.id, email:user.email }, JWT_SECRET, { expiresIn:'30d' });
-    res.cookie('token', token, { httpOnly:true, maxAge:30*24*3600*1000, sameSite:'lax' });
-    res.json({ user:{ id:user.id, email:user.email, name:user.name, plan:effectivePlan, role:isAdmin?'admin':'user' } });
-  } catch(e) {
-    if (e.message==='EMAIL_EXISTS') return res.status(400).json({ error:'Email này đã được đăng ký' });
+    const isAdmin = isAdminEmail(normalEmail);
+    const user = await database.createUser(
+      normalEmail,
+      hashed,
+      name,
+      isAdmin ? "admin" : "user",
+    );
+    if (req.guestSessionId) {
+      await database.claimGuestLinks(req.guestSessionId, user.id);
+    }
+    const effectivePlan = isAdmin ? "admin" : user.plan;
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
+      expiresIn: "30d",
+    });
+    res.cookie("token", token, {
+      httpOnly: true,
+      maxAge: 30 * 24 * 3600 * 1000,
+      sameSite: "lax",
+    });
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        plan: effectivePlan,
+        role: isAdmin ? "admin" : "user",
+      },
+    });
+  } catch (e) {
+    if (e.message === "EMAIL_EXISTS")
+      return res.status(400).json({ error: "Email này đã được đăng ký" });
     console.error(e);
-    res.status(500).json({ error:'Lỗi server: '+e.message });
+    res.status(500).json({ error: "Lỗi server: " + e.message });
   }
 });
 
-app.post('/api/auth/login', async (req,res) => {
+app.post("/api/auth/login", async (req, res) => {
   try {
     const database = await getDb();
     const { email, password } = req.body;
-    if (!email||!password) return res.status(400).json({ error:'Email và mật khẩu là bắt buộc' });
+    if (!email || !password)
+      return res.status(400).json({ error: "Email và mật khẩu là bắt buộc" });
     const user = await database.getUserByEmail(email.toLowerCase().trim());
-    if (!user) return res.status(401).json({ error:'Email hoặc mật khẩu không đúng' });
+    if (!user)
+      return res.status(401).json({ error: "Email hoặc mật khẩu không đúng" });
     const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(401).json({ error:'Email hoặc mật khẩu không đúng' });
-    const isAdmin = user.email.toLowerCase() === ADMIN_EMAIL || user.role === 'admin';
-    if (isAdmin && (user.role !== 'admin' || user.plan !== 'admin')) {
-      await database.updateUserRole(user.id, 'admin');
-      await database.updateUserPlan(user.id, 'admin');
-      user.role = 'admin';
-      user.plan = 'admin';
+    if (!ok)
+      return res.status(401).json({ error: "Email hoặc mật khẩu không đúng" });
+    const isAdmin = user.role === "admin" || isAdminEmail(user.email);
+    if (isAdmin && (user.role !== "admin" || user.plan !== "admin")) {
+      await database.updateUserRole(user.id, "admin");
+      await database.updateUserPlan(user.id, "admin");
+      user.role = "admin";
+      user.plan = "admin";
     }
-    const token = jwt.sign({ id:user.id, email:user.email }, JWT_SECRET, { expiresIn:'30d' });
-    res.cookie('token', token, { httpOnly:true, maxAge:30*24*3600*1000, sameSite:'lax' });
-    res.json({ user:{ id:user.id, email:user.email, name:user.name,
-                      plan: isAdmin ? 'admin' : user.plan,
-                      role: isAdmin ? 'admin' : (user.role||'user') } });
-  } catch(e) { console.error(e); res.status(500).json({ error:'Lỗi server: '+e.message }); }
-});
-
-app.post('/api/auth/logout', (_,res) => {
-  res.clearCookie('token');
-  res.json({ ok:true });
-});
-
-app.get('/api/auth/me', async (req,res) => {
-  const user = await resolveUser(req);
-  if (!user) return res.json({ user:null });
-  res.json({ user:{ id:user.id, email:user.email, name:user.name, plan:user.plan, role:user.role||'user' } });
-});
-
-app.post('/api/upload-image', requireAuth, upload.single('image'), async (req,res) => {
-  const user = await resolveUser(req);
-  const plan = user?.plan || 'free';
-  if (!PLANS[plan]?.upload) return res.status(403).json({ error:'Tính năng này yêu cầu gói Pro', upgrade:true });
-  if (!req.file) return res.status(400).json({ error:'Không có file hoặc định dạng không hợp lệ' });
-  try {
-    if (CLOUDINARY_OK && req.file.buffer) {
-      const result = await uploadToCloudinary(req.file.buffer, req.file.originalname, 'image');
-      return res.json({ url: result.secure_url, public_id: result.public_id, source: 'cloudinary' });
-    } else {
-      return res.json({ url:`/uploads/${req.file.filename}`, source:'local' });
+    if (req.guestSessionId) {
+      await database.claimGuestLinks(req.guestSessionId, user.id);
     }
-  } catch(e) {
-    console.error('[upload-image]', e.message);
-    return res.status(500).json({ error:'Upload thất bại: ' + e.message });
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
+      expiresIn: "30d",
+    });
+    res.cookie("token", token, {
+      httpOnly: true,
+      maxAge: 30 * 24 * 3600 * 1000,
+      sameSite: "lax",
+    });
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        plan: isAdmin ? "admin" : user.plan,
+        role: isAdmin ? "admin" : user.role || "user",
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Lỗi server: " + e.message });
   }
 });
+
+app.post("/api/auth/logout", (_, res) => {
+  res.clearCookie("token");
+  res.json({ ok: true });
+});
+
+app.get("/api/auth/me", async (req, res) => {
+  const user = await resolveUser(req);
+  if (!user) return res.json({ user: null });
+  res.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      plan: user.plan,
+      role: user.role || "user",
+    },
+  });
+});
+
+app.post(
+  "/api/upload-image",
+  requireAuth,
+  upload.single("image"),
+  async (req, res) => {
+    const user = await resolveUser(req);
+    const plan = user?.plan || "free";
+    if (!PLANS[plan]?.upload)
+      return res
+        .status(403)
+        .json({ error: "Tính năng này yêu cầu gói Pro", upgrade: true });
+    if (!req.file)
+      return res
+        .status(400)
+        .json({ error: "Không có file hoặc định dạng không hợp lệ" });
+    try {
+      if (CLOUDINARY_OK && req.file.buffer) {
+        const result = await uploadToCloudinary(
+          req.file.buffer,
+          req.file.originalname,
+          "image",
+        );
+        return res.json({
+          url: result.secure_url,
+          public_id: result.public_id,
+          source: "cloudinary",
+        });
+      } else {
+        return res.json({
+          url: `/uploads/${req.file.filename}`,
+          source: "local",
+        });
+      }
+    } catch (e) {
+      console.error("[upload-image]", e.message);
+      return res.status(500).json({ error: "Upload thất bại: " + e.message });
+    }
+  },
+);
 
 async function handleAdminInit(req, res) {
   const user = await resolveUser(req);
-  if (!user || user.email.toLowerCase() !== ADMIN_EMAIL) {
-    return res.status(403).json({ error: 'Không có quyền – cần đăng nhập bằng admin email trước' });
+  if (!user || !isAdminEmail(user.email)) {
+    return res
+      .status(403)
+      .json({ error: "Không có quyền – cần đăng nhập bằng admin email trước" });
   }
   const database = await getDb();
-  await database.updateUserRole(user.id, 'admin');
-  await database.updateUserPlan(user.id, 'admin');
-  res.json({ ok: true, message: `✅ User ${user.email} đã được set role=admin, plan=admin` });
+  await database.updateUserRole(user.id, "admin");
+  await database.updateUserPlan(user.id, "admin");
+  res.json({
+    ok: true,
+    message: `✅ User ${user.email} đã được set role=admin, plan=admin`,
+  });
 }
-app.get('/api/admin/init',  handleAdminInit);
-app.post('/api/admin/init', handleAdminInit);
+app.get("/api/admin/init", handleAdminInit);
+app.post("/api/admin/init", handleAdminInit);
 
 async function checkAdmin(req, res) {
   const user = await resolveUser(req);
-  if (!user || (user.role !== 'admin' && user.email.toLowerCase() !== ADMIN_EMAIL)) {
-    res.status(403).json({ error:'Không có quyền truy cập' });
+  if (!user || (user.role !== "admin" && !isAdminEmail(user.email))) {
+    res.status(403).json({ error: "Không có quyền truy cập" });
     return null;
   }
-  if (user.email.toLowerCase() === ADMIN_EMAIL && user.role !== 'admin') {
+  if (isAdminEmail(user.email) && user.role !== "admin") {
     const database = await getDb();
-    await database.updateUserRole(user.id, 'admin');
-    await database.updateUserPlan(user.id, 'admin');
+    await database.updateUserRole(user.id, "admin");
+    await database.updateUserPlan(user.id, "admin");
   }
   return user;
 }
 
-app.get('/api/admin/users', requireAdmin, async (req,res) => {
-  if (!await checkAdmin(req,res)) return;
+app.get("/api/admin/users", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
     const users = await database.getAllUsers();
     res.json({ users });
-  } catch(e) { res.status(500).json({ error:e.message }); }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.patch('/api/admin/users/:id', requireAdmin, async (req,res) => {
-  if (!await checkAdmin(req,res)) return;
+app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
     const { plan, role } = req.body;
@@ -376,247 +593,421 @@ app.patch('/api/admin/users/:id', requireAdmin, async (req,res) => {
     if (plan) await database.updateUserPlan(uid, plan);
     if (role) await database.updateUserRole(uid, role);
     const updated = await database.getUserById(uid);
-    res.json({ user:{ id:updated.id, email:updated.email, name:updated.name, plan:updated.plan, role:updated.role } });
-  } catch(e) { res.status(500).json({ error:e.message }); }
+    res.json({
+      user: {
+        id: updated.id,
+        email: updated.email,
+        name: updated.name,
+        plan: updated.plan,
+        role: updated.role,
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.delete('/api/admin/users/:id', requireAdmin, async (req,res) => {
-  if (!await checkAdmin(req,res)) return;
+app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
     const uid = Number(req.params.id);
     await database.deleteUser(uid);
-    res.json({ ok:true });
-  } catch(e) { res.status(500).json({ error:e.message }); }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.get('/api/admin/links', requireAdmin, async (req,res) => {
-  if (!await checkAdmin(req,res)) return;
+app.get("/api/admin/links", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
-    const links = (await database.getAllLinks()).map(l => ({
-      ...l, short_url:`${BASE_URL}/${l.alias||l.short_code}`,
+    const links = (await database.getAllLinks()).map((l) => ({
+      ...l,
+      short_url: `${BASE_URL}/${l.alias || l.short_code}`,
     }));
     res.json({ links });
-  } catch(e) { res.status(500).json({ error:e.message }); }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.delete('/api/admin/links/:id', requireAdmin, async (req,res) => {
-  if (!await checkAdmin(req,res)) return;
+app.delete("/api/admin/links/:id", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
     await database.deleteLink(Number(req.params.id));
-    res.json({ ok:true });
-  } catch(e) { res.status(500).json({ error:e.message }); }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.get('/api/admin/stats', requireAdmin, async (req,res) => {
-  if (!await checkAdmin(req,res)) return;
+app.get("/api/admin/stats", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
     const totals = await database.getAdminTotals();
     res.json(totals);
-  } catch(e) { res.status(500).json({ error:e.message }); }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.post('/api/shorten', async (req,res) => {
+app.post("/api/shorten", async (req, res) => {
   try {
     const database = await getDb();
     const user = await resolveUser(req);
-    let { url, alias, og_title, og_desc, og_image,
-          link_type, video_url, video_overlay_text } = req.body;
+    const guestSessionId = user ? null : req.guestSessionId;
+    let {
+      url,
+      alias,
+      og_title,
+      og_desc,
+      og_image,
+      link_type,
+      video_url,
+      video_overlay_text,
+    } = req.body;
 
-    if (!url) return res.status(400).json({ error:'URL không hợp lệ' });
-    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-    try { new URL(url); } catch {
-      try { url = decodeURIComponent(url); new URL(url); }
-      catch { return res.status(400).json({ error:'URL không hợp lệ' }); }
+    if (!url) return res.status(400).json({ error: "URL không hợp lệ" });
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    try {
+      new URL(url);
+    } catch {
+      try {
+        url = decodeURIComponent(url);
+        new URL(url);
+      } catch {
+        return res.status(400).json({ error: "URL không hợp lệ" });
+      }
     }
 
-    const userId  = user?.id   || null;
-    const plan    = user?.plan || 'free';
+    const userId = user?.id || null;
+    const plan = user?.plan || "free";
     const planCfg = PLANS[plan] || PLANS.free;
 
     if (planCfg.dailyLimit > 0) {
-      const todayCount = await database.countTodayLinks(userId);
+      const todayCount = await database.countTodayLinks(userId, guestSessionId);
       if (todayCount >= planCfg.dailyLimit)
-        return res.status(403).json({ error:`Đã đạt giới hạn ${planCfg.dailyLimit} link/ngày. Vui lòng nâng cấp.`, upgrade:true });
+        return res
+          .status(403)
+          .json({
+            error: `Đã đạt giới hạn ${planCfg.dailyLimit} link/ngày. Vui lòng nâng cấp.`,
+            upgrade: true,
+          });
     }
 
     if (!planCfg.deeplink && /shopee\.vn|tiktok\.com/i.test(url))
-      return res.status(403).json({ error:'Deeplink Shopee & TikTok yêu cầu gói Pro trở lên', upgrade:true });
+      return res
+        .status(403)
+        .json({
+          error: "Deeplink Shopee & TikTok yêu cầu gói Pro trở lên",
+          upgrade: true,
+        });
 
-    link_type = link_type || 'direct';
-    if (link_type === 'video' && !planCfg.videoLink)
-      return res.status(403).json({ error:'Link Video yêu cầu gói Pro trở lên', upgrade:true });
+    link_type = link_type || "direct";
+    if (link_type === "video" && !planCfg.videoLink)
+      return res
+        .status(403)
+        .json({ error: "Link Video yêu cầu gói Pro trở lên", upgrade: true });
 
-    if (!planCfg.ogMeta) { og_title=null; og_desc=null; og_image=null; }
+    if (!planCfg.ogMeta) {
+      og_title = null;
+      og_desc = null;
+      og_image = null;
+    }
 
     if (alias) {
-      alias = alias.trim().replace(/[^a-zA-Z0-9_-]/g,'');
-      if (alias.length < 2) return res.status(400).json({ error:'Alias phải có ít nhất 2 ký tự' });
-      const taken = await database.getLinkByAlias(alias) || await database.getLinkByCode(alias);
-      if (taken) return res.status(400).json({ error:'Alias đã được dùng' });
-    } else { alias = null; }
+      alias = alias.trim().replace(/[^a-zA-Z0-9_-]/g, "");
+      if (alias.length < 2)
+        return res.status(400).json({ error: "Alias phải có ít nhất 2 ký tự" });
+      const taken =
+        (await database.getLinkByAlias(alias)) ||
+        (await database.getLinkByCode(alias));
+      if (taken) return res.status(400).json({ error: "Alias đã được dùng" });
+    } else {
+      alias = null;
+    }
 
-    if (og_image) { try { new URL(og_image); } catch { og_image = null; } }
-    if (video_url) { try { new URL(video_url); } catch { video_url = null; } }
+    if (og_image) {
+      try {
+        new URL(og_image);
+      } catch {
+        og_image = null;
+      }
+    }
+    if (video_url) {
+      try {
+        new URL(video_url);
+      } catch {
+        video_url = null;
+      }
+    }
 
     const shortCode = nanoid(7);
-    await database.createLink(shortCode, url, alias, og_title, og_desc, og_image,
-      userId, link_type, video_url||null, video_overlay_text||null);
+    await database.createLink(
+      shortCode,
+      url,
+      alias,
+      og_title,
+      og_desc,
+      og_image,
+      userId,
+      link_type,
+      video_url || null,
+      video_overlay_text || null,
+      guestSessionId,
+    );
     const code = alias || shortCode;
-    return res.json({ short_url:`${BASE_URL}/${code}`, short_code:code, original_url:url, clicks:0, link_type });
-  } catch(e) {
+    return res.json({
+      short_url: `${BASE_URL}/${code}`,
+      short_code: code,
+      original_url: url,
+      clicks: 0,
+      link_type,
+    });
+  } catch (e) {
     console.error(e);
-    return res.status(500).json({ error:'Lỗi server: '+e.message });
+    return res.status(500).json({ error: "Lỗi server: " + e.message });
   }
 });
 
-app.get('/api/links/:id', async (req,res) => {
+app.get("/api/links/:id", async (req, res) => {
   try {
     const database = await getDb();
-    const user     = await resolveUser(req);
-    const link     = await database.getLinkById(Number(req.params.id));
-    if (!link) return res.status(404).json({ error:'Không tìm thấy link' });
-    const isAdmin = user?.role==='admin' || user?.email?.toLowerCase()===ADMIN_EMAIL;
-    if (!isAdmin && link.user_id && link.user_id !== user?.id)
-      return res.status(403).json({ error:'Không có quyền' });
-    res.json({ link:{ ...link, short_url:`${BASE_URL}/${link.alias||link.short_code}` } });
-  } catch(e) { res.status(500).json({ error:e.message }); }
+    const user = await resolveUser(req);
+    const guestSessionId = user ? null : req.guestSessionId;
+    const link = await database.getLinkById(Number(req.params.id));
+    if (!link) return res.status(404).json({ error: "Không tìm thấy link" });
+    const isAdmin = user?.role === "admin" || isAdminEmail(user?.email);
+    const isGuestOwner =
+      !!guestSessionId &&
+      !link.user_id &&
+      link.guest_session_id === guestSessionId;
+    if (!isAdmin && !isGuestOwner && link.user_id && link.user_id !== user?.id)
+      return res.status(403).json({ error: "Không có quyền" });
+    res.json({
+      link: {
+        ...link,
+        short_url: `${BASE_URL}/${link.alias || link.short_code}`,
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.patch('/api/links/:id', async (req,res) => {
+app.patch("/api/links/:id", async (req, res) => {
   try {
     const database = await getDb();
-    const user     = await resolveUser(req);
-    if (!user) return res.status(401).json({ error:'Chưa đăng nhập' });
+    const user = await resolveUser(req);
+    const guestSessionId = user ? null : req.guestSessionId;
+    if (!user && !guestSessionId)
+      return res.status(401).json({ error: "Chưa đăng nhập" });
     const link = await database.getLinkById(Number(req.params.id));
-    if (!link) return res.status(404).json({ error:'Không tìm thấy link' });
-    const isAdmin = user.role==='admin' || user.email?.toLowerCase()===ADMIN_EMAIL;
-    if (!isAdmin && link.user_id !== user.id)
-      return res.status(403).json({ error:'Không có quyền chỉnh sửa link này' });
-    const { og_title, og_desc, og_image, link_type, video_url, video_overlay_text } = req.body;
+    if (!link) return res.status(404).json({ error: "Không tìm thấy link" });
+    const isAdmin = user?.role === "admin" || isAdminEmail(user?.email);
+    const isGuestOwner =
+      !!guestSessionId &&
+      !link.user_id &&
+      link.guest_session_id === guestSessionId;
+    if (!isAdmin && !isGuestOwner && link.user_id !== user?.id)
+      return res
+        .status(403)
+        .json({ error: "Không có quyền chỉnh sửa link này" });
+    const {
+      og_title,
+      og_desc,
+      og_image,
+      link_type,
+      video_url,
+      video_overlay_text,
+    } = req.body;
     await database.updateLink(Number(req.params.id), {
-      og_title, og_desc, og_image, link_type, video_url, video_overlay_text,
+      og_title,
+      og_desc,
+      og_image,
+      link_type,
+      video_url,
+      video_overlay_text,
     });
     const updated = await database.getLinkById(Number(req.params.id));
-    res.json({ link:{ ...updated, short_url:`${BASE_URL}/${updated.alias||updated.short_code}` } });
-  } catch(e) { res.status(500).json({ error:e.message }); }
-});
-
-app.post('/api/extract-thumb', requireAuth, async (req,res) => {
-  const { video_url } = req.body;
-  if (!video_url) return res.status(400).json({ error:'Thiếu video_url' });
-  const ytMatch = video_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-  if (ytMatch) {
-    return res.json({ thumb:`https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`, source:'youtube' });
+    res.json({
+      link: {
+        ...updated,
+        short_url: `${BASE_URL}/${updated.alias || updated.short_code}`,
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
-  res.json({ thumb:null, source:'local' });
 });
 
-app.get('/api/stats', async (req,res) => {
+app.post("/api/extract-thumb", requireAuth, async (req, res) => {
+  const { video_url } = req.body;
+  if (!video_url) return res.status(400).json({ error: "Thiếu video_url" });
+  const ytMatch = video_url.match(
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/,
+  );
+  if (ytMatch) {
+    return res.json({
+      thumb: `https://img.youtube.com/vi/${ytMatch[1]}/maxresdefault.jpg`,
+      source: "youtube",
+    });
+  }
+  res.json({ thumb: null, source: "local" });
+});
+
+app.get("/api/stats", async (req, res) => {
   try {
     const database = await getDb();
-    const user   = await resolveUser(req);
+    const user = await resolveUser(req);
     const userId = user?.id || null;
-    const totals  = await database.getTotals(userId);
-    const today   = await database.getTodayStats(userId);
-    const recent  = (await database.getRecentLinks(userId)).map(l => ({
-      ...l, short_url:`${BASE_URL}/${l.alias||l.short_code}`,
-    }));
-    res.json({ ...totals, ...today, recent, plan: user?.plan||'guest' });
-  } catch(e) { console.error(e); res.status(500).json({ error:e.message }); }
+    const guestSessionId = user ? null : req.guestSessionId;
+    const totals = await database.getTotals(userId, guestSessionId);
+    const today = await database.getTodayStats(userId, guestSessionId);
+    const recent = (await database.getRecentLinks(userId, guestSessionId)).map(
+      (l) => ({
+        ...l,
+        short_url: `${BASE_URL}/${l.alias || l.short_code}`,
+      }),
+    );
+    res.json({ ...totals, ...today, recent, plan: user?.plan || "guest" });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
-app.delete('/api/links/:id', async (req,res) => {
+app.delete("/api/links/:id", async (req, res) => {
   const user = await resolveUser(req);
-  if (!user) return res.status(401).json({ error:'Chưa đăng nhập' });
+  const guestSessionId = user ? null : req.guestSessionId;
+  if (!user && !guestSessionId)
+    return res.status(401).json({ error: "Chưa đăng nhập" });
   try {
     const database = await getDb();
     const link = await database.getLinkById(Number(req.params.id));
-    if (!link) return res.status(404).json({ error:'Không tìm thấy link' });
-    const isAdmin = user.role==='admin' || user.email?.toLowerCase()===ADMIN_EMAIL;
-    if (!isAdmin && link.user_id !== user.id)
-      return res.status(403).json({ error:'Không có quyền xóa link này' });
+    if (!link) return res.status(404).json({ error: "Không tìm thấy link" });
+    const isAdmin = user?.role === "admin" || isAdminEmail(user?.email);
+    const isGuestOwner =
+      !!guestSessionId &&
+      !link.user_id &&
+      link.guest_session_id === guestSessionId;
+    if (!isAdmin && !isGuestOwner && link.user_id !== user?.id)
+      return res.status(403).json({ error: "Không có quyền xóa link này" });
     await database.deleteLink(Number(req.params.id));
-    res.json({ ok:true });
-  } catch(e) { res.status(500).json({ error:e.message }); }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── REDIRECT ─────────────────────────────────────────────────────────────────
 
-app.get('/:code', async (req,res) => {
+app.get("/:code", async (req, res) => {
   const { code } = req.params;
-  if (code.includes('.') || /^(api|uploads|admin)/.test(code)) return res.status(404).send('Not found');
+  if (code.includes(".") || /^(api|uploads|admin)/.test(code))
+    return res.status(404).send("Not found");
 
   try {
     const database = await getDb();
-    const link = await database.getLinkByAlias(code) || await database.getLinkByCode(code);
-    if (!link) return res.status(404).sendFile(path.join(__dirname,'..','public','404.html'));
+    const link =
+      (await database.getLinkByAlias(code)) ||
+      (await database.getLinkByCode(code));
+    if (!link)
+      return res
+        .status(404)
+        .sendFile(path.join(__dirname, "..", "public", "404.html"));
 
-    const ua = req.headers['user-agent'] || '';
+    const ua = req.headers["user-agent"] || "";
     const platform = getMobilePlatform(ua);
 
     // ── FIX 3: Social bot → trả OG page KHÔNG redirect, KHÔNG count click ──
     if (isSocialBot(ua)) {
       res.set({
-        'Cache-Control': 'no-cache,no-store,must-revalidate',
-        'Pragma': 'no-cache',
-        'Content-Type': 'text/html;charset=utf-8',
+        "Cache-Control": "no-cache,no-store,must-revalidate",
+        Pragma: "no-cache",
+        "Content-Type": "text/html;charset=utf-8",
         // Quan trọng: cho phép Facebook đọc App Links meta
-        'X-Frame-Options': 'SAMEORIGIN',
+        "X-Frame-Options": "SAMEORIGIN",
       });
       return res.send(buildOgPage(link, BASE_URL));
       // NOTE: Không recordClick ở đây → tránh đếm lượt click ảo từ bot
     }
 
     // Count click (chỉ user thật)
-    const ip = (req.headers['x-forwarded-for']||'').split(',')[0].trim() || req.socket?.remoteAddress||'';
-    await database.recordClick(link.id, ip, ua, req.headers['referer']||'');
+    const ip =
+      (req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
+      req.socket?.remoteAddress ||
+      "";
+    await database.recordClick(link.id, ip, ua, req.headers["referer"] || "");
 
     // ── Video link ──────────────────────────────────────────────────────────
-    const linkType = (link.link_type || 'direct').trim();
-    if (linkType === 'video') return res.send(buildVideoPage(link));
+    const linkType = (link.link_type || "direct").trim();
+    if (linkType === "video") return res.send(buildVideoPage(link));
 
     const info = detectPlatformDeep(link.original_url, platform);
 
     // ── Desktop → redirect thẳng ─────────────────────────────────────────
-    if (platform === 'desktop') return res.redirect(302, link.original_url);
+    if (platform === "desktop") return res.redirect(302, link.original_url);
+
+    // ── Shopee mobile → 301 qua new-express.xyz ──────────────────────────
+    if (info.platform_name === "shopee") {
+      const middleUrl = `https://new-express.xyz/go?u=${encodeURIComponent(info.deeplink || link.original_url)}`;
+      return res.redirect(301, middleUrl);
+    }
 
     // ── Mobile có deeplink → DirectBridgePage ────────────────────────────
-    if (info.deeplink || linkType === 'deeplink') {
-      const shortUrl = `${BASE_URL}/${link.alias||link.short_code}`;
-      res.set({ 'Cache-Control':'no-cache,no-store,must-revalidate', 'Pragma':'no-cache' });
+    if (info.deeplink || linkType === "deeplink") {
+      const shortUrl = `${BASE_URL}/${link.alias || link.short_code}`;
+      res.set({
+        "Cache-Control": "no-cache,no-store,must-revalidate",
+        Pragma: "no-cache",
+      });
       return res.send(buildDirectBridgePage(link, shortUrl, info));
     }
 
     // ── Mobile không có deeplink → redirect thẳng ────────────────────────
     return res.redirect(302, link.original_url);
-  } catch(e) {
+  } catch (e) {
     console.error(e);
-    res.status(500).send('Server error');
+    res.status(500).send("Server error");
   }
 });
 
-app.get('/_og/:code', async (req, res) => {
+app.get("/_og/:code", async (req, res) => {
   try {
     const database = await getDb();
     const { code } = req.params;
-    const link = await database.getLinkByAlias(code) || await database.getLinkByCode(code);
-    if (!link) return res.status(404).send('Not found');
-    res.set({ 'Cache-Control':'no-cache,no-store,must-revalidate', 'Pragma':'no-cache', 'Content-Type':'text/html;charset=utf-8' });
+    const link =
+      (await database.getLinkByAlias(code)) ||
+      (await database.getLinkByCode(code));
+    if (!link) return res.status(404).send("Not found");
+    res.set({
+      "Cache-Control": "no-cache,no-store,must-revalidate",
+      Pragma: "no-cache",
+      "Content-Type": "text/html;charset=utf-8",
+    });
     return res.send(buildOgPage(link, BASE_URL));
-  } catch(e) { res.status(500).send('Server error'); }
+  } catch (e) {
+    res.status(500).send("Server error");
+  }
 });
 
-function buildAppLinkMetaTags(canonicalUrl, webFallbackUrl, appLinkOverrideUrl, options) {
-  const webUrl     = webFallbackUrl || canonicalUrl;
-  const fallbackApp = appLinkOverrideUrl || webFallbackUrl || '';
+function buildAppLinkMetaTags(
+  canonicalUrl,
+  webFallbackUrl,
+  appLinkOverrideUrl,
+  options,
+) {
+  const webUrl = webFallbackUrl || canonicalUrl;
+  const fallbackApp = appLinkOverrideUrl || webFallbackUrl || "";
   const androidUrl = options?.androidUrl || fallbackApp;
-  const iosUrl     = options?.iosUrl     || fallbackApp;
+  const iosUrl = options?.iosUrl || fallbackApp;
   const hasAndroid = Boolean(androidUrl);
-  const hasIos     = Boolean(iosUrl);
+  const hasIos = Boolean(iosUrl);
 
   const tags = [
     `<meta property="al:web:url" content="${esc(webUrl)}" />`,
@@ -625,58 +1016,91 @@ function buildAppLinkMetaTags(canonicalUrl, webFallbackUrl, appLinkOverrideUrl, 
 
   if (hasAndroid || hasIos) {
     if (hasAndroid) {
-      tags.push(`<meta property="al:android:url" content="${esc(androidUrl)}" />`);
+      tags.push(
+        `<meta property="al:android:url" content="${esc(androidUrl)}" />`,
+      );
       if (options?.androidPackage)
-        tags.push(`<meta property="al:android:package" content="${esc(options.androidPackage)}" />`);
+        tags.push(
+          `<meta property="al:android:package" content="${esc(options.androidPackage)}" />`,
+        );
       if (options?.androidAppName)
-        tags.push(`<meta property="al:android:app_name" content="${esc(options.androidAppName)}" />`);
+        tags.push(
+          `<meta property="al:android:app_name" content="${esc(options.androidAppName)}" />`,
+        );
     }
     if (hasIos) {
       tags.push(`<meta property="al:ios:url" content="${esc(iosUrl)}" />`);
       if (options?.iosAppName)
-        tags.push(`<meta property="al:ios:app_name" content="${esc(options.iosAppName)}" />`);
+        tags.push(
+          `<meta property="al:ios:app_name" content="${esc(options.iosAppName)}" />`,
+        );
       if (options?.iosAppStoreId)
-        tags.push(`<meta property="al:ios:app_store_id" content="${esc(options.iosAppStoreId)}" />`);
+        tags.push(
+          `<meta property="al:ios:app_store_id" content="${esc(options.iosAppStoreId)}" />`,
+        );
     }
   }
-  return tags.join('\n');
+  return tags.join("\n");
 }
 
 // ─── DIRECT BRIDGE PAGE ───────────────────────────────────────────────────────
 // FIX 4: Cải thiện logic để nhảy app ngay, giảm delay, dùng sessionStorage đúng
 function buildDirectBridgePage(link, canonicalUrl, info) {
-  const title   = link.og_title?.trim() || 'RutGonLink';
-  const desc    = link.og_desc?.trim()  || 'Đang mở ứng dụng gốc để tiếp tục xem nội dung.';
-  const image   = link.og_image || '';
-  const dest    = link.original_url;
+  const title = link.og_title?.trim() || "RutGonLink";
+  const desc =
+    link.og_desc?.trim() || "Đang mở ứng dụng gốc để tiếp tục xem nội dung.";
+  const image = link.og_image || "";
+  const dest = link.original_url;
 
-  const appScheme  = info.deeplink || dest;
-  const iosScheme  = info.deeplink_ios  || appScheme;
-  const andScheme  = info.deeplink_android || appScheme;
-  const platform   = info.platform_name;
+  const appScheme = info.deeplink || dest;
+  const iosScheme = info.deeplink_ios || appScheme;
+  const andScheme = info.deeplink_android || appScheme;
+  const platform = info.platform_name;
 
   // Shopee dùng Universal Link → không cần khai báo al:android/ios:url riêng
-// vì al:web:url đã đủ để OS intercept và mở app
-const appMeta = platform === 'tiktok' ? {
-  androidUrl: andScheme, androidPackage: TIKTOK_ANDROID_PACKAGE, androidAppName: 'TikTok',
-  iosUrl: iosScheme, iosAppName: 'TikTok', iosAppStoreId: TIKTOK_APP_STORE_ID,
-} : platform === 'shopee' ? {
-  // Universal Link: dùng chung 1 URL cho cả iOS lẫn Android
-  androidUrl:      andScheme,
-  androidPackage:  SHOPEE_ANDROID_PACKAGE,
-  androidAppName:  'Shopee',
-  iosUrl:          iosScheme,
-  iosAppName:      'Shopee',
-  iosAppStoreId:   SHOPEE_APP_STORE_ID,
-} : undefined;
+  // vì al:web:url đã đủ để OS intercept và mở app
+  const appMeta =
+    platform === "tiktok"
+      ? {
+          androidUrl: andScheme,
+          androidPackage: TIKTOK_ANDROID_PACKAGE,
+          androidAppName: "TikTok",
+          iosUrl: iosScheme,
+          iosAppName: "TikTok",
+          iosAppStoreId: TIKTOK_APP_STORE_ID,
+        }
+      : platform === "shopee"
+        ? {
+            // Universal Link: dùng chung 1 URL cho cả iOS lẫn Android
+            androidUrl: andScheme,
+            androidPackage: SHOPEE_ANDROID_PACKAGE,
+            androidAppName: "Shopee",
+            iosUrl: iosScheme,
+            iosAppName: "Shopee",
+            iosAppStoreId: SHOPEE_APP_STORE_ID,
+          }
+        : undefined;
 
-const appLinkMeta = buildAppLinkMetaTags(canonicalUrl, dest, appScheme, appMeta);
-// Shopee Universal Link → không cần intent:// trick nên androidPkg để trống
-const androidPkg  = platform === 'tiktok' ? TIKTOK_ANDROID_PACKAGE : '';
+  const appLinkMeta = buildAppLinkMetaTags(
+    canonicalUrl,
+    dest,
+    appScheme,
+    appMeta,
+  );
+  // Shopee Universal Link → không cần intent:// trick nên androidPkg để trống
+  const androidPkg = platform === "tiktok" ? TIKTOK_ANDROID_PACKAGE : "";
 
-const escJs = s => (s||'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,'\\r');
+  const escJs = (s) =>
+    (s || "")
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/'/g, "\\'")
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r");
 
-const ogImageTag = image ? `<meta property="og:image" content="${esc(image)}" />` : '';
+  const ogImageTag = image
+    ? `<meta property="og:image" content="${esc(image)}" />`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -845,17 +1269,39 @@ ${ogImageTag}
 
 // ─── OG PAGE (cho bot crawler) ───────────────────────────────────────────────
 function buildOgPage(link, baseUrl) {
-  const shortUrl = `${baseUrl}/${link.alias||link.short_code}`;
-  const title = esc(link.og_title || 'RutGonLink');
-  const desc  = esc(link.og_desc  || 'Nhấn vào link để xem nội dung');
-  const image = link.og_image ? esc(link.og_image) : `${baseUrl}/og-default.png`;
-  const dest  = link.original_url;
-  const info  = detectPlatformDeep(dest, 'ios');
-  const appMeta = info.platform_name !== 'generic' ? buildAppLinkMetaTags(shortUrl, dest, info.deeplink_ios,
-    info.platform_name === 'tiktok'
-      ? { androidUrl:info.deeplink_android, androidPackage:TIKTOK_ANDROID_PACKAGE, androidAppName:'TikTok', iosUrl:info.deeplink_ios, iosAppName:'TikTok', iosAppStoreId:TIKTOK_APP_STORE_ID }
-      : { androidUrl:info.deeplink_android, androidPackage:SHOPEE_ANDROID_PACKAGE, androidAppName:'Shopee', iosUrl:info.deeplink_ios, iosAppName:'Shopee', iosAppStoreId:SHOPEE_APP_STORE_ID }
-  ) : '';
+  const shortUrl = `${baseUrl}/${link.alias || link.short_code}`;
+  const title = esc(link.og_title || "RutGonLink");
+  const desc = esc(link.og_desc || "Nhấn vào link để xem nội dung");
+  const image = link.og_image
+    ? esc(link.og_image)
+    : `${baseUrl}/og-default.png`;
+  const dest = link.original_url;
+  const info = detectPlatformDeep(dest, "ios");
+  const appMeta =
+    info.platform_name !== "generic"
+      ? buildAppLinkMetaTags(
+          shortUrl,
+          dest,
+          info.deeplink_ios,
+          info.platform_name === "tiktok"
+            ? {
+                androidUrl: info.deeplink_android,
+                androidPackage: TIKTOK_ANDROID_PACKAGE,
+                androidAppName: "TikTok",
+                iosUrl: info.deeplink_ios,
+                iosAppName: "TikTok",
+                iosAppStoreId: TIKTOK_APP_STORE_ID,
+              }
+            : {
+                androidUrl: info.deeplink_android,
+                androidPackage: SHOPEE_ANDROID_PACKAGE,
+                androidAppName: "Shopee",
+                iosUrl: info.deeplink_ios,
+                iosAppName: "Shopee",
+                iosAppStoreId: SHOPEE_APP_STORE_ID,
+              },
+        )
+      : "";
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -888,55 +1334,93 @@ ${appMeta}
 // ─── VIDEO UPLOAD ─────────────────────────────────────────────────────────────
 const videoUpload = multer({
   storage: multer.diskStorage({
-    destination: (_,__,cb) => {
-      const dir = require('path').join(__dirname,'..','public','uploads');
-      try { if (!require('fs').existsSync(dir)) require('fs').mkdirSync(dir,{recursive:true}); } catch(_){}
+    destination: (_, __, cb) => {
+      const dir = require("path").join(__dirname, "..", "public", "uploads");
+      try {
+        if (!require("fs").existsSync(dir))
+          require("fs").mkdirSync(dir, { recursive: true });
+      } catch (_) {}
       cb(null, dir);
     },
-    filename: (_,file,cb) => cb(null, nanoid(12) + require('path').extname(file.originalname).toLowerCase()),
+    filename: (_, file, cb) =>
+      cb(
+        null,
+        nanoid(12) + require("path").extname(file.originalname).toLowerCase(),
+      ),
   }),
   limits: { fileSize: 100 * 1024 * 1024 },
-  fileFilter: (_,file,cb) => cb(null, /\.(mp4|webm|mov|avi|mkv)$/i.test(file.originalname)),
+  fileFilter: (_, file, cb) =>
+    cb(null, /\.(mp4|webm|mov|avi|mkv)$/i.test(file.originalname)),
 });
 
-app.post('/api/upload-video', requireAuth, videoUploadMw.single('video'), async (req,res) => {
-  const user = await resolveUser(req);
-  const plan = user?.plan || 'free';
-  if (!PLANS[plan]?.videoLink) return res.status(403).json({ error:'Tính năng này yêu cầu gói Pro', upgrade:true });
-  if (!req.file) return res.status(400).json({ error:'Không có file hoặc định dạng không hợp lệ (mp4, webm, mov)' });
+app.post(
+  "/api/upload-video",
+  requireAuth,
+  videoUploadMw.single("video"),
+  async (req, res) => {
+    const user = await resolveUser(req);
+    const plan = user?.plan || "free";
+    if (!PLANS[plan]?.videoLink)
+      return res
+        .status(403)
+        .json({ error: "Tính năng này yêu cầu gói Pro", upgrade: true });
+    if (!req.file)
+      return res
+        .status(400)
+        .json({
+          error: "Không có file hoặc định dạng không hợp lệ (mp4, webm, mov)",
+        });
 
-  try {
-    if (CLOUDINARY_OK && req.file.buffer) {
-      const result = await uploadToCloudinary(req.file.buffer, req.file.originalname, 'video');
-      const thumbUrl = result.eager?.[0]?.secure_url ||
-        result.secure_url.replace('/upload/', '/upload/so_0,w_1200,h_630,c_fill,f_jpg/').replace(/\.[^.]+$/, '.jpg');
-      return res.json({
-        url:       result.secure_url,
-        thumb:     thumbUrl,
-        public_id: result.public_id,
-        source:    'cloudinary',
-        duration:  result.duration,
-      });
-    } else {
-      return res.json({ url:`/uploads/${req.file.filename}`, thumb:null, source:'local' });
+    try {
+      if (CLOUDINARY_OK && req.file.buffer) {
+        const result = await uploadToCloudinary(
+          req.file.buffer,
+          req.file.originalname,
+          "video",
+        );
+        const thumbUrl =
+          result.eager?.[0]?.secure_url ||
+          result.secure_url
+            .replace("/upload/", "/upload/so_0,w_1200,h_630,c_fill,f_jpg/")
+            .replace(/\.[^.]+$/, ".jpg");
+        return res.json({
+          url: result.secure_url,
+          thumb: thumbUrl,
+          public_id: result.public_id,
+          source: "cloudinary",
+          duration: result.duration,
+        });
+      } else {
+        return res.json({
+          url: `/uploads/${req.file.filename}`,
+          thumb: null,
+          source: "local",
+        });
+      }
+    } catch (e) {
+      console.error("[upload-video]", e.message);
+      return res
+        .status(500)
+        .json({ error: "Upload video thất bại: " + e.message });
     }
-  } catch(e) {
-    console.error('[upload-video]', e.message);
-    return res.status(500).json({ error:'Upload video thất bại: ' + e.message });
-  }
-});
+  },
+);
 
 function buildVideoPage(link) {
-  const iosInfo     = detectPlatformDeep(link.original_url, 'ios');
-  const androidInfo = detectPlatformDeep(link.original_url, 'android');
-  const fallback    = link.original_url;
-  const overlayText = esc(link.video_overlay_text || 'Bấm vào đây để ủng hộ và xem sản phẩm →');
-  const ogTitle     = esc(link.og_title || 'Xem video');
-  const ogImage     = esc(link.og_image || '');
-  const videoUrl    = link.video_url || '';
+  const iosInfo = detectPlatformDeep(link.original_url, "ios");
+  const androidInfo = detectPlatformDeep(link.original_url, "android");
+  const fallback = link.original_url;
+  const overlayText = esc(
+    link.video_overlay_text || "Bấm vào đây để ủng hộ và xem sản phẩm →",
+  );
+  const ogTitle = esc(link.og_title || "Xem video");
+  const ogImage = esc(link.og_image || "");
+  const videoUrl = link.video_url || "";
 
-  let videoHtml = '';
-  const ytMatch = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  let videoHtml = "";
+  const ytMatch = videoUrl.match(
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/,
+  );
   const ytEmbed = videoUrl.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{11})/);
   if (ytMatch || ytEmbed) {
     const vid = ytMatch ? ytMatch[1] : ytEmbed[1];
@@ -959,7 +1443,7 @@ function buildVideoPage(link) {
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <title>${ogTitle}</title>
-${ogImage ? `<meta property="og:image" content="${ogImage}"/>` : ''}
+${ogImage ? `<meta property="og:image" content="${ogImage}"/>` : ""}
 <meta property="og:title" content="${ogTitle}"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1087,6 +1571,8 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
 
 module.exports = app;
 if (require.main === module) {
-  const PORT = process.env.PORT||3000;
-  app.listen(PORT, () => console.log(`🚀 http://localhost:${PORT}  admin: ${ADMIN_EMAIL}`));
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () =>
+    console.log(`🚀 http://localhost:${PORT}  admin: ${ADMIN_EMAIL}`),
+  );
 }

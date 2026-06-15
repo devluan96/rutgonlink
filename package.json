@@ -5,7 +5,8 @@
   "main": "api/index.js",
   "scripts": {
     "start": "node api/index.js",
-    "dev": "nodemon api/index.js"
+    "dev": "node --watch api/index.js",
+    "build": "node --check api/index.js && node --check api/db.js && node --check server.js && node --check database.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",
