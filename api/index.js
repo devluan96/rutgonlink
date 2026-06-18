@@ -501,6 +501,18 @@ function logRedirectDecision(meta) {
   if (refererHost) {
     entry.refererHost = refererHost;
   }
+  console.log(
+    `[redirect-runtime] ${JSON.stringify({
+      requestId: entry.requestId,
+      code: entry.code,
+      mode: entry.mode,
+      platform: entry.platform,
+      uaKind: entry.uaKind,
+      status: entry.status,
+      target: entry.target,
+      refererHost: entry.refererHost || null,
+    })}`,
+  );
   console.info(`[redirect] ${JSON.stringify(entry)}`);
   persistRedirectLogEntry(entry);
 }
