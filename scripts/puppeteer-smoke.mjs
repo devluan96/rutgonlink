@@ -594,87 +594,54 @@ async function main() {
 
       const clickCountAfterBot = (await db.getLinkByCode(shopeeShortCode)).clicks;
       assert.equal(clickCountAfterBot, clickCountBeforeBot);
+      const expectedShopeeMiddleLocation = `https://new-express.xyz/go?u=${encodeURIComponent(shopeeOriginalUrl)}`;
+
+      const assertShopeeMiddleRedirect = (response, label) => {
+        assert.equal(response.status, 301, `${label} should return 301`);
+        assert.equal(
+          response.headers.get("x-rgl-redirect-mode"),
+          "shopee-middle-redirect",
+        );
+        assert.equal(
+          response.headers.get("x-rgl-redirect-platform"),
+          "shopee",
+        );
+        assert.ok(response.headers.get("x-request-id"));
+        const location = response.headers.get("location") || "";
+        assert.equal(
+          location,
+          expectedShopeeMiddleLocation,
+          `${label} should forward to the Shopee middle-domain deeplink`,
+        );
+        const middleUrl = new URL(location);
+        assert.equal(middleUrl.origin, "https://new-express.xyz");
+        assert.equal(middleUrl.pathname, "/go");
+        assert.equal(
+          middleUrl.searchParams.get("u"),
+          shopeeOriginalUrl,
+          `${label} should preserve the exact Shopee deeplink in ?u=`,
+        );
+      };
 
       const facebookIosPage = await fetchText(shopeeShortUrl, {
         ua: FACEBOOK_IOS_UA,
       });
-      assert.equal(facebookIosPage.response.status, 200);
-      assert.equal(
-        facebookIosPage.response.headers.get("x-rgl-redirect-mode"),
-        "shopee-facebook-app-links",
-      );
-      assert.equal(
-        facebookIosPage.response.headers.get("x-rgl-redirect-platform"),
-        "shopee",
-      );
-      assert.ok(facebookIosPage.response.headers.get("x-request-id"));
-      assert.match(
-        facebookIosPage.text,
-        /al:ios:app_store_id" content="959841449"/,
-      );
-      assert.match(
-        facebookIosPage.text,
-        /al:android:package" content="com\.shopee\.vn"/,
-      );
-      assert.match(
-        facebookIosPage.text,
-        new RegExp(
-          `al:web:url" content="${shopeeOriginalUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`,
-        ),
-      );
-      assert.ok(
-        !facebookIosPage.text.includes("window.location"),
-        "Facebook iOS Shopee page should not force an immediate JS redirect",
-      );
+      assertShopeeMiddleRedirect(facebookIosPage.response, "Facebook iOS Shopee");
 
       const facebookAndroidPage = await fetchText(shopeeShortUrl, {
         ua: FACEBOOK_ANDROID_UA,
       });
-      assert.equal(facebookAndroidPage.response.status, 200);
-      assert.equal(
-        facebookAndroidPage.response.headers.get("x-rgl-redirect-mode"),
-        "shopee-facebook-app-links",
-      );
-      assert.equal(
-        facebookAndroidPage.response.headers.get("x-rgl-redirect-platform"),
-        "shopee",
-      );
-      assert.ok(facebookAndroidPage.response.headers.get("x-request-id"));
-      assert.match(
-        facebookAndroidPage.text,
-        /al:ios:app_store_id" content="959841449"/,
-      );
-      assert.match(
-        facebookAndroidPage.text,
-        /al:android:package" content="com\.shopee\.vn"/,
-      );
-      assert.match(
-        facebookAndroidPage.text,
-        new RegExp(
-          `al:web:url" content="${shopeeOriginalUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`,
-        ),
-      );
-      assert.ok(
-        !facebookAndroidPage.text.includes("window.location"),
-        "Facebook Android Shopee page should not force an immediate JS redirect",
+      assertShopeeMiddleRedirect(
+        facebookAndroidPage.response,
+        "Facebook Android Shopee",
       );
 
       const mobileShopeeRedirect = await fetchText(shopeeShortUrl, {
         ua: MOBILE_IOS_UA,
       });
-      assert.equal(mobileShopeeRedirect.response.status, 301);
-      assert.equal(
-        mobileShopeeRedirect.response.headers.get("x-rgl-redirect-mode"),
-        "shopee-middle-redirect",
-      );
-      assert.equal(
-        mobileShopeeRedirect.response.headers.get("x-rgl-redirect-platform"),
-        "shopee",
-      );
-      assert.ok(mobileShopeeRedirect.response.headers.get("x-request-id"));
-      assert.match(
-        mobileShopeeRedirect.response.headers.get("location") || "",
-        /^https:\/\/new-express\.xyz\/go\?u=/,
+      assertShopeeMiddleRedirect(
+        mobileShopeeRedirect.response,
+        "Generic mobile Shopee",
       );
 
       const desktopShopeeRedirect = await fetchText(shopeeShortUrl, {
@@ -697,7 +664,6 @@ async function main() {
 
       const redirectLogs = getLogs();
       assert.match(redirectLogs, /"mode":"social-bot-og"/);
-      assert.match(redirectLogs, /"mode":"shopee-facebook-app-links"/);
       assert.match(redirectLogs, /"mode":"shopee-middle-redirect"/);
       assert.match(redirectLogs, /"mode":"desktop-redirect"/);
 
@@ -723,7 +689,7 @@ async function main() {
         "#adRedirectBody",
         (el) => el.textContent,
       );
-      assert.match(adminRedirectText, /shopee-facebook-app-links/);
+      assert.match(adminRedirectText, /shopee-middle-redirect/);
       assert.match(adminRedirectText, /desktop-redirect/);
 
       await authedPage.goto(`${baseUrl}/create`, {

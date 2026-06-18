@@ -1660,36 +1660,6 @@ app.get("/:code", async (req, res) => {
     }
 
     const info = detectPlatformDeep(link.original_url, platform);
-    const isFacebookInApp = isFacebookInAppBrowser(ua);
-
-    if (
-      platform !== "desktop" &&
-      info.platform_name === "shopee" &&
-      isFacebookInApp
-    ) {
-      setRedirectDebugHeaders(res, {
-        mode: "shopee-facebook-app-links",
-        platform: info.platform_name,
-      });
-      logRedirectDecision({
-        requestId: req.requestId,
-        linkId: link.id,
-        code: codeValue,
-        mode: "shopee-facebook-app-links",
-        platform: info.platform_name,
-        uaKind,
-        status: 200,
-        target: info.fallback || link.original_url,
-        referer,
-      });
-      res.set({
-        "Cache-Control": "no-cache,no-store,must-revalidate",
-        Pragma: "no-cache",
-        "Content-Type": "text/html;charset=utf-8",
-        "X-Frame-Options": "SAMEORIGIN",
-      });
-      return res.send(buildShopeeFacebookAppPage(link, publicBaseUrl, info));
-    }
 
     // ── Desktop → redirect thẳng ─────────────────────────────────────────
     if (platform === "desktop") {
@@ -1874,56 +1844,6 @@ function buildAppLinkMetaTags(
     }
   }
   return tags.join("\n");
-}
-
-function buildShopeeFacebookAppPage(link, baseUrl, info) {
-  const shortUrl = `${baseUrl}/${link.alias || link.short_code}`;
-  const title = esc(link.og_title || "RutGonLink");
-  const desc = esc(link.og_desc || "Nhấn vào link để xem nội dung");
-  const image = link.og_image
-    ? esc(link.og_image)
-    : `${baseUrl}/og-default.png`;
-  const webFallback = info.fallback || link.original_url;
-  const iosUrl = info.deeplink_ios || info.deeplink || webFallback;
-  const androidUrl = info.deeplink_android || info.deeplink || webFallback;
-  const appMeta = buildAppLinkMetaTags(shortUrl, webFallback, iosUrl, {
-    androidUrl,
-    androidPackage: SHOPEE_ANDROID_PACKAGE,
-    androidAppName: "Shopee VN",
-    iosUrl,
-    iosAppName: "Shopee VN",
-    iosAppStoreId: SHOPEE_APP_STORE_ID,
-  });
-
-  return `<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>${title}</title>
-<meta name="description" content="${desc}" />
-<meta name="robots" content="noindex, nofollow" />
-<link rel="canonical" href="${esc(shortUrl)}" />
-<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
-${appMeta}
-<meta property="og:locale" content="vi_VN" />
-<meta property="og:type" content="website" />
-<meta property="og:title" content="${title}" />
-<meta property="og:description" content="${desc}" />
-<meta property="og:url" content="${esc(shortUrl)}" />
-<meta property="og:site_name" content="RutGonLink" />
-<meta property="og:image" content="${image}" />
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="${title}" />
-<meta name="twitter:description" content="${desc}" />
-<meta name="twitter:image" content="${image}" />
-</head>
-<body>
-<main>
-  <a href="${esc(webFallback)}">Tiếp tục tới Shopee</a>
-</main>
-</body>
-</html>`;
 }
 
 function buildBioPage(profile, owner, links, canonicalUrl) {
