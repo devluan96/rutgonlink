@@ -15,6 +15,7 @@ const cookieParser = require("cookie-parser");
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const { init: initDb } = require("./db");
+const { isAffiliateShortenUrl } = require("../affiliate");
 
 const app = express();
 const BASE_URL =
@@ -33,6 +34,10 @@ if (!JWT_SECRET) {
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL
   ? process.env.ADMIN_EMAIL.toLowerCase()
   : null;
+const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || "").trim();
+const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
+const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+const SUPABASE_ANON_KEY = (process.env.SUPABASE_ANON_KEY || "").trim();
 const GUEST_SESSION_COOKIE = "guest_session";
 const GUEST_SESSION_MAX_AGE = 30 * 24 * 3600 * 1000;
 
@@ -106,7 +111,80 @@ app.use((req, res, next) => {
   });
   next();
 });
-app.use(express.static(path.join(__dirname, "..", "public")));
+
+function serveLanding(_req, res) {
+  res.sendFile(path.join(__dirname, "..", "public", "landing.html"));
+}
+
+function serveAppShell(_req, res) {
+  res.sendFile(path.join(__dirname, "..", "public", "index.html"));
+}
+
+function redirectToCanonical(pathname) {
+  return (req, res) => {
+    const queryIndex = req.originalUrl.indexOf("?");
+    const search = queryIndex >= 0 ? req.originalUrl.slice(queryIndex) : "";
+    res.redirect(302, `${pathname}${search}`);
+  };
+}
+
+const appShellRoutes = [
+  "/dashboard",
+  "/dashboard/",
+  "/links",
+  "/links/",
+  "/create",
+  "/create/",
+  "/qr",
+  "/qr/",
+  "/bio",
+  "/bio/",
+  "/integrations",
+  "/integrations/",
+  "/team",
+  "/team/",
+  "/pricing",
+  "/pricing/",
+  "/stats",
+  "/stats/",
+  "/admin",
+  "/admin/",
+  "/app",
+  "/app/",
+  "/app/:page",
+  "/app/:page/",
+  "/index.html",
+];
+
+app.get("/", serveLanding);
+app.get(["/landing", "/landing/"], redirectToCanonical("/"));
+app.get(appShellRoutes, serveAppShell);
+const serveAuthHtml = (templatePath) => (_req, res) => {
+  const html = fs
+    .readFileSync(templatePath, "utf8")
+    .replaceAll("__GOOGLE_CLIENT_ID__", GOOGLE_CLIENT_ID)
+    .replaceAll("__SUPABASE_URL__", SUPABASE_URL)
+    .replaceAll("__SUPABASE_ANON_KEY__", SUPABASE_ANON_KEY);
+  res.type("html").send(html);
+};
+app.get(["/login", "/login/"], serveAuthHtml(
+  path.join(__dirname, "..", "public", "user", "login", "index.html"),
+));
+app.get(["/register", "/register/"], serveAuthHtml(
+  path.join(__dirname, "..", "public", "user", "register", "index.html"),
+));
+app.get(["/user/login", "/user/login/"], redirectToCanonical("/login"));
+app.get(["/user/register", "/user/register/"], redirectToCanonical("/register"));
+app.get("/favicon.ico", (_req, res) => {
+  res.type("image/svg+xml");
+  res.sendFile(path.join(__dirname, "..", "public", "favicon.svg"));
+});
+
+app.use(
+  express.static(path.join(__dirname, "..", "public"), {
+    index: false,
+  }),
+);
 
 // ── FIX 1: Thêm /robots.txt để tránh 404 và ngăn bot crawl ──────────────────
 app.get("/robots.txt", (_, res) => {
@@ -208,6 +286,87 @@ function normalizeDomainHost(input) {
     ? new URL(raw)
     : new URL(`https://${raw}`);
   return normalized.hostname.toLowerCase();
+}
+
+function normalizeBioSlug(input, fallback = "") {
+  const raw = String(input || fallback || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return raw || null;
+}
+
+function normalizeBioLinkOrder(input) {
+  let value = input;
+  if (typeof value === "string") {
+    const raw = value.trim();
+    if (!raw) return [];
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      value = raw.split(",").map((part) => part.trim());
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function parseBioLinkSource(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return { mode: "recent", order: [] };
+  if (raw.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        mode: parsed.mode === "all" ? "all" : "recent",
+        order: normalizeBioLinkOrder(parsed.order),
+      };
+    } catch {}
+  }
+  if (raw.startsWith("ordered:")) {
+    return {
+      mode: "recent",
+      order: normalizeBioLinkOrder(raw.slice("ordered:".length)),
+    };
+  }
+  return {
+    mode: raw === "all" ? "all" : "recent",
+    order: [],
+  };
+}
+
+function serializeBioLinkSource(mode, order) {
+  const normalizedMode = mode === "all" ? "all" : "recent";
+  const normalizedOrder = normalizeBioLinkOrder(order);
+  if (normalizedOrder.length) {
+    return JSON.stringify({ mode: normalizedMode, order: normalizedOrder });
+  }
+  return normalizedMode;
+}
+
+function buildBioShareUrl(baseUrl, slug) {
+  return `${baseUrl}/u/${encodeURIComponent(slug)}`;
+}
+
+async function resolvePublicBioLinks(database, profile) {
+  const source = parseBioLinkSource(profile.link_source);
+  const pool = await database.getRecentLinks(profile.user_id);
+  const byCode = new Map();
+  for (const link of pool || []) {
+    if (link.short_code) byCode.set(String(link.short_code), link);
+    if (link.alias) byCode.set(String(link.alias), link);
+  }
+
+  if (source.order.length) {
+    const ordered = source.order.map((code) => byCode.get(code)).filter(Boolean);
+    if (ordered.length) return ordered;
+  }
+
+  const limit = Math.max(1, Number(profile.link_count || 8));
+  const base = (source.mode === "all" ? pool : pool.slice(0, limit)).filter(Boolean);
+  return source.mode === "all" ? base : base.slice(0, limit);
 }
 
 function esc(s) {
@@ -409,6 +568,83 @@ app.get("/api/debug", (req, res) =>
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 
+function buildAuthUserPayload(user, isAdmin = false) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    plan: isAdmin ? "admin" : user.plan,
+    role: isAdmin ? "admin" : user.role || "user",
+    created_at: user.created_at,
+  };
+}
+
+async function promoteAdminIfNeeded(database, user) {
+  const isAdmin = user.role === "admin" || isAdminEmail(user.email);
+  if (isAdmin && (user.role !== "admin" || user.plan !== "admin")) {
+    await database.updateUserRole(user.id, "admin");
+    await database.updateUserPlan(user.id, "admin");
+    user.role = "admin";
+    user.plan = "admin";
+  }
+  return isAdmin;
+}
+
+async function issueAuthSession(req, res, user, isAdmin = false) {
+  const database = await getDb();
+  if (req.guestSessionId) {
+    await database.claimGuestLinks(req.guestSessionId, user.id);
+  }
+  const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
+    expiresIn: "30d",
+  });
+  res.cookie("token", token, {
+    httpOnly: true,
+    maxAge: 30 * 24 * 3600 * 1000,
+    sameSite: "lax",
+  });
+  res.json({ user: buildAuthUserPayload(user, isAdmin) });
+}
+
+async function verifyGoogleCredential(credential) {
+  if (!GOOGLE_CLIENT_ID) {
+    throw new Error("GOOGLE_LOGIN_DISABLED");
+  }
+  const response = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`,
+  );
+  if (!response.ok) {
+    throw new Error("INVALID_GOOGLE_TOKEN");
+  }
+  const payload = await response.json();
+  if (payload.aud !== GOOGLE_CLIENT_ID) {
+    throw new Error("INVALID_GOOGLE_AUDIENCE");
+  }
+  if (payload.email_verified !== "true") {
+    throw new Error("GOOGLE_EMAIL_UNVERIFIED");
+  }
+  return payload;
+}
+
+async function verifySupabaseAccessToken(accessToken) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("SUPABASE_LOGIN_DISABLED");
+  }
+  const response = await fetch(
+    `${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/user`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+      },
+    },
+  );
+  if (!response.ok) {
+    throw new Error("INVALID_SUPABASE_TOKEN");
+  }
+  return response.json();
+}
+
 app.post("/api/auth/register", async (req, res) => {
   try {
     const database = await getDb();
@@ -431,24 +667,7 @@ app.post("/api/auth/register", async (req, res) => {
     if (req.guestSessionId) {
       await database.claimGuestLinks(req.guestSessionId, user.id);
     }
-    const effectivePlan = isAdmin ? "admin" : user.plan;
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
-      expiresIn: "30d",
-    });
-    res.cookie("token", token, {
-      httpOnly: true,
-      maxAge: 30 * 24 * 3600 * 1000,
-      sameSite: "lax",
-    });
-    res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        plan: effectivePlan,
-        role: isAdmin ? "admin" : "user",
-      },
-    });
+    return issueAuthSession(req, res, user, isAdmin);
   } catch (e) {
     if (e.message === "EMAIL_EXISTS")
       return res.status(400).json({ error: "Email này đã được đăng ký" });
@@ -479,26 +698,132 @@ app.post("/api/auth/login", async (req, res) => {
     if (req.guestSessionId) {
       await database.claimGuestLinks(req.guestSessionId, user.id);
     }
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
-      expiresIn: "30d",
-    });
-    res.cookie("token", token, {
-      httpOnly: true,
-      maxAge: 30 * 24 * 3600 * 1000,
-      sameSite: "lax",
-    });
-    res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        plan: isAdmin ? "admin" : user.plan,
-        role: isAdmin ? "admin" : user.role || "user",
-      },
-    });
+    return issueAuthSession(req, res, user, isAdmin);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Lỗi server: " + e.message });
+  }
+});
+
+app.post("/api/auth/google", async (req, res) => {
+  try {
+    const { credential } = req.body || {};
+    if (!credential) {
+      return res
+        .status(400)
+        .json({ error: "Thiếu thông tin đăng nhập Google" });
+    }
+    const payload = await verifyGoogleCredential(credential);
+    const email = (payload.email || "").toLowerCase().trim();
+    if (!email) {
+      return res.status(400).json({ error: "Google không trả về email" });
+    }
+
+    const database = await getDb();
+    let user = await database.getUserByEmail(email);
+    const name =
+      (payload.name || payload.given_name || email.split("@")[0] || "").trim() ||
+      null;
+    const isAdmin = isAdminEmail(email);
+
+    if (!user) {
+      const tempPassword = await bcrypt.hash(
+        crypto.randomBytes(32).toString("hex"),
+        10,
+      );
+      user = await database.createUser(
+        email,
+        tempPassword,
+        name,
+        isAdmin ? "admin" : "user",
+      );
+    } else if (!user.name && name) {
+      await database.updateUserName(user.id, name);
+      user.name = name;
+    }
+
+    const effectiveIsAdmin = await promoteAdminIfNeeded(database, user);
+    return issueAuthSession(req, res, user, effectiveIsAdmin || isAdmin);
+  } catch (e) {
+    console.error(e);
+    if (e.message === "GOOGLE_LOGIN_DISABLED") {
+      return res
+        .status(503)
+        .json({ error: "Đăng nhập bằng Google chưa được cấu hình" });
+    }
+    if (
+      e.message === "INVALID_GOOGLE_TOKEN" ||
+      e.message === "INVALID_GOOGLE_AUDIENCE" ||
+      e.message === "GOOGLE_EMAIL_UNVERIFIED"
+    ) {
+      return res.status(401).json({ error: "Google login không hợp lệ" });
+    }
+    res.status(500).json({ error: "Lỗi đăng nhập Google: " + e.message });
+  }
+});
+
+app.post("/api/auth/supabase", async (req, res) => {
+  try {
+    const { access_token: accessToken } = req.body || {};
+    if (!accessToken) {
+      return res
+        .status(400)
+        .json({ error: "Thiếu access token từ Supabase" });
+    }
+
+    const supabaseUser = await verifySupabaseAccessToken(accessToken);
+    const email = String(supabaseUser.email || "").toLowerCase().trim();
+    if (!email) {
+      return res.status(400).json({ error: "Supabase không trả về email" });
+    }
+
+    const database = await getDb();
+    let user = await database.getUserByEmail(email);
+    const metadata = supabaseUser.user_metadata || supabaseUser.userMetadata || {};
+    const name =
+      String(
+        metadata.full_name ||
+          metadata.name ||
+          metadata.username ||
+          supabaseUser.display_name ||
+          email.split("@")[0] ||
+          "",
+      ).trim() || null;
+    const isAdmin = isAdminEmail(email);
+
+    if (!user) {
+      const tempPassword = await bcrypt.hash(
+        crypto.randomBytes(32).toString("hex"),
+        10,
+      );
+      user = await database.createUser(
+        email,
+        tempPassword,
+        name,
+        isAdmin ? "admin" : "user",
+      );
+    } else if (!user.name && name) {
+      await database.updateUserName(user.id, name);
+      user.name = name;
+    }
+
+    if (req.guestSessionId) {
+      await database.claimGuestLinks(req.guestSessionId, user.id);
+    }
+
+    const effectiveIsAdmin = await promoteAdminIfNeeded(database, user);
+    return issueAuthSession(req, res, user, effectiveIsAdmin || isAdmin);
+  } catch (e) {
+    if (e.message === "SUPABASE_LOGIN_DISABLED") {
+      return res
+        .status(503)
+        .json({ error: "Supabase chưa được cấu hình trên máy chủ" });
+    }
+    if (e.message === "INVALID_SUPABASE_TOKEN") {
+      return res.status(401).json({ error: "Đăng nhập Supabase không hợp lệ" });
+    }
+    console.error(e);
+    res.status(500).json({ error: "Lỗi đăng nhập Supabase: " + e.message });
   }
 });
 
@@ -517,6 +842,7 @@ app.get("/api/auth/me", async (req, res) => {
       name: user.name,
       plan: user.plan,
       role: user.role || "user",
+      created_at: user.created_at,
     },
   });
 });
@@ -540,6 +866,83 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
         name: updated.name,
         plan: updated.plan,
         role: updated.role || "user",
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Lỗi server: " + e.message });
+  }
+});
+
+app.get("/api/bio/me", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const existing = await database.getBioProfileByUserId(user.id);
+    const parsedSource = parseBioLinkSource(existing?.link_source);
+    const fallbackSlug = normalizeBioSlug(
+      existing?.slug ||
+        user.name ||
+        user.email?.split("@")[0] ||
+        `user-${user.id}`,
+      `user-${user.id}`,
+    );
+    const profile = existing
+      ? {
+          ...existing,
+          link_source: parsedSource.mode,
+          link_order: parsedSource.order,
+        }
+      : {
+          user_id: user.id,
+          slug: fallbackSlug,
+          title: user.name || "",
+          subtitle: "Link-in-bio page được tạo từ RutGonLink.",
+          avatar: (user.name || "D").charAt(0).toUpperCase(),
+          accent: "#3b82f6",
+          link_count: 5,
+          link_source: "recent",
+          link_order: [],
+          is_published: true,
+        };
+    res.json({ profile });
+  } catch (e) {
+    res.status(500).json({ error: "Lỗi server: " + e.message });
+  }
+});
+
+app.patch("/api/bio/me", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const rawSlug = normalizeBioSlug(req.body?.slug, user.email?.split("@")[0] || `user-${user.id}`);
+    if (!rawSlug)
+      return res.status(400).json({ error: "Slug không hợp lệ" });
+    const taken = await database.getBioProfileBySlug(rawSlug);
+    if (taken && taken.user_id !== user.id)
+      return res.status(400).json({ error: "Slug này đã được dùng" });
+    const linkOrder = normalizeBioLinkOrder(req.body?.link_order);
+    const profile = await database.upsertBioProfile(user.id, {
+      slug: rawSlug,
+      title: String(req.body?.title || "").trim().slice(0, 120),
+      subtitle: String(req.body?.subtitle || "").trim().slice(0, 220),
+      avatar: String(req.body?.avatar || "").trim().slice(0, 220),
+      accent: String(req.body?.accent || "#3b82f6").trim(),
+      link_count: Number(req.body?.link_count || 5),
+      link_source: serializeBioLinkSource(
+        String(req.body?.link_source || "recent").trim(),
+        linkOrder,
+      ),
+      link_order: linkOrder,
+      is_published: req.body?.is_published !== false,
+    });
+    const parsedSource = parseBioLinkSource(profile.link_source);
+    res.json({
+      profile: {
+        ...profile,
+        link_source: parsedSource.mode,
+        link_order: parsedSource.order,
       },
     });
   } catch (e) {
@@ -820,6 +1223,24 @@ app.post("/api/shorten", async (req, res) => {
       }
     }
 
+    const isAffiliateUrl = isAffiliateShortenUrl(url);
+    const confirmAffiliate =
+      req.body?.confirm_affiliate === true ||
+      req.body?.confirmAffiliate === true;
+    if (isAffiliateUrl && !user) {
+      return res.status(401).json({
+        error: "Link affiliate cần đăng nhập hoặc đăng ký để rút gọn",
+        authRequired: true,
+      });
+    }
+    if (isAffiliateUrl && user && !confirmAffiliate) {
+      return res.status(428).json({
+        error: "Link affiliate cần được xác nhận trước khi rút gọn",
+        confirmationRequired: true,
+        affiliateUrl: true,
+      });
+    }
+
     const userId = user?.id || null;
     const plan = user?.plan || "free";
     const planCfg = PLANS[plan] || PLANS.free;
@@ -835,7 +1256,7 @@ app.post("/api/shorten", async (req, res) => {
           });
     }
 
-    if (!planCfg.deeplink && /shopee\.vn|tiktok\.com/i.test(url))
+    if (!isAffiliateUrl && !planCfg.deeplink && /shopee\.vn|tiktok\.com/i.test(url))
       return res
         .status(403)
         .json({
@@ -1137,6 +1558,35 @@ app.get("/_og/:code", async (req, res) => {
   }
 });
 
+app.get("/u/:slug", async (req, res) => {
+  try {
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const slug = normalizeBioSlug(req.params.slug);
+    if (!slug)
+      return res
+        .status(404)
+        .sendFile(path.join(__dirname, "..", "public", "404.html"));
+    const profile = await database.getBioProfileBySlug(slug);
+    if (!profile || profile.is_published === false)
+      return res
+        .status(404)
+        .sendFile(path.join(__dirname, "..", "public", "404.html"));
+    const owner = await database.getUserById(profile.user_id);
+    const links = await resolvePublicBioLinks(database, profile);
+    const canonicalUrl = buildBioShareUrl(publicBaseUrl, slug);
+    res.set({
+      "Cache-Control": "no-cache,no-store,must-revalidate",
+      Pragma: "no-cache",
+      "Content-Type": "text/html;charset=utf-8",
+    });
+    return res.send(buildBioPage(profile, owner, links, canonicalUrl));
+  } catch (e) {
+    console.error(e);
+    return res.status(500).send("Server error");
+  }
+});
+
 function buildAppLinkMetaTags(
   canonicalUrl,
   webFallbackUrl,
@@ -1182,6 +1632,110 @@ function buildAppLinkMetaTags(
     }
   }
   return tags.join("\n");
+}
+
+function buildBioPage(profile, owner, links, canonicalUrl) {
+  const accent = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(profile.accent || "")
+    ? profile.accent
+    : "#3b82f6";
+  const title =
+    profile.title?.trim() ||
+    owner?.name ||
+    owner?.email?.split("@")[0] ||
+    "RutGonLink";
+  const subtitle =
+    profile.subtitle?.trim() || "Link-in-bio page được tạo từ RutGonLink.";
+  const avatar = profile.avatar?.trim() || (owner?.name || "R").charAt(0).toUpperCase();
+  const pageBase = canonicalUrl.replace(/\/u\/[^/]+$/, "");
+  const shortLinks = (links || []).map((l) => {
+    const code = l.alias || l.short_code;
+    return {
+      shortUrl: l.short_url || buildShortUrl(pageBase, code),
+      originalUrl: l.original_url,
+      title: l.og_title || l.original_url,
+      clicks: l.clicks || 0,
+      type: l.link_type || "direct",
+    };
+  });
+  const isImageAvatar = /^https?:\/\//i.test(avatar);
+  const avatarMarkup = isImageAvatar
+    ? `<img class="bio-avatar" src="${esc(avatar)}" alt="${esc(title)}" />`
+    : `<div class="bio-avatar">${esc(avatar)}</div>`;
+  const linksMarkup = shortLinks.length
+    ? shortLinks
+        .map(
+          (l) => `
+            <a class="bio-link" href="${esc(l.shortUrl)}" target="_blank" rel="noreferrer">
+              <div class="bio-link-title">${esc(l.title)}</div>
+              <div class="bio-link-desc">${esc(l.originalUrl)}</div>
+              <div class="bio-link-meta">
+                <span>${esc(l.type)}</span>
+                <span>👁 ${l.clicks.toLocaleString()}</span>
+              </div>
+            </a>`,
+        )
+        .join("")
+    : `<div class="bio-empty">Chưa có link nào để hiển thị.</div>`;
+
+  return `<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${esc(title)} | RutGonLink</title>
+  <meta name="description" content="${esc(subtitle)}" />
+  <meta property="og:title" content="${esc(title)}" />
+  <meta property="og:description" content="${esc(subtitle)}" />
+  <meta property="og:image" content="${esc(`${BASE_URL}/og-default.png`)}" />
+  <meta property="og:url" content="${esc(canonicalUrl)}" />
+  <meta property="og:type" content="profile" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    :root{color-scheme:dark;--bg:#0d1117;--bg2:#161b27;--bg3:#1e2535;--text:#e2e8f0;--text2:#94a3b8;--border:#2a3347;--accent:${accent};--accent2:#8b5cf6}
+    *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:radial-gradient(circle at top, rgba(59,130,246,.22), transparent 35%), linear-gradient(180deg, #0b1020 0%, #090d16 100%);color:var(--text);min-height:100vh}
+    a{text-decoration:none;color:inherit}
+    .wrap{max-width:760px;margin:0 auto;padding:28px 18px 44px}
+    .hero{background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));border:1px solid var(--border);border-radius:28px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.25)}
+    .cover{height:160px;border-radius:22px;background:linear-gradient(135deg, var(--accent), var(--accent2));margin-bottom:-56px}
+    .body{padding:0 4px 10px}
+    .bio-avatar{width:112px;height:112px;border-radius:30px;border:5px solid rgba(13,17,23,.9);margin:0 auto;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:900;color:#fff;overflow:hidden;box-shadow:0 18px 30px rgba(0,0,0,.25);object-fit:cover}
+    h1{font-size:30px;line-height:1.1;text-align:center;margin:16px 0 8px}
+    p.desc{text-align:center;color:var(--text2);margin:0 auto 18px;max-width:560px;line-height:1.6}
+    .meta{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+    .pill{padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text2);font-size:12px}
+    .links{display:grid;gap:12px;margin-top:18px}
+    .bio-link{display:block;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:20px;padding:16px 16px 14px;transition:.18s}
+    .bio-link:hover{transform:translateY(-2px);border-color:var(--accent);background:rgba(255,255,255,.06)}
+    .bio-link-title{font-weight:800;font-size:16px;margin-bottom:4px}
+    .bio-link-desc{font-size:13px;color:var(--text2);line-height:1.4;word-break:break-word}
+    .bio-link-meta{display:flex;justify-content:space-between;gap:10px;margin-top:10px;color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+    .bio-empty{padding:18px;border:1px dashed var(--border);border-radius:18px;text-align:center;color:var(--text2);background:rgba(255,255,255,.03)}
+    .footer{margin-top:18px;text-align:center;font-size:12px;color:var(--text2)}
+    .brand{font-weight:800;color:#fff}
+    @media (max-width:520px){.wrap{padding:14px}.hero{padding:16px;border-radius:24px}.cover{height:124px;margin-bottom:-48px} h1{font-size:24px}.bio-avatar{width:92px;height:92px;font-size:34px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div class="cover"></div>
+      <div class="body">
+        ${avatarMarkup}
+        <h1>${esc(title)}</h1>
+        <p class="desc">${esc(subtitle)}</p>
+        <div class="meta">
+          <span class="pill">${shortLinks.length.toLocaleString()} link</span>
+          <span class="pill">${esc(profile.link_source || "recent")}</span>
+          <span class="pill">RutGonLink Bio</span>
+        </div>
+        <div class="links">${linksMarkup}</div>
+        <div class="footer">Tạo bằng <span class="brand">RutGonLink</span> · ${owner?.email ? esc(owner.email) : "Public profile"}</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
 }
 
 // ─── DIRECT BRIDGE PAGE ───────────────────────────────────────────────────────

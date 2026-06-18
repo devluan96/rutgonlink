@@ -91,6 +91,47 @@ async function init() {
       check(error);
     },
 
+    async getBioProfileByUserId(userId) {
+      const { data } = await sb
+        .from('bio_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+      return data;
+    },
+
+    async getBioProfileBySlug(slug) {
+      if (!slug) return null;
+      const { data } = await sb
+        .from('bio_profiles')
+        .select('*')
+        .eq('slug', slug)
+        .maybeSingle();
+      return data;
+    },
+
+    async upsertBioProfile(userId, profile) {
+      const payload = {
+        user_id: userId,
+        slug: profile.slug,
+        title: profile.title || null,
+        subtitle: profile.subtitle || null,
+        avatar: profile.avatar || null,
+        accent: profile.accent || '#3b82f6',
+        link_count: Number(profile.link_count || 5),
+        link_source: profile.link_source || 'recent',
+        is_published: profile.is_published !== false,
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error } = await sb
+        .from('bio_profiles')
+        .upsert(payload, { onConflict: 'user_id' })
+        .select()
+        .single();
+      check(error, 'bio');
+      return data;
+    },
+
     async getAllUsers() {
       const { data, error } = await sb
         .from('users')

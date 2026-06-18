@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node api/index.js",
     "dev": "node --watch api/index.js",
+    "test": "node scripts/puppeteer-smoke.mjs",
+    "test:e2e": "node scripts/puppeteer-smoke.mjs",
     "build": "node --check api/index.js && node --check api/db.js && node --check server.js && node --check database.js"
   },
   "dependencies": {
@@ -18,5 +20,8 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
     "nanoid": "^3.3.7"
+  },
+  "devDependencies": {
+    "puppeteer": "^25.1.0"
   }
 }

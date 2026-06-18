@@ -1,0 +1,1311 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+    <meta
+      name="description"
+      content="RutGonLink giúp rút gọn link, tạo QR, bio page và theo dõi hiệu quả chiến dịch trong một workspace gọn nhẹ."
+    />
+    <meta name="theme-color" content="#3b82f6" />
+    <title>RutGonLink - Rút gọn link, QR và bio</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+    <link rel="apple-touch-icon" href="/favicon.svg?v=2" />
+    <style>
+      :root {
+        --bg: #eef4ff;
+        --bg-soft: rgba(255, 255, 255, 0.7);
+        --card: rgba(255, 255, 255, 0.82);
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: rgba(99, 102, 241, 0.16);
+        --brand: #4f46e5;
+        --brand-2: #3b82f6;
+        --shadow: 0 24px 60px rgba(76, 96, 190, 0.18);
+      }
+
+      :root[data-theme="dark"] {
+        --bg: #09111f;
+        --bg-soft: rgba(15, 23, 42, 0.78);
+        --card: rgba(15, 23, 42, 0.88);
+        --text: #e5eefc;
+        --muted: #93a8c7;
+        --line: rgba(129, 140, 248, 0.22);
+        --brand: #818cf8;
+        --brand-2: #38bdf8;
+        --shadow: 0 24px 60px rgba(2, 6, 23, 0.48);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont,
+          sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(59, 130, 246, 0.22), transparent 32%),
+          radial-gradient(circle at top right, rgba(129, 140, 248, 0.2), transparent 28%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.92), transparent 40%),
+          var(--bg);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .container {
+        width: min(1180px, calc(100vw - 32px));
+        margin: 0 auto;
+      }
+
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        backdrop-filter: blur(16px);
+        background: rgba(255, 255, 255, 0.72);
+        border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      }
+
+      :root[data-theme="dark"] .site-header {
+        background: rgba(9, 17, 31, 0.72);
+      }
+
+      .site-header .container,
+      .hero-grid,
+      .feature-grid,
+      .section-grid,
+      .footer-grid,
+      .hero-actions,
+      .hero-pills,
+      .landing-auth-shell,
+      .summary-head,
+      .summary-brand,
+      .board-grid,
+      .section-actions {
+        display: flex;
+      }
+
+      .site-header .container {
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        min-height: 88px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .brand-mark {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        box-shadow: 0 10px 30px rgba(79, 70, 229, 0.2);
+      }
+
+      .brand-title {
+        display: block;
+        font-size: 1.05rem;
+        font-weight: 800;
+      }
+
+      .brand-subtitle {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .landing-auth-shell {
+        align-items: center;
+        gap: 12px;
+      }
+
+      .landing-auth-user {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--bg-soft);
+      }
+
+      .landing-auth-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        color: white;
+        background: linear-gradient(135deg, var(--brand-2), var(--brand));
+      }
+
+      .landing-auth-meta {
+        display: grid;
+        gap: 2px;
+      }
+
+      .landing-auth-name {
+        font-size: 0.95rem;
+        font-weight: 700;
+      }
+
+      .landing-auth-status {
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+
+      .theme-toggle,
+      .btn {
+        border: 0;
+        cursor: pointer;
+      }
+
+      .theme-toggle {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: var(--bg-soft);
+        box-shadow: inset 0 0 0 1px var(--line);
+      }
+
+      .theme-toggle svg {
+        width: 22px;
+        height: 22px;
+        stroke: currentColor;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 48px;
+        padding: 0 22px;
+        border-radius: 999px;
+        font-weight: 700;
+        transition:
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          background 0.18s ease;
+      }
+
+      .btn:hover {
+        transform: translateY(-1px);
+      }
+
+      .btn-brand {
+        color: white;
+        background: linear-gradient(135deg, var(--brand-2), var(--brand));
+        box-shadow: 0 16px 38px rgba(79, 70, 229, 0.24);
+      }
+
+      .btn-brand-outline {
+        color: var(--text);
+        background: var(--bg-soft);
+        box-shadow: inset 0 0 0 1px var(--line);
+      }
+
+      .hero {
+        padding: 74px 0 34px;
+      }
+
+      .hero-grid,
+      .section-grid,
+      .footer-grid {
+        gap: 28px;
+      }
+
+      .hero-grid {
+        align-items: center;
+      }
+
+      .hero-copy,
+      .hero-visual,
+      .section-copy,
+      .section-panel {
+        flex: 1 1 0;
+      }
+
+      .hero-kicker,
+      .section-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 18px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: inset 0 0 0 1px var(--line);
+        font-size: 0.92rem;
+        font-weight: 700;
+        color: var(--muted);
+      }
+
+      :root[data-theme="dark"] .hero-kicker,
+      :root[data-theme="dark"] .section-kicker {
+        background: rgba(15, 23, 42, 0.82);
+      }
+
+      .hero-title {
+        margin: 18px 0 14px;
+        font-size: clamp(3.2rem, 7vw, 5.4rem);
+        line-height: 0.92;
+        letter-spacing: -0.06em;
+      }
+
+      .hero-title span:last-child {
+        color: var(--brand);
+      }
+
+      .hero-lead,
+      .section-copy p,
+      .footer-copy p {
+        margin: 0;
+        font-size: 1.08rem;
+        line-height: 1.7;
+        color: var(--muted);
+      }
+
+      .hero-form {
+        margin-top: 28px;
+      }
+
+      .hero-form .input-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.76);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+          0 24px 54px rgba(76, 96, 190, 0.12);
+      }
+
+      :root[data-theme="dark"] .hero-form .input-group {
+        background: rgba(15, 23, 42, 0.82);
+      }
+
+      .hero-form input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        color: var(--text);
+        font-size: 1.02rem;
+        padding: 0 16px;
+        outline: none;
+      }
+
+      #landingShortenResult,
+      .surface-card,
+      .feature-tile,
+      .board-card,
+      .floating-chip,
+      .section-panel,
+      .footer-shell {
+        border: 1px solid var(--line);
+        background: var(--card);
+        backdrop-filter: blur(18px);
+        box-shadow: var(--shadow);
+      }
+
+      #landingShortenResult {
+        margin-top: 16px;
+        padding: 18px 20px;
+        border-radius: 22px;
+      }
+
+      .hero-actions,
+      .hero-pills,
+      .section-actions {
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .hero-actions {
+        margin-top: 20px;
+      }
+
+      .tiny-note {
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      .hero-pills {
+        margin-top: 18px;
+      }
+
+      .hero-pill,
+      .footer-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 0 16px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.74);
+        box-shadow: inset 0 0 0 1px var(--line);
+        color: var(--muted);
+        font-weight: 700;
+      }
+
+      :root[data-theme="dark"] .hero-pill,
+      :root[data-theme="dark"] .footer-badge {
+        background: rgba(15, 23, 42, 0.8);
+      }
+
+      .visual-shell {
+        position: relative;
+        padding: 32px;
+        border-radius: 34px;
+        background:
+          linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(129, 140, 248, 0.14)),
+          rgba(255, 255, 255, 0.5);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.44);
+      }
+
+      .visual-stage {
+        position: relative;
+        transform-style: preserve-3d;
+        transition: transform 0.28s ease;
+      }
+
+      .visual-orb {
+        position: absolute;
+        border-radius: 999px;
+        filter: blur(26px);
+        opacity: 0.54;
+      }
+
+      .orb-a {
+        inset: 12% auto auto 12%;
+        width: 120px;
+        height: 120px;
+        background: rgba(59, 130, 246, 0.35);
+      }
+
+      .orb-b {
+        inset: auto 6% 18% auto;
+        width: 150px;
+        height: 150px;
+        background: rgba(129, 140, 248, 0.3);
+      }
+
+      .orb-c {
+        inset: 24% 16% auto auto;
+        width: 100px;
+        height: 100px;
+        background: rgba(14, 165, 233, 0.18);
+      }
+
+      .board-card,
+      .feature-tile,
+      .section-panel,
+      .footer-shell {
+        border-radius: 28px;
+      }
+
+      .board-card {
+        padding: 22px;
+      }
+
+      .summary-head {
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .summary-brand {
+        align-items: center;
+        gap: 14px;
+      }
+
+      .summary-mark,
+      .chip-icon,
+      .tile-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        color: white;
+        background: linear-gradient(135deg, var(--brand-2), var(--brand));
+        font-size: 1.25rem;
+        font-weight: 800;
+      }
+
+      .summary-text {
+        display: grid;
+        gap: 4px;
+      }
+
+      .summary-text strong,
+      .tile-title,
+      .panel-title,
+      .footer-brand-copy strong {
+        font-size: 1rem;
+        font-weight: 800;
+      }
+
+      .summary-text small,
+      .summary-metric,
+      .panel-copy,
+      .tile-copy {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .summary-metric {
+        font-weight: 700;
+      }
+
+      .board-grid {
+        display: grid;
+        gap: 16px;
+        margin-top: 18px;
+        grid-template-columns: 1.2fr 0.95fr;
+      }
+
+      .board-card--chart {
+        min-height: 260px;
+      }
+
+      .chart-area {
+        position: relative;
+        height: 190px;
+        overflow: hidden;
+        border-radius: 24px;
+        background:
+          linear-gradient(180deg, rgba(99, 102, 241, 0.14), transparent 35%),
+          rgba(79, 70, 229, 0.08);
+      }
+
+      .chart-area svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .floating-chip {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 18px;
+        border-radius: 20px;
+      }
+
+      .chip-qr {
+        top: 14px;
+        left: -12px;
+      }
+
+      .chip-bio {
+        right: -8px;
+        bottom: 18px;
+      }
+
+      .feature-strip {
+        padding: 6px 0 24px;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .feature-tile {
+        padding: 24px;
+      }
+
+      .tile-icon {
+        margin-bottom: 18px;
+      }
+
+      .tile-copy {
+        margin-top: 8px;
+        line-height: 1.7;
+      }
+
+      .section {
+        padding: 28px 0;
+      }
+
+      .section-grid {
+        align-items: stretch;
+      }
+
+      .section-panel {
+        padding: 26px;
+      }
+
+      .panel-kicker {
+        display: inline-block;
+        padding: 7px 12px;
+        border-radius: 999px;
+        color: var(--brand);
+        background: rgba(79, 70, 229, 0.12);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .panel-title {
+        margin: 16px 0 10px;
+      }
+
+      .panel-copy {
+        line-height: 1.7;
+      }
+
+      .surface-card {
+        margin-top: 20px;
+        padding: 22px;
+        border-radius: 24px;
+      }
+
+      .surface-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .surface-row input {
+        flex: 1;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.64);
+        color: var(--text);
+      }
+
+      :root[data-theme="dark"] .surface-row input {
+        background: rgba(9, 17, 31, 0.82);
+      }
+
+      .surface-list {
+        display: grid;
+        gap: 14px;
+      }
+
+      .surface-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.62);
+        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
+      }
+
+      :root[data-theme="dark"] .surface-item {
+        background: rgba(9, 17, 31, 0.8);
+      }
+
+      .surface-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 0 12px;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.12);
+        color: var(--brand);
+        font-size: 0.82rem;
+        font-weight: 800;
+      }
+
+      .icon-strip {
+        padding: 10px 0 32px;
+      }
+
+      .icon-strip-grid,
+      .footer-links-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .icon-strip-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .footer {
+        padding: 28px 0 42px;
+      }
+
+      .footer-shell {
+        padding: 30px;
+      }
+
+      .footer-grid {
+        align-items: start;
+      }
+
+      .footer-copy {
+        flex: 1.2 1 0;
+      }
+
+      .footer-brand-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+
+      .footer-brand-mark {
+        width: 40px;
+        height: 40px;
+      }
+
+      .footer-links {
+        flex: 1;
+        display: grid;
+        gap: 16px;
+      }
+
+      .footer-links strong {
+        font-size: 0.92rem;
+      }
+
+      .footer-links-list a {
+        color: var(--muted);
+      }
+
+      .footer-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-top: 26px;
+        padding-top: 18px;
+        border-top: 1px solid rgba(148, 163, 184, 0.14);
+        color: var(--muted);
+      }
+
+      @media (max-width: 980px) {
+        .hero-grid,
+        .section-grid,
+        .footer-grid {
+          flex-direction: column;
+        }
+
+        .feature-grid,
+        .icon-strip-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .board-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .chip-qr,
+        .chip-bio {
+          position: static;
+          margin-top: 12px;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .site-header .container {
+          min-height: 76px;
+        }
+
+        .landing-auth-shell {
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .hero {
+          padding-top: 40px;
+        }
+
+        .hero-form .input-group {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .hero-form input,
+        .hero-form .btn-brand {
+          width: 100%;
+        }
+
+        .summary-head,
+        .surface-row,
+        .footer-bottom {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container">
+        <a href="/" class="brand">
+          <img
+            src="/favicon.svg?v=2"
+            alt="RutGonLink"
+            class="brand-mark"
+            width="44"
+            height="44"
+          />
+          <div>
+            <span class="brand-title">RutGonLink</span>
+            <span class="brand-subtitle">Rút gọn link, QR và bio</span>
+          </div>
+        </a>
+        <div class="landing-auth-shell">
+          <button
+            type="button"
+            class="theme-toggle"
+            id="landingThemeToggle"
+            aria-label="Chuyển sang chế độ tối"
+            title="Chuyển sang chế độ tối"
+          >
+            <svg id="landingThemeIcon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2"></path>
+              <path d="M12 20v2"></path>
+              <path d="M4.93 4.93l1.41 1.41"></path>
+              <path d="M17.66 17.66l1.41 1.41"></path>
+              <path d="M2 12h2"></path>
+              <path d="M20 12h2"></path>
+              <path d="M4.93 19.07l1.41-1.41"></path>
+              <path d="M17.66 6.34l1.41-1.41"></path>
+            </svg>
+          </button>
+          <div class="landing-auth-shell" id="landingAuthGuest">
+            <a href="/login" class="btn btn-brand-outline" id="landingLoginBtn">
+              Đăng nhập
+            </a>
+            <a href="/register" class="btn btn-brand" id="landingRegisterBtn">
+              Bắt đầu
+            </a>
+          </div>
+          <div class="landing-auth-shell" id="landingAuthUser" hidden>
+            <div class="landing-auth-user">
+              <div class="landing-auth-avatar" id="landingAuthAvatar">U</div>
+              <div class="landing-auth-meta">
+                <div class="landing-auth-name" id="landingAuthName">User</div>
+                <div class="landing-auth-status">Đã đăng nhập</div>
+              </div>
+            </div>
+            <a
+              href="/dashboard"
+              class="btn btn-brand-outline"
+              id="landingDashboardBtn"
+            >
+              Bảng điều khiển
+            </a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" id="hero">
+        <div class="container hero-grid">
+          <div class="hero-copy">
+            <span class="hero-kicker">Đăng nhập nhanh, tiếp tục đúng chỗ</span>
+            <h1 class="hero-title">
+              Trực quan, An toàn
+              <span>&amp; Năng động</span><br />
+              <span id="typed-word">Mã QR.</span>
+            </h1>
+            <p class="hero-lead">
+              Tăng cường chiến dịch bằng cách tạo liên kết động, mã QR và trang
+              tiểu sử trong một flow gọn, rõ và dễ cộng tác.
+            </p>
+
+            <form class="hero-form" action="/api/shorten" method="post">
+              <div class="input-group">
+                <input
+                  type="text"
+                  class="form-control"
+                  placeholder="Dán URL dài"
+                  name="url"
+                  aria-label="Dán URL dài"
+                />
+                <button type="submit" class="btn btn-brand">Rút gọn</button>
+              </div>
+            </form>
+
+            <div id="landingShortenResult" hidden>
+              <div
+                style="
+                  display: flex;
+                  gap: 12px;
+                  align-items: center;
+                  justify-content: space-between;
+                  flex-wrap: wrap;
+                "
+              >
+                <div style="min-width: 0">
+                  <div
+                    style="
+                      font-size: 0.72rem;
+                      font-weight: 800;
+                      letter-spacing: 0.08em;
+                      text-transform: uppercase;
+                      color: var(--brand);
+                      margin-bottom: 4px;
+                    "
+                  >
+                    Link ngắn đã tạo
+                  </div>
+                  <a
+                    id="landingShortenUrl"
+                    href="#"
+                    target="_blank"
+                    rel="noreferrer"
+                    style="
+                      display: inline-block;
+                      font-weight: 800;
+                      color: var(--text);
+                      word-break: break-all;
+                    "
+                  ></a>
+                </div>
+                <button
+                  id="landingShortenCopy"
+                  type="button"
+                  class="btn btn-brand-outline"
+                >
+                  Sao chép
+                </button>
+              </div>
+              <div
+                id="landingShortenStatus"
+                style="margin-top: 10px; color: var(--muted); font-size: 0.92rem"
+              ></div>
+              <div
+                id="landingShortenGate"
+                hidden
+                style="
+                  margin-top: 14px;
+                  display: flex;
+                  gap: 10px;
+                  flex-wrap: wrap;
+                "
+              >
+                <button
+                  id="landingShortenConfirm"
+                  type="button"
+                  class="btn btn-brand"
+                  hidden
+                >
+                  Tôi hiểu, tiếp tục
+                </button>
+                <a
+                  id="landingShortenLogin"
+                  class="btn btn-brand-outline"
+                  href="/login"
+                >
+                  Đăng nhập
+                </a>
+                <a
+                  id="landingShortenRegister"
+                  class="btn btn-brand"
+                  href="/register"
+                >
+                  Đăng ký
+                </a>
+              </div>
+            </div>
+
+            <div class="hero-actions">
+              <a href="/register" class="btn btn-brand-outline">
+                Tạo tài khoản
+              </a>
+              <span class="tiny-note">Không cần nhiều chữ để vẫn đã mắt.</span>
+            </div>
+
+            <div class="hero-pills">
+              <span class="hero-pill">Link</span>
+              <span class="hero-pill">QR</span>
+              <span class="hero-pill">Bio</span>
+              <span class="hero-pill">Tracking</span>
+            </div>
+          </div>
+
+          <div class="hero-visual">
+            <div class="visual-shell" id="visual-shell">
+              <div class="visual-orb orb-a"></div>
+              <div class="visual-orb orb-b"></div>
+              <div class="visual-orb orb-c"></div>
+              <div class="visual-stage" id="visual-stage">
+                <div class="floating-chip chip-qr">
+                  <span class="chip-icon">Q</span>
+                  <span>Mã QR</span>
+                </div>
+                <div class="floating-chip chip-bio">
+                  <span class="chip-icon">B</span>
+                  <span>Trang tiểu sử</span>
+                </div>
+                <article class="board-card">
+                  <div class="summary-head">
+                    <div class="summary-brand">
+                      <span class="summary-mark">⛓</span>
+                      <span class="summary-text">
+                        <strong>RutGonLink</strong>
+                        <small>
+                          https://boclink.click/<span id="hero-url-suffix">short</span>
+                        </small>
+                      </span>
+                    </div>
+                    <span class="summary-metric">1.57M lượt nhấp</span>
+                  </div>
+                  <div class="board-grid">
+                    <div class="board-card board-card--chart">
+                      <div class="panel-title">Tăng trưởng click</div>
+                      <div class="panel-copy">Từ landing tới app shell trong một nhịp thao tác.</div>
+                      <div class="chart-area" aria-hidden="true">
+                        <svg viewBox="0 0 420 220" preserveAspectRatio="none">
+                          <defs>
+                            <linearGradient id="chart-fill" x1="0" x2="0" y1="0" y2="1">
+                              <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.95"></stop>
+                              <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.15"></stop>
+                            </linearGradient>
+                          </defs>
+                          <path
+                            d="M0 220 L0 180 L40 166 L76 160 L110 144 L140 152 L178 118 L212 132 L248 98 L280 110 L318 70 L350 84 L388 24 L420 16 L420 220 Z"
+                            fill="url(#chart-fill)"
+                          ></path>
+                          <path
+                            d="M0 180 L40 166 L76 160 L110 144 L140 152 L178 118 L212 132 L248 98 L280 110 L318 70 L350 84 L388 24 L420 16"
+                            fill="none"
+                            stroke="#3b82f6"
+                            stroke-width="8"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          ></path>
+                        </svg>
+                      </div>
+                    </div>
+                    <div class="board-card">
+                      <div class="panel-title">QR + Bio card</div>
+                      <div class="panel-copy">
+                        Cùng một workspace để gom link chính, QR động và flow affiliate xác nhận.
+                      </div>
+                      <div class="surface-card">
+                        <div class="surface-item">
+                          <span>Smart QR</span>
+                          <span class="surface-badge">Live</span>
+                        </div>
+                        <div class="surface-item">
+                          <span>Bio page</span>
+                          <span class="surface-badge">Public</span>
+                        </div>
+                        <div class="surface-item">
+                          <span>Affiliate gate</span>
+                          <span class="surface-badge">Safe</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-strip">
+        <div class="container feature-grid">
+          <article class="feature-tile">
+            <div class="tile-icon">⚡</div>
+            <div class="tile-title">Tạo tài khoản nhanh</div>
+            <div class="tile-copy">Đi từ landing sang dashboard mà không mất ngữ cảnh.</div>
+          </article>
+          <article class="feature-tile">
+            <div class="tile-icon">∞</div>
+            <div class="tile-title">Link, QR và bio</div>
+            <div class="tile-copy">Một flow, một session, một nơi quản lý.</div>
+          </article>
+          <article class="feature-tile">
+            <div class="tile-icon">G</div>
+            <div class="tile-title">Google / Gmail</div>
+            <div class="tile-copy">Đăng nhập nhanh để tiếp tục đúng route sau auth.</div>
+          </article>
+          <article class="feature-tile">
+            <div class="tile-icon">A</div>
+            <div class="tile-title">Affiliate an toàn</div>
+            <div class="tile-copy">Link aff cần đăng nhập và xác nhận rõ ràng trước khi tạo.</div>
+          </article>
+          <article class="feature-tile">
+            <div class="tile-icon">T</div>
+            <div class="tile-title">Tab teamwork</div>
+            <div class="tile-copy">Owner, editor và analyst nhìn cùng một workspace.</div>
+          </article>
+          <article class="feature-tile">
+            <div class="tile-icon">D</div>
+            <div class="tile-title">Dashboard gọn</div>
+            <div class="tile-copy">Từ tạo link tới đọc stats đều vào cùng một app shell.</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section boclink-section" id="boclink-showcase">
+        <div class="container section-grid">
+          <div class="section-copy">
+            <span class="section-kicker">Boclink flow</span>
+            <h2 class="hero-title" style="font-size: clamp(2.4rem, 5vw, 3.7rem)">
+              Từ link dài sang
+              <span>workspace rõ ràng</span>
+            </h2>
+            <p>
+              Domain `boclink.click` có thể đi cùng link ngắn, bio page và xác nhận
+              affiliate trong một nhịp trải nghiệm liền mạch.
+            </p>
+          </div>
+          <div class="section-panel">
+            <span class="panel-kicker">Demo domain</span>
+            <div class="panel-title">https://boclink.click/<span id="boclink-url-suffix">profile</span></div>
+            <div class="panel-copy">
+              Gọn, nhớ được và hợp để dùng làm domain public cho link, QR và landing.
+            </div>
+            <div class="surface-card">
+              <div class="surface-item">
+                <span>Public route</span>
+                <strong>/u/creator</strong>
+              </div>
+              <div class="surface-item">
+                <span>Short link</span>
+                <strong>/summer-sale</strong>
+              </div>
+              <div class="surface-item">
+                <span>Team hub</span>
+                <strong>/team</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section icon-strip">
+        <div class="container icon-strip-grid">
+          <div class="section-panel">
+            <span class="panel-kicker">Rút gọn</span>
+            <div class="panel-title">Dán link và tạo ngay</div>
+            <div class="panel-copy">
+              Link thường đi một bước, link affiliate đi theo flow đăng nhập và xác nhận.
+            </div>
+          </div>
+          <div class="section-panel">
+            <span class="panel-kicker">QR</span>
+            <div class="panel-title">Theo dõi click theo chiến dịch</div>
+            <div class="panel-copy">
+              Giữ visual card cho mobile nhưng tách logic sang JS riêng để dễ bảo trì.
+            </div>
+          </div>
+          <div class="section-panel">
+            <span class="panel-kicker">Bio</span>
+            <div class="panel-title">Trang đích gọn cho social</div>
+            <div class="panel-copy">
+              Thêm owner/editor/analyst vào cùng một luồng làm việc khi cần.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section insight-section" id="resources">
+        <div class="container section-grid">
+          <div class="section-copy">
+            <span class="section-kicker">Insight</span>
+            <h2 class="hero-title" style="font-size: clamp(2.2rem, 4vw, 3.5rem)">
+              Preview nhanh
+              <span>trước khi publish</span>
+            </h2>
+            <p>
+              Dùng ô preview này như một nhịp kiểm tra route trước khi đưa link vào
+              bio hoặc chiến dịch.
+            </p>
+          </div>
+          <div class="section-panel">
+            <div class="surface-row">
+              <input
+                id="insight-url-input"
+                type="text"
+                value="https://boclink.click/page"
+                aria-label="Insight URL preview"
+              />
+              <button class="btn btn-brand" type="button">Kiểm tra</button>
+            </div>
+            <div class="surface-list">
+              <div class="surface-item">
+                <span>Auth redirect</span>
+                <span class="surface-badge">Giữ next</span>
+              </div>
+              <div class="surface-item">
+                <span>Affiliate confirm</span>
+                <span class="surface-badge">2 bước</span>
+              </div>
+              <div class="surface-item">
+                <span>Dashboard</span>
+                <span class="surface-badge">/dashboard</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section apps-section" id="apps-section">
+        <div class="container section-grid">
+          <div class="section-copy">
+            <span class="section-kicker">Tích hợp</span>
+            <h2 class="hero-title" style="font-size: clamp(2.2rem, 4vw, 3.5rem)">
+              Đi cùng
+              <span>automation</span>
+            </h2>
+            <p>
+              API, webhook và workflow tab trong app shell đang đi cùng một hướng:
+              giảm trùng logic và mở đường cho team feature thật.
+            </p>
+          </div>
+          <div class="section-panel">
+            <div class="surface-list">
+              <div class="surface-item">
+                <span>Webhook</span>
+                <span class="surface-badge">Realtime</span>
+              </div>
+              <div class="surface-item">
+                <span>Developer API</span>
+                <span class="surface-badge">Docs</span>
+              </div>
+              <div class="surface-item">
+                <span>Workspace route</span>
+                <span class="surface-badge">Shared</span>
+              </div>
+            </div>
+            <div class="section-actions" style="margin-top: 18px">
+              <a href="/integrations" class="btn btn-brand-outline">
+                Xem tab tích hợp
+              </a>
+              <a href="/team" class="btn btn-brand">Xem teamwork</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section team-section" id="team-section">
+        <div class="container section-grid">
+          <div class="section-copy">
+            <span class="section-kicker">Team</span>
+            <h2 class="hero-title" style="font-size: clamp(2.2rem, 4vw, 3.5rem)">
+              Workspace cho
+              <span>nhóm nhỏ</span>
+            </h2>
+            <p>
+              Bắt đầu từ một tab teamwork nhẹ để điều phối owner, editor, analyst,
+              rồi mới tiến tới backend invite/permission đầy đủ.
+            </p>
+          </div>
+          <div class="section-panel">
+            <div class="surface-list">
+              <div class="surface-item">
+                <span>Owner</span>
+                <span class="surface-badge">Rule + domain</span>
+              </div>
+              <div class="surface-item">
+                <span>Editor</span>
+                <span class="surface-badge">Link + QR + bio</span>
+              </div>
+              <div class="surface-item">
+                <span>Analyst</span>
+                <span class="surface-badge">Stats + phản hồi</span>
+              </div>
+            </div>
+            <div class="section-actions" style="margin-top: 18px">
+              <a href="/team" class="btn btn-brand">Mở tab teamwork</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer" id="footer">
+      <div class="container">
+        <div class="footer-shell">
+          <div class="footer-grid">
+            <div class="footer-copy">
+              <div class="footer-brand-row">
+                <img
+                  src="/favicon.svg?v=2"
+                  alt="RutGonLink"
+                  class="footer-brand-mark"
+                  width="40"
+                  height="40"
+                />
+                <div class="footer-brand-copy">
+                  <strong>RutGonLink</strong>
+                  <p>Rút gọn link, QR, bio và tracking.</p>
+                </div>
+              </div>
+              <p>
+                Một nền tảng gọn nhẹ để tạo link, QR, trang tiểu sử và điều phối
+                chiến dịch trong cùng một workspace.
+              </p>
+              <div class="hero-pills" style="margin-top: 18px">
+                <span class="footer-badge">Link</span>
+                <span class="footer-badge">QR</span>
+                <span class="footer-badge">Bio</span>
+              </div>
+            </div>
+            <div class="footer-links">
+              <strong>Giải pháp</strong>
+              <div class="footer-links-list">
+                <a href="#boclink-showcase">Rút gọn link</a>
+                <a href="#resources">Preview route</a>
+                <a href="#team-section">Làm việc nhóm</a>
+                <a href="/register">Bắt đầu</a>
+              </div>
+            </div>
+            <div class="footer-links">
+              <strong>Tài nguyên</strong>
+              <div class="footer-links-list">
+                <a href="/login">Đăng nhập</a>
+                <a href="#apps-section">Tích hợp</a>
+                <a href="#team-section">Cộng tác</a>
+                <a href="#footer">Liên hệ</a>
+              </div>
+            </div>
+          </div>
+          <div class="footer-bottom">
+            <small>© 2026 RutGonLink. boclink.click workspace.</small>
+            <div class="section-actions">
+              <a href="/">Landing</a>
+              <a href="/">Trang chủ</a>
+              <a href="#hero">Lên đầu trang</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="/shared-client.js"></script>
+    <script src="/landing.js"></script>
+  </body>
+</html>

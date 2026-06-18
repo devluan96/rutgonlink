@@ -2,6 +2,7 @@ const express = require('express');
 const path    = require('path');
 const { nanoid } = require('nanoid');
 const { init: initDb } = require('./database');
+const { isAffiliateShortenUrl } = require('./affiliate');
 
 const app      = express();
 const PORT     = process.env.PORT || 3000;
@@ -9,7 +10,6 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
 
 // DB handle (populated after initDb resolves)
 let db;
@@ -101,6 +101,14 @@ app.post('/api/shorten', async (req, res) => {
       return res.status(400).json({ error: 'URL không hợp lệ' });
     }
 
+    if (isAffiliateShortenUrl(url) && req.body?.confirm_affiliate !== true && req.body?.confirmAffiliate !== true) {
+      return res.status(428).json({
+        error: 'Link affiliate cần được xác nhận trước khi rút gọn',
+        confirmationRequired: true,
+        affiliateUrl: true,
+      });
+    }
+
     if (alias) {
       alias = alias.trim().replace(/[^a-zA-Z0-9_-]/g, '');
       if (alias.length < 2) {
@@ -158,6 +166,27 @@ app.get('/api/stats', (req, res) => {
     res.status(500).json({ error: 'Lỗi server' });
   }
 });
+
+// ─── Auth pages ─────────────────────────────────────────────────────────────
+
+function serveLanding(_req, res) {
+  res.sendFile(path.join(__dirname, 'public', 'landing.html'));
+}
+
+app.get('/', serveLanding);
+app.get(['/landing', '/landing/'], (_req, res) => res.redirect(302, '/'));
+app.get('/favicon.ico', (_req, res) => {
+  res.type('image/svg+xml');
+  res.sendFile(path.join(__dirname, 'public', 'favicon.svg'));
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+function serveAppShell(_req, res) {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+}
+
+app.get('/user/*', serveAppShell);
 
 // ─── Redirect ────────────────────────────────────────────────────────────────
 
