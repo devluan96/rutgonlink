@@ -42,6 +42,15 @@ const GUEST_SESSION_COOKIE = "guest_session";
 const GUEST_SESSION_MAX_AGE = 30 * 24 * 3600 * 1000;
 const REDIRECT_LOG_DIR = path.join(__dirname, "..", "logs");
 const REDIRECT_LOG_FILE = path.join(REDIRECT_LOG_DIR, "redirect.log");
+const ANALYTICS_TIME_ZONE = (process.env.APP_TIME_ZONE || "Asia/Ho_Chi_Minh").trim();
+const regionNamesVi =
+  typeof Intl.DisplayNames === "function"
+    ? new Intl.DisplayNames(["vi"], { type: "region" })
+    : null;
+const regionNamesEn =
+  typeof Intl.DisplayNames === "function"
+    ? new Intl.DisplayNames(["en"], { type: "region" })
+    : null;
 let redirectLogDirReady = null;
 let redirectLogWriteQueue = Promise.resolve();
 
@@ -286,7 +295,15 @@ async function getPublicBaseUrl() {
 }
 
 function buildShortUrl(baseUrl, code) {
-  return `${baseUrl}/${code}`;
+  return `${String(baseUrl || "").replace(/\/+$/, "")}/${code}`;
+}
+
+function buildLinkShortUrl(link, fallbackBaseUrl) {
+  const domainHostname = normalizeDomainHost(link?.domain_hostname);
+  if (domainHostname) {
+    return buildShortUrl(`https://${domainHostname}`, link.alias || link.short_code);
+  }
+  return buildShortUrl(fallbackBaseUrl, link.alias || link.short_code);
 }
 
 function normalizeDomainHost(input) {
@@ -655,12 +672,209 @@ function detectPlatformDeep(originalUrl, platform) {
   };
 }
 
+function normalizeAnalyticsText(input, maxLength = 80) {
+  const value = String(input || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (!value) return null;
+  return value.slice(0, maxLength);
+}
+
+function normalizeCountryCode(input) {
+  const value = String(input || "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(value)) return null;
+  if (value === "XX" || value === "T1") return null;
+  return value;
+}
+
+function getCountryNameFromCode(code) {
+  if (!code) return null;
+  return (
+    regionNamesVi?.of(code) ||
+    regionNamesEn?.of(code) ||
+    code
+  );
+}
+
+function getCountryEnglishNameFromCode(code) {
+  if (!code) return null;
+  return regionNamesEn?.of(code) || code;
+}
+
+function extractClickGeo(req) {
+  const countryCode = normalizeCountryCode(
+    req.headers["cf-ipcountry"] ||
+      req.headers["x-vercel-ip-country"] ||
+      req.headers["x-country-code"] ||
+      req.headers["x-country"] ||
+      "",
+  );
+  const countryName =
+    normalizeAnalyticsText(
+      req.headers["x-vercel-ip-country-name"] ||
+        req.headers["x-country-name"] ||
+        req.headers["cf-country-name"] ||
+        "",
+      120,
+    ) ||
+    getCountryNameFromCode(countryCode);
+  const city = normalizeAnalyticsText(
+    req.headers["cf-ipcity"] ||
+      req.headers["x-vercel-ip-city"] ||
+      req.headers["x-city"] ||
+      "",
+    120,
+  );
+  return {
+    country_code: countryCode,
+    country_name: countryName,
+    city,
+  };
+}
+
+function getAnalyticsDayKey(input) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: ANALYTICS_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(input));
+  } catch {
+    return String(input || "").slice(0, 10);
+  }
+}
+
+function getLinkAnalyticsPlatform(link) {
+  if ((link?.link_type || "").trim() === "video") {
+    return {
+      key: "video",
+      label: "Video Overlay",
+      color: "#f59e0b",
+    };
+  }
+  const detected = detectPlatformDeep(link?.original_url || "", "desktop");
+  if (detected.platform_name === "shopee") {
+    return {
+      key: "shopee",
+      label: "Shopee",
+      color: "#ee4d2d",
+    };
+  }
+  if (detected.platform_name === "tiktok") {
+    return {
+      key: "tiktok",
+      label: "TikTok",
+      color: "#69c9d0",
+    };
+  }
+  return {
+    key: "generic",
+    label: "Khác",
+    color: "#6366f1",
+  };
+}
+
+function buildStatsAnalytics(clickRows = []) {
+  const timelineMap = new Map();
+  const countryMap = new Map();
+  const platformMap = new Map();
+  let trackedGeoClicks = 0;
+
+  for (const row of clickRows) {
+    const clickedAt = row?.clicked_at;
+    if (clickedAt) {
+      const dayKey = getAnalyticsDayKey(clickedAt);
+      timelineMap.set(dayKey, (timelineMap.get(dayKey) || 0) + 1);
+    }
+
+    const countryCode = normalizeCountryCode(row?.country_code);
+    const countryName =
+      normalizeAnalyticsText(row?.country_name, 120) ||
+      getCountryNameFromCode(countryCode) ||
+      "Không rõ";
+    const cityName = normalizeAnalyticsText(row?.city, 120) || "Không rõ";
+    if (countryCode) {
+      trackedGeoClicks += 1;
+      if (!countryMap.has(countryCode)) {
+        countryMap.set(countryCode, {
+          country_code: countryCode,
+          country_name: countryName,
+          clicks: 0,
+          cities: new Map(),
+        });
+      }
+      const countryEntry = countryMap.get(countryCode);
+      countryEntry.clicks += 1;
+      countryEntry.cities.set(cityName, (countryEntry.cities.get(cityName) || 0) + 1);
+    }
+
+    const platform = getLinkAnalyticsPlatform(row?.link || row);
+    if (!platformMap.has(platform.key)) {
+      platformMap.set(platform.key, {
+        key: platform.key,
+        label: platform.label,
+        color: platform.color,
+        clicks: 0,
+      });
+    }
+    platformMap.get(platform.key).clicks += 1;
+  }
+
+  const totalClicks = clickRows.length;
+  const timeline = [...timelineMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, clicks]) => ({ date, clicks }));
+  const topCountries = [...countryMap.values()]
+    .sort((a, b) => b.clicks - a.clicks)
+    .map((country) => {
+      const topCity =
+        [...country.cities.entries()].sort((a, b) => b[1] - a[1])[0] || [];
+      return {
+        country_code: country.country_code,
+        country_name: country.country_name,
+        country_name_en: getCountryEnglishNameFromCode(country.country_code),
+        clicks: country.clicks,
+        city: topCity[0] || "Không rõ",
+        city_clicks: topCity[1] || 0,
+      };
+    });
+  const platformDistribution = [...platformMap.values()]
+    .sort((a, b) => b.clicks - a.clicks)
+    .map((platform) => ({
+      ...platform,
+      percent: totalClicks
+        ? Math.round((platform.clicks / totalClicks) * 1000) / 10
+        : 0,
+    }));
+
+  return {
+    total_clicks: totalClicks,
+    timeline,
+    geo: {
+      tracked_clicks: trackedGeoClicks,
+      unknown_clicks: Math.max(totalClicks - trackedGeoClicks, 0),
+      countries: topCountries.map((country) => ({
+        country_code: country.country_code,
+        country_name: country.country_name,
+        country_name_en: country.country_name_en,
+        clicks: country.clicks,
+      })),
+      top_countries: topCountries.slice(0, 8),
+    },
+    platforms: {
+      distribution: platformDistribution,
+      top_platforms: platformDistribution.slice(0, 8),
+    },
+  };
+}
+
 app.get("/og-default.png", (_, res) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
     <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#1e2535"/><stop offset="100%" style="stop-color:#0d1117"/></linearGradient></defs>
     <rect width="1200" height="630" fill="url(#g)"/>
     <rect x="80" y="200" width="1040" height="8" rx="4" fill="#2a3347"/>
-    <text x="600" y="280" font-family="Arial,sans-serif" font-size="72" font-weight="bold" fill="#3b82f6" text-anchor="middle">🔗 RutGonLink</text>
+    <text x="600" y="280" font-family="Arial,sans-serif" font-size="72" font-weight="bold" fill="#3b82f6" text-anchor="middle">🔗 BocLink</text>
     <text x="600" y="370" font-family="Arial,sans-serif" font-size="32" fill="#64748b" text-anchor="middle">Rút gọn link thông minh</text>
     <text x="600" y="430" font-family="Arial,sans-serif" font-size="24" fill="#334155" text-anchor="middle">Deeplink Shopee &amp; TikTok · Custom Preview</text>
   </svg>`;
@@ -1014,7 +1228,7 @@ app.get("/api/bio/me", requireAuth, async (req, res) => {
           user_id: user.id,
           slug: fallbackSlug,
           title: user.name || "",
-          subtitle: "Link-in-bio page được tạo từ RutGonLink.",
+          subtitle: "Link-in-bio page được tạo từ BocLink.click.",
           avatar: (user.name || "D").charAt(0).toUpperCase(),
           accent: "#3b82f6",
           link_count: 5,
@@ -1192,7 +1406,7 @@ app.get("/api/admin/links", requireAdmin, async (req, res) => {
     const publicBaseUrl = await getPublicBaseUrl();
     const links = (await database.getAllLinks()).map((l) => ({
       ...l,
-      short_url: buildShortUrl(publicBaseUrl, l.alias || l.short_code),
+      short_url: buildLinkShortUrl(l, publicBaseUrl),
     }));
     res.json({ links });
   } catch (e) {
@@ -1217,6 +1431,22 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
     const database = await getDb();
     const totals = await database.getAdminTotals();
     res.json(totals);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/domains", async (_req, res) => {
+  try {
+    const database = await getDb();
+    const domains = await database.getActiveDomains();
+    res.json({
+      domains,
+      primary:
+        domains.find((domain) => domain.is_primary) ||
+        domains[0] ||
+        null,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1338,6 +1568,7 @@ app.post("/api/shorten", async (req, res) => {
       og_title,
       og_desc,
       og_image,
+      domain_hostname,
       link_type,
       video_url,
       video_overlay_text,
@@ -1436,6 +1667,21 @@ app.post("/api/shorten", async (req, res) => {
       }
     }
 
+    let selectedDomainHostname = null;
+    if (domain_hostname) {
+      selectedDomainHostname = normalizeDomainHost(domain_hostname);
+      if (!selectedDomainHostname)
+        return res.status(400).json({ error: "Domain tạo link không hợp lệ" });
+      const activeDomains = await database.getActiveDomains();
+      const matchedDomain = activeDomains.find(
+        (domain) => domain.hostname === selectedDomainHostname,
+      );
+      if (!matchedDomain) {
+        return res.status(400).json({ error: "Domain tạo link không còn hoạt động" });
+      }
+      selectedDomainHostname = matchedDomain.hostname;
+    }
+
     const shortCode = nanoid(7);
     await database.createLink(
       shortCode,
@@ -1449,14 +1695,19 @@ app.post("/api/shorten", async (req, res) => {
       video_url || null,
       video_overlay_text || null,
       guestSessionId,
+      selectedDomainHostname,
     );
     const code = alias || shortCode;
+    const shortBaseUrl = selectedDomainHostname
+      ? `https://${selectedDomainHostname}`
+      : publicBaseUrl;
     return res.json({
-      short_url: buildShortUrl(publicBaseUrl, code),
+      short_url: buildShortUrl(shortBaseUrl, code),
       short_code: code,
       original_url: url,
       clicks: 0,
       link_type,
+      domain_hostname: selectedDomainHostname,
     });
   } catch (e) {
     console.error(e);
@@ -1482,7 +1733,7 @@ app.get("/api/links/:id", async (req, res) => {
     res.json({
       link: {
         ...link,
-        short_url: buildShortUrl(publicBaseUrl, link.alias || link.short_code),
+        short_url: buildLinkShortUrl(link, publicBaseUrl),
       },
     });
   } catch (e) {
@@ -1513,23 +1764,42 @@ app.patch("/api/links/:id", async (req, res) => {
       og_title,
       og_desc,
       og_image,
+      domain_hostname,
       link_type,
       video_url,
       video_overlay_text,
     } = req.body;
-    await database.updateLink(Number(req.params.id), {
+    const updateFields = {
       og_title,
       og_desc,
       og_image,
       link_type,
       video_url,
       video_overlay_text,
-    });
+    };
+    if (typeof domain_hostname !== "undefined") {
+      let nextDomainHostname = null;
+      if (String(domain_hostname || "").trim()) {
+        nextDomainHostname = normalizeDomainHost(domain_hostname);
+        if (!nextDomainHostname)
+          return res.status(400).json({ error: "Domain tạo link không hợp lệ" });
+        const activeDomains = await database.getActiveDomains();
+        const matchedDomain = activeDomains.find(
+          (domain) => domain.hostname === nextDomainHostname,
+        );
+        if (!matchedDomain) {
+          return res.status(400).json({ error: "Domain tạo link không còn hoạt động" });
+        }
+        nextDomainHostname = matchedDomain.hostname;
+      }
+      updateFields.domain_hostname = nextDomainHostname;
+    }
+    await database.updateLink(Number(req.params.id), updateFields);
     const updated = await database.getLinkById(Number(req.params.id));
     res.json({
       link: {
         ...updated,
-        short_url: buildShortUrl(publicBaseUrl, updated.alias || updated.short_code),
+        short_url: buildLinkShortUrl(updated, publicBaseUrl),
       },
     });
   } catch (e) {
@@ -1561,13 +1831,22 @@ app.get("/api/stats", async (req, res) => {
     const guestSessionId = user ? null : req.guestSessionId;
     const totals = await database.getTotals(userId, guestSessionId);
     const today = await database.getTodayStats(userId, guestSessionId);
+    const analytics = buildStatsAnalytics(
+      await database.getClickAnalytics(userId, guestSessionId),
+    );
     const recent = (await database.getRecentLinks(userId, guestSessionId)).map(
       (l) => ({
         ...l,
-        short_url: buildShortUrl(publicBaseUrl, l.alias || l.short_code),
+        short_url: buildLinkShortUrl(l, publicBaseUrl),
       }),
     );
-    res.json({ ...totals, ...today, recent, plan: user?.plan || "guest" });
+    res.json({
+      ...totals,
+      ...today,
+      recent,
+      analytics,
+      plan: user?.plan || "guest",
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -1635,7 +1914,7 @@ app.get("/:code", async (req, res) => {
         platform: "bot",
         uaKind,
         status: 200,
-        target: buildShortUrl(publicBaseUrl, codeValue),
+        target: buildLinkShortUrl(link, publicBaseUrl),
         referer,
       });
       res.set({
@@ -1654,7 +1933,13 @@ app.get("/:code", async (req, res) => {
       (req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
       req.socket?.remoteAddress ||
       "";
-    await database.recordClick(link.id, ip, ua, req.headers["referer"] || "");
+    await database.recordClick(
+      link.id,
+      ip,
+      ua,
+      req.headers["referer"] || "",
+      extractClickGeo(req),
+    );
 
     // ── Video link ──────────────────────────────────────────────────────────
     const linkType = (link.link_type || "direct").trim();
@@ -1752,7 +2037,7 @@ app.get("/:code", async (req, res) => {
 
     // ── Mobile có deeplink → DirectBridgePage ────────────────────────────
     if (info.deeplink || linkType === "deeplink") {
-      const shortUrl = buildShortUrl(publicBaseUrl, link.alias || link.short_code);
+      const shortUrl = buildLinkShortUrl(link, publicBaseUrl);
       setRedirectDebugHeaders(res, {
         mode: "deeplink-bridge",
         platform: info.platform_name,
@@ -1815,6 +2100,49 @@ app.get("/_og/:code", async (req, res) => {
     return res.send(buildOgPage(link, publicBaseUrl));
   } catch (e) {
     res.status(500).send("Server error");
+  }
+});
+
+app.post("/api/links/bulk-delete", async (req, res) => {
+  const user = await resolveUser(req);
+  const guestSessionId = user ? null : req.guestSessionId;
+  if (!user && !guestSessionId)
+    return res.status(401).json({ error: "Chưa đăng nhập" });
+  try {
+    const database = await getDb();
+    const requestedIds = Array.isArray(req.body?.ids)
+      ? [...new Set(req.body.ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
+      : [];
+    if (!requestedIds.length)
+      return res.status(400).json({ error: "Chưa chọn link nào để xóa" });
+
+    const isAdmin = user?.role === "admin" || isAdminEmail(user?.email);
+    const linksToCheck = await Promise.all(
+      requestedIds.map((linkId) => database.getLinkById(linkId)),
+    );
+    const deletableIds = linksToCheck
+      .filter(Boolean)
+      .filter((link) => {
+        const isGuestOwner =
+          !!guestSessionId &&
+          !link.user_id &&
+          link.guest_session_id === guestSessionId;
+        return isAdmin || isGuestOwner || link.user_id === user?.id;
+      })
+      .map((link) => Number(link.id));
+
+    if (!deletableIds.length)
+      return res.status(403).json({ error: "Không có link hợp lệ để xóa" });
+
+    await database.deleteLinks(deletableIds);
+    return res.json({
+      ok: true,
+      deleted_count: deletableIds.length,
+      skipped_count: requestedIds.length - deletableIds.length,
+      deleted_ids: deletableIds,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 
@@ -1902,15 +2230,14 @@ function buildBioPage(profile, owner, links, canonicalUrl) {
     profile.title?.trim() ||
     owner?.name ||
     owner?.email?.split("@")[0] ||
-    "RutGonLink";
+    "BocLink";
   const subtitle =
-    profile.subtitle?.trim() || "Link-in-bio page được tạo từ RutGonLink.";
+    profile.subtitle?.trim() || "Link-in-bio page được tạo từ BocLink.click.";
   const avatar = profile.avatar?.trim() || (owner?.name || "R").charAt(0).toUpperCase();
   const pageBase = canonicalUrl.replace(/\/u\/[^/]+$/, "");
   const shortLinks = (links || []).map((l) => {
-    const code = l.alias || l.short_code;
     return {
-      shortUrl: l.short_url || buildShortUrl(pageBase, code),
+      shortUrl: l.short_url || buildLinkShortUrl(l, pageBase),
       originalUrl: l.original_url,
       title: l.og_title || l.original_url,
       clicks: l.clicks || 0,
@@ -1942,7 +2269,7 @@ function buildBioPage(profile, owner, links, canonicalUrl) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>${esc(title)} | RutGonLink</title>
+  <title>${esc(title)} | BocLink</title>
   <meta name="description" content="${esc(subtitle)}" />
   <meta property="og:title" content="${esc(title)}" />
   <meta property="og:description" content="${esc(subtitle)}" />
@@ -1987,10 +2314,10 @@ function buildBioPage(profile, owner, links, canonicalUrl) {
         <div class="meta">
           <span class="pill">${shortLinks.length.toLocaleString()} link</span>
           <span class="pill">${esc(profile.link_source || "recent")}</span>
-          <span class="pill">RutGonLink Bio</span>
+          <span class="pill">BocLink Bio</span>
         </div>
         <div class="links">${linksMarkup}</div>
-        <div class="footer">Tạo bằng <span class="brand">RutGonLink</span> · ${owner?.email ? esc(owner.email) : "Public profile"}</div>
+        <div class="footer">Tạo bằng <span class="brand">BocLink</span> · ${owner?.email ? esc(owner.email) : "Public profile"}</div>
       </div>
     </div>
   </div>
@@ -1999,14 +2326,15 @@ function buildBioPage(profile, owner, links, canonicalUrl) {
 }
 
 function buildShopeeFacebookBridgePage(link, baseUrl, info) {
-  const shortUrl = `${baseUrl}/${link.alias || link.short_code}`;
-  const title = esc(link.og_title || "RutGonLink");
+  const shortUrl = buildLinkShortUrl(link, baseUrl);
+  const shortBaseUrl = shortUrl.replace(/\/[^/]+$/, "");
+  const title = esc(link.og_title || "BocLink");
   const desc = esc(
     link.og_desc || "Đang mở Shopee để tiếp tục xem nội dung.",
   );
   const image = link.og_image
     ? esc(link.og_image)
-    : `${baseUrl}/og-default.png`;
+    : `${shortBaseUrl}/og-default.png`;
   const webUrl = info.fallback || link.original_url;
   const appUrl = buildShopeeAppLinkUrl(webUrl);
   const appMeta = buildAppLinkMetaTags(shortUrl, webUrl, appUrl, {
@@ -2035,7 +2363,7 @@ ${appMeta}
 <meta property="og:title" content="${title}" />
 <meta property="og:description" content="${desc}" />
 <meta property="og:url" content="${esc(shortUrl)}" />
-<meta property="og:site_name" content="RutGonLink" />
+<meta property="og:site_name" content="BocLink" />
 <meta property="og:image" content="${image}" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="${title}" />
@@ -2078,7 +2406,7 @@ ${appMeta}
 // ─── DIRECT BRIDGE PAGE ───────────────────────────────────────────────────────
 // FIX 4: Cải thiện logic để nhảy app ngay, giảm delay, dùng sessionStorage đúng
 function buildDirectBridgePage(link, canonicalUrl, info) {
-  const title = link.og_title?.trim() || "RutGonLink";
+  const title = link.og_title?.trim() || "BocLink";
   const desc =
     link.og_desc?.trim() || "Đang mở ứng dụng gốc để tiếp tục xem nội dung.";
   const image = link.og_image || "";
@@ -2151,7 +2479,7 @@ ${appLinkMeta}
 <meta property="og:title" content="${esc(title)}" />
 <meta property="og:description" content="${esc(desc)}" />
 <meta property="og:url" content="${esc(canonicalUrl)}" />
-<meta property="og:site_name" content="RutGonLink" />
+<meta property="og:site_name" content="BocLink" />
 ${ogImageTag}
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="${esc(title)}" />
@@ -2302,12 +2630,13 @@ ${ogImageTag}
 
 // ─── OG PAGE (cho bot crawler) ───────────────────────────────────────────────
 function buildOgPage(link, baseUrl) {
-  const shortUrl = `${baseUrl}/${link.alias || link.short_code}`;
-  const title = esc(link.og_title || "RutGonLink");
+  const shortUrl = buildLinkShortUrl(link, baseUrl);
+  const shortBaseUrl = shortUrl.replace(/\/[^/]+$/, "");
+  const title = esc(link.og_title || "BocLink");
   const desc = esc(link.og_desc || "Nhấn vào link để xem nội dung");
   const image = link.og_image
     ? esc(link.og_image)
-    : `${baseUrl}/og-default.png`;
+    : `${shortBaseUrl}/og-default.png`;
   const dest = link.original_url;
   const info = detectPlatformDeep(dest, "ios");
   const appMeta =
@@ -2352,7 +2681,7 @@ ${appMeta}
 <meta property="og:image"        content="${image}" />
 <meta property="og:image:width"  content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:site_name"    content="RutGonLink" />
+<meta property="og:site_name"    content="BocLink" />
 <meta name="twitter:card"        content="summary_large_image" />
 <meta name="twitter:title"       content="${title}" />
 <meta name="twitter:description" content="${desc}" />

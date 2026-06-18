@@ -147,6 +147,73 @@ async function registerAuthedPage(browser) {
   }
 }
 
+async function verifyAuthedDashboardBoot(page) {
+  let releaseAuthRequest;
+  const allowAuthRequest = new Promise((resolve) => {
+    releaseAuthRequest = resolve;
+  });
+  let authRequestSeenResolve;
+  const authRequestSeen = new Promise((resolve) => {
+    authRequestSeenResolve = resolve;
+  });
+
+  const requestHandler = async (request) => {
+    if (request.isInterceptResolutionHandled()) return;
+    if (request.url() === `${baseUrl}/api/auth/me`) {
+      authRequestSeenResolve();
+      await allowAuthRequest;
+    }
+    await request.continue();
+  };
+
+  await page.setRequestInterception(true);
+  page.on("request", requestHandler);
+
+  try {
+    const navigation = page.goto(`${baseUrl}/dashboard`, {
+      waitUntil: "domcontentloaded",
+    });
+
+    await authRequestSeen;
+    await page.waitForFunction(() =>
+      document.body?.classList.contains("app-shell-booting"),
+    );
+
+    const bootState = await page.evaluate(() => {
+      const splash = document.getElementById("appBootSplash");
+      const authScreen = document.getElementById("authScreen");
+      const appScreen = document.getElementById("appScreen");
+      return {
+        splashHidden: splash?.hidden ?? null,
+        authVisibility: authScreen ? getComputedStyle(authScreen).visibility : null,
+        appVisibility: appScreen ? getComputedStyle(appScreen).visibility : null,
+      };
+    });
+    assert.equal(bootState.splashHidden, false);
+    assert.equal(bootState.authVisibility, "hidden");
+    assert.equal(bootState.appVisibility, "hidden");
+
+    releaseAuthRequest();
+    await navigation;
+    await page.waitForFunction(
+      () =>
+        document.body?.dataset.appReady === "true" &&
+        document.getElementById("appScreen")?.classList.contains("show"),
+    );
+
+    const settledState = await page.evaluate(() => ({
+      splashHidden: document.getElementById("appBootSplash")?.hidden ?? null,
+      authDisplay: getComputedStyle(document.getElementById("authScreen")).display,
+    }));
+    assert.equal(settledState.splashHidden, true);
+    assert.equal(settledState.authDisplay, "none");
+  } finally {
+    releaseAuthRequest?.();
+    page.off("request", requestHandler);
+    await page.setRequestInterception(false);
+  }
+}
+
 async function shortenAsAuthedUser(page, payload) {
   return page.evaluate(async (body) => {
     const response = await fetch("/api/shorten", {
@@ -254,7 +321,7 @@ async function main() {
         const brand = await page.$eval(".brand-title", (el) =>
           el.textContent.trim(),
         );
-        assert.equal(brand, "RutGonLink");
+        assert.equal(brand, "BocLink");
 
         const heroTitle = await page.$eval(".hero-title", (el) =>
           el.textContent.replace(/\s+/g, " ").trim(),
@@ -411,6 +478,8 @@ async function main() {
 
     const { page: authedPage, userId } = await registerAuthedPage(browser);
     try {
+      await verifyAuthedDashboardBoot(authedPage);
+
       await authedPage.goto(`${baseUrl}/`, {
         waitUntil: "domcontentloaded",
       });

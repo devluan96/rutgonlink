@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS links (
   og_image           TEXT,
   video_url          TEXT,
   video_overlay_text TEXT,
+  domain_hostname    TEXT,
   user_id            BIGINT REFERENCES users(id) ON DELETE SET NULL,
   guest_session_id   TEXT,
   created_at         TIMESTAMPTZ DEFAULT NOW(),
@@ -33,11 +34,13 @@ CREATE TABLE IF NOT EXISTS links (
 );
 
 ALTER TABLE links ADD COLUMN IF NOT EXISTS guest_session_id TEXT;
+ALTER TABLE links ADD COLUMN IF NOT EXISTS domain_hostname TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_links_short_code ON links(short_code);
 CREATE INDEX IF NOT EXISTS idx_links_alias      ON links(alias);
 CREATE INDEX IF NOT EXISTS idx_links_user_id    ON links(user_id);
 CREATE INDEX IF NOT EXISTS idx_links_guest_session_id ON links(guest_session_id);
+CREATE INDEX IF NOT EXISTS idx_links_domain_hostname ON links(domain_hostname);
 
 -- ── Clicks ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS clicks (
@@ -46,11 +49,19 @@ CREATE TABLE IF NOT EXISTS clicks (
   ip         TEXT,
   user_agent TEXT,
   referrer   TEXT,
+  country_code TEXT,
+  country_name TEXT,
+  city         TEXT,
   clicked_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE clicks ADD COLUMN IF NOT EXISTS country_code TEXT;
+ALTER TABLE clicks ADD COLUMN IF NOT EXISTS country_name TEXT;
+ALTER TABLE clicks ADD COLUMN IF NOT EXISTS city TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_clicks_link_id    ON clicks(link_id);
 CREATE INDEX IF NOT EXISTS idx_clicks_clicked_at ON clicks(clicked_at);
+CREATE INDEX IF NOT EXISTS idx_clicks_country_code ON clicks(country_code);
 
 -- ── Uploads dedup ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS uploads (

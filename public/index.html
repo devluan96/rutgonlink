@@ -7,14 +7,249 @@
       name="facebook-domain-verification"
       content="dvi6z9wdihomohwzyyw44984fi75n6"
     />
-    <title>RutGonLink – Rút gọn link Shopee & TikTok thông minh</title>
+    <title>BocLink.click – Rút gọn link Shopee & TikTok thông minh</title>
     <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" sizes="any" />
     <link rel="shortcut icon" href="/favicon.svg?v=2" />
+    <script>
+      (() => {
+        try {
+          const storedTheme = localStorage.getItem("rutgonlink-theme");
+          if (storedTheme === "dark" || storedTheme === "light") {
+            document.documentElement.dataset.theme = storedTheme;
+          }
+        } catch {}
+      })();
+    </script>
+    <style>
+      body.app-shell-booting {
+        margin: 0;
+        min-height: 100vh;
+        overflow: hidden;
+      }
+
+      body.app-shell-booting #authScreen,
+      body.app-shell-booting #appScreen {
+        visibility: hidden;
+      }
+
+      #appBootSplash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at top, rgba(59, 130, 246, 0.22), transparent 38%),
+          linear-gradient(180deg, #0f172a 0%, #111827 100%);
+        color: #f8fafc;
+        transition: opacity 0.16s ease, visibility 0.16s ease;
+      }
+
+      html[data-theme="light"] #appBootSplash {
+        background:
+          radial-gradient(circle at top, rgba(59, 130, 246, 0.14), transparent 38%),
+          linear-gradient(180deg, #fbf7ef 0%, #f6efe2 100%);
+        color: #1f170f;
+      }
+
+      #appBootSplash[hidden],
+      body[data-app-ready="true"] #appBootSplash {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .app-boot-card {
+        width: min(560px, 100%);
+        padding: clamp(28px, 5vw, 42px);
+        border-radius: 32px;
+        background:
+          linear-gradient(180deg, rgba(30, 41, 59, 0.94), rgba(15, 23, 42, 0.96)),
+          rgba(15, 23, 42, 0.92);
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        box-shadow:
+          0 28px 70px rgba(2, 6, 23, 0.45),
+          inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
+
+      html[data-theme="light"] .app-boot-card {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 252, 0.96)),
+          rgba(255, 255, 255, 0.94);
+        border-color: rgba(148, 163, 184, 0.24);
+        box-shadow:
+          0 28px 60px rgba(15, 23, 42, 0.12),
+          inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      }
+
+      .app-boot-logo-shell {
+        width: 92px;
+        height: 92px;
+        margin: 0 auto 24px;
+        border-radius: 28px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.94));
+        border: 1px solid rgba(96, 165, 250, 0.12);
+        box-shadow:
+          0 18px 34px rgba(15, 23, 42, 0.3),
+          inset 0 0 0 6px rgba(255, 255, 255, 0.02);
+      }
+
+      html[data-theme="light"] .app-boot-logo-shell {
+        background: linear-gradient(180deg, rgba(226, 232, 240, 0.96), rgba(255, 255, 255, 0.98));
+        border-color: rgba(148, 163, 184, 0.24);
+        box-shadow:
+          0 18px 28px rgba(148, 163, 184, 0.22),
+          inset 0 0 0 6px rgba(255, 255, 255, 0.68);
+      }
+
+      .app-boot-logo {
+        width: 54px;
+        height: 54px;
+        border-radius: 18px;
+        object-fit: cover;
+        box-shadow: 0 10px 22px rgba(249, 115, 22, 0.2);
+      }
+
+      .app-boot-kicker {
+        display: block;
+        margin-bottom: 10px;
+        text-align: center;
+        color: #ffb454;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+      }
+
+      .app-boot-copy {
+        text-align: center;
+      }
+
+      .app-boot-copy strong {
+        display: block;
+        font-size: clamp(30px, 4vw, 42px);
+        line-height: 1.08;
+        letter-spacing: -0.05em;
+      }
+
+      .app-boot-copy span {
+        display: block;
+        margin-top: 14px;
+        font-size: 16px;
+        line-height: 1.7;
+        color: rgba(226, 232, 240, 0.78);
+      }
+
+      html[data-theme="light"] .app-boot-copy span {
+        color: rgba(51, 65, 85, 0.8);
+      }
+
+      .app-boot-progress {
+        margin-top: 26px;
+      }
+
+      .app-boot-progress-track {
+        position: relative;
+        height: 10px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(148, 163, 184, 0.18);
+      }
+
+      html[data-theme="light"] .app-boot-progress-track {
+        background: rgba(148, 163, 184, 0.22);
+      }
+
+      .app-boot-progress-bar {
+        width: 44%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #f97316, #fb923c);
+        box-shadow: 0 0 22px rgba(249, 115, 22, 0.45);
+        animation: appBootPulse 1.6s ease-in-out infinite;
+      }
+
+      .app-boot-dots {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .app-boot-dots span {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #fb923c;
+        opacity: 0.3;
+        animation: appBootDot 1.2s ease-in-out infinite;
+      }
+
+      .app-boot-dots span:nth-child(2) {
+        animation-delay: 0.16s;
+      }
+
+      .app-boot-dots span:nth-child(3) {
+        animation-delay: 0.32s;
+      }
+
+      @keyframes appBootPulse {
+        0%,
+        100% {
+          transform: scaleX(0.96);
+          transform-origin: left center;
+          opacity: 0.86;
+        }
+        50% {
+          transform: scaleX(1);
+          transform-origin: left center;
+          opacity: 1;
+        }
+      }
+
+      @keyframes appBootDot {
+        0%,
+        100% {
+          opacity: 0.28;
+          transform: translateY(0);
+        }
+        50% {
+          opacity: 1;
+          transform: translateY(-2px);
+        }
+      }
+    </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>
-    <link rel="stylesheet" href="/app.css" />
+    <link rel="stylesheet" href="/app.css?v=20260619b" />
   </head>
-  <body>
+  <body class="app-shell-booting">
+    <div id="appBootSplash" role="status" aria-live="polite">
+      <div class="app-boot-card">
+        <div class="app-boot-logo-shell" aria-hidden="true">
+          <img class="app-boot-logo" src="/favicon.svg?v=2" alt="" />
+        </div>
+        <div class="app-boot-copy">
+          <small class="app-boot-kicker">BocLink</small>
+          <strong>Đang khởi động trung tâm quản trị</strong>
+          <span>Đang đồng bộ phiên đăng nhập, khôi phục tab gần nhất và nạp dữ liệu cần thiết.</span>
+        </div>
+        <div class="app-boot-progress" aria-hidden="true">
+          <div class="app-boot-progress-track">
+            <div class="app-boot-progress-bar"></div>
+          </div>
+          <div class="app-boot-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- ══ AUTH SCREEN ══ -->
     <div id="authScreen" data-route="landing">
       <header class="auth-menu">
@@ -22,7 +257,7 @@
           <div class="auth-brand">
             <div class="auth-brand-mark">🔗</div>
             <div class="auth-brand-text">
-              <b>RutGonLink</b>
+              <b>BocLink</b>
               <span>Rút gọn link, QR, bio public và integrations</span>
             </div>
           </div>
@@ -321,7 +556,7 @@
             <div class="auth-visual-card">
               <div class="auth-visual-top">
                 <div>
-                  <strong>RutGonLink</strong>
+                  <strong>BocLink</strong>
                   <span>https://boclink.click/short</span>
                 </div>
                 <div class="auth-visual-kpi">0.61M Lượt nhấp</div>
@@ -403,7 +638,7 @@
           <div class="auth-footer-brand">
             <div class="auth-brand-mark">🔗</div>
             <div>
-              <b>RutGonLink</b>
+              <b>BocLink</b>
               <span
                 >Rút gọn link, QR, bio và tracking cho chiến dịch hiện
                 đại.</span
@@ -424,7 +659,7 @@
           </div>
         </div>
         <div class="auth-footer-bottom">
-          <span>© 2026 RutGonLink. Mọi quyền được bảo lưu.</span>
+          <span>© 2026 BocLink.click. Mọi quyền được bảo lưu.</span>
           <div class="auth-footer-bottom-links">
             <a href="/login?next=%2Fstats">Báo cáo</a>
             <a href="/login">Đăng nhập</a>
@@ -464,7 +699,7 @@
         </button>
         <div class="tb-logo">
           <div class="li">🔗</div>
-          Rut<span>Gon</span>Link
+          Boc<span>Link</span>
         </div>
         <div class="tb-search">
           <input
@@ -1160,7 +1395,7 @@
                   </button>
                 </div>
                 <div class="billing-note">
-                  RutGonLink có QR riêng cho link, chiến dịch và bio profile. Ở
+                  BocLink có QR riêng cho link, chiến dịch và bio profile. Ở
                   đây bạn có thể tạo nhanh từ bất kỳ URL nào.
                 </div>
               </div>
@@ -1377,7 +1612,7 @@
           <div class="page" id="page-integrations">
             <div class="ph">
               <h1>Tích hợp</h1>
-              <p>Nối RutGonLink với công cụ tự động hóa, CMS và API</p>
+              <p>Nối BocLink với công cụ tự động hóa, CMS và API</p>
             </div>
             <div class="integration-head">
               <div class="integration-banner">
@@ -1627,7 +1862,7 @@
                   <span class="sc-lbl">Workspace</span>
                   <div class="sc-icon" style="background: rgba(139, 92, 246, 0.12)">🧭</div>
                 </div>
-                <div class="sc-val" id="teamWorkspaceName">RutGonLink</div>
+                <div class="sc-val" id="teamWorkspaceName">BocLink</div>
                 <div class="sc-sub" id="teamWorkspaceStatus">Owner + editor + analyst trong một luồng.</div>
               </div>
             </div>
@@ -1819,10 +2054,45 @@
                   Khác
                 </button>
               </div>
+              <div class="link-bulkbar" id="linkBulkBar">
+                <div class="link-bulk-status" id="linkBulkStatus">
+                  Đang hiển thị 0 link
+                </div>
+                <div class="link-bulk-actions">
+                  <button
+                    class="btn-cp"
+                    id="linkClearSelectionBtn"
+                    type="button"
+                    onclick="clearSelectedLinks()"
+                    disabled
+                  >
+                    Bỏ chọn
+                  </button>
+                  <button
+                    class="btn-del"
+                    id="linkBulkDeleteBtn"
+                    type="button"
+                    onclick="bulkDeleteSelectedLinks()"
+                    disabled
+                  >
+                    Xóa đã chọn
+                  </button>
+                </div>
+              </div>
               <div style="overflow-x: auto">
                 <table>
                   <thead>
                     <tr>
+                      <th>
+                        <label class="tbl-check">
+                          <input
+                            type="checkbox"
+                            id="tblSelectAll"
+                            onchange="toggleSelectAllVisibleLinks(this.checked)"
+                          />
+                          <span></span>
+                        </label>
+                      </th>
                       <th>Link rút gọn</th>
                       <th>Link gốc</th>
                       <th>Nền tảng</th>
@@ -1834,7 +2104,7 @@
                   </thead>
                   <tbody id="tblBody">
                     <tr>
-                      <td colspan="7" class="tbl-empty">⏳ Đang tải...</td>
+                      <td colspan="8" class="tbl-empty">⏳ Đang tải...</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2010,9 +2280,76 @@
               <div class="ch-wrap"><canvas id="statsChart"></canvas></div>
             </div>
             <div class="chart-card">
-              <div class="chart-head"><h3>Phân bố nền tảng</h3></div>
-              <div style="height: 220px">
-                <canvas id="platformChart"></canvas>
+              <div class="chart-head">
+                <h3>Phân bố nền tảng</h3>
+                <span class="stats-note" id="statsPlatformSummary">
+                  Đang tổng hợp dữ liệu click
+                </span>
+              </div>
+              <div class="stats-analytics-grid">
+                <section class="stats-analytics-card">
+                  <div class="stats-card-head">
+                    <h4>Quốc gia</h4>
+                    <span class="stats-note" id="statsGeoSummary">
+                      Chưa có dữ liệu địa lý
+                    </span>
+                  </div>
+                  <div id="statsCountryMap" class="stats-map-wrap"></div>
+                </section>
+                <section class="stats-analytics-card">
+                  <div class="stats-card-head">
+                    <h4>Quốc gia hàng đầu</h4>
+                  </div>
+                  <div class="stats-table-wrap">
+                    <table class="stats-mini-table">
+                      <thead>
+                        <tr>
+                          <th>Quốc gia</th>
+                          <th>Thành phố</th>
+                          <th>Click</th>
+                        </tr>
+                      </thead>
+                      <tbody id="statsCountryBody">
+                        <tr>
+                          <td colspan="3" class="tbl-empty">
+                            Đang tổng hợp quốc gia...
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+                <section class="stats-analytics-card">
+                  <div class="stats-card-head">
+                    <h4>Nền tảng</h4>
+                  </div>
+                  <div class="stats-platform-chart-wrap">
+                    <canvas id="platformChart"></canvas>
+                  </div>
+                </section>
+                <section class="stats-analytics-card">
+                  <div class="stats-card-head">
+                    <h4>Nền tảng hàng đầu</h4>
+                  </div>
+                  <div class="stats-table-wrap">
+                    <table class="stats-mini-table">
+                      <thead>
+                        <tr>
+                          <th>Nền tảng</th>
+                          <th>Tỷ trọng</th>
+                          <th>Click</th>
+                        </tr>
+                      </thead>
+                      <tbody id="statsPlatformBody">
+                        <tr>
+                          <td colspan="3" class="tbl-empty">
+                            Đang tổng hợp nền tảng...
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
               </div>
             </div>
           </div>
@@ -2021,237 +2358,338 @@
           <div class="page" id="page-admin">
             <div class="ph">
               <h1>🛡️ Quản trị hệ thống</h1>
-              <p>Quản lý người dùng, link và thống kê toàn bộ hệ thống</p>
+              <p>Quản lý người dùng, liên kết, domain và nhật ký vận hành toàn hệ thống.</p>
             </div>
-            <div class="sg" id="adminStatsRow">
-              <div class="sc">
-                <div class="sc-top">
-                  <span class="sc-lbl">Tổng người dùng</span>
-                  <div
-                    class="sc-icon"
-                    style="background: rgba(139, 92, 246, 0.12)"
-                  >
-                    👥
-                  </div>
-                </div>
-                <div class="sc-val" id="adTotalUsers">–</div>
-              </div>
-              <div class="sc">
-                <div class="sc-top">
-                  <span class="sc-lbl">Tổng link</span>
-                  <div
-                    class="sc-icon"
-                    style="background: rgba(59, 130, 246, 0.12)"
-                  >
-                    🔗
-                  </div>
-                </div>
-                <div class="sc-val" id="adTotalLinks">–</div>
-              </div>
-              <div class="sc">
-                <div class="sc-top">
-                  <span class="sc-lbl">Tổng lượt click</span>
-                  <div
-                    class="sc-icon"
-                    style="background: rgba(34, 197, 94, 0.12)"
-                  >
-                    📊
-                  </div>
-                </div>
-                <div class="sc-val" id="adTotalClicks">–</div>
-              </div>
-            </div>
-            <div class="tbl-card" style="margin-bottom: 18px">
-              <div class="tbl-head">
-                <div>
-                  <h3>
-                    🧭 Redirect gần đây (<span id="adRedirectCount">0</span>)
-                  </h3>
-                  <p
-                    style="
-                      margin: 6px 0 0;
-                      font-size: 12px;
-                      color: var(--text3);
-                    "
-                  >
-                    Nguồn log:
-                    <code id="adRedirectLogFile">logs/redirect.log</code>
-                  </p>
-                </div>
-                <button
-                  class="user-btn"
-                  type="button"
-                  id="adminRedirectReloadBtn"
-                  onclick="loadAdminRedirects(true)"
-                >
-                  Tải lại
-                </button>
-              </div>
-              <div style="overflow-x: auto">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Thời gian</th>
-                      <th>Mode</th>
-                      <th>Code</th>
-                      <th>UA</th>
-                      <th>Status</th>
-                      <th>Target</th>
-                      <th>Request</th>
-                    </tr>
-                  </thead>
-                  <tbody id="adRedirectBody">
-                    <tr>
-                      <td colspan="7" class="tbl-empty">⏳ Đang tải...</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div class="tbl-card" style="margin-bottom: 18px">
-              <div class="tbl-head">
-                <h3>
-                  🌐 Tên miền hệ thống (<span id="adDomainCount">0</span>)
-                </h3>
-                <input
-                  type="text"
-                  class="tbl-search"
-                  id="adDomainSearch"
-                  placeholder="Tìm domain..."
-                  oninput="filterAdminDomains(this.value)"
-                />
-              </div>
-              <div
-                class="card-p"
-                style="border-bottom: 1px solid var(--border)"
+            <div class="admin-tabs" role="tablist" aria-label="Điều hướng quản trị">
+              <button
+                class="admin-tab-btn active"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="adminPanelOverview"
+                data-admin-section="overview"
+                onclick="setAdminSection('overview')"
               >
-                <div class="fg" style="margin-bottom: 0">
-                  <div>
-                    <label class="fl">Hostname</label>
-                    <input
-                      type="text"
-                      class="fi"
-                      id="adminDomainHost"
-                      placeholder="go.rutgonlink.com"
-                    />
+                Tổng quan
+              </button>
+              <button
+                class="admin-tab-btn"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="adminPanelUsers"
+                data-admin-section="users"
+                onclick="setAdminSection('users')"
+              >
+                Người dùng
+              </button>
+              <button
+                class="admin-tab-btn"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="adminPanelLinks"
+                data-admin-section="links"
+                onclick="setAdminSection('links')"
+              >
+                Liên kết
+              </button>
+              <button
+                class="admin-tab-btn"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="adminPanelSystem"
+                data-admin-section="system"
+                onclick="setAdminSection('system')"
+              >
+                Hệ thống
+              </button>
+              <button
+                class="admin-tab-btn"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="adminPanelLogs"
+                data-admin-section="logs"
+                onclick="setAdminSection('logs')"
+              >
+                Nhật ký
+              </button>
+            </div>
+
+            <section
+              class="admin-panel active"
+              id="adminPanelOverview"
+              data-admin-panel="overview"
+              role="tabpanel"
+            >
+              <div class="sg" id="adminStatsRow">
+                <div class="sc">
+                  <div class="sc-top">
+                    <span class="sc-lbl">Tổng người dùng</span>
+                    <div
+                      class="sc-icon"
+                      style="background: rgba(139, 92, 246, 0.12)"
+                    >
+                      👥
+                    </div>
                   </div>
-                  <div>
-                    <label class="fl">Nhãn hiển thị</label>
-                    <input
-                      type="text"
-                      class="fi"
-                      id="adminDomainLabel"
-                      placeholder="Domain chính"
-                    />
+                  <div class="sc-val" id="adTotalUsers">–</div>
+                </div>
+                <div class="sc">
+                  <div class="sc-top">
+                    <span class="sc-lbl">Tổng link</span>
+                    <div
+                      class="sc-icon"
+                      style="background: rgba(59, 130, 246, 0.12)"
+                    >
+                      🔗
+                    </div>
+                  </div>
+                  <div class="sc-val" id="adTotalLinks">–</div>
+                </div>
+                <div class="sc">
+                  <div class="sc-top">
+                    <span class="sc-lbl">Tổng lượt click</span>
+                    <div
+                      class="sc-icon"
+                      style="background: rgba(34, 197, 94, 0.12)"
+                    >
+                      📊
+                    </div>
+                  </div>
+                  <div class="sc-val" id="adTotalClicks">–</div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="admin-panel"
+              id="adminPanelUsers"
+              data-admin-panel="users"
+              role="tabpanel"
+              hidden
+            >
+              <div class="tbl-card">
+                <div class="tbl-head">
+                  <h3>👥 Người dùng (<span id="adUserCount">0</span>)</h3>
+                  <input
+                    type="text"
+                    class="tbl-search"
+                    id="adUserSearch"
+                    placeholder="Tìm email..."
+                    oninput="filterAdminUsers(this.value)"
+                  />
+                </div>
+                <div style="overflow-x: auto">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Email</th>
+                        <th>Tên</th>
+                        <th>Gói hiện tại</th>
+                        <th>Role</th>
+                        <th>Ngày tạo</th>
+                        <th>Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody id="adUserBody">
+                      <tr>
+                        <td colspan="7" class="tbl-empty">⏳ Đang tải...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="admin-panel"
+              id="adminPanelLinks"
+              data-admin-panel="links"
+              role="tabpanel"
+              hidden
+            >
+              <div class="tbl-card">
+                <div class="tbl-head">
+                  <h3>🔗 Tất cả liên kết (<span id="adLinkCount">0</span>)</h3>
+                  <input
+                    type="text"
+                    class="tbl-search"
+                    id="adLinkSearch"
+                    placeholder="Tìm link..."
+                    oninput="filterAdminLinks(this.value)"
+                  />
+                </div>
+                <div style="overflow-x: auto">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Link rút gọn</th>
+                        <th>Link gốc</th>
+                        <th>Loại</th>
+                        <th>Chủ sở hữu</th>
+                        <th>Clicks</th>
+                        <th>Ngày tạo</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="adLinkBody">
+                      <tr>
+                        <td colspan="7" class="tbl-empty">⏳ Đang tải...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="admin-panel"
+              id="adminPanelSystem"
+              data-admin-panel="system"
+              role="tabpanel"
+              hidden
+            >
+              <div class="tbl-card">
+                <div class="tbl-head">
+                  <h3>
+                    🌐 Tên miền hệ thống (<span id="adDomainCount">0</span>)
+                  </h3>
+                  <input
+                    type="text"
+                    class="tbl-search"
+                    id="adDomainSearch"
+                    placeholder="Tìm domain..."
+                    oninput="filterAdminDomains(this.value)"
+                  />
+                </div>
+                <div
+                  class="card-p"
+                  style="border-bottom: 1px solid var(--border)"
+                >
+                  <div class="fg" style="margin-bottom: 0">
+                    <div>
+                      <label class="fl">Hostname</label>
+                      <input
+                        type="text"
+                        class="fi"
+                        id="adminDomainHost"
+                        placeholder="go.boclink.click"
+                      />
+                    </div>
+                    <div>
+                      <label class="fl">Nhãn hiển thị</label>
+                      <input
+                        type="text"
+                        class="fi"
+                        id="adminDomainLabel"
+                        placeholder="Domain chính"
+                      />
+                    </div>
+                  </div>
+                  <div class="user-actions" style="margin-top: 10px">
+                    <label
+                      style="
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        color: var(--text2);
+                        font-size: 13px;
+                      "
+                    >
+                      <input type="checkbox" id="adminDomainPrimary" />
+                      Đặt làm domain chính
+                    </label>
+                    <button
+                      class="user-btn primary"
+                      type="button"
+                      id="adminDomainAddBtn"
+                      onclick="addAdminDomain()"
+                    >
+                      Thêm domain
+                    </button>
                   </div>
                 </div>
-                <div class="user-actions" style="margin-top: 10px">
-                  <label
-                    style="
-                      display: flex;
-                      align-items: center;
-                      gap: 8px;
-                      color: var(--text2);
-                      font-size: 13px;
-                    "
-                  >
-                    <input type="checkbox" id="adminDomainPrimary" />
-                    Đặt làm domain chính
-                  </label>
+                <div style="overflow-x: auto">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Domain</th>
+                        <th>Nhãn</th>
+                        <th>Chính</th>
+                        <th>Trạng thái</th>
+                        <th>Ngày tạo</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="adDomainBody">
+                      <tr>
+                        <td colspan="6" class="tbl-empty">⏳ Đang tải...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="admin-panel"
+              id="adminPanelLogs"
+              data-admin-panel="logs"
+              role="tabpanel"
+              hidden
+            >
+              <div class="tbl-card">
+                <div class="tbl-head">
+                  <div>
+                    <h3>
+                      🧭 Redirect gần đây (<span id="adRedirectCount">0</span>)
+                    </h3>
+                    <p
+                      style="
+                        margin: 6px 0 0;
+                        font-size: 12px;
+                        color: var(--text3);
+                      "
+                    >
+                      Nguồn log:
+                      <code id="adRedirectLogFile">logs/redirect.log</code>
+                    </p>
+                  </div>
                   <button
-                    class="user-btn primary"
+                    class="user-btn"
                     type="button"
-                    id="adminDomainAddBtn"
-                    onclick="addAdminDomain()"
+                    id="adminRedirectReloadBtn"
+                    onclick="loadAdminRedirects(true)"
                   >
-                    Thêm domain
+                    Tải lại
                   </button>
                 </div>
+                <div style="overflow-x: auto">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Thời gian</th>
+                        <th>Mode</th>
+                        <th>Code</th>
+                        <th>UA</th>
+                        <th>Status</th>
+                        <th>Target</th>
+                        <th>Request</th>
+                      </tr>
+                    </thead>
+                    <tbody id="adRedirectBody">
+                      <tr>
+                        <td colspan="7" class="tbl-empty">⏳ Đang tải...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div style="overflow-x: auto">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Domain</th>
-                      <th>Nhãn</th>
-                      <th>Chính</th>
-                      <th>Trạng thái</th>
-                      <th>Ngày tạo</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody id="adDomainBody">
-                    <tr>
-                      <td colspan="6" class="tbl-empty">⏳ Đang tải...</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div class="tbl-card" style="margin-bottom: 18px">
-              <div class="tbl-head">
-                <h3>👥 Người dùng (<span id="adUserCount">0</span>)</h3>
-                <input
-                  type="text"
-                  class="tbl-search"
-                  id="adUserSearch"
-                  placeholder="Tìm email..."
-                  oninput="filterAdminUsers(this.value)"
-                />
-              </div>
-              <div style="overflow-x: auto">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Email</th>
-                      <th>Tên</th>
-                      <th>Gói hiện tại</th>
-                      <th>Role</th>
-                      <th>Ngày tạo</th>
-                      <th>Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody id="adUserBody">
-                    <tr>
-                      <td colspan="7" class="tbl-empty">⏳ Đang tải...</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div class="tbl-card">
-              <div class="tbl-head">
-                <h3>🔗 Tất cả liên kết (<span id="adLinkCount">0</span>)</h3>
-                <input
-                  type="text"
-                  class="tbl-search"
-                  id="adLinkSearch"
-                  placeholder="Tìm link..."
-                  oninput="filterAdminLinks(this.value)"
-                />
-              </div>
-              <div style="overflow-x: auto">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Link rút gọn</th>
-                      <th>Link gốc</th>
-                      <th>Loại</th>
-                      <th>Chủ sở hữu</th>
-                      <th>Clicks</th>
-                      <th>Ngày tạo</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody id="adLinkBody">
-                    <tr>
-                      <td colspan="7" class="tbl-empty">⏳ Đang tải...</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            </section>
           </div>
         </div>
         <!-- /content -->
@@ -2417,6 +2855,6 @@
     <div class="toast" id="toast"></div>
 
     <script src="/shared-client.js"></script>
-    <script src="/app.js"></script>
+    <script src="/app.js?v=20260619b"></script>
   </body>
 </html>

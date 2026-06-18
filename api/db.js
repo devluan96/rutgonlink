@@ -148,27 +148,37 @@ async function init() {
     },
 
     // ── Links ──────────────────────────────────────────────────────────
-    async createLink(shortCode, originalUrl, alias, ogTitle, ogDesc, ogImage, userId, linkType, videoUrl, videoOverlayText, guestSessionId) {
-      const { data, error } = await sb
-        .from('links')
-        .insert({
-          short_code: shortCode,
-          original_url: originalUrl,
-          alias: alias || null,
-          og_title: ogTitle || null,
-          og_desc: ogDesc || null,
-          og_image: ogImage || null,
-          user_id: userId || null,
-          link_type: linkType || 'direct',
-          video_url: videoUrl || null,
-          video_overlay_text: videoOverlayText || null,
-          guest_session_id: guestSessionId || null,
-          clicks: 0,
-        })
-        .select()
-        .single();
-      check(error, 'link');
-      return data;
+    async createLink(shortCode, originalUrl, alias, ogTitle, ogDesc, ogImage, userId, linkType, videoUrl, videoOverlayText, guestSessionId, domainHostname) {
+      const payload = {
+        short_code: shortCode,
+        original_url: originalUrl,
+        alias: alias || null,
+        og_title: ogTitle || null,
+        og_desc: ogDesc || null,
+        og_image: ogImage || null,
+        user_id: userId || null,
+        link_type: linkType || 'direct',
+        video_url: videoUrl || null,
+        video_overlay_text: videoOverlayText || null,
+        guest_session_id: guestSessionId || null,
+        clicks: 0,
+      };
+      if (domainHostname) {
+        payload.domain_hostname = domainHostname;
+      }
+
+      let result = await sb.from('links').insert(payload).select().single();
+      if (
+        result.error &&
+        domainHostname &&
+        /domain_hostname|schema cache/i.test(result.error.message || '')
+      ) {
+        const fallbackPayload = { ...payload };
+        delete fallbackPayload.domain_hostname;
+        result = await sb.from('links').insert(fallbackPayload).select().single();
+      }
+      check(result.error, 'link');
+      return result.data;
     },
 
     async getLinkByCode(code) {
@@ -200,16 +210,33 @@ async function init() {
       return data;
     },
 
-    async recordClick(linkId, ip, ua, ref) {
+    async recordClick(linkId, ip, ua, ref, meta = {}) {
       // Tăng click counter
       await sb.rpc('increment_clicks', { link_id: linkId });
       // Ghi click log
-      await sb.from('clicks').insert({
+      const payload = {
         link_id: linkId,
         ip: ip || '',
         user_agent: ua || '',
         referrer: ref || '',
-      });
+      };
+      if (meta.country_code) payload.country_code = meta.country_code;
+      if (meta.country_name) payload.country_name = meta.country_name;
+      if (meta.city) payload.city = meta.city;
+      let result = await sb.from('clicks').insert(payload);
+      if (
+        result.error &&
+        /country_code|country_name|city|schema cache/i.test(result.error.message || '')
+      ) {
+        const fallbackPayload = {
+          link_id: linkId,
+          ip: ip || '',
+          user_agent: ua || '',
+          referrer: ref || '',
+        };
+        result = await sb.from('clicks').insert(fallbackPayload);
+      }
+      check(result.error, 'click');
     },
 
     async getRecentLinks(userId, guestSessionId) {
@@ -246,9 +273,18 @@ async function init() {
       check(error);
     },
 
+    async deleteLinks(linkIds) {
+      const ids = Array.isArray(linkIds)
+        ? [...new Set(linkIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
+        : [];
+      if (!ids.length) return;
+      const { error } = await sb.from('links').delete().in('id', ids);
+      check(error);
+    },
+
     async updateLink(linkId, fields) {
       const allowed = ['original_url','alias','og_title','og_desc','og_image',
-                       'link_type','video_url','video_overlay_text'];
+                       'link_type','video_url','video_overlay_text','domain_hostname'];
       const updates = {};
       for (const [k, v] of Object.entries(fields)) {
         if (allowed.includes(k)) updates[k] = v ?? null;
@@ -344,6 +380,38 @@ async function init() {
       return { linksToday: linksToday || 0, clicksToday: clicksToday || 0 };
     },
 
+    async getClickAnalytics(userId, guestSessionId, limit = 5000) {
+      const buildQuery = (selectExpr) => {
+        let q = sb
+          .from('clicks')
+          .select(selectExpr)
+          .order('clicked_at', { ascending: false })
+          .limit(limit);
+        if (userId) q = q.eq('links.user_id', userId);
+        else if (guestSessionId) q = q.eq('links.guest_session_id', guestSessionId);
+        else q = q.is('links.user_id', null).is('links.guest_session_id', null);
+        return q;
+      };
+
+      let result = await buildQuery(
+        'id,link_id,user_agent,referrer,clicked_at,country_code,country_name,city,links!inner(id,original_url,link_type,user_id,guest_session_id)',
+      );
+      if (
+        result.error &&
+        /country_code|country_name|city|schema cache/i.test(result.error.message || '')
+      ) {
+        result = await buildQuery(
+          'id,link_id,user_agent,referrer,clicked_at,links!inner(id,original_url,link_type,user_id,guest_session_id)',
+        );
+      }
+      check(result.error, 'click_analytics');
+      return (result.data || []).map((row) => ({
+        ...row,
+        link: row.links || null,
+        links: undefined,
+      }));
+    },
+
     async claimGuestLinks(guestSessionId, userId) {
       if (!guestSessionId || !userId) return;
       const { error } = await sb
@@ -357,6 +425,17 @@ async function init() {
       const { data, error } = await sb
         .from('domains')
         .select('*')
+        .order('is_primary', { ascending: false })
+        .order('created_at', { ascending: false });
+      check(error);
+      return data || [];
+    },
+
+    async getActiveDomains() {
+      const { data, error } = await sb
+        .from('domains')
+        .select('*')
+        .eq('is_active', true)
         .order('is_primary', { ascending: false })
         .order('created_at', { ascending: false });
       check(error);

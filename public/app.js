@@ -26,8 +26,14 @@
       let links = [];
       let chart = null;
       let chartDays = 7;
+      let statsAnalytics = null;
       let linkSearchQuery = "";
       let linkTypeFilter = "all";
+      let currentFilteredLinks = [];
+      let selectedLinkIds = new Set();
+      let availableDomains = [];
+      let availableDomainsPromise = null;
+      let createDomainSelection = "";
       let qrRenderedText = "";
       let qrStyler = null;
       let bioConfig = null;
@@ -95,6 +101,173 @@
       }
 
       canonicalizeAppLocation();
+
+      function normalizeDomainChoice(value) {
+        return String(value || "")
+          .trim()
+          .toLowerCase()
+          .replace(/^https?:\/\//, "")
+          .replace(/\/.*$/, "")
+          .replace(/\.+$/, "");
+      }
+
+      function syncAvailableDomains(domains = []) {
+        const normalized = [];
+        const seen = new Set();
+        (Array.isArray(domains) ? domains : []).forEach((domain) => {
+          const hostname = normalizeDomainChoice(domain?.hostname);
+          if (!hostname || seen.has(hostname)) return;
+          seen.add(hostname);
+          normalized.push({
+            ...domain,
+            hostname,
+            label: String(domain?.label || "").trim(),
+            is_primary: domain?.is_primary === true,
+            is_active: domain?.is_active !== false,
+          });
+        });
+        availableDomains = normalized;
+        const current = normalizeDomainChoice(createDomainSelection);
+        if (current && availableDomains.some((domain) => domain.hostname === current)) {
+          createDomainSelection = current;
+          return availableDomains;
+        }
+        createDomainSelection = getDefaultCreateDomainHost();
+        return availableDomains;
+      }
+
+      async function loadAvailableDomains({ force = false } = {}) {
+        if (availableDomainsPromise && !force) return availableDomainsPromise;
+        availableDomainsPromise = (async () => {
+          try {
+            const response = await fetch("/api/domains");
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(data.error || "Không thể tải domain");
+            }
+            return syncAvailableDomains(data.domains || []);
+          } catch (error) {
+            console.error("loadAvailableDomains", error);
+            if (!availableDomains.length) {
+              syncAvailableDomains([]);
+            }
+            return availableDomains;
+          }
+        })();
+        return availableDomainsPromise;
+      }
+
+      function getDefaultCreateDomainHost() {
+        return normalizeDomainChoice(
+          availableDomains.find((domain) => domain.is_primary)?.hostname ||
+            availableDomains[0]?.hostname ||
+            "",
+        );
+      }
+
+      function getCreateDomainPreviewHost() {
+        return (
+          normalizeDomainChoice(createDomainSelection) ||
+          getDefaultCreateDomainHost() ||
+          window.location.host
+        );
+      }
+
+      function formatDomainChoiceLabel(domain) {
+        const hostname = normalizeDomainChoice(domain?.hostname);
+        const label = String(domain?.label || "").trim();
+        if (!hostname) return "";
+        if (!label) return hostname;
+        return `${hostname} - ${label}`;
+      }
+
+      function buildCreateDomainFieldMarkup(containerId) {
+        if (!availableDomains.length) {
+          return `
+      <div>
+        <label class="fl" style="margin-bottom:4px">Domain tạo link</label>
+        <div class="domain-fallback">${window.location.host}</div>
+        <div class="domain-picker-meta" id="${containerId}_domainmeta"></div>
+      </div>`;
+        }
+        const selectedHost =
+          normalizeDomainChoice(createDomainSelection) || getDefaultCreateDomainHost();
+        return `
+      <div>
+        <label class="fl" style="margin-bottom:4px">Domain tạo link</label>
+        <select class="fi" id="${containerId}_domain" onchange="onCreateDomainChange('${containerId}', this.value)">
+          ${availableDomains
+            .map(
+              (domain) =>
+                `<option value="${esc(domain.hostname)}"${domain.hostname === selectedHost ? " selected" : ""}>${esc(formatDomainChoiceLabel(domain))}</option>`,
+            )
+            .join("")}
+        </select>
+        <div class="domain-picker-meta" id="${containerId}_domainmeta"></div>
+      </div>`;
+      }
+
+      function updateCreateDomainDisplay(cid) {
+        const domainInput = document.getElementById(`${cid}_domain`);
+        const prefixEl = document.getElementById(`${cid}_domainprefix`);
+        const metaEl = document.getElementById(`${cid}_domainmeta`);
+        const ogDomainEl = document.getElementById(`${cid}_ogdom`);
+        const nextHost = normalizeDomainChoice(
+          domainInput?.value || createDomainSelection || getDefaultCreateDomainHost(),
+        );
+
+        if (domainInput) {
+          const hasOption = [...domainInput.options].some(
+            (option) => normalizeDomainChoice(option.value) === nextHost,
+          );
+          if (hasOption && domainInput.value !== nextHost) {
+            domainInput.value = nextHost;
+          }
+        }
+
+        createDomainSelection = nextHost;
+        const previewHost = getCreateDomainPreviewHost();
+        const selectedDomain = availableDomains.find(
+          (domain) => domain.hostname === normalizeDomainChoice(previewHost),
+        );
+        if (prefixEl) prefixEl.textContent = `${previewHost}/`;
+        if (ogDomainEl) ogDomainEl.textContent = previewHost.toUpperCase();
+        if (metaEl) {
+          if (selectedDomain) {
+            const metaBits = [];
+            if (selectedDomain.label) metaBits.push(selectedDomain.label);
+            if (selectedDomain.is_primary) metaBits.push("Primary");
+            metaEl.textContent = metaBits.length
+              ? `${previewHost} • ${metaBits.join(" • ")}`
+              : `Link rút gọn sẽ dùng domain ${previewHost}`;
+          } else {
+            metaEl.textContent = `Link rút gọn sẽ dùng domain ${previewHost}`;
+          }
+        }
+      }
+
+      function onCreateDomainChange(cid, value) {
+        createDomainSelection = normalizeDomainChoice(value);
+        updateCreateDomainDisplay(cid);
+        document.getElementById(`${cid}_res`)?.classList.remove("show");
+      }
+
+      function syncAvailableDomainsFromAdmin(domains = []) {
+        syncAvailableDomains(
+          (Array.isArray(domains) ? domains : []).filter(
+            (domain) => domain?.is_active !== false,
+          ),
+        );
+        availableDomainsPromise = Promise.resolve(availableDomains);
+      }
+
+      function finishShellBoot() {
+        document.body?.classList.remove("app-shell-booting");
+        if (document.body) {
+          document.body.dataset.appReady = "true";
+        }
+        document.getElementById("appBootSplash")?.setAttribute("hidden", "");
+      }
 
       function redirectToAuth(mode = "login", message = "") {
         if (message) toast(message, "warn");
@@ -817,6 +990,7 @@
         setAuthRouteMode(mode);
         document.getElementById("authScreen").style.display = "flex";
         document.getElementById("appScreen").classList.remove("show");
+        finishShellBoot();
         if (mode === "landing") {
           initLandingTypedText();
         } else {
@@ -834,6 +1008,7 @@
         closeLandingNav();
         document.getElementById("authScreen").style.display = "none";
         document.getElementById("appScreen").classList.add("show");
+        finishShellBoot();
         loadThemePreference();
         updateTopbar();
         loadBioConfig();
@@ -848,6 +1023,7 @@
         setAuthRouteMode(mode);
         document.getElementById("appScreen").classList.remove("show");
         document.getElementById("authScreen").style.display = "flex";
+        finishShellBoot();
         if (mode === "landing") {
           initLandingTypedText();
         } else {
@@ -867,6 +1043,7 @@
         closeLandingNav();
         document.getElementById("authScreen").style.display = "none";
         document.getElementById("appScreen").classList.add("show");
+        finishShellBoot();
         loadThemePreference();
         updateTopbar();
         loadBioConfig();
@@ -1144,7 +1321,10 @@
         if (page === "bio") renderBioPage();
         if (page === "integrations") renderIntegrationsPage();
         if (page === "team") renderTeamPage();
-        if (page === "admin") loadAdminData();
+        if (page === "admin") {
+          syncAdminSectionUI();
+          loadAdminData();
+        }
         if (page === "stats") renderStatsPage();
         const sidebar = document.getElementById("sidebar");
         sidebar?.classList.remove("mob-open");
@@ -1246,26 +1426,29 @@
     <!-- Detect badge -->
     <div class="det" id="${containerId}_det" style="margin-bottom:10px"></div>
 
-    <!-- ② Alias + Kiểu link (2 cột ngang) -->
-    <div style="display:grid;grid-template-columns:1fr 180px;gap:10px;margin-bottom:12px">
+    <!-- ② Alias + Domain -->
+    <div class="create-form-grid create-form-grid--alias-domain">
       <div>
         <label class="fl" style="margin-bottom:4px">Alias tùy chỉnh</label>
         <div class="pfx">
-          <span style="font-size:12px;color:var(--text3);white-space:nowrap">${window.location.host}/</span>
+          <span id="${containerId}_domainprefix" style="font-size:12px;color:var(--text3);white-space:nowrap">${getCreateDomainPreviewHost()}/</span>
           <input type="text" id="${containerId}_alias" placeholder="ten-link" maxlength="40" autocomplete="off"/>
         </div>
       </div>
-      <div>
-        <label class="fl" style="margin-bottom:4px">Kiểu link</label>
-        <select class="fi" id="${containerId}_ltype" onchange="onLinkTypeChange('${containerId}')">
-          <option value="direct">🔗 Trực tiếp</option>
-          <option value="deeplink">📱 Deeplink App</option>
-          <option value="video">🎬 Video Overlay</option>
-        </select>
-      </div>
+      ${buildCreateDomainFieldMarkup(containerId)}
     </div>
 
-    <!-- ③ VIDEO SECTION (hiện khi chọn Video Overlay) -->
+    <!-- ③ Kiểu link -->
+    <div style="margin-bottom:12px">
+      <label class="fl" style="margin-bottom:4px">Kiểu link</label>
+      <select class="fi" id="${containerId}_ltype" onchange="onLinkTypeChange('${containerId}')">
+        <option value="direct">🔗 Trực tiếp</option>
+        <option value="deeplink">📱 Deeplink App</option>
+        <option value="video">🎬 Video Overlay</option>
+      </select>
+    </div>
+
+    <!-- ④ VIDEO SECTION (hiện khi chọn Video Overlay) -->
     <div class="video-sec" id="${containerId}_videosec" style="margin-bottom:12px">
 
       <!-- Hàng 1: Video upload + URL video -->
@@ -1317,7 +1500,7 @@
       </div>
     </div>
 
-    <!-- ④ META SECTION (collapsible) -->
+    <!-- ⑤ META SECTION (collapsible) -->
     <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px">
       <!-- Header toggle -->
       <div onclick="toggleMeta('${containerId}')"
@@ -1395,7 +1578,7 @@
                 <img id="${containerId}_ogprevimg" src="" alt=""
                   style="width:100%;height:60px;object-fit:cover;display:none"/>
                 <div style="padding:7px 9px;background:var(--bg3)">
-                  <div id="${containerId}_ogdom" style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">${window.location.host.toUpperCase()}</div>
+                  <div id="${containerId}_ogdom" style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">${getCreateDomainPreviewHost().toUpperCase()}</div>
                   <div id="${containerId}_ogptitle" style="font-size:12px;font-weight:700;color:var(--text);line-height:1.3">Tiêu đề sẽ hiện ở đây</div>
                   <div id="${containerId}_ogpdesc" style="font-size:10px;color:var(--text2);margin-top:2px">Mô tả sẽ hiện ở đây</div>
                 </div>
@@ -1429,6 +1612,7 @@
             if (e.key === "Enter") doShorten(containerId);
           });
         }
+        updateCreateDomainDisplay(containerId);
       }
 
       function onUrlInput(cid) {
@@ -1447,12 +1631,7 @@
           det.className = "det";
         }
 
-        // Try auto-fill OG from URL domain
-        try {
-          const dom = new URL(url).hostname.toUpperCase();
-          const el = document.getElementById(`${cid}_ogdom`);
-          if (el) el.textContent = dom;
-        } catch {}
+        updateCreateDomainDisplay(cid);
         document.getElementById(`${cid}_res`)?.classList.remove("show");
         document.getElementById(`${cid}_err`)?.classList.remove("show");
       }
@@ -2077,6 +2256,9 @@
           document.getElementById(`${cid}_ogimg`)?.value.trim() || "";
         const link_type =
           document.getElementById(`${cid}_ltype`)?.value || "direct";
+        const domain_hostname = normalizeDomainChoice(
+          document.getElementById(`${cid}_domain`)?.value || createDomainSelection || "",
+        );
         const video_url =
           document.getElementById(`${cid}_videourl`)?.value.trim() || "";
         const video_overlay_text =
@@ -2150,6 +2332,7 @@
               og_title,
               og_desc,
               og_image,
+              domain_hostname,
               link_type,
               video_url,
               video_overlay_text,
@@ -2249,7 +2432,13 @@
         try {
           const r = await fetch("/api/stats");
           const d = await r.json();
+          statsAnalytics = d.analytics || null;
           links = d.recent || [];
+          selectedLinkIds = new Set(
+            [...selectedLinkIds].filter((id) =>
+              links.some((link) => Number(link.id) === Number(id)),
+            ),
+          );
           document.getElementById("dClicks").textContent = (
             d.totalClicks || 0
           ).toLocaleString();
@@ -2334,9 +2523,11 @@
 
       function renderTable(arr) {
         const tb = document.getElementById("tblBody");
+        currentFilteredLinks = Array.isArray(arr) ? arr.slice() : [];
         if (!arr.length) {
           tb.innerHTML =
-            '<tr><td colspan="7" class="tbl-empty">Chưa có link. <span style="color:var(--brand);cursor:pointer" onclick="navigate(\'create\')">Tạo ngay →</span></td></tr>';
+            '<tr><td colspan="8" class="tbl-empty">Chưa có link. <span style="color:var(--brand);cursor:pointer" onclick="navigate(\'create\')">Tạo ngay →</span></td></tr>';
+          syncLinkBulkToolbar(currentFilteredLinks);
           return;
         }
         const lbl = {
@@ -2349,7 +2540,15 @@
             const p = pt(l.original_url);
             const short = (l.short_url || "").replace(/^https?:\/\//, "");
             const date = (l.created_at || "").substring(0, 10);
-            return `<tr>
+            const linkId = Number(l.id);
+            const isSelected = selectedLinkIds.has(linkId);
+            return `<tr data-link-id="${linkId}" class="${isSelected ? "is-selected" : ""}">
+      <td class="td-check">
+        <label class="tbl-check">
+          <input type="checkbox" ${isSelected ? "checked" : ""} onchange="toggleLinkSelection(${linkId}, this.checked)"/>
+          <span></span>
+        </label>
+      </td>
       <td><a class="td-link" href="${l.short_url || "#"}" target="_blank">${short}</a></td>
       <td class="td-orig" title="${l.original_url || ""}">${l.original_url || ""}</td>
       <td><span class="pill ${p}">${lbl[p]}</span></td>
@@ -2364,6 +2563,117 @@
     </tr>`;
           })
           .join("");
+        syncLinkBulkToolbar(currentFilteredLinks);
+      }
+
+      function syncLinkBulkToolbar(arr = currentFilteredLinks) {
+        const visibleLinks = Array.isArray(arr) ? arr : [];
+        currentFilteredLinks = visibleLinks.slice();
+        const visibleIds = visibleLinks
+          .map((link) => Number(link.id))
+          .filter((id) => Number.isFinite(id));
+        const visibleSelectedCount = visibleIds.filter((id) =>
+          selectedLinkIds.has(id),
+        ).length;
+        const totalSelectedCount = selectedLinkIds.size;
+        const bar = document.getElementById("linkBulkBar");
+        const status = document.getElementById("linkBulkStatus");
+        const clearBtn = document.getElementById("linkClearSelectionBtn");
+        const deleteBtn = document.getElementById("linkBulkDeleteBtn");
+        const selectAll = document.getElementById("tblSelectAll");
+
+        if (bar) {
+          bar.classList.toggle("active", totalSelectedCount > 0);
+        }
+        if (status) {
+          if (totalSelectedCount > 0) {
+            status.textContent =
+              visibleSelectedCount === totalSelectedCount
+                ? `Đã chọn ${totalSelectedCount} link`
+                : `Đã chọn ${totalSelectedCount} link, ${visibleSelectedCount} link đang hiện trong bộ lọc`;
+          } else {
+            status.textContent = `Đang hiển thị ${visibleLinks.length} link`;
+          }
+        }
+        if (clearBtn) clearBtn.disabled = totalSelectedCount === 0;
+        if (deleteBtn) deleteBtn.disabled = totalSelectedCount === 0;
+        if (selectAll) {
+          selectAll.checked =
+            visibleIds.length > 0 && visibleSelectedCount === visibleIds.length;
+          selectAll.indeterminate =
+            visibleSelectedCount > 0 && visibleSelectedCount < visibleIds.length;
+        }
+      }
+
+      function toggleLinkSelection(linkId, checked) {
+        const normalizedId = Number(linkId);
+        if (!Number.isFinite(normalizedId)) return;
+        if (checked) {
+          selectedLinkIds.add(normalizedId);
+        } else {
+          selectedLinkIds.delete(normalizedId);
+        }
+        const row = document.querySelector(`tr[data-link-id="${normalizedId}"]`);
+        if (row) row.classList.toggle("is-selected", checked);
+        syncLinkBulkToolbar();
+      }
+
+      function toggleSelectAllVisibleLinks(checked) {
+        currentFilteredLinks.forEach((link) => {
+          const normalizedId = Number(link.id);
+          if (!Number.isFinite(normalizedId)) return;
+          if (checked) {
+            selectedLinkIds.add(normalizedId);
+          } else {
+            selectedLinkIds.delete(normalizedId);
+          }
+        });
+        renderTable(currentFilteredLinks);
+      }
+
+      function clearSelectedLinks() {
+        if (!selectedLinkIds.size) return;
+        selectedLinkIds = new Set();
+        renderTable(currentFilteredLinks);
+      }
+
+      async function bulkDeleteSelectedLinks() {
+        const ids = [...selectedLinkIds];
+        if (!ids.length) {
+          toast("Chưa chọn link nào để xóa", "warn");
+          return;
+        }
+        if (
+          !confirm(
+            `Xóa ${ids.length} link đã chọn?\nHành động này không thể hoàn tác.`,
+          )
+        ) {
+          return;
+        }
+        try {
+          const response = await fetch("/api/links/bulk-delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            toast(data.error || "Xóa hàng loạt thất bại", "err");
+            return;
+          }
+          selectedLinkIds = new Set();
+          const deletedCount = Number(data.deleted_count || 0);
+          const skippedCount = Number(data.skipped_count || 0);
+          toast(
+            skippedCount
+              ? `Đã xóa ${deletedCount} link, bỏ qua ${skippedCount} link`
+              : `Đã xóa ${deletedCount} link`,
+            "ok",
+          );
+          loadData();
+        } catch {
+          toast("Lỗi kết nối", "err");
+        }
       }
 
       function filterTable(q) {
@@ -2434,7 +2744,7 @@
 
       function downloadQr(extension = "png") {
         if (qrStyler && typeof qrStyler.download === "function") {
-          qrStyler.download({ name: "rutgonlink-qr", extension });
+          qrStyler.download({ name: "boclink-qr", extension });
           return;
         }
         const img = document.querySelector("#qrPreviewWrap img");
@@ -2739,28 +3049,290 @@
       let statsChartInst = null;
       let platformChartInst = null;
 
-      function renderStatsPage() {
-        // Numbers already filled by loadData()
-        // Render chart on statsChart canvas
-        const ctx = document.getElementById("statsChart");
-        if (ctx) {
-          const labels = [],
-            vals = [];
-          const now = new Date();
-          for (let i = chartDays - 1; i >= 0; i--) {
-            const d = new Date(now);
-            d.setDate(d.getDate() - i);
-            labels.push(
-              d.toLocaleDateString("vi", { day: "2-digit", month: "2-digit" }),
-            );
-            vals.push(0);
-          }
+      function getStatsDayKey(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      }
+
+      function formatStatsDayLabel(dayKey) {
+        const [year, month, day] = String(dayKey || "").split("-");
+        if (!year || !month || !day) return dayKey || "";
+        return `${day}/${month}`;
+      }
+
+      function getFallbackPlatformDistribution() {
+        const rows = [
+          {
+            key: "shopee",
+            label: "Shopee",
+            color: "#ee4d2d",
+            clicks: links.filter((l) => /shopee\.vn/i.test(l.original_url)).length,
+          },
+          {
+            key: "tiktok",
+            label: "TikTok",
+            color: "#69c9d0",
+            clicks: links.filter((l) => /tiktok\.com/i.test(l.original_url)).length,
+          },
+          {
+            key: "video",
+            label: "Video Overlay",
+            color: "#f59e0b",
+            clicks: links.filter((l) => (l.link_type || "") === "video").length,
+          },
+        ];
+        const genericCount = Math.max(
+          links.length - rows.reduce((sum, row) => sum + row.clicks, 0),
+          0,
+        );
+        rows.push({
+          key: "generic",
+          label: "Khác",
+          color: "#6366f1",
+          clicks: genericCount,
+        });
+        const total = rows.reduce((sum, row) => sum + row.clicks, 0);
+        return rows
+          .filter((row) => row.clicks > 0)
+          .map((row) => ({
+            ...row,
+            percent: total ? Math.round((row.clicks / total) * 1000) / 10 : 0,
+          }))
+          .sort((a, b) => b.clicks - a.clicks);
+      }
+
+      function getStatsTimelineSeries() {
+        const labels = [];
+        const vals = [];
+        const timelineMap = new Map(
+          (statsAnalytics?.timeline || []).map((item) => [
+            String(item.date || ""),
+            Number(item.clicks || 0),
+          ]),
+        );
+        const hasTimeline = [...timelineMap.values()].some((value) => value > 0);
+        const now = new Date();
+        for (let i = chartDays - 1; i >= 0; i--) {
+          const d = new Date(now);
+          d.setDate(d.getDate() - i);
+          const dayKey = getStatsDayKey(d);
+          labels.push(formatStatsDayLabel(dayKey));
+          vals.push(hasTimeline ? timelineMap.get(dayKey) || 0 : 0);
+        }
+        if (!hasTimeline) {
           links.forEach((l) => {
             if (!l.created_at) return;
             const diff = Math.floor((now - new Date(l.created_at)) / 86400000);
             const idx = chartDays - 1 - diff;
             if (idx >= 0 && idx < chartDays) vals[idx] += l.clicks || 0;
           });
+        }
+        return { labels, vals };
+      }
+
+      function renderStatsCountryMap() {
+        const mapEl = document.getElementById("statsCountryMap");
+        const summaryEl = document.getElementById("statsGeoSummary");
+        if (!mapEl) return;
+        const geo = statsAnalytics?.geo || {};
+        const countries = Array.isArray(geo.countries)
+          ? geo.countries.filter((item) => item.country_name_en && item.clicks > 0)
+          : [];
+        const trackedClicks = Number(geo.tracked_clicks || 0);
+        const totalClicks = Number(statsAnalytics?.total_clicks || 0);
+
+        if (summaryEl) {
+          summaryEl.textContent = trackedClicks
+            ? `${trackedClicks}/${totalClicks || trackedClicks} click có quốc gia`
+            : "Chưa có dữ liệu địa lý";
+        }
+
+        if (!countries.length) {
+          if (window.Plotly?.purge) window.Plotly.purge(mapEl);
+          mapEl.innerHTML =
+            '<div class="stats-map-empty">Chưa có dữ liệu quốc gia để hiển thị.<br/>Các click mới có header địa lý từ proxy/CDN sẽ tự hiện ở đây.</div>';
+          return;
+        }
+
+        if (!window.Plotly) {
+          mapEl.innerHTML =
+            '<div class="stats-map-empty">Không tải được thư viện bản đồ để vẽ quốc gia.</div>';
+          return;
+        }
+
+        mapEl.innerHTML = "";
+        window.Plotly.react(
+          mapEl,
+          [
+            {
+              type: "choropleth",
+              locationmode: "country names",
+              locations: countries.map((item) => item.country_name_en),
+              z: countries.map((item) => Number(item.clicks || 0)),
+              text: countries.map(
+                (item) => `${item.country_name}: ${(item.clicks || 0).toLocaleString()} click`,
+              ),
+              hovertemplate: "%{text}<extra></extra>",
+              showscale: false,
+              colorscale: [
+                [0, "rgba(148,163,184,0.18)"],
+                [0.35, "rgba(96,165,250,0.55)"],
+                [1, "rgba(37,99,235,0.95)"],
+              ],
+              marker: {
+                line: {
+                  color: "rgba(255,255,255,0.22)",
+                  width: 0.4,
+                },
+              },
+            },
+          ],
+          {
+            paper_bgcolor: "transparent",
+            plot_bgcolor: "transparent",
+            margin: { l: 0, r: 0, t: 0, b: 0 },
+            geo: {
+              scope: "world",
+              projection: { type: "equirectangular" },
+              showframe: false,
+              showcoastlines: false,
+              showcountries: true,
+              countrycolor: "rgba(148,163,184,0.22)",
+              bgcolor: "transparent",
+              lakecolor: "transparent",
+            },
+          },
+          {
+            displayModeBar: false,
+            responsive: true,
+          },
+        );
+      }
+
+      function renderStatsCountryTable() {
+        const tb = document.getElementById("statsCountryBody");
+        if (!tb) return;
+        const rows = Array.isArray(statsAnalytics?.geo?.top_countries)
+          ? statsAnalytics.geo.top_countries
+          : [];
+        if (!rows.length) {
+          tb.innerHTML =
+            '<tr><td colspan="3" class="tbl-empty">Chưa có click nào có dữ liệu quốc gia.</td></tr>';
+          return;
+        }
+        tb.innerHTML = rows
+          .map(
+            (country, index) => `<tr>
+      <td><span class="stats-rank">${index + 1}</span>${esc(country.country_name || country.country_code || "Không rõ")}</td>
+      <td>${esc(country.city || "Không rõ")}</td>
+      <td style="font-weight:700;color:var(--text)">${Number(country.clicks || 0).toLocaleString()}</td>
+    </tr>`,
+          )
+          .join("");
+      }
+
+      function renderStatsPlatformChart() {
+        const ctx = document.getElementById("platformChart");
+        const summaryEl = document.getElementById("statsPlatformSummary");
+        if (!ctx) return;
+        const distribution =
+          statsAnalytics?.platforms?.distribution?.length
+            ? statsAnalytics.platforms.distribution
+            : getFallbackPlatformDistribution();
+        const usingFallback = !statsAnalytics?.platforms?.distribution?.length;
+        if (summaryEl) {
+          const totalClicks = Number(statsAnalytics?.total_clicks || 0);
+          summaryEl.textContent = usingFallback
+            ? "Chưa có click, đang tạm dùng phân bố link"
+            : `${totalClicks.toLocaleString()} click đã được phân loại`;
+        }
+        if (platformChartInst) platformChartInst.destroy();
+        platformChartInst = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: distribution.map((item) => item.label),
+            datasets: [
+              {
+                data: distribution.map((item) => item.clicks),
+                backgroundColor: distribution.map((item) => item.color),
+                borderRadius: 10,
+                borderSkipped: false,
+              },
+            ],
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: "#1e2535",
+                borderColor: "#2a3347",
+                borderWidth: 1,
+                titleColor: "#e2e8f0",
+                bodyColor: "#94a3b8",
+                callbacks: {
+                  label: (context) => `${context.raw || 0} click`,
+                },
+              },
+            },
+            scales: {
+              x: {
+                grid: { color: "rgba(255,255,255,.03)" },
+                ticks: {
+                  color: "#4b5563",
+                  font: { size: 11 },
+                  precision: 0,
+                },
+                beginAtZero: true,
+              },
+              y: {
+                grid: { display: false },
+                ticks: { color: "#94a3b8", font: { size: 12, weight: "600" } },
+              },
+            },
+          },
+        });
+      }
+
+      function renderStatsPlatformTable() {
+        const tb = document.getElementById("statsPlatformBody");
+        if (!tb) return;
+        const rows =
+          statsAnalytics?.platforms?.top_platforms?.length
+            ? statsAnalytics.platforms.top_platforms
+            : getFallbackPlatformDistribution();
+        if (!rows.length) {
+          tb.innerHTML =
+            '<tr><td colspan="3" class="tbl-empty">Chưa có dữ liệu nền tảng.</td></tr>';
+          return;
+        }
+        tb.innerHTML = rows
+          .map(
+            (platform, index) => `<tr>
+      <td>
+        <span class="stats-rank">${index + 1}</span>
+        <span class="stats-pill">
+          <span class="stats-pill-dot" style="background:${esc(platform.color || "#3b82f6")}"></span>
+          ${esc(platform.label || "Khác")}
+        </span>
+      </td>
+      <td>${Number(platform.percent || 0).toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%</td>
+      <td style="font-weight:700;color:var(--text)">${Number(platform.clicks || 0).toLocaleString()}</td>
+    </tr>`,
+          )
+          .join("");
+      }
+
+      function renderStatsPage() {
+        // Numbers already filled by loadData()
+        // Render chart on statsChart canvas
+        const ctx = document.getElementById("statsChart");
+        if (ctx) {
+          const { labels, vals } = getStatsTimelineSeries();
           if (statsChartInst) statsChartInst.destroy();
           statsChartInst = new Chart(ctx, {
             type: "line",
@@ -2798,41 +3370,10 @@
             },
           });
         }
-        // Platform chart
-        const ctx2 = document.getElementById("platformChart");
-        if (ctx2) {
-          const shopee = links.filter((l) =>
-            /shopee\.vn/i.test(l.original_url),
-          ).length;
-          const tiktok = links.filter((l) =>
-            /tiktok\.com/i.test(l.original_url),
-          ).length;
-          const generic = links.length - shopee - tiktok;
-          if (platformChartInst) platformChartInst.destroy();
-          platformChartInst = new Chart(ctx2, {
-            type: "doughnut",
-            data: {
-              labels: ["Shopee", "TikTok", "Khác"],
-              datasets: [
-                {
-                  data: [shopee, tiktok, generic],
-                  backgroundColor: ["#ee4d2d", "#69c9d0", "#6366f1"],
-                  borderWidth: 0,
-                },
-              ],
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: {
-                  position: "bottom",
-                  labels: { color: "#94a3b8", font: { size: 12 } },
-                },
-              },
-            },
-          });
-        }
+        renderStatsCountryMap();
+        renderStatsCountryTable();
+        renderStatsPlatformChart();
+        renderStatsPlatformTable();
       }
 
       // ══════════════════════════════════════════════════
@@ -2852,6 +3393,7 @@
             toast(d.error || "Xóa thất bại", "err");
             return;
           }
+          selectedLinkIds.delete(Number(id));
           toast("🗑️ Đã xóa link", "ok");
           loadData();
         } catch {
@@ -2866,6 +3408,35 @@
       let adminUsers = [];
       let adminDomains = [];
       let adminRedirects = [];
+      let adminSection = "overview";
+
+      function syncAdminSectionUI() {
+        const availableSections = new Set([
+          "overview",
+          "users",
+          "links",
+          "system",
+          "logs",
+        ]);
+        if (!availableSections.has(adminSection)) {
+          adminSection = "overview";
+        }
+        document.querySelectorAll(".admin-tab-btn").forEach((btn) => {
+          const isActive = btn.dataset.adminSection === adminSection;
+          btn.classList.toggle("active", isActive);
+          btn.setAttribute("aria-selected", isActive ? "true" : "false");
+        });
+        document.querySelectorAll(".admin-panel").forEach((panel) => {
+          const isActive = panel.dataset.adminPanel === adminSection;
+          panel.classList.toggle("active", isActive);
+          panel.hidden = !isActive;
+        });
+      }
+
+      function setAdminSection(section) {
+        adminSection = section || "overview";
+        syncAdminSectionUI();
+      }
 
       async function loadAdminData() {
         if (!isAdminUser()) {
@@ -2892,6 +3463,7 @@
             const d = await dr.json();
             adminDomains = d.domains || [];
             renderAdminDomains(adminDomains);
+            syncAvailableDomainsFromAdmin(adminDomains);
           }
           if (lr.ok) {
             const l = await lr.json();
@@ -3146,6 +3718,7 @@
           }
           adminDomains = d.domains || [];
           renderAdminDomains(adminDomains);
+          syncAvailableDomainsFromAdmin(adminDomains);
           hostInput.value = "";
           labelInput.value = "";
           primaryInput.checked = false;
@@ -3172,6 +3745,7 @@
           }
           adminDomains = d.domains || [];
           renderAdminDomains(adminDomains);
+          syncAvailableDomainsFromAdmin(adminDomains);
           loadData();
           toast("✅ Đã đặt domain chính", "ok");
         } catch {
@@ -3193,6 +3767,7 @@
           }
           adminDomains = d.domains || [];
           renderAdminDomains(adminDomains);
+          syncAvailableDomainsFromAdmin(adminDomains);
           loadData();
           toast("✅ Đã cập nhật domain", "ok");
         } catch {
@@ -3213,6 +3788,7 @@
           }
           adminDomains = d.domains || [];
           renderAdminDomains(adminDomains);
+          syncAvailableDomainsFromAdmin(adminDomains);
           loadData();
           toast("🗑️ Đã xóa domain", "ok");
         } catch {
@@ -3449,6 +4025,7 @@
         try {
           loadThemePreference();
           updateIntegrationUI();
+          await loadAvailableDomains();
           const authMode = getAuthRouteMode();
           const r = await fetch("/api/auth/me");
           const d = await r.json();
