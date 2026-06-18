@@ -591,6 +591,14 @@ async function main() {
         shopeeBotPage.text,
         /al:android:package" content="com\.shopee\.vn"/,
       );
+      assert.match(
+        shopeeBotPage.text,
+        /al:ios:url" content="shopeevn:\/\/reactPath\?/,
+      );
+      assert.match(
+        shopeeBotPage.text,
+        /al:android:url" content="shopeevn:\/\/reactPath\?/,
+      );
 
       const clickCountAfterBot = (await db.getLinkByCode(shopeeShortCode)).clicks;
       assert.equal(clickCountAfterBot, clickCountBeforeBot);

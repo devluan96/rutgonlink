@@ -690,6 +690,12 @@ function buildAuthUserPayload(user, isAdmin = false) {
   };
 }
 
+function buildShopeeAppLinkUrl(originalUrl) {
+  const webUrl = String(originalUrl || "").trim();
+  if (!webUrl) return "";
+  return `shopeevn://reactPath?navigate_url=${encodeURIComponent(webUrl)}&path=${encodeURIComponent("shopee/TRANSFER_PAGE")}&tab=buy&use_deeplink=1&version=1`;
+}
+
 async function promoteAdminIfNeeded(database, user) {
   const isAdmin = user.role === "admin" || isAdminEmail(user.email);
   if (isAdmin && (user.role !== "admin" || user.plan !== "admin")) {
@@ -1990,11 +1996,12 @@ function buildDirectBridgePage(link, canonicalUrl, info) {
         }
       : platform === "shopee"
         ? {
-            // Universal Link: dùng chung 1 URL cho cả iOS lẫn Android
-            androidUrl: andScheme,
+            // App Links cho Facebook nên trỏ thẳng vào custom scheme của Shopee
+            // để tăng khả năng mở app khi user bấm short link trong comment/feed.
+            androidUrl: buildShopeeAppLinkUrl(dest),
             androidPackage: SHOPEE_ANDROID_PACKAGE,
             androidAppName: "Shopee",
-            iosUrl: iosScheme,
+            iosUrl: buildShopeeAppLinkUrl(dest),
             iosAppName: "Shopee",
             iosAppStoreId: SHOPEE_APP_STORE_ID,
           }
@@ -2212,10 +2219,10 @@ function buildOgPage(link, baseUrl) {
                 iosAppStoreId: TIKTOK_APP_STORE_ID,
               }
             : {
-                androidUrl: info.deeplink_android,
+                androidUrl: buildShopeeAppLinkUrl(dest),
                 androidPackage: SHOPEE_ANDROID_PACKAGE,
                 androidAppName: "Shopee",
-                iosUrl: info.deeplink_ios,
+                iosUrl: buildShopeeAppLinkUrl(dest),
                 iosAppName: "Shopee",
                 iosAppStoreId: SHOPEE_APP_STORE_ID,
               },
