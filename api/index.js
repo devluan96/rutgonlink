@@ -1681,25 +1681,25 @@ app.get("/:code", async (req, res) => {
       return res.redirect(302, link.original_url);
     }
 
-    // ── Shopee mobile → 301 qua new-express.xyz ──────────────────────────
+    // ── Shopee mobile → 301 thẳng tới Shopee/App Link ───────────────────
     if (info.platform_name === "shopee") {
-      const middleUrl = `https://new-express.xyz/go?u=${encodeURIComponent(info.deeplink || link.original_url)}`;
+      const shopeeTarget = info.deeplink || link.original_url;
       setRedirectDebugHeaders(res, {
-        mode: "shopee-middle-redirect",
+        mode: "shopee-direct-redirect",
         platform: info.platform_name,
       });
       logRedirectDecision({
         requestId: req.requestId,
         linkId: link.id,
         code: codeValue,
-        mode: "shopee-middle-redirect",
+        mode: "shopee-direct-redirect",
         platform: info.platform_name,
         uaKind,
         status: 301,
-        target: middleUrl,
+        target: shopeeTarget,
         referer,
       });
-      return res.redirect(301, middleUrl);
+      return res.redirect(301, shopeeTarget);
     }
 
     // ── Mobile có deeplink → DirectBridgePage ────────────────────────────
