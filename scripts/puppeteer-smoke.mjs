@@ -621,18 +621,49 @@ async function main() {
         );
       };
 
+      const assertShopeeFacebookBridge = (pageResult, label) => {
+        assert.equal(pageResult.response.status, 200, `${label} should return 200`);
+        assert.equal(
+          pageResult.response.headers.get("x-rgl-redirect-mode"),
+          "shopee-facebook-bridge",
+        );
+        assert.equal(
+          pageResult.response.headers.get("x-rgl-redirect-platform"),
+          "shopee",
+        );
+        assert.ok(pageResult.response.headers.get("x-request-id"));
+        assert.match(
+          pageResult.text,
+          /window\.location\.replace\(webUrl\)/,
+        );
+        assert.match(
+          pageResult.text,
+          /http-equiv="refresh" content="0;url=https:\/\/s\.shopee\.vn\/4Axe4JRRDO"/,
+        );
+        assert.match(
+          pageResult.text,
+          /al:ios:url" content="shopeevn:\/\/reactPath\?/,
+        );
+        assert.match(
+          pageResult.text,
+          /al:android:url" content="shopeevn:\/\/reactPath\?/,
+        );
+        assert.doesNotMatch(
+          pageResult.text,
+          /Tiếp tục tới Shopee/,
+          `${label} should auto-redirect without showing a continue button`,
+        );
+      };
+
       const facebookIosPage = await fetchText(shopeeShortUrl, {
         ua: FACEBOOK_IOS_UA,
       });
-      assertShopeeDirectRedirect(facebookIosPage.response, "Facebook iOS Shopee");
+      assertShopeeFacebookBridge(facebookIosPage, "Facebook iOS Shopee");
 
       const facebookAndroidPage = await fetchText(shopeeShortUrl, {
         ua: FACEBOOK_ANDROID_UA,
       });
-      assertShopeeDirectRedirect(
-        facebookAndroidPage.response,
-        "Facebook Android Shopee",
-      );
+      assertShopeeFacebookBridge(facebookAndroidPage, "Facebook Android Shopee");
 
       const mobileShopeeRedirect = await fetchText(shopeeShortUrl, {
         ua: MOBILE_IOS_UA,
@@ -662,6 +693,7 @@ async function main() {
 
       const redirectLogs = getLogs();
       assert.match(redirectLogs, /"mode":"social-bot-og"/);
+      assert.match(redirectLogs, /"mode":"shopee-facebook-bridge"/);
       assert.match(redirectLogs, /"mode":"shopee-direct-redirect"/);
       assert.match(redirectLogs, /"mode":"desktop-redirect"/);
 
@@ -687,6 +719,7 @@ async function main() {
         "#adRedirectBody",
         (el) => el.textContent,
       );
+      assert.match(adminRedirectText, /shopee-facebook-bridge/);
       assert.match(adminRedirectText, /shopee-direct-redirect/);
       assert.match(adminRedirectText, /desktop-redirect/);
 

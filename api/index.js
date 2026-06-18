@@ -1678,6 +1678,36 @@ app.get("/:code", async (req, res) => {
     }
 
     const info = detectPlatformDeep(link.original_url, platform);
+    const isFacebookInApp = isFacebookInAppBrowser(ua);
+
+    if (
+      platform !== "desktop" &&
+      info.platform_name === "shopee" &&
+      isFacebookInApp
+    ) {
+      setRedirectDebugHeaders(res, {
+        mode: "shopee-facebook-bridge",
+        platform: info.platform_name,
+      });
+      logRedirectDecision({
+        requestId: req.requestId,
+        linkId: link.id,
+        code: codeValue,
+        mode: "shopee-facebook-bridge",
+        platform: info.platform_name,
+        uaKind,
+        status: 200,
+        target: info.fallback || link.original_url,
+        referer,
+      });
+      res.set({
+        "Cache-Control": "no-cache,no-store,must-revalidate",
+        Pragma: "no-cache",
+        "Content-Type": "text/html;charset=utf-8",
+        "X-Frame-Options": "SAMEORIGIN",
+      });
+      return res.send(buildShopeeFacebookBridgePage(link, publicBaseUrl, info));
+    }
 
     // ── Desktop → redirect thẳng ─────────────────────────────────────────
     if (platform === "desktop") {
@@ -1964,6 +1994,83 @@ function buildBioPage(profile, owner, links, canonicalUrl) {
       </div>
     </div>
   </div>
+</body>
+</html>`;
+}
+
+function buildShopeeFacebookBridgePage(link, baseUrl, info) {
+  const shortUrl = `${baseUrl}/${link.alias || link.short_code}`;
+  const title = esc(link.og_title || "RutGonLink");
+  const desc = esc(
+    link.og_desc || "Đang mở Shopee để tiếp tục xem nội dung.",
+  );
+  const image = link.og_image
+    ? esc(link.og_image)
+    : `${baseUrl}/og-default.png`;
+  const webUrl = info.fallback || link.original_url;
+  const appUrl = buildShopeeAppLinkUrl(webUrl);
+  const appMeta = buildAppLinkMetaTags(shortUrl, webUrl, appUrl, {
+    androidUrl: appUrl,
+    androidPackage: SHOPEE_ANDROID_PACKAGE,
+    androidAppName: "Shopee",
+    iosUrl: appUrl,
+    iosAppName: "Shopee",
+    iosAppStoreId: SHOPEE_APP_STORE_ID,
+  });
+
+  return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${title}</title>
+<meta name="description" content="${desc}" />
+<meta name="robots" content="noindex, nofollow" />
+<link rel="canonical" href="${esc(shortUrl)}" />
+<meta http-equiv="refresh" content="0;url=${esc(webUrl)}" />
+<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
+${appMeta}
+<meta property="og:locale" content="vi_VN" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="${title}" />
+<meta property="og:description" content="${desc}" />
+<meta property="og:url" content="${esc(shortUrl)}" />
+<meta property="og:site_name" content="RutGonLink" />
+<meta property="og:image" content="${image}" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${title}" />
+<meta name="twitter:description" content="${desc}" />
+<meta name="twitter:image" content="${image}" />
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: #0f172a;
+    color: #e2e8f0;
+    font: 600 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .hint { opacity: 0.72; letter-spacing: 0.01em; }
+</style>
+</head>
+<body>
+<div class="hint">Dang mo Shopee...</div>
+<script>
+(function() {
+  var appUrl = ${JSON.stringify(appUrl)};
+  var webUrl = ${JSON.stringify(webUrl)};
+  var fallbackDelay = /iphone|ipad|ipod/i.test(navigator.userAgent || "") ? 380 : 520;
+
+  if (appUrl) {
+    try { window.location.href = appUrl; } catch (_) {}
+  }
+
+  setTimeout(function() {
+    window.location.replace(webUrl);
+  }, fallbackDelay);
+})();
+</script>
 </body>
 </html>`;
 }
