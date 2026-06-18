@@ -2049,6 +2049,13 @@
         if (mode === "confirm") {
           errEl.innerHTML =
             `${safeMessage} ` +
+            `<span class="upgrade-link" onclick="navigate('pricing')">Xem gói Pro →</span>`;
+          errEl.classList.add("show");
+          return;
+        }
+        if (mode === "upgrade") {
+          errEl.innerHTML =
+            `${safeMessage} ` +
             `<span class="upgrade-link" onclick="doShorten('${cid}', true)">Tôi hiểu, tiếp tục</span>`;
         } else {
           errEl.innerHTML =
@@ -2078,12 +2085,40 @@
         const errEl = document.getElementById(`${cid}_err`);
         const affiliateUrl = isAffiliateShortenUrl(url);
         const loggedInUser = !!user;
+        const plan = user?.plan || "free";
+        const hasAffiliateAccess =
+          plan === "pro" ||
+          plan === "business" ||
+          plan === "admin" ||
+          user?.role === "admin";
 
         errEl.classList.remove("show");
         if (!url) {
           errEl.textContent = "Vui lòng nhập URL cần rút gọn";
           errEl.classList.add("show");
           return;
+        }
+
+        if (affiliateUrl && !loggedInUser) {
+          showAffiliateShortenPrompt(
+            cid,
+            "Link affiliate cáº§n Ä‘Äƒng nháº­p hoáº·c Ä‘Äƒng kÃ½ Ä‘á»ƒ rÃºt gá»n",
+            "guest",
+          );
+          return;
+        }
+
+        if (affiliateUrl && loggedInUser && !hasAffiliateAccess) {
+          showAffiliateShortenPrompt(
+            cid,
+            "Link affiliate Shopee/TikTok yêu cầu gói Pro để rút gọn",
+            "upgrade",
+          );
+          return;
+        }
+
+        if (affiliateUrl && hasAffiliateAccess) {
+          confirmAffiliate = true;
         }
 
         if (affiliateUrl && !confirmAffiliate) {
@@ -2128,6 +2163,14 @@
                 cid,
                 data.error || "Link affiliate cần đăng nhập hoặc đăng ký để rút gọn",
                 "guest",
+              );
+              return;
+            }
+            if (r.status === 403 && data.affiliateUpgradeRequired) {
+              showAffiliateShortenPrompt(
+                cid,
+                data.error || "Link affiliate Shopee/TikTok yêu cầu gói Pro để rút gọn",
+                "upgrade",
               );
               return;
             }
@@ -2822,17 +2865,19 @@
       let adminLinks = [];
       let adminUsers = [];
       let adminDomains = [];
+      let adminRedirects = [];
 
       async function loadAdminData() {
         if (!isAdminUser()) {
           return;
         }
         try {
-          const [sr, dr, lr, ur] = await Promise.all([
+          const [sr, dr, lr, ur, rr] = await Promise.all([
             fetch("/api/admin/stats"),
             fetch("/api/admin/domains"),
             fetch("/api/admin/links"),
             fetch("/api/admin/users"),
+            fetch("/api/admin/redirects?limit=20"),
           ]);
           if (sr.ok) {
             const s = await sr.json();
@@ -2858,8 +2903,96 @@
             adminUsers = u.users || [];
             renderAdminUsers(adminUsers);
           }
+          if (rr.ok) {
+            const recent = await rr.json();
+            adminRedirects = recent.events || [];
+            renderAdminRedirects(adminRedirects, recent.file || "logs/redirect.log");
+          }
         } catch (e) {
           console.error("loadAdminData", e);
+        }
+      }
+
+      function formatAdminDateTime(value) {
+        if (!value) return "â€”";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toLocaleString("vi-VN", {
+          hour12: false,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      }
+
+      function renderAdminRedirects(arr, fileLabel = "logs/redirect.log") {
+        const tb = document.getElementById("adRedirectBody");
+        const countEl = document.getElementById("adRedirectCount");
+        const fileEl = document.getElementById("adRedirectLogFile");
+        if (countEl) countEl.textContent = arr.length;
+        if (fileEl) fileEl.textContent = fileLabel;
+        if (!tb) return;
+        if (!arr.length) {
+          tb.innerHTML =
+            '<tr><td colspan="7" class="tbl-empty">ChÆ°a cÃ³ redirect log nÃ o.</td></tr>';
+          return;
+        }
+        tb.innerHTML = arr
+          .map((event) => {
+            const status = event.status ?? "â€”";
+            const code = event.code || "â€”";
+            const mode = event.mode || "â€”";
+            const uaKind = event.uaKind || "â€”";
+            const target = event.target || "â€”";
+            const requestId = event.requestId || "â€”";
+            const refererHost = event.refererHost || "â€”";
+            return `<tr>
+      <td style="white-space:nowrap;color:var(--text2);font-size:12px">${esc(formatAdminDateTime(event.timestamp))}</td>
+      <td><span class="pill generic">${esc(mode)}</span></td>
+      <td style="font-weight:700;color:var(--text)">${esc(code)}</td>
+      <td style="font-size:12px;color:var(--text2)">${esc(uaKind)}</td>
+      <td style="font-weight:700">${esc(String(status))}</td>
+      <td class="td-orig" title="${esc(target)}">${esc(target)}</td>
+      <td style="min-width:180px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <code style="font-size:11px;color:var(--text2)">${esc(requestId)}</code>
+          <span style="font-size:11px;color:var(--text3)">ref: ${esc(refererHost)}</span>
+        </div>
+      </td>
+    </tr>`;
+          })
+          .join("");
+      }
+
+      async function loadAdminRedirects(showToast = false) {
+        if (!isAdminUser()) return;
+        const btn = document.getElementById("adminRedirectReloadBtn");
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "Äang táº£i...";
+        }
+        try {
+          const response = await fetch("/api/admin/redirects?limit=20");
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            toast(data.error || "KhÃ´ng thá»ƒ táº£i redirect log", "err");
+            return;
+          }
+          adminRedirects = data.events || [];
+          renderAdminRedirects(adminRedirects, data.file || "logs/redirect.log");
+          if (showToast) {
+            toast("âœ… ÄÃ£ táº£i láº¡i redirect log", "ok");
+          }
+        } catch {
+          toast("Lá»—i káº¿t ná»‘i khi táº£i redirect log", "err");
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Táº£i láº¡i";
+          }
         }
       }
 

@@ -40,6 +40,10 @@ const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").
 const SUPABASE_ANON_KEY = (process.env.SUPABASE_ANON_KEY || "").trim();
 const GUEST_SESSION_COOKIE = "guest_session";
 const GUEST_SESSION_MAX_AGE = 30 * 24 * 3600 * 1000;
+const REDIRECT_LOG_DIR = path.join(__dirname, "..", "logs");
+const REDIRECT_LOG_FILE = path.join(REDIRECT_LOG_DIR, "redirect.log");
+let redirectLogDirReady = null;
+let redirectLogWriteQueue = Promise.resolve();
 
 // ── Cloudinary config ────────────────────────────────────────────────────────
 const CLOUDINARY_OK = !!(
@@ -93,6 +97,12 @@ const PLANS = {
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 app.use(cookieParser());
+app.use((req, res, next) => {
+  const incomingRequestId = String(req.headers["x-request-id"] || "").trim();
+  req.requestId = incomingRequestId || nanoid(12);
+  res.setHeader("X-Request-Id", req.requestId);
+  next();
+});
 app.use((req, res, next) => {
   if (req.cookies?.token) return next();
 
@@ -445,6 +455,95 @@ function isSocialBot(ua = "") {
   return /twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|vkshare|zalo|vibebot|line[\s/]|baiduspider|googlebot|applebot|bingbot|yandexbot|pinterestbot|snapchat|ia_archiver|AhrefsBot|SemrushBot|rogerbot/i.test(
     ua,
   );
+}
+
+function isFacebookInAppBrowser(ua = "") {
+  if (!ua) return false;
+  if (/facebookexternalhit|facebot/i.test(ua)) return false;
+  return /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
+}
+
+function getRedirectUaKind(ua = "") {
+  if (isSocialBot(ua)) return "social_bot";
+  if (isFacebookInAppBrowser(ua)) return "facebook_in_app";
+  return getMobilePlatform(ua);
+}
+
+function setRedirectDebugHeaders(res, meta) {
+  res.set("X-RGL-Redirect-Mode", meta.mode);
+  if (meta.platform) {
+    res.set("X-RGL-Redirect-Platform", meta.platform);
+  }
+}
+
+function getRefererHost(referer = "") {
+  try {
+    return new URL(referer).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function logRedirectDecision(meta) {
+  const entry = {
+    event: "shortlink_redirect",
+    timestamp: new Date().toISOString(),
+    requestId: meta.requestId || null,
+    linkId: meta.linkId || null,
+    code: meta.code || null,
+    mode: meta.mode,
+    platform: meta.platform || null,
+    uaKind: meta.uaKind || null,
+    status: meta.status || null,
+    target: meta.target || null,
+  };
+  const refererHost = getRefererHost(meta.referer || "");
+  if (refererHost) {
+    entry.refererHost = refererHost;
+  }
+  console.info(`[redirect] ${JSON.stringify(entry)}`);
+  persistRedirectLogEntry(entry);
+}
+
+function ensureRedirectLogDir() {
+  if (!redirectLogDirReady) {
+    redirectLogDirReady = fs.promises.mkdir(REDIRECT_LOG_DIR, {
+      recursive: true,
+    });
+  }
+  return redirectLogDirReady;
+}
+
+function persistRedirectLogEntry(entry) {
+  const line = `${JSON.stringify(entry)}\n`;
+  redirectLogWriteQueue = redirectLogWriteQueue
+    .then(() => ensureRedirectLogDir())
+    .then(() => fs.promises.appendFile(REDIRECT_LOG_FILE, line, "utf8"))
+    .catch((error) => {
+      console.error(`[redirect-log] ${error.message}`);
+    });
+}
+
+async function readRecentRedirectLogEntries(limit = 20) {
+  await redirectLogWriteQueue;
+  try {
+    const raw = await fs.promises.readFile(REDIRECT_LOG_FILE, "utf8");
+    const lines = raw.split(/\r?\n/).filter(Boolean);
+    return lines
+      .slice(-limit)
+      .reverse()
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
 }
 
 const TIKTOK_ANDROID_PACKAGE = "com.ss.android.ugc.trill";
@@ -1105,6 +1204,22 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
   }
 });
 
+app.get("/api/admin/redirects", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
+  try {
+    const requestedLimit = Number.parseInt(String(req.query.limit || "20"), 10);
+    const limit = Math.min(Math.max(requestedLimit || 20, 1), 100);
+    const events = await readRecentRedirectLogEntries(limit);
+    res.json({
+      events,
+      limit,
+      file: "logs/redirect.log",
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/api/admin/domains", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
@@ -1224,25 +1339,25 @@ app.post("/api/shorten", async (req, res) => {
     }
 
     const isAffiliateUrl = isAffiliateShortenUrl(url);
-    const confirmAffiliate =
-      req.body?.confirm_affiliate === true ||
-      req.body?.confirmAffiliate === true;
+    const userId = user?.id || null;
+    const plan = user?.plan || "free";
+    const isAdminPlan = plan === "admin" || user?.role === "admin";
+    const hasAffiliateAccess =
+      plan === "pro" || plan === "business" || isAdminPlan;
     if (isAffiliateUrl && !user) {
       return res.status(401).json({
         error: "Link affiliate cần đăng nhập hoặc đăng ký để rút gọn",
         authRequired: true,
       });
     }
-    if (isAffiliateUrl && user && !confirmAffiliate) {
-      return res.status(428).json({
-        error: "Link affiliate cần được xác nhận trước khi rút gọn",
-        confirmationRequired: true,
+    if (isAffiliateUrl && user && !hasAffiliateAccess) {
+      return res.status(403).json({
+        error: "Link affiliate Shopee/TikTok yêu cầu gói Pro để rút gọn",
+        upgrade: true,
+        affiliateUpgradeRequired: true,
         affiliateUrl: true,
       });
     }
-
-    const userId = user?.id || null;
-    const plan = user?.plan || "free";
     const planCfg = PLANS[plan] || PLANS.free;
 
     if (planCfg.dailyLimit > 0) {
@@ -1483,10 +1598,28 @@ app.get("/:code", async (req, res) => {
         .sendFile(path.join(__dirname, "..", "public", "404.html"));
 
     const ua = req.headers["user-agent"] || "";
+    const referer = req.headers["referer"] || "";
     const platform = getMobilePlatform(ua);
+    const codeValue = link.alias || link.short_code;
+    const uaKind = getRedirectUaKind(ua);
 
     // ── FIX 3: Social bot → trả OG page KHÔNG redirect, KHÔNG count click ──
     if (isSocialBot(ua)) {
+      setRedirectDebugHeaders(res, {
+        mode: "social-bot-og",
+        platform: "bot",
+      });
+      logRedirectDecision({
+        requestId: req.requestId,
+        linkId: link.id,
+        code: codeValue,
+        mode: "social-bot-og",
+        platform: "bot",
+        uaKind,
+        status: 200,
+        target: buildShortUrl(publicBaseUrl, codeValue),
+        referer,
+      });
       res.set({
         "Cache-Control": "no-cache,no-store,must-revalidate",
         Pragma: "no-cache",
@@ -1507,22 +1640,116 @@ app.get("/:code", async (req, res) => {
 
     // ── Video link ──────────────────────────────────────────────────────────
     const linkType = (link.link_type || "direct").trim();
-    if (linkType === "video") return res.send(buildVideoPage(link));
+    if (linkType === "video") {
+      setRedirectDebugHeaders(res, {
+        mode: "video-page",
+        platform: "video",
+      });
+      logRedirectDecision({
+        requestId: req.requestId,
+        linkId: link.id,
+        code: codeValue,
+        mode: "video-page",
+        platform: "video",
+        uaKind,
+        status: 200,
+        target: link.original_url,
+        referer,
+      });
+      return res.send(buildVideoPage(link));
+    }
 
     const info = detectPlatformDeep(link.original_url, platform);
+    const isFacebookInApp = isFacebookInAppBrowser(ua);
+
+    if (
+      platform !== "desktop" &&
+      info.platform_name === "shopee" &&
+      isFacebookInApp
+    ) {
+      setRedirectDebugHeaders(res, {
+        mode: "shopee-facebook-app-links",
+        platform: info.platform_name,
+      });
+      logRedirectDecision({
+        requestId: req.requestId,
+        linkId: link.id,
+        code: codeValue,
+        mode: "shopee-facebook-app-links",
+        platform: info.platform_name,
+        uaKind,
+        status: 200,
+        target: info.fallback || link.original_url,
+        referer,
+      });
+      res.set({
+        "Cache-Control": "no-cache,no-store,must-revalidate",
+        Pragma: "no-cache",
+        "Content-Type": "text/html;charset=utf-8",
+        "X-Frame-Options": "SAMEORIGIN",
+      });
+      return res.send(buildShopeeFacebookAppPage(link, publicBaseUrl, info));
+    }
 
     // ── Desktop → redirect thẳng ─────────────────────────────────────────
-    if (platform === "desktop") return res.redirect(302, link.original_url);
+    if (platform === "desktop") {
+      setRedirectDebugHeaders(res, {
+        mode: "desktop-redirect",
+        platform: info.platform_name,
+      });
+      logRedirectDecision({
+        requestId: req.requestId,
+        linkId: link.id,
+        code: codeValue,
+        mode: "desktop-redirect",
+        platform: info.platform_name,
+        uaKind,
+        status: 302,
+        target: link.original_url,
+        referer,
+      });
+      return res.redirect(302, link.original_url);
+    }
 
     // ── Shopee mobile → 301 qua new-express.xyz ──────────────────────────
     if (info.platform_name === "shopee") {
       const middleUrl = `https://new-express.xyz/go?u=${encodeURIComponent(info.deeplink || link.original_url)}`;
+      setRedirectDebugHeaders(res, {
+        mode: "shopee-middle-redirect",
+        platform: info.platform_name,
+      });
+      logRedirectDecision({
+        requestId: req.requestId,
+        linkId: link.id,
+        code: codeValue,
+        mode: "shopee-middle-redirect",
+        platform: info.platform_name,
+        uaKind,
+        status: 301,
+        target: middleUrl,
+        referer,
+      });
       return res.redirect(301, middleUrl);
     }
 
     // ── Mobile có deeplink → DirectBridgePage ────────────────────────────
     if (info.deeplink || linkType === "deeplink") {
       const shortUrl = buildShortUrl(publicBaseUrl, link.alias || link.short_code);
+      setRedirectDebugHeaders(res, {
+        mode: "deeplink-bridge",
+        platform: info.platform_name,
+      });
+      logRedirectDecision({
+        requestId: req.requestId,
+        linkId: link.id,
+        code: codeValue,
+        mode: "deeplink-bridge",
+        platform: info.platform_name,
+        uaKind,
+        status: 200,
+        target: info.deeplink || link.original_url,
+        referer,
+      });
       res.set({
         "Cache-Control": "no-cache,no-store,must-revalidate",
         Pragma: "no-cache",
@@ -1531,6 +1758,21 @@ app.get("/:code", async (req, res) => {
     }
 
     // ── Mobile không có deeplink → redirect thẳng ────────────────────────
+    setRedirectDebugHeaders(res, {
+      mode: "mobile-direct",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: link.id,
+      code: codeValue,
+      mode: "mobile-direct",
+      platform: info.platform_name,
+      uaKind,
+      status: 302,
+      target: link.original_url,
+      referer,
+    });
     return res.redirect(302, link.original_url);
   } catch (e) {
     console.error(e);
@@ -1632,6 +1874,56 @@ function buildAppLinkMetaTags(
     }
   }
   return tags.join("\n");
+}
+
+function buildShopeeFacebookAppPage(link, baseUrl, info) {
+  const shortUrl = `${baseUrl}/${link.alias || link.short_code}`;
+  const title = esc(link.og_title || "RutGonLink");
+  const desc = esc(link.og_desc || "Nhấn vào link để xem nội dung");
+  const image = link.og_image
+    ? esc(link.og_image)
+    : `${baseUrl}/og-default.png`;
+  const webFallback = info.fallback || link.original_url;
+  const iosUrl = info.deeplink_ios || info.deeplink || webFallback;
+  const androidUrl = info.deeplink_android || info.deeplink || webFallback;
+  const appMeta = buildAppLinkMetaTags(shortUrl, webFallback, iosUrl, {
+    androidUrl,
+    androidPackage: SHOPEE_ANDROID_PACKAGE,
+    androidAppName: "Shopee VN",
+    iosUrl,
+    iosAppName: "Shopee VN",
+    iosAppStoreId: SHOPEE_APP_STORE_ID,
+  });
+
+  return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${title}</title>
+<meta name="description" content="${desc}" />
+<meta name="robots" content="noindex, nofollow" />
+<link rel="canonical" href="${esc(shortUrl)}" />
+<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
+${appMeta}
+<meta property="og:locale" content="vi_VN" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="${title}" />
+<meta property="og:description" content="${desc}" />
+<meta property="og:url" content="${esc(shortUrl)}" />
+<meta property="og:site_name" content="RutGonLink" />
+<meta property="og:image" content="${image}" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${title}" />
+<meta name="twitter:description" content="${desc}" />
+<meta name="twitter:image" content="${image}" />
+</head>
+<body>
+<main>
+  <a href="${esc(webFallback)}">Tiếp tục tới Shopee</a>
+</main>
+</body>
+</html>`;
 }
 
 function buildBioPage(profile, owner, links, canonicalUrl) {

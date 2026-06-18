@@ -138,18 +138,23 @@
     if (landingShortenCopy) landingShortenCopy.hidden = true;
     if (landingShortenGate) landingShortenGate.hidden = false;
     if (landingShortenConfirm) {
-      landingShortenConfirm.hidden = mode !== "confirm";
+      landingShortenConfirm.hidden = mode === "guest";
+      landingShortenConfirm.textContent =
+        mode === "upgrade" ? "Xem gói Pro" : "Tôi hiểu, tiếp tục";
+      landingShortenConfirm.dataset.mode = mode;
     }
     if (landingShortenLogin) {
-      landingShortenLogin.hidden = mode === "confirm";
+      landingShortenLogin.hidden = mode !== "guest";
       landingShortenLogin.href = buildAuthUrl("login");
     }
     if (landingShortenRegister) {
-      landingShortenRegister.hidden = mode === "confirm";
+      landingShortenRegister.hidden = mode !== "guest";
       landingShortenRegister.href = buildAuthUrl("register");
     }
     landingShortenStatus.textContent =
-      mode === "confirm"
+      mode === "upgrade"
+        ? "Link affiliate Shopee/TikTok yêu cầu gói Pro để rút gọn."
+        : mode === "confirm"
         ? "Bạn đã đăng nhập. Hãy xác nhận để tiếp tục rút gọn link affiliate."
         : "Để rút gọn link affiliate, bạn cần đăng nhập hoặc đăng ký.";
   };
@@ -205,6 +210,12 @@
 
     const isAffiliate = isAffiliateShortenUrl(url);
     const authUser = isAffiliate ? await loadLandingAuthState() : null;
+    const userPlan = authUser?.plan || "free";
+    const hasAffiliateAccess =
+      userPlan === "pro" ||
+      userPlan === "business" ||
+      userPlan === "admin" ||
+      authUser?.role === "admin";
     if (isAffiliate && !authUser) {
       showLandingShortenGate(
         "Link affiliate cần đăng nhập hoặc đăng ký trước khi rút gọn.",
@@ -212,7 +223,14 @@
       );
       return;
     }
-    if (isAffiliate && authUser && !confirmAffiliate) {
+    if (isAffiliate && authUser && !hasAffiliateAccess) {
+      showLandingShortenGate(
+        "Link affiliate Shopee/TikTok yêu cầu gói Pro để rút gọn.",
+        "upgrade",
+      );
+      return;
+    }
+    if (isAffiliate && authUser && !confirmAffiliate && !hasAffiliateAccess) {
       showLandingShortenGate(
         "Link affiliate cần xác nhận trước khi rút gọn.",
         "confirm",
@@ -246,6 +264,10 @@
           showLandingShortenGate(data.error, "guest");
           return;
         }
+        if (response.status === 403 && data.affiliateUpgradeRequired) {
+          showLandingShortenGate(data.error, "upgrade");
+          return;
+        }
         if (response.status === 428 && data.confirmationRequired) {
           showLandingShortenGate(data.error, "confirm");
           return;
@@ -272,6 +294,10 @@
   };
 
   landingShortenConfirm?.addEventListener("click", async () => {
+    if (landingShortenConfirm?.dataset.mode === "upgrade") {
+      location.href = "/pricing";
+      return;
+    }
     await submitLandingShorten({ confirmAffiliate: true });
   });
 
