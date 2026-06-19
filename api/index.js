@@ -3321,6 +3321,148 @@ app.delete("/api/links/:id", async (req, res) => {
 
 // ─── REDIRECT ─────────────────────────────────────────────────────────────────
 
+app.get("/go/:code", async (req, res) => {
+  const { code } = req.params;
+  if (code.includes(".") || /^(api|uploads|admin)/.test(code))
+    return res.status(404).send("Not found");
+
+  try {
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const link =
+      (await database.getLinkByAlias(code)) ||
+      (await database.getLinkByCode(code));
+    if (!link)
+      return res
+        .status(404)
+        .sendFile(path.join(__dirname, "..", "public", "404.html"));
+
+    const ua = req.headers["user-agent"] || "";
+    const referer = req.headers["referer"] || "";
+    const platform = getMobilePlatform(ua);
+    const codeValue = link.alias || link.short_code;
+    const uaKind = getRedirectUaKind(ua);
+    const linkType = (link.link_type || "direct").trim();
+    const info = detectPlatformDeep(link.original_url, platform);
+    const isFacebookInApp = isFacebookInAppBrowser(ua);
+
+    // Route này chỉ dùng khi người xem bấm overlay video, nên không recordClick
+    // để tránh double-count so với lần mở short link ban đầu.
+
+    if (
+      platform !== "desktop" &&
+      info.platform_name === "shopee" &&
+      isFacebookInApp
+    ) {
+      setRedirectDebugHeaders(res, {
+        mode: "video-launch-shopee-facebook-bridge",
+        platform: info.platform_name,
+      });
+      logRedirectDecision({
+        requestId: req.requestId,
+        linkId: link.id,
+        code: codeValue,
+        mode: "video-launch-shopee-facebook-bridge",
+        platform: info.platform_name,
+        uaKind,
+        status: 200,
+        target: info.fallback || link.original_url,
+        referer,
+      });
+      res.set({
+        "Cache-Control": "no-cache,no-store,must-revalidate",
+        Pragma: "no-cache",
+        "Content-Type": "text/html;charset=utf-8",
+        "X-Frame-Options": "SAMEORIGIN",
+      });
+      return res.send(buildShopeeFacebookBridgePage(link, publicBaseUrl, info));
+    }
+
+    if (platform === "desktop") {
+      setRedirectDebugHeaders(res, {
+        mode: "video-launch-desktop-redirect",
+        platform: info.platform_name,
+      });
+      logRedirectDecision({
+        requestId: req.requestId,
+        linkId: link.id,
+        code: codeValue,
+        mode: "video-launch-desktop-redirect",
+        platform: info.platform_name,
+        uaKind,
+        status: 302,
+        target: link.original_url,
+        referer,
+      });
+      return res.redirect(302, link.original_url);
+    }
+
+    if (info.platform_name === "shopee") {
+      const shopeeTarget = info.deeplink || link.original_url;
+      setRedirectDebugHeaders(res, {
+        mode: "video-launch-shopee-direct-redirect",
+        platform: info.platform_name,
+      });
+      logRedirectDecision({
+        requestId: req.requestId,
+        linkId: link.id,
+        code: codeValue,
+        mode: "video-launch-shopee-direct-redirect",
+        platform: info.platform_name,
+        uaKind,
+        status: 301,
+        target: shopeeTarget,
+        referer,
+      });
+      return res.redirect(301, shopeeTarget);
+    }
+
+    if (info.deeplink || linkType === "deeplink") {
+      const shortUrl = buildLinkShortUrl(link, publicBaseUrl);
+      setRedirectDebugHeaders(res, {
+        mode: "video-launch-deeplink-bridge",
+        platform: info.platform_name,
+      });
+      logRedirectDecision({
+        requestId: req.requestId,
+        linkId: link.id,
+        code: codeValue,
+        mode: "video-launch-deeplink-bridge",
+        platform: info.platform_name,
+        uaKind,
+        status: 200,
+        target: info.deeplink || link.original_url,
+        referer,
+      });
+      res.set({
+        "Cache-Control": "no-cache,no-store,must-revalidate",
+        Pragma: "no-cache",
+      });
+      return res.send(buildDirectBridgePage(link, shortUrl, info));
+    }
+
+    setRedirectDebugHeaders(res, {
+      mode: "video-launch-mobile-direct",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: link.id,
+      code: codeValue,
+      mode: "video-launch-mobile-direct",
+      platform: info.platform_name,
+      uaKind,
+      status: 302,
+      target: link.original_url,
+      referer,
+    });
+    return res.redirect(302, link.original_url);
+  } catch (e) {
+    console.error(e);
+    res.status(500).send("Server error");
+  }
+});
+
 app.get("/:code", async (req, res) => {
   const { code } = req.params;
   if (code.includes(".") || /^(api|uploads|admin)/.test(code))
@@ -4212,9 +4354,8 @@ app.post(
 );
 
 function buildVideoPage(link) {
-  const iosInfo = detectPlatformDeep(link.original_url, "ios");
-  const androidInfo = detectPlatformDeep(link.original_url, "android");
-  const fallback = link.original_url;
+  const launchCode = link.alias || link.short_code;
+  const launchUrl = `/go/${encodeURIComponent(launchCode)}`;
   const overlayText = esc(
     link.video_overlay_text || "Bấm vào đây để ủng hộ và xem sản phẩm →",
   );
@@ -4290,9 +4431,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
 </div>
 <script>
 (function(){
-  var DL_IOS     = ${JSON.stringify(iosInfo.deeplink || fallback)};
-  var DL_ANDROID = ${JSON.stringify(androidInfo.deeplink || fallback)};
-  var FALLBACK   = ${JSON.stringify(fallback)};
+  var LAUNCH_URL = ${JSON.stringify(launchUrl)};
   var CIRC = 120.6, DELAY = 5000;
 
   var videoEl = document.getElementById('videoEl');
@@ -4303,9 +4442,6 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
   var cdNum   = document.getElementById('cdNum');
   var pf      = document.getElementById('pf');
   var shown   = false;
-
-  var isIos     = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  var isAndroid = /android/i.test(navigator.userAgent);
 
   window.fitVideo = function(v) {
     if (!v.videoWidth) return;
@@ -4344,18 +4480,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
   }
 
   function goApp(){
-    if(isAndroid&&DL_ANDROID!==FALLBACK){
-      var u=DL_ANDROID
-        .replace('shopee://','intent://shopee#Intent;scheme=shopee;package=com.shopee.vn;end')
-        .replace('snssdk1233://','intent://tiktok#Intent;scheme=snssdk1233;package=com.zhiliaoapp.musically;end');
-      window.location.href=u;
-      setTimeout(function(){window.location.href=FALLBACK;},1500);
-    } else if(isIos&&DL_IOS!==FALLBACK){
-      window.location.href=DL_IOS;
-      setTimeout(function(){window.location.href=FALLBACK;},2000);
-    } else {
-      window.open(FALLBACK,'_blank');
-    }
+    window.location.href=LAUNCH_URL;
   }
   window.goApp=goApp;
 
