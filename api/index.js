@@ -680,6 +680,49 @@ function normalizeAnalyticsText(input, maxLength = 80) {
   return value.slice(0, maxLength);
 }
 
+function stripVietnameseMarks(input) {
+  return String(input || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D");
+}
+
+function sanitizeAliasInput(input, maxLength = 40) {
+  const compact = stripVietnameseMarks(input)
+    .toLowerCase()
+    .replace(/['"`’]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return compact.slice(0, maxLength).replace(/-+$/g, "");
+}
+
+function humanizeSlugTitle(input, maxLength = 120) {
+  const compact = String(input || "")
+    .trim()
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ");
+  if (!compact) return null;
+  const pretty = compact.charAt(0).toUpperCase() + compact.slice(1);
+  return pretty.slice(0, maxLength);
+}
+
+function normalizeShareTitleInput(input, maxLength = 120) {
+  if (typeof input === "undefined") return undefined;
+  const compact = String(input || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (!compact) return null;
+  const looksLikeSlug =
+    !/\s/.test(compact) &&
+    /[-_]/.test(compact) &&
+    !compact.includes("://");
+  return looksLikeSlug
+    ? humanizeSlugTitle(compact, maxLength)
+    : compact.slice(0, maxLength);
+}
+
 function normalizeCountryCode(input) {
   const value = String(input || "").trim().toUpperCase();
   if (!/^[A-Z]{2}$/.test(value)) return null;
@@ -869,6 +912,348 @@ function buildStatsAnalytics(clickRows = []) {
   };
 }
 
+function normalizeDomainVerificationStatus(input) {
+  const value = String(input || "").trim().toLowerCase();
+  if (value === "verified" || value === "pending" || value === "failed") {
+    return value;
+  }
+  return null;
+}
+
+function normalizeExpiryDateInput(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+  const normalized = raw.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+  const parsed = new Date(`${normalized}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  return normalized;
+}
+
+function getRequestIp(req) {
+  return normalizeAnalyticsText(
+    (req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
+      req.headers["x-real-ip"] ||
+      req.socket?.remoteAddress ||
+      "",
+    120,
+  );
+}
+
+function detectDeviceTypeFromUa(ua = "") {
+  const lower = ua.toLowerCase();
+  if (/ipad|tablet|playbook|silk/i.test(lower)) return "tablet";
+  if (/mobi|iphone|ipod|android/i.test(lower)) return "mobile";
+  return "desktop";
+}
+
+function detectBrowserFromUa(ua = "") {
+  if (!ua) return "Trình duyệt lạ";
+  if (/edg\//i.test(ua)) return "Edge";
+  if (/opr\//i.test(ua) || /opera/i.test(ua)) return "Opera";
+  if (/samsungbrowser\//i.test(ua)) return "Samsung Internet";
+  if (/firefox\//i.test(ua)) return "Firefox";
+  if (/chrome\//i.test(ua) && !/edg\//i.test(ua) && !/opr\//i.test(ua)) return "Chrome";
+  if (/safari\//i.test(ua) && !/chrome\//i.test(ua)) return "Safari";
+  if (/FBAN|FBAV|FB_IAB|FBIOS/i.test(ua)) return "Facebook In-App";
+  if (/instagram/i.test(ua)) return "Instagram In-App";
+  if (/zalo/i.test(ua)) return "Zalo";
+  return "Trình duyệt lạ";
+}
+
+function detectOsFromUa(ua = "") {
+  if (!ua) return "Hệ điều hành lạ";
+  if (/windows nt/i.test(ua)) return "Windows";
+  if (/iphone|ipad|ipod/i.test(ua)) return "iOS";
+  if (/android/i.test(ua)) return "Android";
+  if (/mac os x/i.test(ua)) return "macOS";
+  if (/linux/i.test(ua)) return "Linux";
+  return "Hệ điều hành lạ";
+}
+
+function getDeviceTypeLabel(deviceType = "desktop") {
+  if (deviceType === "mobile") return "Mobile";
+  if (deviceType === "tablet") return "Tablet";
+  return "Desktop";
+}
+
+function buildLoginDeviceContext(req) {
+  const userAgent = String(req.headers["user-agent"] || "").trim();
+  const browserName = detectBrowserFromUa(userAgent);
+  const osName = detectOsFromUa(userAgent);
+  const deviceType = detectDeviceTypeFromUa(userAgent);
+  const deviceLabel = [browserName, osName, getDeviceTypeLabel(deviceType)]
+    .filter(Boolean)
+    .join(" • ");
+  const deviceFingerprint = crypto
+    .createHash("sha1")
+    .update([browserName.toLowerCase(), osName.toLowerCase(), deviceType].join("|"))
+    .digest("hex");
+  return {
+    deviceFingerprint,
+    deviceLabel,
+    browserName,
+    osName,
+    deviceType,
+    ip: getRequestIp(req),
+    userAgent,
+  };
+}
+
+function buildQuotaAlert(planName, linksToday, hasAccount = true) {
+  const effectivePlan = planName === "guest" ? "free" : planName;
+  const planCfg = PLANS[effectivePlan] || PLANS.free;
+  const dailyLimit = Number(planCfg.dailyLimit || 0);
+  const used = Math.max(Number(linksToday || 0), 0);
+  if (dailyLimit < 1) {
+    return {
+      active: false,
+      level: "normal",
+      key: "",
+      daily_limit: 0,
+      used,
+      remaining: null,
+      ratio: 0,
+      has_account: hasAccount,
+      plan: planName,
+    };
+  }
+
+  const remaining = Math.max(dailyLimit - used, 0);
+  const ratio = dailyLimit ? used / dailyLimit : 0;
+  let level = "normal";
+  if (used >= dailyLimit) level = "critical";
+  else if (ratio >= 0.8 || remaining <= Math.min(5, Math.ceil(dailyLimit * 0.2))) level = "warn";
+  const todayKey = getAnalyticsDayKey(new Date());
+
+  return {
+    active: hasAccount && level !== "normal",
+    level,
+    key: !hasAccount || level === "normal" ? "" : `quota:${effectivePlan}:${level}:${todayKey}`,
+    daily_limit: dailyLimit,
+    used,
+    remaining,
+    ratio: Math.round(ratio * 1000) / 10,
+    has_account: hasAccount,
+    plan: planName,
+  };
+}
+
+function buildClickSpikeAlert(clickRows = [], currentTime = Date.now()) {
+  const bucketMinutes = 15;
+  const bucketMs = bucketMinutes * 60 * 1000;
+  const currentBucketStart = Math.floor(currentTime / bucketMs) * bucketMs;
+  const oldestBucketStart = currentBucketStart - 4 * bucketMs;
+  const countsByBucket = new Map();
+
+  for (const row of clickRows) {
+    const clickedAtMs = new Date(row?.clicked_at || 0).getTime();
+    if (!Number.isFinite(clickedAtMs) || clickedAtMs < oldestBucketStart) continue;
+    const bucketStart = Math.floor(clickedAtMs / bucketMs) * bucketMs;
+    countsByBucket.set(bucketStart, (countsByBucket.get(bucketStart) || 0) + 1);
+  }
+
+  const currentClicks = countsByBucket.get(currentBucketStart) || 0;
+  const previousBuckets = [1, 2, 3, 4].map(
+    (index) => countsByBucket.get(currentBucketStart - index * bucketMs) || 0,
+  );
+  const baselineClicks =
+    previousBuckets.reduce((total, value) => total + value, 0) / previousBuckets.length;
+  const ratio = baselineClicks > 0 ? currentClicks / baselineClicks : currentClicks;
+  const active =
+    currentClicks >= 12 &&
+    ((baselineClicks >= 3 && ratio >= 3) || (baselineClicks < 3 && currentClicks >= 18));
+
+  return {
+    active,
+    level: active ? "warn" : "normal",
+    key: active ? `click-spike:${new Date(currentBucketStart).toISOString()}` : "",
+    bucket_minutes: bucketMinutes,
+    bucket_started_at: new Date(currentBucketStart).toISOString(),
+    current_clicks: currentClicks,
+    baseline_clicks: Math.round(baselineClicks * 10) / 10,
+    ratio: Math.round(ratio * 10) / 10,
+  };
+}
+
+function buildSecurityAlert(loginEvent) {
+  if (!loginEvent?.is_new_device) {
+    return {
+      active: false,
+      level: "normal",
+      key: "",
+    };
+  }
+  const occurredAtMs = new Date(loginEvent.occurred_at || 0).getTime();
+  if (!Number.isFinite(occurredAtMs) || Date.now() - occurredAtMs > 7 * 24 * 3600 * 1000) {
+    return {
+      active: false,
+      level: "normal",
+      key: "",
+    };
+  }
+  return {
+    active: true,
+    level: "warn",
+    key: `security:new-device:${loginEvent.id}`,
+    occurred_at: loginEvent.occurred_at,
+    device_label: normalizeAnalyticsText(loginEvent.device_label, 120) || "Thiết bị mới",
+    browser_name: normalizeAnalyticsText(loginEvent.browser_name, 80),
+    os_name: normalizeAnalyticsText(loginEvent.os_name, 80),
+    device_type: normalizeAnalyticsText(loginEvent.device_type, 40),
+  };
+}
+
+function getDaysUntilExpiry(dateValue, currentTime = Date.now()) {
+  const normalized = normalizeExpiryDateInput(dateValue);
+  if (!normalized) return null;
+  const expiryMs = new Date(`${normalized}T00:00:00.000Z`).getTime();
+  const currentDate = new Date(currentTime);
+  const todayMs = Date.UTC(
+    currentDate.getUTCFullYear(),
+    currentDate.getUTCMonth(),
+    currentDate.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+  return Math.floor((expiryMs - todayMs) / (24 * 60 * 60 * 1000));
+}
+
+function buildDomainAlerts(domains = [], currentTime = Date.now()) {
+  const alerts = [];
+  const dayKey = getAnalyticsDayKey(new Date(currentTime));
+
+  for (const domain of domains) {
+    if (!domain || domain.is_active === false) continue;
+    const hostname = normalizeAnalyticsText(domain.hostname, 120) || "domain";
+    const verificationStatus = normalizeDomainVerificationStatus(domain.verification_status) || "verified";
+    if (verificationStatus === "failed") {
+      alerts.push({
+        key: `domain:verify:${domain.id}:failed:${dayKey}`,
+        type: "verify_failed",
+        level: "err",
+        hostname,
+        title: "Domain lỗi verify",
+        message: `${hostname} đang ở trạng thái verify failed.`,
+      });
+    }
+
+    const daysUntilExpiry = getDaysUntilExpiry(domain.expires_at, currentTime);
+    if (daysUntilExpiry === null) continue;
+    if (daysUntilExpiry < 0) {
+      alerts.push({
+        key: `domain:expiry:${domain.id}:expired:${Math.abs(daysUntilExpiry)}`,
+        type: "expired",
+        level: "err",
+        hostname,
+        title: "Domain đã hết hạn",
+        message: `${hostname} đã hết hạn ${Math.abs(daysUntilExpiry)} ngày.`,
+        expires_at: normalizeExpiryDateInput(domain.expires_at),
+      });
+    } else if (daysUntilExpiry <= 14) {
+      alerts.push({
+        key: `domain:expiry:${domain.id}:${daysUntilExpiry}`,
+        type: "expiring",
+        level: "warn",
+        hostname,
+        title: "Domain sắp hết hạn",
+        message: `${hostname} còn ${daysUntilExpiry} ngày trước khi hết hạn.`,
+        expires_at: normalizeExpiryDateInput(domain.expires_at),
+        days_until_expiry: daysUntilExpiry,
+      });
+    }
+  }
+
+  return alerts.sort((left, right) => {
+    const severity = { err: 0, warn: 1, info: 2 };
+    const severityDiff = (severity[left.level] ?? 9) - (severity[right.level] ?? 9);
+    if (severityDiff !== 0) return severityDiff;
+    return String(left.hostname || "").localeCompare(String(right.hostname || ""));
+  });
+}
+
+function buildSessionAlertsFromLoginEvent(loginEvent) {
+  const securityAlert = buildSecurityAlert(loginEvent);
+  if (!securityAlert.active) return [];
+  return [
+    {
+      key: securityAlert.key,
+      title: "Thiết bị mới đăng nhập",
+      message: `${securityAlert.device_label} vừa đăng nhập vào tài khoản của bạn.`,
+      kind: "warn",
+      createdAt: securityAlert.occurred_at,
+    },
+  ];
+}
+
+function alertLevelToNotificationKind(level = "info") {
+  if (level === "err" || level === "critical") return "err";
+  if (level === "warn") return "warn";
+  if (level === "ok") return "ok";
+  return "info";
+}
+
+function buildStatsAlertPayload({ planName, linksToday, hasAccount, clickRows, latestLoginEvent }) {
+  const quota = buildQuotaAlert(planName, linksToday, hasAccount);
+  const clickSpike = buildClickSpikeAlert(clickRows);
+  const sessionItems = buildSessionAlertsFromLoginEvent(latestLoginEvent);
+  const active = [];
+
+  if (quota.active) {
+    active.push({
+      key: quota.key,
+      title: quota.level === "critical" ? "Đã chạm giới hạn gói" : "Sắp chạm ngưỡng quota",
+      message:
+        quota.level === "critical"
+          ? `Bạn đã dùng ${quota.used}/${quota.daily_limit} link hôm nay.`
+          : `Bạn đã dùng ${quota.used}/${quota.daily_limit} link hôm nay, còn ${quota.remaining}.`,
+      kind: alertLevelToNotificationKind(quota.level),
+      page: "pricing",
+    });
+  }
+
+  if (clickSpike.active) {
+    active.push({
+      key: clickSpike.key,
+      title: "Click tăng đột biến",
+      message: `${clickSpike.current_clicks} click / ${clickSpike.bucket_minutes} phút, gấp ${clickSpike.ratio} lần mức nền.`,
+      kind: alertLevelToNotificationKind(clickSpike.level),
+      page: "stats",
+      createdAt: clickSpike.bucket_started_at,
+    });
+  }
+
+  sessionItems.forEach((item) => {
+    active.push({
+      ...item,
+      page: "",
+    });
+  });
+
+  return {
+    quota,
+    click_spike: clickSpike,
+    session: buildSecurityAlert(latestLoginEvent),
+    active,
+  };
+}
+
+function buildAdminAlertPayload(domains = []) {
+  const domainAlerts = buildDomainAlerts(domains);
+  return {
+    domains: domainAlerts,
+    active: domainAlerts.map((item) => ({
+      key: item.key,
+      title: item.title,
+      message: item.message,
+      kind: alertLevelToNotificationKind(item.level),
+      page: "admin",
+    })),
+  };
+}
+
 app.get("/og-default.png", (_, res) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
     <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#1e2535"/><stop offset="100%" style="stop-color:#0d1117"/></linearGradient></defs>
@@ -926,6 +1311,10 @@ async function issueAuthSession(req, res, user, isAdmin = false) {
   if (req.guestSessionId) {
     await database.claimGuestLinks(req.guestSessionId, user.id);
   }
+  await database.recordLoginEvent({
+    userId: user.id,
+    ...buildLoginDeviceContext(req),
+  });
   const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
     expiresIn: "30d",
   });
@@ -1387,6 +1776,23 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
   }
 });
 
+app.post("/api/admin/users/bulk-delete", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
+  try {
+    const database = await getDb();
+    const userIds = Array.isArray(req.body?.ids)
+      ? [...new Set(req.body.ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
+      : [];
+    if (!userIds.length) {
+      return res.status(400).json({ error: "Chưa chọn người dùng nào để xóa" });
+    }
+    await database.deleteUsers(userIds);
+    res.json({ ok: true, deleted_count: userIds.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
@@ -1430,7 +1836,11 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     const totals = await database.getAdminTotals();
-    res.json(totals);
+    const domains = await database.getDomains();
+    res.json({
+      ...totals,
+      alerts: buildAdminAlertPayload(domains),
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1456,7 +1866,7 @@ app.get("/api/admin/redirects", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
     const requestedLimit = Number.parseInt(String(req.query.limit || "20"), 10);
-    const limit = Math.min(Math.max(requestedLimit || 20, 1), 100);
+    const limit = Math.min(Math.max(requestedLimit || 20, 1), 500);
     const events = await readRecentRedirectLogEntries(limit);
     res.json({
       events,
@@ -1486,6 +1896,9 @@ app.post("/api/admin/domains", requireAdmin, async (req, res) => {
     const hostname = normalizeDomainHost(req.body?.hostname);
     const label = String(req.body?.label || "").trim().slice(0, 80);
     const isPrimary = req.body?.is_primary === true || req.body?.is_primary === "true";
+    const verificationStatus =
+      normalizeDomainVerificationStatus(req.body?.verification_status) || "verified";
+    const expiresAt = normalizeExpiryDateInput(req.body?.expires_at);
     if (!hostname)
       return res.status(400).json({ error: "Domain không hợp lệ" });
     const existing = (await database.getDomains()).find((d) => d.hostname === hostname);
@@ -1495,6 +1908,8 @@ app.post("/api/admin/domains", requireAdmin, async (req, res) => {
       hostname,
       label,
       isPrimary,
+      verificationStatus,
+      expiresAt,
     });
     if (domain.is_primary) {
       await database.setPrimaryDomain(domain.id);
@@ -1525,6 +1940,20 @@ app.patch("/api/admin/domains/:id", requireAdmin, async (req, res) => {
       const hostname = normalizeDomainHost(req.body.hostname);
       if (!hostname) return res.status(400).json({ error: "Domain không hợp lệ" });
       updates.hostname = hostname;
+    }
+    if (typeof req.body?.verification_status !== "undefined") {
+      const verificationStatus = normalizeDomainVerificationStatus(req.body.verification_status);
+      if (!verificationStatus) {
+        return res.status(400).json({ error: "Trang thai verify khong hop le" });
+      }
+      updates.verification_status = verificationStatus;
+    }
+    if (typeof req.body?.expires_at !== "undefined") {
+      const expiresAt = normalizeExpiryDateInput(req.body.expires_at);
+      if (String(req.body.expires_at || "").trim() && !expiresAt) {
+        return res.status(400).json({ error: "Ngay het han khong hop le" });
+      }
+      updates.expires_at = expiresAt;
     }
     const makePrimary = req.body?.is_primary === true || req.body?.is_primary === "true";
     if (makePrimary) {
@@ -1573,6 +2002,9 @@ app.post("/api/shorten", async (req, res) => {
       video_url,
       video_overlay_text,
     } = req.body;
+
+    alias = sanitizeAliasInput(alias, 40);
+    og_title = normalizeShareTitleInput(og_title, 120);
 
     if (!url) return res.status(400).json({ error: "URL không hợp lệ" });
     if (!/^https?:\/\//i.test(url)) url = "https://" + url;
@@ -1641,7 +2073,6 @@ app.post("/api/shorten", async (req, res) => {
     }
 
     if (alias) {
-      alias = alias.trim().replace(/[^a-zA-Z0-9_-]/g, "");
       if (alias.length < 2)
         return res.status(400).json({ error: "Alias phải có ít nhất 2 ký tự" });
       const taken =
@@ -1770,7 +2201,7 @@ app.patch("/api/links/:id", async (req, res) => {
       video_overlay_text,
     } = req.body;
     const updateFields = {
-      og_title,
+      og_title: normalizeShareTitleInput(og_title, 120),
       og_desc,
       og_image,
       link_type,
@@ -1831,9 +2262,16 @@ app.get("/api/stats", async (req, res) => {
     const guestSessionId = user ? null : req.guestSessionId;
     const totals = await database.getTotals(userId, guestSessionId);
     const today = await database.getTodayStats(userId, guestSessionId);
-    const analytics = buildStatsAnalytics(
-      await database.getClickAnalytics(userId, guestSessionId),
-    );
+    const clickRows = await database.getClickAnalytics(userId, guestSessionId);
+    const analytics = buildStatsAnalytics(clickRows);
+    const latestLoginEvent = user ? await database.getLatestLoginEvent(user.id) : null;
+    const alerts = buildStatsAlertPayload({
+      planName: user?.plan || "guest",
+      linksToday: today.linksToday || 0,
+      hasAccount: !!user,
+      clickRows,
+      latestLoginEvent,
+    });
     const recent = (await database.getRecentLinks(userId, guestSessionId)).map(
       (l) => ({
         ...l,
@@ -1845,6 +2283,7 @@ app.get("/api/stats", async (req, res) => {
       ...today,
       recent,
       analytics,
+      alerts,
       plan: user?.plan || "guest",
     });
   } catch (e) {

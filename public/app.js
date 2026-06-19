@@ -22,6 +22,38 @@
             .charAt(0)
             .toUpperCase());
 
+      function stripVietnameseMarks(value) {
+        return String(value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/đ/g, "d")
+          .replace(/Đ/g, "D");
+      }
+
+      function slugifyAliasValue(value, maxLength = 40) {
+        const compact = stripVietnameseMarks(value)
+          .toLowerCase()
+          .replace(/['"`’]/g, "")
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/-+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        return compact.slice(0, maxLength).replace(/-+$/g, "");
+      }
+
+      function humanizeSlugTitle(value) {
+        const normalized = String(value || "")
+          .trim()
+          .replace(/[-_]+/g, " ")
+          .replace(/\s+/g, " ");
+        if (!normalized) return "";
+        return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+      }
+
+      function looksLikeSlugTitle(value) {
+        const raw = String(value || "").trim();
+        return !!raw && !/\s/.test(raw) && /[-_]/.test(raw) && !raw.includes("://");
+      }
+
       let user = null; // { id, email, name, plan }
       let links = [];
       let chart = null;
@@ -45,6 +77,15 @@
       let landingQuickUrl = "";
       let landingTypedTimer = null;
       let landingTypedStartTimer = null;
+      let userMenuSection = "";
+      let notificationItems = [];
+      let unreadNotificationCount = 0;
+      let notificationStatsSnapshot = null;
+      let adminNotificationSnapshot = null;
+      let notificationPollTimer = null;
+      let confirmModalResolver = null;
+      const notificationSeenStorageKey = "rutgonlink-notification-seen";
+      let seenNotificationKeys = {};
       const KNOWN_APP_PAGES = new Set([
         "dashboard",
         "links",
@@ -990,6 +1031,8 @@
         setAuthRouteMode(mode);
         document.getElementById("authScreen").style.display = "flex";
         document.getElementById("appScreen").classList.remove("show");
+        stopRealtimeNotificationLoop();
+        closeNotificationDropdown();
         finishShellBoot();
         if (mode === "landing") {
           initLandingTypedText();
@@ -1017,12 +1060,15 @@
         void syncBioProfileFromServer();
         syncRouteFromLocation();
         loadData();
+        startRealtimeNotificationLoop();
       }
       function showAuth(mode = "landing") {
         closeLandingNav();
         setAuthRouteMode(mode);
         document.getElementById("appScreen").classList.remove("show");
         document.getElementById("authScreen").style.display = "flex";
+        stopRealtimeNotificationLoop();
+        closeNotificationDropdown();
         finishShellBoot();
         if (mode === "landing") {
           initLandingTypedText();
@@ -1051,6 +1097,7 @@
         updateIntegrationUI();
         syncRouteFromLocation();
         loadData();
+        startRealtimeNotificationLoop();
         if (landingQuickUrl) {
           prefillCreateUrl(landingQuickUrl);
           landingQuickUrl = "";
@@ -1144,7 +1191,342 @@
         document
           .getElementById("userDropdown")
           .setAttribute("aria-hidden", "true");
+        stopRealtimeNotificationLoop();
         showAuthScreen();
+      }
+
+      function getNotificationIconSvg(kind = "info") {
+        if (kind === "ok") {
+          return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20 7 9 18l-5-5" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+        }
+        if (kind === "warn") {
+          return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 4 3 19h18L12 4Z" stroke-linejoin="round"></path><path d="M12 9v4" stroke-linecap="round"></path><circle cx="12" cy="16.5" r="1"></circle></svg>';
+        }
+        if (kind === "err") {
+          return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"></circle><path d="M9 9l6 6M15 9l-6 6" stroke-linecap="round"></path></svg>';
+        }
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 7h.01M11 11h2v6h-2z" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="12" cy="12" r="9"></circle></svg>';
+      }
+
+      function formatNotificationTime(value) {
+        const time = new Date(value || Date.now()).getTime();
+        if (!Number.isFinite(time)) return "Vừa xong";
+        const diffMs = Date.now() - time;
+        const diffMin = Math.max(Math.floor(diffMs / 60000), 0);
+        if (diffMin < 1) return "Vừa xong";
+        if (diffMin < 60) return `${diffMin} phút trước`;
+        const diffHour = Math.floor(diffMin / 60);
+        if (diffHour < 24) return `${diffHour} giờ trước`;
+        const diffDay = Math.floor(diffHour / 24);
+        return `${diffDay} ngày trước`;
+      }
+
+      function renderNotificationCenter() {
+        const badge = document.getElementById("notificationBadge");
+        const listEl = document.getElementById("notificationList");
+        const statusEl = document.getElementById("notificationStatus");
+        if (badge) {
+          badge.hidden = unreadNotificationCount < 1;
+          badge.textContent = unreadNotificationCount > 9 ? "9+" : unreadNotificationCount;
+        }
+        if (statusEl) {
+          statusEl.textContent = unreadNotificationCount
+            ? `${unreadNotificationCount} thông báo chưa đọc`
+            : notificationItems.length
+              ? "Mọi thông báo đã được xem"
+              : "Chưa có thông báo mới";
+        }
+        if (!listEl) return;
+        if (!notificationItems.length) {
+          listEl.innerHTML =
+            '<div class="notification-empty">Chuông sẽ hiện các thay đổi mới về click, link, domain và quản trị.</div>';
+          return;
+        }
+        listEl.innerHTML = notificationItems
+          .map((item, index) => `<button class="notification-item ${item.read ? "" : "unread"}" type="button" onclick="openNotification(${index})">
+  <span class="notification-icon ${item.kind || "info"}">${getNotificationIconSvg(item.kind)}</span>
+  <span class="notification-copy">
+    <span class="notification-label">${item.read ? "" : '<span class="notification-dot"></span>'}${esc(item.title || "Thông báo")}</span>
+    <span class="notification-msg">${esc(item.message || "")}</span>
+    <span class="notification-time">${esc(formatNotificationTime(item.createdAt))}</span>
+  </span>
+</button>`)
+          .join("");
+      }
+
+      function addNotification(entry = {}) {
+        const key = String(entry.key || `${Date.now()}-${Math.random()}`);
+        if (notificationItems.some((item) => item.key === key)) return;
+        const item = {
+          key,
+          title: entry.title || "Thông báo mới",
+          message: entry.message || "",
+          kind: entry.kind || "info",
+          createdAt: entry.createdAt || new Date().toISOString(),
+          page: entry.page || "",
+          url: entry.url || "",
+          read: false,
+        };
+        notificationItems = [item, ...notificationItems].slice(0, 16);
+        if (!document.getElementById("notificationDropdown")?.classList.contains("show")) {
+          unreadNotificationCount += 1;
+        }
+        renderNotificationCenter();
+      }
+
+      function closeNotificationDropdown() {
+        const dropdown = document.getElementById("notificationDropdown");
+        const bell = document.getElementById("notificationBellBtn");
+        dropdown?.classList.remove("show");
+        dropdown?.setAttribute("aria-hidden", "true");
+        bell?.classList.remove("is-open");
+      }
+
+      function markAllNotificationsRead() {
+        notificationItems = notificationItems.map((item) => ({ ...item, read: true }));
+        unreadNotificationCount = 0;
+        renderNotificationCenter();
+      }
+
+      function toggleNotificationDropdown() {
+        closeUserPopup();
+        const dropdown = document.getElementById("notificationDropdown");
+        const bell = document.getElementById("notificationBellBtn");
+        if (!dropdown) return;
+        const willOpen = !dropdown.classList.contains("show");
+        dropdown.classList.toggle("show", willOpen);
+        dropdown.setAttribute("aria-hidden", willOpen ? "false" : "true");
+        bell?.classList.toggle("is-open", willOpen);
+        if (willOpen) {
+          markAllNotificationsRead();
+        }
+      }
+
+      function openNotification(index) {
+        const item = notificationItems[index];
+        if (!item) return;
+        notificationItems = notificationItems.map((entry, entryIndex) =>
+          entryIndex === index ? { ...entry, read: true } : entry,
+        );
+        unreadNotificationCount = notificationItems.filter((entry) => !entry.read).length;
+        renderNotificationCenter();
+        closeNotificationDropdown();
+        if (item.url) {
+          window.open(item.url, "_blank", "noopener");
+          return;
+        }
+        if (item.page) {
+          const navEl = document.querySelector(`.sitem[onclick*="navigate('${item.page}'"]`);
+          navigate(item.page, navEl);
+        }
+      }
+
+      function loadSeenNotificationKeys() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(notificationSeenStorageKey) || "{}");
+          const next = {};
+          const cutoff = Date.now() - 45 * 24 * 3600 * 1000;
+          Object.entries(parsed || {}).forEach(([key, value]) => {
+            const timestamp = Number(value || 0);
+            if (key && Number.isFinite(timestamp) && timestamp >= cutoff) {
+              next[key] = timestamp;
+            }
+          });
+          seenNotificationKeys = next;
+        } catch {
+          seenNotificationKeys = {};
+        }
+      }
+
+      function persistSeenNotificationKeys() {
+        try {
+          localStorage.setItem(
+            notificationSeenStorageKey,
+            JSON.stringify(seenNotificationKeys),
+          );
+        } catch {}
+      }
+
+      function hasSeenNotificationKey(key) {
+        return !!(key && seenNotificationKeys[key]);
+      }
+
+      function markNotificationKeySeen(key) {
+        if (!key) return;
+        seenNotificationKeys[key] = Date.now();
+        persistSeenNotificationKeys();
+      }
+
+      function maybeAddPersistentNotification(entry = {}) {
+        if (!entry.key || hasSeenNotificationKey(entry.key)) return;
+        markNotificationKeySeen(entry.key);
+        addNotification(entry);
+      }
+
+      function enqueueStatsAlerts(payload = {}) {
+        const activeAlerts = Array.isArray(payload?.alerts?.active) ? payload.alerts.active : [];
+        activeAlerts.forEach((item) => {
+          maybeAddPersistentNotification({
+            key: item.key,
+            title: item.title || "Canh bao",
+            message: item.message || "",
+            kind: item.kind || "info",
+            page: item.page || "stats",
+            createdAt: item.createdAt || new Date().toISOString(),
+          });
+        });
+      }
+
+      function enqueueAdminAlerts(payload = {}) {
+        const activeAlerts = Array.isArray(payload?.alerts?.active) ? payload.alerts.active : [];
+        activeAlerts.forEach((item) => {
+          maybeAddPersistentNotification({
+            key: item.key,
+            title: item.title || "Canh bao admin",
+            message: item.message || "",
+            kind: item.kind || "warn",
+            page: item.page || "admin",
+            createdAt: item.createdAt || new Date().toISOString(),
+          });
+        });
+      }
+
+      function buildStatsNotificationSnapshot(payload = {}) {
+        const recent = Array.isArray(payload.recent) ? payload.recent : [];
+        return {
+          totalClicks: Number(payload.totalClicks || 0),
+          totalLinks: Number(payload.totalLinks || 0),
+          recentFirstId: recent[0]?.id ? Number(recent[0].id) : null,
+          recentFirstShort: (recent[0]?.short_url || "").replace(/^https?:\/\//, ""),
+        };
+      }
+
+      function rememberStatsNotificationSnapshot(payload = {}) {
+        notificationStatsSnapshot = buildStatsNotificationSnapshot(payload);
+      }
+
+      function buildAdminNotificationSnapshot(statsPayload = {}, redirectPayload = {}) {
+        const newestEvent = Array.isArray(redirectPayload.events) ? redirectPayload.events[0] : null;
+        return {
+          totalUsers: Number(statsPayload.totalUsers || 0),
+          latestRedirectKey: newestEvent
+            ? `${newestEvent.timestamp || ""}:${newestEvent.requestId || ""}:${newestEvent.status || ""}`
+            : "",
+        };
+      }
+
+      function rememberAdminNotificationSnapshot(statsPayload = {}, redirectPayload = {}) {
+        adminNotificationSnapshot = buildAdminNotificationSnapshot(
+          statsPayload,
+          redirectPayload,
+        );
+      }
+
+      async function pollRealtimeNotifications() {
+        if (!document.getElementById("appScreen")?.classList.contains("show")) return;
+        try {
+          const statsResponse = await fetch("/api/stats");
+          const statsPayload = await statsResponse.json().catch(() => null);
+          if (statsResponse.ok && statsPayload) {
+            enqueueStatsAlerts(statsPayload);
+            const previous = notificationStatsSnapshot;
+            const next = buildStatsNotificationSnapshot(statsPayload);
+            if (previous) {
+              const clicksDiff = next.totalClicks - previous.totalClicks;
+              if (clicksDiff > 0) {
+                addNotification({
+                  key: `clicks-${next.totalClicks}`,
+                  title: `Có ${clicksDiff.toLocaleString()} lượt nhấp mới`,
+                  message: "Tab thống kê vừa có dữ liệu mới cần xem.",
+                  kind: "ok",
+                  page: "stats",
+                });
+              }
+              const linksDiff = next.totalLinks - previous.totalLinks;
+              if (linksDiff > 0) {
+                addNotification({
+                  key: `links-${next.totalLinks}`,
+                  title: `Có ${linksDiff.toLocaleString()} liên kết mới`,
+                  message: next.recentFirstShort
+                    ? `Liên kết mới nhất: ${next.recentFirstShort}`
+                    : "Danh sách liên kết vừa được cập nhật.",
+                  kind: "info",
+                  page: "links",
+                });
+              }
+            }
+            notificationStatsSnapshot = next;
+          }
+
+          if (isAdminUser()) {
+            const [adminStatsResponse, redirectResponse] = await Promise.all([
+              fetch("/api/admin/stats"),
+              fetch("/api/admin/redirects?limit=3"),
+            ]);
+            const adminStatsPayload = await adminStatsResponse.json().catch(() => null);
+            const redirectPayload = await redirectResponse.json().catch(() => null);
+            if (adminStatsResponse.ok && adminStatsPayload) {
+              enqueueAdminAlerts(adminStatsPayload);
+            }
+            if (adminStatsResponse.ok && redirectResponse.ok && adminStatsPayload && redirectPayload) {
+              const previousAdmin = adminNotificationSnapshot;
+              const nextAdmin = buildAdminNotificationSnapshot(
+                adminStatsPayload,
+                redirectPayload,
+              );
+              if (previousAdmin) {
+                const userDiff = nextAdmin.totalUsers - previousAdmin.totalUsers;
+                if (userDiff > 0) {
+                  addNotification({
+                    key: `admin-users-${nextAdmin.totalUsers}`,
+                    title: `Có ${userDiff.toLocaleString()} người dùng mới`,
+                    message: "Tab quản trị người dùng vừa có thêm thành viên.",
+                    kind: "info",
+                    page: "admin",
+                  });
+                }
+                const newestEvent = Array.isArray(redirectPayload.events)
+                  ? redirectPayload.events[0]
+                  : null;
+                if (
+                  newestEvent &&
+                  nextAdmin.latestRedirectKey &&
+                  nextAdmin.latestRedirectKey !== previousAdmin.latestRedirectKey &&
+                  Number(newestEvent.status || 0) >= 400
+                ) {
+                  addNotification({
+                    key: `redirect-alert-${nextAdmin.latestRedirectKey}`,
+                    title: "Redirect cần chú ý",
+                    message: `${newestEvent.code || "—"} trả về ${newestEvent.status || "—"} • ${newestEvent.mode || "redirect"}`,
+                    kind: "warn",
+                    page: "admin",
+                  });
+                }
+              }
+              adminNotificationSnapshot = nextAdmin;
+            }
+          } else {
+            adminNotificationSnapshot = null;
+          }
+        } catch {}
+      }
+
+      function stopRealtimeNotificationLoop() {
+        if (notificationPollTimer) {
+          clearInterval(notificationPollTimer);
+          notificationPollTimer = null;
+        }
+      }
+
+      function startRealtimeNotificationLoop() {
+        stopRealtimeNotificationLoop();
+        loadSeenNotificationKeys();
+        renderNotificationCenter();
+        void pollRealtimeNotifications();
+        notificationPollTimer = setInterval(() => {
+          if (document.hidden) return;
+          void pollRealtimeNotifications();
+        }, 30000);
       }
 
       function updateTopbar() {
@@ -1169,6 +1551,9 @@
         document.getElementById("popupPlan").textContent =
           plan === "guest" ? "GUEST" : plan.toUpperCase();
         document.getElementById("popupRole").textContent = role || "user";
+        document.getElementById("popupSessionStatus").textContent = user
+          ? "Đang đăng nhập"
+          : "Khách / chưa xác thực";
         const billingCurrentPlan = document.getElementById("billingCurrentPlan");
         if (billingCurrentPlan)
           billingCurrentPlan.textContent =
@@ -1207,51 +1592,69 @@
           plan === "admin" || role === "admin" ? "" : "none";
 
         const isAdmin = plan === "admin" || role === "admin";
-
-        // Show/hide Admin nav item
         const adminNav = document.getElementById("adminNavItem");
         if (adminNav) adminNav.style.display = isAdmin ? "" : "none";
-
-        // Hide upgrade box for pro/business/admin
         const sf = document.getElementById("sidebarFooter");
         sf.style.display =
           plan === "pro" || plan === "business" || isAdmin ? "none" : "";
 
-        // Pricing current plan highlights
+        renderNotificationCenter();
         updatePricingUI();
       }
 
-      function toggleDropdown() {
-        document.getElementById("userDropdown").classList.toggle("show");
+      function clearUserMenuSection() {
+        userMenuSection = "";
         document
-          .getElementById("userDropdown")
-          .setAttribute(
-            "aria-hidden",
-            document.getElementById("userDropdown").classList.contains("show")
-              ? "false"
-              : "true",
-          );
+          .querySelectorAll("#userDropdown .user-tab")
+          .forEach((tab) => tab.classList.remove("active"));
+        document
+          .querySelectorAll("#userDropdown .user-panel")
+          .forEach((panel) => panel.classList.remove("active"));
+        document.getElementById("userDropdown")?.querySelector(".user-panels")?.classList.remove("has-active");
+      }
+
+      function toggleDropdown() {
+        closeNotificationDropdown();
+        const dropdown = document.getElementById("userDropdown");
+        if (!dropdown) return;
+        const willOpen = !dropdown.classList.contains("show");
+        dropdown.classList.toggle("show", willOpen);
+        dropdown.setAttribute("aria-hidden", willOpen ? "false" : "true");
+        if (!willOpen) {
+          clearUserMenuSection();
+        }
       }
       function closeUserPopup() {
-        document.getElementById("userDropdown").classList.remove("show");
-        document
-          .getElementById("userDropdown")
-          .setAttribute("aria-hidden", "true");
+        const dropdown = document.getElementById("userDropdown");
+        dropdown?.classList.remove("show");
+        dropdown?.setAttribute("aria-hidden", "true");
+        clearUserMenuSection();
       }
       function switchUserTab(tab, el) {
-        document
-          .querySelectorAll(".user-tab")
-          .forEach((t) => t.classList.remove("active"));
-        document
-          .querySelectorAll(".user-panel")
-          .forEach((p) => p.classList.remove("active"));
-        el.classList.add("active");
+        const current = userMenuSection;
+        clearUserMenuSection();
+        if (current === tab) return;
+        userMenuSection = tab;
+        el?.classList.add("active");
+        document.getElementById("userDropdown")?.querySelector(".user-panels")?.classList.add("has-active");
         document
           .getElementById(
             "userPanel" + tab.charAt(0).toUpperCase() + tab.slice(1),
           )
           ?.classList.add("active");
       }
+
+      function openPublicProfile() {
+        closeUserPopup();
+        const bioNav = document.querySelector(".sitem[onclick*=\"navigate('bio'\"]");
+        navigate("bio", bioNav);
+      }
+
+      function openHelpCenter() {
+        closeUserPopup();
+        window.open("/landing", "_blank", "noopener");
+      }
+
       async function saveProfile() {
         const btn = document.getElementById("saveProfileBtn");
         const name = document.getElementById("profileNameInput").value.trim();
@@ -1270,6 +1673,12 @@
           }
           user = d.user;
           updateTopbar();
+          addNotification({
+            key: `profile-${Date.now()}`,
+            title: "Hồ sơ đã được cập nhật",
+            message: "Tên hiển thị mới đã được lưu thành công.",
+            kind: "ok",
+          });
           toast("✅ Đã cập nhật hồ sơ", "ok");
         } catch {
           toast("Lỗi kết nối", "err");
@@ -1279,13 +1688,66 @@
         }
       }
       document.addEventListener("click", (e) => {
+        const userToggle = document.getElementById("tbUser");
+        const userDropdown = document.getElementById("userDropdown");
+        const notificationToggle = document.getElementById("notificationBellBtn");
+        const notificationDropdown = document.getElementById("notificationDropdown");
         if (
-          !document.getElementById("tbUser").contains(e.target) &&
-          !document.getElementById("userDropdown").contains(e.target)
+          userToggle &&
+          userDropdown &&
+          !userToggle.contains(e.target) &&
+          !userDropdown.contains(e.target)
         ) {
           closeUserPopup();
         }
+        if (
+          notificationToggle &&
+          notificationDropdown &&
+          !notificationToggle.contains(e.target) &&
+          !notificationDropdown.contains(e.target)
+        ) {
+          closeNotificationDropdown();
+        }
       });
+
+      function showConfirmDialog(options = {}) {
+        const modal = document.getElementById("confirmModal");
+        const titleEl = document.getElementById("confirmTitle");
+        const messageEl = document.getElementById("confirmMessage");
+        const noteEl = document.getElementById("confirmNote");
+        const actionBtn = document.getElementById("confirmActionBtn");
+        if (!modal || !titleEl || !messageEl || !actionBtn) {
+          return Promise.resolve(window.confirm(options.message || "Xác nhận thao tác?"));
+        }
+        titleEl.textContent = options.title || "Xác nhận hành động";
+        messageEl.textContent =
+          options.message || "Bạn có chắc muốn tiếp tục thao tác này không?";
+        if (noteEl) {
+          if (options.note) {
+            noteEl.hidden = false;
+            noteEl.textContent = options.note;
+          } else {
+            noteEl.hidden = true;
+            noteEl.textContent = "";
+          }
+        }
+        actionBtn.textContent = options.confirmLabel || "Xác nhận";
+        actionBtn.className =
+          options.tone === "danger" ? "user-btn danger" : "btn-save";
+        modal.classList.remove("hidden");
+        return new Promise((resolve) => {
+          confirmModalResolver = resolve;
+        });
+      }
+
+      function closeConfirmModal(result = false) {
+        document.getElementById("confirmModal")?.classList.add("hidden");
+        if (confirmModalResolver) {
+          const resolver = confirmModalResolver;
+          confirmModalResolver = null;
+          resolver(!!result);
+        }
+      }
 
       // ══════════════════════════════════════════════════
       //  NAVIGATION
@@ -1308,6 +1770,7 @@
           page = allowed;
         }
         closeUserPopup();
+        closeNotificationDropdown();
         document
           .querySelectorAll(".page")
           .forEach((p) => p.classList.remove("active"));
@@ -1432,7 +1895,7 @@
         <label class="fl" style="margin-bottom:4px">Alias tùy chỉnh</label>
         <div class="pfx">
           <span id="${containerId}_domainprefix" style="font-size:12px;color:var(--text3);white-space:nowrap">${getCreateDomainPreviewHost()}/</span>
-          <input type="text" id="${containerId}_alias" placeholder="ten-link" maxlength="40" autocomplete="off"/>
+          <input type="text" id="${containerId}_alias" placeholder="ten-link" maxlength="40" autocomplete="off" spellcheck="false" oninput="onAliasInput('${containerId}')"/>
         </div>
       </div>
       ${buildCreateDomainFieldMarkup(containerId)}
@@ -1560,7 +2023,7 @@
                 <label class="fl" style="margin-bottom:4px">Tiêu đề</label>
                 <input type="text" class="fi" id="${containerId}_ogtitle"
                   placeholder="Tiêu đề hiện khi share..." maxlength="120"
-                  oninput="updateOgPreview('${containerId}')" style="font-size:12px"/>
+                  oninput="onOgTitleInput('${containerId}')" onblur="normalizeOgTitleInput('${containerId}')" style="font-size:12px"/>
               </div>
               <div>
                 <label class="fl" style="margin-bottom:4px">Mô tả</label>
@@ -1936,11 +2399,18 @@
         teamState = loadTeamState();
         const member = (teamState.members || []).find((item) => item.id === memberId);
         if (!member || member.role === "owner") return;
-        if (!confirm(`Xóa ${member.email || member.name} khỏi workspace?`)) return;
-        teamState.members = teamState.members.filter((item) => item.id !== memberId);
-        saveTeamState();
-        renderTeamPage();
-        toast("🗑️ Đã gỡ thành viên khỏi workspace.", "ok");
+        showConfirmDialog({
+          title: "Gỡ thành viên workspace",
+          message: `Xóa ${member.email || member.name} khỏi workspace?`,
+          confirmLabel: "Gỡ thành viên",
+          tone: "danger",
+        }).then((confirmed) => {
+          if (!confirmed) return;
+          teamState.members = teamState.members.filter((item) => item.id !== memberId);
+          saveTeamState();
+          renderTeamPage();
+          toast("🗑️ Đã gỡ thành viên khỏi workspace.", "ok");
+        });
       }
 
       function toggleMeta(cid) {
@@ -1951,6 +2421,34 @@
           body.style.display !== "none" && body.style.display !== "";
         body.style.display = isOpen ? "none" : "block";
         if (arrow) arrow.style.transform = isOpen ? "" : "rotate(180deg)";
+      }
+
+      function onAliasInput(cid) {
+        const input = document.getElementById(`${cid}_alias`);
+        if (!input) return;
+        const nextValue = slugifyAliasValue(input.value, 40);
+        if (input.value !== nextValue) {
+          input.value = nextValue;
+        }
+      }
+
+      function onOgTitleInput(cid) {
+        updateOgPreview(cid);
+      }
+
+      function normalizeOgTitleInput(cid) {
+        const input = document.getElementById(`${cid}_ogtitle`);
+        if (!input) return;
+        const rawValue = input.value.trim();
+        if (!rawValue) {
+          input.value = "";
+          updateOgPreview(cid);
+          return;
+        }
+        if (looksLikeSlugTitle(rawValue)) {
+          input.value = humanizeSlugTitle(rawValue).slice(0, 120);
+        }
+        updateOgPreview(cid);
       }
 
       function updateOgPreview(cid) {
@@ -2247,9 +2745,17 @@
 
       async function doShorten(cid, confirmAffiliate = false) {
         const url = document.getElementById(`${cid}_url`)?.value.trim();
-        const alias = document.getElementById(`${cid}_alias`)?.value.trim();
-        const og_title =
-          document.getElementById(`${cid}_ogtitle`)?.value.trim() || "";
+        const aliasInput = document.getElementById(`${cid}_alias`);
+        const alias = slugifyAliasValue(aliasInput?.value || "", 40);
+        if (aliasInput && aliasInput.value !== alias) aliasInput.value = alias;
+        const titleInput = document.getElementById(`${cid}_ogtitle`);
+        const normalizedOgTitle = looksLikeSlugTitle(titleInput?.value || "")
+          ? humanizeSlugTitle(titleInput?.value || "").slice(0, 120)
+          : String(titleInput?.value || "").trim();
+        if (titleInput && titleInput.value.trim() !== normalizedOgTitle) {
+          titleInput.value = normalizedOgTitle;
+        }
+        const og_title = normalizedOgTitle || "";
         const og_desc =
           document.getElementById(`${cid}_ogdesc`)?.value.trim() || "";
         const og_image =
@@ -2273,6 +2779,8 @@
           plan === "business" ||
           plan === "admin" ||
           user?.role === "admin";
+
+        updateOgPreview(cid);
 
         errEl.classList.remove("show");
         if (!url) {
@@ -2494,6 +3002,8 @@
             renderTeamPage();
           if (document.getElementById("page-links")?.classList.contains("active"))
             applyLinkFilters();
+          enqueueStatsAlerts(d);
+          rememberStatsNotificationSnapshot(d);
         } catch {}
       }
 
@@ -2643,11 +3153,14 @@
           toast("Chưa chọn link nào để xóa", "warn");
           return;
         }
-        if (
-          !confirm(
-            `Xóa ${ids.length} link đã chọn?\nHành động này không thể hoàn tác.`,
-          )
-        ) {
+        const confirmed = await showConfirmDialog({
+          title: "Xóa nhiều liên kết",
+          message: `Xóa ${ids.length} link đã chọn?`,
+          note: "Hành động này không thể hoàn tác.",
+          confirmLabel: "Xóa đã chọn",
+          tone: "danger",
+        });
+        if (!confirmed) {
           return;
         }
         try {
@@ -3380,11 +3893,14 @@
       //  DELETE OWN LINK
       // ══════════════════════════════════════════════════
       async function deleteMyLink(id, shortDisplay) {
-        if (
-          !confirm(
-            `Xóa link "${shortDisplay}"?\nHành động này không thể hoàn tác.`,
-          )
-        )
+        const confirmed = await showConfirmDialog({
+          title: "Xóa liên kết",
+          message: `Xóa link "${shortDisplay}"?`,
+          note: "Hành động này không thể hoàn tác.",
+          confirmLabel: "Xóa link",
+          tone: "danger",
+        });
+        if (!confirmed)
           return;
         try {
           const r = await fetch("/api/links/" + id, { method: "DELETE" });
@@ -3409,12 +3925,17 @@
       let adminDomains = [];
       let adminRedirects = [];
       let adminSection = "overview";
+      let adminUserSearchQuery = "";
+      let adminUserPlanFilter = "all";
+      let adminUserPage = 1;
+      let adminRedirectPage = 1;
+      let adminSelectedUserIds = new Set();
+      const ADMIN_PAGE_SIZE = 20;
 
       function syncAdminSectionUI() {
         const availableSections = new Set([
           "overview",
           "users",
-          "links",
           "system",
           "logs",
         ]);
@@ -3438,26 +3959,111 @@
         syncAdminSectionUI();
       }
 
+      function paginateAdminRows(rows, page = 1, pageSize = ADMIN_PAGE_SIZE) {
+        const total = Array.isArray(rows) ? rows.length : 0;
+        const pages = Math.max(Math.ceil(total / pageSize), 1);
+        const safePage = Math.min(Math.max(Number(page) || 1, 1), pages);
+        const start = total ? (safePage - 1) * pageSize : 0;
+        const end = Math.min(start + pageSize, total);
+        return {
+          rows: (rows || []).slice(start, end),
+          total,
+          page: safePage,
+          pages,
+          start: total ? start + 1 : 0,
+          end,
+        };
+      }
+
+      function renderAdminPagination(targetId, meta, setPageFn) {
+        const el = document.getElementById(targetId);
+        if (!el) return;
+        const total = Number(meta?.total || 0);
+        if (!total) {
+          el.innerHTML =
+            '<div class="pagination-status">Không có dữ liệu để phân trang.</div>';
+          return;
+        }
+        el.innerHTML = `<div class="pagination-status">Hiển thị ${meta.start}-${meta.end} / ${meta.total}</div>
+<div class="pagination-actions">
+  <button class="pagination-btn" type="button" onclick="${setPageFn}(${meta.page - 1})" ${meta.page <= 1 ? "disabled" : ""}>Trang trước</button>
+  <div class="pagination-status">Trang ${meta.page}/${meta.pages}</div>
+  <button class="pagination-btn" type="button" onclick="${setPageFn}(${meta.page + 1})" ${meta.page >= meta.pages ? "disabled" : ""}>Trang sau</button>
+</div>`;
+      }
+
+      function getFilteredAdminUsers() {
+        return adminUsers.filter((u) => {
+          const matchesQuery =
+            !adminUserSearchQuery ||
+            (u.email || "").toLowerCase().includes(adminUserSearchQuery) ||
+            (u.name || "").toLowerCase().includes(adminUserSearchQuery);
+          const matchesPlan =
+            adminUserPlanFilter === "all" || (u.plan || "free") === adminUserPlanFilter;
+          return matchesQuery && matchesPlan;
+        });
+      }
+
+      function setAdminUserPage(page) {
+        adminUserPage = page;
+        renderAdminUsers();
+      }
+
+      function setAdminRedirectPage(page) {
+        adminRedirectPage = page;
+        renderAdminRedirects(adminRedirects);
+      }
+
+      function setAdminUserPlanFilter(value) {
+        adminUserPlanFilter = String(value || "all").trim() || "all";
+        adminUserPage = 1;
+        renderAdminUsers();
+      }
+
+      function syncAdminUserSelectionUI(filteredUsers, pageRows) {
+        const summaryEl = document.getElementById("adminUserBulkSummary");
+        const pageCheckbox = document.getElementById("adminUserSelectPage");
+        const selectedCount = adminSelectedUserIds.size;
+        if (summaryEl) {
+          summaryEl.textContent = selectedCount
+            ? `Đã chọn ${selectedCount} người dùng • bộ lọc hiện có ${filteredUsers.length} kết quả`
+            : filteredUsers.length
+              ? `Bộ lọc hiện có ${filteredUsers.length} người dùng`
+              : "Chưa có người dùng phù hợp bộ lọc hiện tại.";
+        }
+        if (pageCheckbox) {
+          const pageIds = pageRows
+            .map((userItem) => Number(userItem.id))
+            .filter((id) => Number.isFinite(id));
+          const selectedOnPage = pageIds.filter((id) => adminSelectedUserIds.has(id)).length;
+          pageCheckbox.checked = !!pageIds.length && selectedOnPage === pageIds.length;
+          pageCheckbox.indeterminate =
+            selectedOnPage > 0 && selectedOnPage < pageIds.length;
+        }
+      }
+
       async function loadAdminData() {
         if (!isAdminUser()) {
           return;
         }
         try {
-          const [sr, dr, lr, ur, rr] = await Promise.all([
+          const [sr, dr, ur, rr] = await Promise.all([
             fetch("/api/admin/stats"),
             fetch("/api/admin/domains"),
-            fetch("/api/admin/links"),
             fetch("/api/admin/users"),
-            fetch("/api/admin/redirects?limit=20"),
+            fetch("/api/admin/redirects?limit=500"),
           ]);
+          let statsPayload = null;
+          let redirectPayload = null;
           if (sr.ok) {
-            const s = await sr.json();
+            statsPayload = await sr.json();
             document.getElementById("adTotalUsers").textContent =
-              s.totalUsers || 0;
+              statsPayload.totalUsers || 0;
             document.getElementById("adTotalLinks").textContent =
-              s.totalLinks || 0;
+              statsPayload.totalLinks || 0;
             document.getElementById("adTotalClicks").textContent =
-              s.totalClicks || 0;
+              statsPayload.totalClicks || 0;
+            enqueueAdminAlerts(statsPayload);
           }
           if (dr.ok) {
             const d = await dr.json();
@@ -3465,20 +4071,29 @@
             renderAdminDomains(adminDomains);
             syncAvailableDomainsFromAdmin(adminDomains);
           }
-          if (lr.ok) {
-            const l = await lr.json();
-            adminLinks = l.links || [];
-            renderAdminLinks(adminLinks);
-          }
           if (ur.ok) {
             const u = await ur.json();
             adminUsers = u.users || [];
-            renderAdminUsers(adminUsers);
+            adminSelectedUserIds = new Set(
+              [...adminSelectedUserIds].filter((id) =>
+                adminUsers.some((userItem) => Number(userItem.id) === Number(id)),
+              ),
+            );
+            renderAdminUsers();
           }
           if (rr.ok) {
-            const recent = await rr.json();
-            adminRedirects = recent.events || [];
-            renderAdminRedirects(adminRedirects, recent.file || "logs/redirect.log");
+            redirectPayload = await rr.json();
+            adminRedirects = redirectPayload.events || [];
+            renderAdminRedirects(
+              adminRedirects,
+              redirectPayload.file || "logs/redirect.log",
+            );
+          }
+          if (statsPayload || redirectPayload) {
+            rememberAdminNotificationSnapshot(
+              statsPayload || {},
+              redirectPayload || { events: adminRedirects },
+            );
           }
         } catch (e) {
           console.error("loadAdminData", e);
@@ -3486,7 +4101,7 @@
       }
 
       function formatAdminDateTime(value) {
-        if (!value) return "â€”";
+        if (!value) return "—";
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) return String(value);
         return date.toLocaleString("vi-VN", {
@@ -3507,20 +4122,23 @@
         if (countEl) countEl.textContent = arr.length;
         if (fileEl) fileEl.textContent = fileLabel;
         if (!tb) return;
-        if (!arr.length) {
+        const pagination = paginateAdminRows(arr, adminRedirectPage);
+        adminRedirectPage = pagination.page;
+        if (!pagination.total) {
           tb.innerHTML =
-            '<tr><td colspan="7" class="tbl-empty">ChÆ°a cÃ³ redirect log nÃ o.</td></tr>';
+            '<tr><td colspan="7" class="tbl-empty">Chưa có redirect log nào.</td></tr>';
+          renderAdminPagination("adRedirectPagination", pagination, "setAdminRedirectPage");
           return;
         }
-        tb.innerHTML = arr
+        tb.innerHTML = pagination.rows
           .map((event) => {
-            const status = event.status ?? "â€”";
-            const code = event.code || "â€”";
-            const mode = event.mode || "â€”";
-            const uaKind = event.uaKind || "â€”";
-            const target = event.target || "â€”";
-            const requestId = event.requestId || "â€”";
-            const refererHost = event.refererHost || "â€”";
+            const status = event.status ?? "—";
+            const code = event.code || "—";
+            const mode = event.mode || "—";
+            const uaKind = event.uaKind || "—";
+            const target = event.target || "—";
+            const requestId = event.requestId || "—";
+            const refererHost = event.refererHost || "—";
             return `<tr>
       <td style="white-space:nowrap;color:var(--text2);font-size:12px">${esc(formatAdminDateTime(event.timestamp))}</td>
       <td><span class="pill generic">${esc(mode)}</span></td>
@@ -3537,6 +4155,11 @@
     </tr>`;
           })
           .join("");
+        renderAdminPagination(
+          "adRedirectPagination",
+          pagination,
+          "setAdminRedirectPage",
+        );
       }
 
       async function loadAdminRedirects(showToast = false) {
@@ -3544,26 +4167,31 @@
         const btn = document.getElementById("adminRedirectReloadBtn");
         if (btn) {
           btn.disabled = true;
-          btn.textContent = "Äang táº£i...";
+          btn.textContent = "Đang tải...";
         }
         try {
-          const response = await fetch("/api/admin/redirects?limit=20");
+          const response = await fetch("/api/admin/redirects?limit=500");
           const data = await response.json().catch(() => ({}));
           if (!response.ok) {
-            toast(data.error || "KhÃ´ng thá»ƒ táº£i redirect log", "err");
+            toast(data.error || "Không thể tải redirect log", "err");
             return;
           }
           adminRedirects = data.events || [];
+          adminRedirectPage = 1;
+          rememberAdminNotificationSnapshot(
+            { totalUsers: adminNotificationSnapshot?.totalUsers || 0 },
+            data,
+          );
           renderAdminRedirects(adminRedirects, data.file || "logs/redirect.log");
           if (showToast) {
-            toast("âœ… ÄÃ£ táº£i láº¡i redirect log", "ok");
+            toast("✅ Đã tải lại redirect log", "ok");
           }
         } catch {
-          toast("Lá»—i káº¿t ná»‘i khi táº£i redirect log", "err");
+          toast("Lỗi kết nối khi tải redirect log", "err");
         } finally {
           if (btn) {
             btn.disabled = false;
-            btn.textContent = "Táº£i láº¡i";
+            btn.textContent = "Tải lại";
           }
         }
       }
@@ -3574,22 +4202,31 @@
         document.getElementById("adDomainCount").textContent = arr.length;
         if (!arr.length) {
           tb.innerHTML =
-            '<tr><td colspan="6" class="tbl-empty">Chưa có domain</td></tr>';
+            '<tr><td colspan="8" class="tbl-empty">Chưa có domain</td></tr>';
           return;
         }
         tb.innerHTML = arr
           .map((d) => {
             const isPrimary = !!d.is_primary;
             const isActive = d.is_active !== false;
+            const verificationStatus = String(d.verification_status || "verified").toLowerCase();
+            const expiresAt = String(d.expires_at || "").slice(0, 10);
             return `<tr>
       <td style="font-weight:700;color:var(--text)">${esc(d.hostname || "")}</td>
       <td>${esc(d.label || "—")}</td>
       <td>${isPrimary ? '<span class="pill generic">Primary</span>' : '<span style="color:var(--text3)">—</span>'}</td>
       <td>${isActive ? '<span class="pill tiktok">Active</span>' : '<span class="pill generic">Paused</span>'}</td>
+      <td>
+        <select class="plan-select" id="domainVerify_${d.id}">
+          ${["verified", "pending", "failed"].map((status) => `<option value="${status}"${verificationStatus === status ? " selected" : ""}>${status}</option>`).join("")}
+        </select>
+      </td>
+      <td><input class="plan-select" type="date" id="domainExpiry_${d.id}" value="${esc(expiresAt)}" /></td>
       <td style="color:var(--text3);font-size:11px">${(d.created_at || "").substring(0, 10)}</td>
       <td style="display:flex;gap:5px;flex-wrap:wrap">
-        <button class="btn-cp" onclick="setPrimaryDomain(${d.id})" ${isPrimary ? "disabled" : ""}>Primary</button>
-        <button class="btn-cp" onclick="toggleDomainActive(${d.id},${isActive ? "false" : "true"})">${isActive ? "Pause" : "Activate"}</button>
+        <button class="btn-cp" onclick="updateDomainHealth(${d.id},'${esc(d.hostname || "")}')">Lưu</button>
+        <button class="btn-cp" onclick="setPrimaryDomain(${d.id},'${esc(d.hostname || "")}')" ${isPrimary ? "disabled" : ""}>Primary</button>
+        <button class="btn-cp" onclick="toggleDomainActive(${d.id},${isActive ? "false" : "true"},'${esc(d.hostname || "")}')">${isActive ? "Pause" : "Activate"}</button>
         <button class="btn-del" onclick="deleteAdminDomain(${d.id},'${esc(d.hostname || "")}')">Xóa</button>
       </td>
     </tr>`;
@@ -3597,88 +4234,56 @@
           .join("");
       }
 
-      function renderAdminUsers(arr) {
+      function renderAdminUsers() {
         const tb = document.getElementById("adUserBody");
         if (!tb) return;
-        document.getElementById("adUserCount").textContent = arr.length;
-        if (!arr.length) {
+        const filteredUsers = getFilteredAdminUsers();
+        const pagination = paginateAdminRows(filteredUsers, adminUserPage);
+        const pageRows = pagination.rows;
+        adminUserPage = pagination.page;
+        document.getElementById("adUserCount").textContent = filteredUsers.length;
+        if (!filteredUsers.length) {
           tb.innerHTML =
-            '<tr><td colspan="7" class="tbl-empty">Không có người dùng</td></tr>';
+            '<tr><td colspan="8" class="tbl-empty">Không có người dùng phù hợp bộ lọc.</td></tr>';
+          syncAdminUserSelectionUI(filteredUsers, []);
+          renderAdminPagination("adUserPagination", pagination, "setAdminUserPage");
           return;
         }
-        tb.innerHTML = arr
+        tb.innerHTML = pageRows
           .map(
-            (u) => `<tr>
+            (u) => {
+              const userId = Number(u.id);
+              const isSelected = adminSelectedUserIds.has(userId);
+              return `<tr class="${isSelected ? "admin-row-selected" : ""}">
+    <td class="td-check">
+      <label class="tbl-check">
+        <input type="checkbox" ${isSelected ? "checked" : ""} onchange="toggleAdminUserSelection(${userId}, this.checked)" />
+        <span></span>
+      </label>
+    </td>
     <td style="color:var(--text3)">${u.id}</td>
     <td style="font-weight:600">${esc(u.email)}</td>
     <td>${esc(u.name || "—")}</td>
     <td>
-      <select class="plan-select" onchange="adminSetPlan(${u.id},this.value)">
+      <select class="plan-select" data-current-plan="${esc(u.plan || "free")}" onchange="adminSetPlan(${u.id},this)">
         ${["free", "pro", "business", "admin"].map((p) => `<option value="${p}"${u.plan === p ? " selected" : ""}>${p}</option>`).join("")}
       </select>
     </td>
     <td><span class="badge-role ${u.role || "user"}">${u.role || "user"}</span></td>
     <td style="color:var(--text3);font-size:11px">${(u.created_at || "").substring(0, 10)}</td>
     <td><button class="btn-del" onclick="adminDeleteUser(${u.id},'${esc(u.email)}')">Xóa</button></td>
-  </tr>`,
+  </tr>`;
+            },
           )
           .join("");
-      }
-
-      function renderAdminLinks(arr) {
-        const tb = document.getElementById("adLinkBody");
-        if (!tb) return;
-        document.getElementById("adLinkCount").textContent = arr.length;
-        if (!arr.length) {
-          tb.innerHTML =
-            '<tr><td colspan="7" class="tbl-empty">Không có link</td></tr>';
-          return;
-        }
-        const lbl = {
-          shopee: "🛒 Shopee",
-          tiktok: "🎵 TikTok",
-          generic: "🔗 Generic",
-        };
-        tb.innerHTML = arr
-          .map((l) => {
-            const p = pt(l.original_url);
-            const short = (l.short_url || "").replace(/^https?:\/\//, "");
-            return `<tr>
-      <td><a class="td-link" href="${l.short_url || "#"}" target="_blank">${short}</a></td>
-      <td class="td-orig" title="${l.original_url || ""}">${l.original_url || ""}</td>
-      <td><span class="pill ${p}">${lbl[p]}</span></td>
-      <td style="font-size:11px;color:var(--text3)">${esc(l.user_email || "guest")}</td>
-      <td style="font-weight:700">${l.clicks || 0}</td>
-      <td style="color:var(--text3);font-size:11px">${(l.created_at || "").substring(0, 10)}</td>
-      <td style="display:flex;gap:5px">
-        <button class="btn-cp" onclick="copyClip('${l.short_url || ""}')">📋</button>
-        <button class="btn-del" onclick="adminDeleteLink(${l.id},'${short}')">Xóa</button>
-      </td>
-    </tr>`;
-          })
-          .join("");
+        syncAdminUserSelectionUI(filteredUsers, pageRows);
+        renderAdminPagination("adUserPagination", pagination, "setAdminUserPage");
       }
 
       function filterAdminUsers(q) {
-        q = q.toLowerCase();
-        renderAdminUsers(
-          adminUsers.filter(
-            (u) =>
-              (u.email || "").toLowerCase().includes(q) ||
-              (u.name || "").toLowerCase().includes(q),
-          ),
-        );
-      }
-
-      function filterAdminLinks(q) {
-        q = q.toLowerCase();
-        renderAdminLinks(
-          adminLinks.filter(
-            (l) =>
-              (l.short_url || "").toLowerCase().includes(q) ||
-              (l.original_url || "").toLowerCase().includes(q),
-          ),
-        );
+        adminUserSearchQuery = String(q || "").trim().toLowerCase();
+        adminUserPage = 1;
+        renderAdminUsers();
       }
 
       function filterAdminDomains(q) {
@@ -3687,18 +4292,67 @@
           adminDomains.filter(
             (d) =>
               (d.hostname || "").toLowerCase().includes(q) ||
-              (d.label || "").toLowerCase().includes(q),
+              (d.label || "").toLowerCase().includes(q) ||
+              (d.verification_status || "").toLowerCase().includes(q),
           ),
         );
+      }
+
+      function toggleAdminUserSelection(userId, checked) {
+        if (checked) adminSelectedUserIds.add(Number(userId));
+        else adminSelectedUserIds.delete(Number(userId));
+        renderAdminUsers();
+      }
+
+      function toggleAllAdminUsersOnPage(checked) {
+        const pageRows = paginateAdminRows(getFilteredAdminUsers(), adminUserPage).rows;
+        pageRows.forEach((userItem) => {
+          if (checked) adminSelectedUserIds.add(Number(userItem.id));
+          else adminSelectedUserIds.delete(Number(userItem.id));
+        });
+        renderAdminUsers();
+      }
+
+      function selectAllAdminUsersFiltered() {
+        getFilteredAdminUsers().forEach((userItem) => {
+          adminSelectedUserIds.add(Number(userItem.id));
+        });
+        renderAdminUsers();
+      }
+
+      function clearAdminUserSelection() {
+        adminSelectedUserIds = new Set();
+        renderAdminUsers();
       }
 
       async function addAdminDomain() {
         const hostInput = document.getElementById("adminDomainHost");
         const labelInput = document.getElementById("adminDomainLabel");
         const primaryInput = document.getElementById("adminDomainPrimary");
+        const verifyInput = document.getElementById("adminDomainVerify");
+        const expiryInput = document.getElementById("adminDomainExpiry");
         const btn = document.getElementById("adminDomainAddBtn");
         const hostname = hostInput.value.trim();
         const label = labelInput.value.trim();
+        const verificationStatus = String(verifyInput?.value || "verified").trim() || "verified";
+        const expiresAt = String(expiryInput?.value || "").trim();
+        if (!hostname) {
+          toast("Nhập hostname trước khi thêm domain", "warn");
+          return;
+        }
+        const confirmed = await showConfirmDialog({
+          title: "Thêm domain mới",
+          message: `Thêm domain "${hostname}" vào hệ thống?`,
+          note: label
+            ? `Nhãn hiển thị: ${label}${primaryInput.checked ? " • sẽ đặt làm domain chính." : ""}${expiresAt ? ` • hết hạn: ${expiresAt}` : ""}`
+            : primaryInput.checked
+              ? "Domain này sẽ được đặt làm domain chính."
+              : expiresAt
+                ? `Hết hạn: ${expiresAt}`
+                : "",
+          confirmLabel: "Thêm domain",
+        });
+        if (!confirmed) return;
         btn.disabled = true;
         btn.textContent = "Đang thêm...";
         try {
@@ -3709,6 +4363,8 @@
               hostname,
               label,
               is_primary: primaryInput.checked,
+              verification_status: verificationStatus,
+              expires_at: expiresAt,
             }),
           });
           const d = await r.json();
@@ -3722,6 +4378,15 @@
           hostInput.value = "";
           labelInput.value = "";
           primaryInput.checked = false;
+          if (verifyInput) verifyInput.value = "verified";
+          if (expiryInput) expiryInput.value = "";
+          addNotification({
+            key: `domain-add-${hostname}-${Date.now()}`,
+            title: "Đã thêm domain",
+            message: `${hostname} đã được thêm vào hệ thống.`,
+            kind: "ok",
+            page: "admin",
+          });
           toast("✅ Đã thêm domain", "ok");
         } catch {
           toast("Lỗi kết nối", "err");
@@ -3731,7 +4396,55 @@
         }
       }
 
-      async function setPrimaryDomain(domainId) {
+      async function updateDomainHealth(domainId, hostname = "") {
+        const verifyInput = document.getElementById(`domainVerify_${domainId}`);
+        const expiryInput = document.getElementById(`domainExpiry_${domainId}`);
+        const verificationStatus = String(verifyInput?.value || "verified").trim() || "verified";
+        const expiresAt = String(expiryInput?.value || "").trim();
+        const confirmed = await showConfirmDialog({
+          title: "Cập nhật sức khỏe domain",
+          message: `Lưu trạng thái verify cho "${hostname || "domain này"}"?`,
+          note: `${verificationStatus}${expiresAt ? ` • hết hạn ${expiresAt}` : ""}`,
+          confirmLabel: "Lưu cập nhật",
+        });
+        if (!confirmed) return;
+        try {
+          const r = await fetch("/api/admin/domains/" + domainId, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              verification_status: verificationStatus,
+              expires_at: expiresAt,
+            }),
+          });
+          const d = await r.json();
+          if (!r.ok) {
+            toast(d.error || "Không thể cập nhật domain", "err");
+            return;
+          }
+          adminDomains = d.domains || [];
+          renderAdminDomains(adminDomains);
+          addNotification({
+            key: `domain-health-${domainId}-${Date.now()}`,
+            title: "Đã cập nhật domain",
+            message: `${hostname || "Domain"} đã được cập nhật verify/expiry.`,
+            kind: "ok",
+            page: "admin",
+          });
+          toast("Cập nhật domain thành công", "ok");
+        } catch {
+          toast("Lỗi kết nối", "err");
+        }
+      }
+
+      async function setPrimaryDomain(domainId, hostname = "") {
+        const confirmed = await showConfirmDialog({
+          title: "Đổi domain chính",
+          message: `Đặt "${hostname || "domain này"}" làm domain chính?`,
+          note: "Tất cả link mới sẽ ưu tiên dùng domain chính đang được chọn.",
+          confirmLabel: "Đặt primary",
+        });
+        if (!confirmed) return;
         try {
           const r = await fetch("/api/admin/domains/" + domainId, {
             method: "PATCH",
@@ -3747,18 +4460,37 @@
           renderAdminDomains(adminDomains);
           syncAvailableDomainsFromAdmin(adminDomains);
           loadData();
+          addNotification({
+            key: `domain-primary-${domainId}-${Date.now()}`,
+            title: "Domain chính đã thay đổi",
+            message: `${hostname || "Domain đã chọn"} đang là domain mặc định mới.`,
+            kind: "ok",
+            page: "admin",
+          });
           toast("✅ Đã đặt domain chính", "ok");
         } catch {
           toast("Lỗi kết nối", "err");
         }
       }
 
-      async function toggleDomainActive(domainId, isActive) {
+      async function toggleDomainActive(domainId, isActive, hostname = "") {
+        const nextActive = isActive === true || isActive === "true";
+        const willEnable = nextActive;
+        const confirmed = await showConfirmDialog({
+          title: willEnable ? "Kích hoạt domain" : "Tạm dừng domain",
+          message: `${willEnable ? "Kích hoạt" : "Tạm dừng"} "${hostname || "domain này"}"?`,
+          note: willEnable
+            ? "Domain sẽ xuất hiện trở lại trong danh sách chọn khi tạo link."
+            : "Link cũ vẫn hoạt động, nhưng domain sẽ không còn được chọn cho link mới.",
+          confirmLabel: willEnable ? "Kích hoạt" : "Tạm dừng",
+          tone: willEnable ? "default" : "danger",
+        });
+        if (!confirmed) return;
         try {
           const r = await fetch("/api/admin/domains/" + domainId, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ is_active: isActive }),
+            body: JSON.stringify({ is_active: nextActive }),
           });
           const d = await r.json();
           if (!r.ok) {
@@ -3769,6 +4501,13 @@
           renderAdminDomains(adminDomains);
           syncAvailableDomainsFromAdmin(adminDomains);
           loadData();
+          addNotification({
+            key: `domain-toggle-${domainId}-${Date.now()}`,
+            title: willEnable ? "Domain đã được kích hoạt" : "Domain đã được tạm dừng",
+            message: hostname || "Cập nhật trạng thái domain thành công.",
+            kind: willEnable ? "ok" : "warn",
+            page: "admin",
+          });
           toast("✅ Đã cập nhật domain", "ok");
         } catch {
           toast("Lỗi kết nối", "err");
@@ -3776,7 +4515,14 @@
       }
 
       async function deleteAdminDomain(domainId, hostname) {
-        if (!confirm(`Xóa domain "${hostname}"?`)) return;
+        const confirmed = await showConfirmDialog({
+          title: "Xóa domain",
+          message: `Xóa domain "${hostname}" khỏi hệ thống?`,
+          note: "Thao tác này không xóa link cũ nhưng sẽ bỏ domain khỏi danh sách sử dụng tiếp theo.",
+          confirmLabel: "Xóa domain",
+          tone: "danger",
+        });
+        if (!confirmed) return;
         try {
           const r = await fetch("/api/admin/domains/" + domainId, {
             method: "DELETE",
@@ -3790,41 +4536,89 @@
           renderAdminDomains(adminDomains);
           syncAvailableDomainsFromAdmin(adminDomains);
           loadData();
+          addNotification({
+            key: `domain-delete-${domainId}-${Date.now()}`,
+            title: "Đã xóa domain",
+            message: `${hostname} đã bị gỡ khỏi hệ thống.`,
+            kind: "warn",
+            page: "admin",
+          });
           toast("🗑️ Đã xóa domain", "ok");
         } catch {
           toast("Lỗi kết nối", "err");
         }
       }
 
-      async function adminSetPlan(userId, plan) {
+      async function adminSetPlan(userId, selectEl) {
+        const nextPlan = selectEl?.value;
+        const currentPlan = selectEl?.dataset?.currentPlan || "free";
+        if (!nextPlan || nextPlan === currentPlan) return;
+        const targetUser = adminUsers.find((u) => Number(u.id) === Number(userId));
+        const confirmed = await showConfirmDialog({
+          title: "Cập nhật gói người dùng",
+          message: `Chuyển ${targetUser?.email || "người dùng này"} sang gói "${nextPlan}"?`,
+          note: "Thay đổi sẽ có hiệu lực ngay sau khi lưu.",
+          confirmLabel: "Cập nhật gói",
+        });
+        if (!confirmed) {
+          if (selectEl) selectEl.value = currentPlan;
+          return;
+        }
         try {
           const r = await fetch("/api/admin/users/" + userId, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ plan }),
+            body: JSON.stringify({ plan: nextPlan }),
           });
-          if (r.ok) toast(`✅ Đã cập nhật gói → ${plan}`, "ok");
-          else {
+          if (r.ok) {
+            if (selectEl) selectEl.dataset.currentPlan = nextPlan;
+            adminUsers = adminUsers.map((userItem) =>
+              Number(userItem.id) === Number(userId)
+                ? { ...userItem, plan: nextPlan }
+                : userItem,
+            );
+            renderAdminUsers();
+            addNotification({
+              key: `plan-${userId}-${nextPlan}-${Date.now()}`,
+              title: "Gói người dùng đã cập nhật",
+              message: `${targetUser?.email || "Người dùng"} đã chuyển sang ${nextPlan}.`,
+              kind: "ok",
+              page: "admin",
+            });
+            toast(`✅ Đã cập nhật gói → ${nextPlan}`, "ok");
+          } else {
             const d = await r.json();
+            if (selectEl) selectEl.value = currentPlan;
             toast(d.error || "Lỗi", "err");
           }
         } catch {
+          if (selectEl) selectEl.value = currentPlan;
           toast("Lỗi kết nối", "err");
         }
       }
 
       async function adminDeleteUser(userId, email) {
-        if (
-          !confirm(
-            `Xóa người dùng "${email}"?\nTất cả link của họ cũng bị xóa.`,
-          )
-        )
-          return;
+        const confirmed = await showConfirmDialog({
+          title: "Xóa người dùng",
+          message: `Xóa người dùng "${email}"?`,
+          note: "Tất cả link của tài khoản này cũng sẽ bị xóa theo.",
+          confirmLabel: "Xóa người dùng",
+          tone: "danger",
+        });
+        if (!confirmed) return;
         try {
           const r = await fetch("/api/admin/users/" + userId, {
             method: "DELETE",
           });
           if (r.ok) {
+            adminSelectedUserIds.delete(Number(userId));
+            addNotification({
+              key: `user-delete-${userId}-${Date.now()}`,
+              title: "Đã xóa người dùng",
+              message: `${email} đã bị xóa khỏi hệ thống.`,
+              kind: "warn",
+              page: "admin",
+            });
             toast("🗑️ Đã xóa người dùng", "ok");
             loadAdminData();
           } else {
@@ -3836,14 +4630,36 @@
         }
       }
 
-      async function adminDeleteLink(linkId, shortDisplay) {
-        if (!confirm(`Xóa link "${shortDisplay}"?`)) return;
+      async function deleteSelectedAdminUsers() {
+        const ids = [...adminSelectedUserIds].filter((id) => Number.isInteger(id));
+        if (!ids.length) {
+          toast("Chưa chọn người dùng nào để xóa", "warn");
+          return;
+        }
+        const confirmed = await showConfirmDialog({
+          title: "Xóa nhiều người dùng",
+          message: `Xóa ${ids.length} người dùng đã chọn?`,
+          note: "Toàn bộ link thuộc các tài khoản này cũng sẽ bị xóa.",
+          confirmLabel: "Xóa đã chọn",
+          tone: "danger",
+        });
+        if (!confirmed) return;
         try {
-          const r = await fetch("/api/admin/links/" + linkId, {
-            method: "DELETE",
+          const r = await fetch("/api/admin/users/bulk-delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids }),
           });
           if (r.ok) {
-            toast("🗑️ Đã xóa link", "ok");
+            adminSelectedUserIds = new Set();
+            addNotification({
+              key: `bulk-user-delete-${ids.length}-${Date.now()}`,
+              title: "Đã xóa nhiều người dùng",
+              message: `${ids.length} tài khoản đã bị xóa khỏi hệ thống.`,
+              kind: "warn",
+              page: "admin",
+            });
+            toast("🗑️ Đã xóa các người dùng đã chọn", "ok");
             loadAdminData();
           } else {
             const d = await r.json();

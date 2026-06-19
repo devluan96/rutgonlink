@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const rawTimeZoneOffset = Number(process.env.APP_TIME_ZONE_OFFSET_MINUTES);
 const APP_TIME_ZONE_OFFSET_MINUTES = Number.isFinite(rawTimeZoneOffset) ? rawTimeZoneOffset : 420;
+const CLICK_DEDUP_WINDOW_MS = 3000;
 
 let _client = null;
 
@@ -91,6 +92,15 @@ async function init() {
       check(error);
     },
 
+    async deleteUsers(userIds) {
+      const ids = Array.isArray(userIds)
+        ? [...new Set(userIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
+        : [];
+      if (!ids.length) return;
+      const { error } = await sb.from('users').delete().in('id', ids);
+      check(error);
+    },
+
     async getBioProfileByUserId(userId) {
       const { data } = await sb
         .from('bio_profiles')
@@ -145,6 +155,78 @@ async function init() {
       const { count, error } = await sb.from('users').select('*', { count: 'exact', head: true });
       check(error);
       return count || 0;
+    },
+
+    async recordLoginEvent({
+      userId,
+      deviceFingerprint,
+      deviceLabel,
+      browserName,
+      osName,
+      deviceType,
+      ip,
+      userAgent,
+    }) {
+      if (!userId || !deviceFingerprint) return null;
+
+      const [{ data: knownDevices, error: knownDevicesError }, { count: priorCount, error: priorCountError }] =
+        await Promise.all([
+          sb
+            .from('login_events')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('device_fingerprint', deviceFingerprint)
+            .limit(1),
+          sb.from('login_events').select('*', { count: 'exact', head: true }).eq('user_id', userId),
+        ]);
+      if (
+        knownDevicesError &&
+        /login_events|relation .*login_events|schema cache/i.test(knownDevicesError.message || '')
+      ) {
+        return null;
+      }
+      if (
+        priorCountError &&
+        /login_events|relation .*login_events|schema cache/i.test(priorCountError.message || '')
+      ) {
+        return null;
+      }
+      check(knownDevicesError);
+      check(priorCountError);
+
+      const isNewDevice = !((knownDevices || []).length) && (priorCount || 0) > 0;
+      const payload = {
+        user_id: userId,
+        device_fingerprint: deviceFingerprint,
+        device_label: deviceLabel || null,
+        browser_name: browserName || null,
+        os_name: osName || null,
+        device_type: deviceType || null,
+        ip: ip || null,
+        user_agent: userAgent || null,
+        is_new_device: isNewDevice,
+      };
+      const { data, error } = await sb.from('login_events').insert(payload).select().single();
+      if (error && /login_events|relation .*login_events|schema cache/i.test(error.message || '')) {
+        return null;
+      }
+      check(error, 'login_event');
+      return data;
+    },
+
+    async getLatestLoginEvent(userId) {
+      if (!userId) return null;
+      const { data, error } = await sb
+        .from('login_events')
+        .select('*')
+        .eq('user_id', userId)
+        .order('occurred_at', { ascending: false })
+        .limit(1);
+      if (error && /login_events|relation .*login_events|schema cache/i.test(error.message || '')) {
+        return null;
+      }
+      check(error, 'login_event_latest');
+      return (data || [])[0] || null;
     },
 
     // ── Links ──────────────────────────────────────────────────────────
@@ -211,13 +293,29 @@ async function init() {
     },
 
     async recordClick(linkId, ip, ua, ref, meta = {}) {
+      const normalizedIp = String(ip || '').trim();
+      const normalizedUa = String(ua || '').trim();
+      if (linkId && normalizedIp && normalizedUa) {
+        const duplicateSince = new Date(Date.now() - CLICK_DEDUP_WINDOW_MS).toISOString();
+        const { count, error: duplicateError } = await sb
+          .from('clicks')
+          .select('*', { count: 'exact', head: true })
+          .eq('link_id', linkId)
+          .eq('ip', normalizedIp)
+          .eq('user_agent', normalizedUa)
+          .gte('clicked_at', duplicateSince);
+        check(duplicateError, 'click_dedup');
+        if ((count || 0) > 0) {
+          return { counted: false, deduped: true };
+        }
+      }
       // Tăng click counter
       await sb.rpc('increment_clicks', { link_id: linkId });
       // Ghi click log
       const payload = {
         link_id: linkId,
-        ip: ip || '',
-        user_agent: ua || '',
+        ip: normalizedIp,
+        user_agent: normalizedUa,
         referrer: ref || '',
       };
       if (meta.country_code) payload.country_code = meta.country_code;
@@ -230,13 +328,14 @@ async function init() {
       ) {
         const fallbackPayload = {
           link_id: linkId,
-          ip: ip || '',
-          user_agent: ua || '',
+          ip: normalizedIp,
+          user_agent: normalizedUa,
           referrer: ref || '',
         };
         result = await sb.from('clicks').insert(fallbackPayload);
       }
       check(result.error, 'click');
+      return { counted: true, deduped: false };
     },
 
     async getRecentLinks(userId, guestSessionId) {
@@ -452,16 +551,36 @@ async function init() {
       return data;
     },
 
-    async addDomain({ hostname, label, isPrimary = false }) {
+    async addDomain({
+      hostname,
+      label,
+      isPrimary = false,
+      verificationStatus = 'verified',
+      expiresAt = null,
+    }) {
       const payload = {
         hostname,
         label: label || null,
         is_primary: !!isPrimary,
         is_active: true,
+        verification_status: verificationStatus || 'verified',
+        expires_at: expiresAt || null,
       };
-      const { data, error } = await sb.from('domains').insert(payload).select().single();
-      check(error);
-      return data;
+      let result = await sb.from('domains').insert(payload).select().single();
+      if (
+        result.error &&
+        /verification_status|expires_at|schema cache/i.test(result.error.message || '')
+      ) {
+        const fallbackPayload = {
+          hostname,
+          label: label || null,
+          is_primary: !!isPrimary,
+          is_active: true,
+        };
+        result = await sb.from('domains').insert(fallbackPayload).select().single();
+      }
+      check(result.error);
+      return result.data;
     },
 
     async setPrimaryDomain(domainId) {
@@ -487,7 +606,7 @@ async function init() {
     },
 
     async updateDomain(domainId, fields) {
-      const allowed = ['hostname', 'label', 'is_primary', 'is_active'];
+      const allowed = ['hostname', 'label', 'is_primary', 'is_active', 'verification_status', 'expires_at'];
       const updates = {};
       for (const [k, v] of Object.entries(fields || {})) {
         if (allowed.includes(k)) updates[k] = v;
@@ -496,14 +615,32 @@ async function init() {
       if (updates.is_primary) {
         await sb.from('domains').update({ is_primary: false }).eq('is_primary', true);
       }
-      const { data, error } = await sb
+      let result = await sb
         .from('domains')
         .update(updates)
         .eq('id', domainId)
         .select()
         .single();
-      check(error);
-      return data;
+      if (
+        result.error &&
+        /verification_status|expires_at|schema cache/i.test(result.error.message || '')
+      ) {
+        const fallbackUpdates = { ...updates };
+        delete fallbackUpdates.verification_status;
+        delete fallbackUpdates.expires_at;
+        if (!Object.keys(fallbackUpdates).length) {
+          result = await sb.from('domains').select('*').eq('id', domainId).maybeSingle();
+        } else {
+          result = await sb
+            .from('domains')
+            .update(fallbackUpdates)
+            .eq('id', domainId)
+            .select()
+            .single();
+        }
+      }
+      check(result.error);
+      return result.data;
     },
 
     async deleteDomain(domainId) {
