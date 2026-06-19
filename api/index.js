@@ -4224,8 +4224,9 @@ function buildOgPage(link, baseUrl) {
     : `${shortBaseUrl}/og-default.png`;
   const dest = link.original_url;
   const info = detectPlatformDeep(dest, "ios");
+  const isVideoLink = (link.link_type || "direct").trim() === "video";
   const appMeta =
-    info.platform_name !== "generic"
+    !isVideoLink && info.platform_name !== "generic"
       ? buildAppLinkMetaTags(
           shortUrl,
           dest,
@@ -4249,13 +4250,16 @@ function buildOgPage(link, baseUrl) {
               },
         )
       : "";
+  const fbAppIdMeta = isVideoLink
+    ? ""
+    : `<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />`;
 
   return `<!DOCTYPE html>
 <html lang="vi">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
+${fbAppIdMeta}
 ${appMeta}
 <title>${title}</title>
 <meta name="description" content="${desc}" />
