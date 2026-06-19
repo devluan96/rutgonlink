@@ -1274,6 +1274,33 @@ function buildStatsAlertPayload({ planName, linksToday, hasAccount, clickRows, l
   };
 }
 
+function buildWorkspaceInvitationAlert(context) {
+  const membership = context?.membership || null;
+  const workspace = context?.workspace || null;
+  if (
+    !membership ||
+    membership.status !== "pending" ||
+    membership.role === "owner" ||
+    !workspace
+  ) {
+    return null;
+  }
+  const roleLabel =
+    membership.role === "owner"
+      ? "Owner"
+      : membership.role === "analyst"
+        ? "Analyst"
+        : "Editor";
+  return {
+    key: `team-invite:${workspace.id}:${membership.id}`,
+    title: "Lời mời workspace mới",
+    message: `Bạn được mời vào ${workspace.name || "workspace"} với quyền ${roleLabel}.`,
+    kind: "info",
+    page: "team",
+    createdAt: membership.updated_at || membership.created_at || new Date().toISOString(),
+  };
+}
+
 function buildAdminAlertPayload(domains = []) {
   const domainAlerts = buildDomainAlerts(domains);
   return {
@@ -1540,6 +1567,223 @@ function getPaymentConfig() {
     qr_image_url: resolvePublicAssetUrl(PAYMENT_QR_IMAGE_URL),
     contact: PAYMENT_CONTACT,
     plans: Object.values(BILLING_PLANS),
+  };
+}
+
+function normalizeWorkspaceRole(input) {
+  const value = String(input || "").trim().toLowerCase();
+  if (value === "owner" || value === "analyst") return value;
+  return "editor";
+}
+
+function normalizeWorkspaceStatus(input) {
+  const value = String(input || "").trim().toLowerCase();
+  if (value === "pending" || value === "paused") return value;
+  return "active";
+}
+
+function getWorkspaceSeatLimitForUser(user) {
+  if (!user) return 1;
+  if (user.role === "admin" || user.plan === "admin" || user.plan === "business") return 10;
+  if (user.plan === "pro") return 5;
+  return 3;
+}
+
+function canManageWorkspaceMembers(membership, workspace, user) {
+  return (
+    !!membership &&
+    membership.role === "owner" &&
+    membership.status === "active" &&
+    Number(workspace?.owner_user_id || 0) === Number(user?.id || 0)
+  );
+}
+
+function canManageWorkspaceTemplates(membership) {
+  return !!membership && membership.status === "active" && ["owner", "editor"].includes(membership.role);
+}
+
+function formatWorkspaceDisplayName(value, fallback = "Workspace") {
+  return String(value || fallback).trim().slice(0, 120) || fallback;
+}
+
+function buildDefaultWorkspaceName(user) {
+  const label = String(user?.name || user?.email?.split("@")[0] || "Workspace").trim();
+  return formatWorkspaceDisplayName(`${label} Workspace`);
+}
+
+function buildWorkspaceMemberResponse(member) {
+  const email = String(member?.email || "").trim().toLowerCase();
+  return {
+    id: member?.id,
+    workspace_id: member?.workspace_id,
+    user_id: member?.user_id || null,
+    email,
+    display_name:
+      String(member?.display_name || "").trim() ||
+      String(member?.name || "").trim() ||
+      (email ? email.split("@")[0] : "Member"),
+    role: normalizeWorkspaceRole(member?.role),
+    status: normalizeWorkspaceStatus(member?.status),
+    invited_by: member?.invited_by || null,
+    joined_at: member?.joined_at || null,
+    created_at: member?.created_at || null,
+    updated_at: member?.updated_at || null,
+  };
+}
+
+function buildWorkspaceTemplateResponse(template, memberMap = new Map(), publicBaseUrl = BASE_URL) {
+  const creator = memberMap.get(Number(template?.created_by_user_id || 0));
+  const sourceLink = template?.source_link_id ? memberMap.get(`link:${template.source_link_id}`) : null;
+  return {
+    id: template?.id,
+    workspace_id: template?.workspace_id,
+    created_by_user_id: template?.created_by_user_id || null,
+    creator_name: creator?.display_name || creator?.email || "Member",
+    source_link_id: template?.source_link_id || null,
+    source_link_short_url: sourceLink?.short_url || null,
+    name: formatWorkspaceDisplayName(template?.name, "Template"),
+    og_title: template?.og_title || "",
+    og_desc: template?.og_desc || "",
+    og_image: template?.og_image || "",
+    link_type: template?.link_type || "direct",
+    video_url: template?.video_url || "",
+    video_overlay_text: template?.video_overlay_text || "",
+    domain_hostname: template?.domain_hostname || null,
+    created_at: template?.created_at || null,
+    updated_at: template?.updated_at || null,
+    preview_domain: template?.domain_hostname || new URL(publicBaseUrl).hostname,
+  };
+}
+
+async function resolveWorkspaceContext(database, user, { ensureOwnerWorkspace = true } = {}) {
+  if (!database || !user?.id) return null;
+  const rawMemberships = await database.listWorkspaceMembershipsForIdentity(user.id, user.email);
+  const normalizedEmail = String(user.email || "").trim().toLowerCase();
+  const normalizedMemberships = [];
+
+  for (const rawMembership of rawMemberships) {
+    const workspace = rawMembership?.workspaces || null;
+    if (!workspace) continue;
+    let member = buildWorkspaceMemberResponse(rawMembership);
+    const shouldBindUser =
+      !member.user_id &&
+      normalizedEmail &&
+      member.email === normalizedEmail;
+    if (shouldBindUser || member.display_name !== (user.name || member.display_name)) {
+      member = buildWorkspaceMemberResponse(
+        (await database.updateWorkspaceMember(member.id, {
+          user_id: shouldBindUser ? user.id : member.user_id,
+          display_name: user.name || member.display_name,
+          status: member.status,
+          joined_at: member.joined_at,
+        })) || rawMembership,
+      );
+    }
+    normalizedMemberships.push({ workspace, member });
+  }
+
+  const activeJoined = normalizedMemberships.find(
+    (item) =>
+      item.member.status === "active" &&
+      Number(item.workspace?.owner_user_id || 0) !== Number(user.id),
+  );
+  const activeOwned = normalizedMemberships.find(
+    (item) =>
+      item.member.status === "active" &&
+      Number(item.workspace?.owner_user_id || 0) === Number(user.id),
+  );
+  const pendingJoined = normalizedMemberships.find(
+    (item) =>
+      item.member.status === "pending" &&
+      Number(item.workspace?.owner_user_id || 0) !== Number(user.id),
+  );
+
+  let selected = activeJoined || pendingJoined || activeOwned || null;
+  if (!selected && ensureOwnerWorkspace) {
+    let workspace = await database.getWorkspaceByOwnerUserId(user.id);
+    if (!workspace) {
+      workspace = await database.createWorkspace(user.id, buildDefaultWorkspaceName(user));
+    } else if (!workspace.name) {
+      workspace = (await database.updateWorkspace(workspace.id, { name: buildDefaultWorkspaceName(user) })) || workspace;
+    }
+    const ownerMember = await database.upsertWorkspaceMember(workspace.id, {
+      user_id: user.id,
+      email: normalizedEmail,
+      display_name: user.name || normalizedEmail.split("@")[0] || "Owner",
+      role: "owner",
+      status: "active",
+      invited_by: user.id,
+      joined_at: new Date().toISOString(),
+    });
+    selected = {
+      workspace,
+      member: buildWorkspaceMemberResponse(ownerMember),
+    };
+  }
+  if (!selected) return null;
+
+  const workspace = await database.getWorkspaceById(selected.workspace.id);
+  const members = (await database.listWorkspaceMembers(workspace.id)).map(buildWorkspaceMemberResponse);
+  const links = await database.getRecentLinks(user.id, null);
+  const linkMap = new Map(
+    links.map((link) => [
+      `link:${link.id}`,
+      {
+        short_url: buildLinkShortUrl(link, BASE_URL),
+      },
+    ]),
+  );
+  const memberMap = new Map(members.map((member) => [Number(member.user_id || 0), member]));
+  for (const [key, value] of linkMap.entries()) {
+    memberMap.set(key, value);
+  }
+  const templates = (await database.listWorkspaceTemplates(workspace.id)).map((template) =>
+    buildWorkspaceTemplateResponse(template, memberMap, BASE_URL),
+  );
+
+  return {
+    workspace,
+    membership: selected.member,
+    members,
+    templates,
+    sourceLinks: links.map((link) => ({
+      id: link.id,
+      short_url: buildLinkShortUrl(link, BASE_URL),
+      short_code: link.alias || link.short_code || "",
+      alias: link.alias || "",
+      original_url: link.original_url || "",
+      og_title: link.og_title || "",
+      og_desc: link.og_desc || "",
+      og_image: link.og_image || "",
+      link_type: link.link_type || "direct",
+      video_url: link.video_url || "",
+      video_overlay_text: link.video_overlay_text || "",
+      domain_hostname: link.domain_hostname || null,
+      created_at: link.created_at || null,
+      workspace_id: link.workspace_id || null,
+    })),
+  };
+}
+
+function buildTeamWorkspacePayload(context, user) {
+  const membership = context?.membership || null;
+  const isPendingInvite =
+    membership?.status === "pending" && membership?.role !== "owner";
+  const visibleMembers = isPendingInvite
+    ? (context?.members || []).filter((member) => member.role === "owner")
+    : context?.members || [];
+  return {
+    workspace: {
+      id: context.workspace.id,
+      owner_user_id: context.workspace.owner_user_id,
+      name: context.workspace.name,
+      seat_limit: getWorkspaceSeatLimitForUser(user),
+    },
+    membership,
+    members: visibleMembers,
+    templates: isPendingInvite ? [] : context.templates || [],
+    source_links: isPendingInvite ? [] : context.sourceLinks || [],
+    invitation_pending: isPendingInvite,
   };
 }
 
@@ -2038,6 +2282,230 @@ app.patch("/api/billing/requests/:id/submit", requireAuth, async (req, res) => {
   }
 });
 
+app.get("/api/team/workspace", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const context = await resolveWorkspaceContext(database, user);
+    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    res.json(buildTeamWorkspacePayload(context, user));
+  } catch (e) {
+    res.status(500).json({ error: "Không thể tải workspace: " + e.message });
+  }
+});
+
+app.post("/api/team/members", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const context = await resolveWorkspaceContext(database, user);
+    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (!canManageWorkspaceMembers(context.membership, context.workspace, user)) {
+      return res.status(403).json({ error: "Chỉ owner mới có thể mời thành viên" });
+    }
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Email mời không hợp lệ" });
+    }
+    const role = normalizeWorkspaceRole(req.body?.role);
+    const members = await database.listWorkspaceMembers(context.workspace.id);
+    if (members.length >= getWorkspaceSeatLimitForUser(user)) {
+      return res.status(403).json({
+        error: "Workspace đã chạm giới hạn seat của gói hiện tại",
+        upgrade: true,
+      });
+    }
+    const existing = await database.getWorkspaceMemberByWorkspaceAndEmail(context.workspace.id, email);
+    if (existing) {
+      return res.status(400).json({ error: "Email này đã có trong workspace" });
+    }
+    const invitedUser = await database.getUserByEmail(email);
+    await database.upsertWorkspaceMember(context.workspace.id, {
+      user_id: invitedUser?.id || null,
+      email,
+      display_name: invitedUser?.name || email.split("@")[0],
+      role,
+      status: "pending",
+      invited_by: user.id,
+      joined_at: null,
+    });
+    const nextContext = await resolveWorkspaceContext(database, user);
+    res.json(buildTeamWorkspacePayload(nextContext, user));
+  } catch (e) {
+    res.status(500).json({ error: "Không thể mời thành viên: " + e.message });
+  }
+});
+
+app.patch("/api/team/members/:id", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const context = await resolveWorkspaceContext(database, user);
+    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (!canManageWorkspaceMembers(context.membership, context.workspace, user)) {
+      return res.status(403).json({ error: "Chỉ owner mới có thể cập nhật thành viên" });
+    }
+    const memberId = Number(req.params.id);
+    const member = await database.getWorkspaceMemberById(memberId);
+    if (!member || Number(member.workspace_id) !== Number(context.workspace.id)) {
+      return res.status(404).json({ error: "Không tìm thấy thành viên" });
+    }
+    if (normalizeWorkspaceRole(member.role) === "owner") {
+      return res.status(400).json({ error: "Không thể đổi trạng thái owner" });
+    }
+    const requestedStatus = normalizeWorkspaceStatus(req.body?.status);
+    if (normalizeWorkspaceStatus(member.status) === "pending" && requestedStatus !== "pending") {
+      return res.status(400).json({
+        error: "Lời mời đang chờ user xác nhận, owner không thể tự kích hoạt",
+      });
+    }
+    await database.updateWorkspaceMember(memberId, {
+      status: requestedStatus,
+      joined_at: requestedStatus === "active"
+        ? member.joined_at || new Date().toISOString()
+        : member.joined_at,
+    });
+    const nextContext = await resolveWorkspaceContext(database, user);
+    res.json(buildTeamWorkspacePayload(nextContext, user));
+  } catch (e) {
+    res.status(500).json({ error: "Không thể cập nhật thành viên: " + e.message });
+  }
+});
+
+app.delete("/api/team/members/:id", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const context = await resolveWorkspaceContext(database, user);
+    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (!canManageWorkspaceMembers(context.membership, context.workspace, user)) {
+      return res.status(403).json({ error: "Chỉ owner mới có thể gỡ thành viên" });
+    }
+    const memberId = Number(req.params.id);
+    const member = await database.getWorkspaceMemberById(memberId);
+    if (!member || Number(member.workspace_id) !== Number(context.workspace.id)) {
+      return res.status(404).json({ error: "Không tìm thấy thành viên" });
+    }
+    if (normalizeWorkspaceRole(member.role) === "owner") {
+      return res.status(400).json({ error: "Không thể gỡ owner khỏi workspace" });
+    }
+    await database.deleteWorkspaceMember(memberId);
+    const nextContext = await resolveWorkspaceContext(database, user);
+    res.json(buildTeamWorkspacePayload(nextContext, user));
+  } catch (e) {
+    res.status(500).json({ error: "Không thể gỡ thành viên: " + e.message });
+  }
+});
+
+app.post("/api/team/templates", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const context = await resolveWorkspaceContext(database, user);
+    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (!canManageWorkspaceTemplates(context.membership)) {
+      return res.status(403).json({ error: "Vai trò hiện tại không thể tạo mẫu chung" });
+    }
+    const sourceLinkId = Number(req.body?.source_link_id);
+    if (!Number.isInteger(sourceLinkId) || sourceLinkId < 1) {
+      return res.status(400).json({ error: "Thiếu link nguồn để tạo mẫu" });
+    }
+    const sourceLink = await database.getLinkById(sourceLinkId);
+    if (!sourceLink) return res.status(404).json({ error: "Không tìm thấy link nguồn" });
+    const canUseSourceLink =
+      Number(sourceLink.user_id || 0) === Number(user.id) ||
+      (sourceLink.workspace_id && Number(sourceLink.workspace_id) === Number(context.workspace.id));
+    if (!canUseSourceLink) {
+      return res.status(403).json({ error: "Bạn không có quyền dùng link này làm mẫu" });
+    }
+    const templateName = formatWorkspaceDisplayName(
+      req.body?.name || sourceLink.og_title || sourceLink.alias || sourceLink.short_code || "Template",
+      "Template",
+    );
+    await database.createWorkspaceTemplate({
+      workspace_id: context.workspace.id,
+      created_by_user_id: user.id,
+      source_link_id: sourceLink.id,
+      name: templateName,
+      og_title: sourceLink.og_title || null,
+      og_desc: sourceLink.og_desc || null,
+      og_image: sourceLink.og_image || null,
+      link_type: sourceLink.link_type || "direct",
+      video_url: sourceLink.video_url || null,
+      video_overlay_text: sourceLink.video_overlay_text || null,
+      domain_hostname: sourceLink.domain_hostname || null,
+    });
+    const nextContext = await resolveWorkspaceContext(database, user);
+    res.json(buildTeamWorkspacePayload(nextContext, user));
+  } catch (e) {
+    res.status(500).json({ error: "Không thể tạo mẫu chung: " + e.message });
+  }
+});
+
+app.post("/api/team/invitations/:id/accept", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const memberId = Number(req.params.id);
+    const member = await database.getWorkspaceMemberById(memberId);
+    if (!member) return res.status(404).json({ error: "Không tìm thấy lời mời" });
+    const normalizedEmail = String(user.email || "").trim().toLowerCase();
+    const canAccept =
+      (member.user_id && Number(member.user_id) === Number(user.id)) ||
+      (normalizedEmail && String(member.email || "").trim().toLowerCase() === normalizedEmail);
+    if (!canAccept) {
+      return res.status(403).json({ error: "Bạn không thể xác nhận lời mời này" });
+    }
+    if (normalizeWorkspaceStatus(member.status) !== "pending") {
+      return res.status(400).json({ error: "Lời mời này không còn ở trạng thái chờ" });
+    }
+    await database.updateWorkspaceMember(memberId, {
+      user_id: user.id,
+      display_name: user.name || member.display_name || normalizedEmail.split("@")[0] || "Member",
+      status: "active",
+      joined_at: member.joined_at || new Date().toISOString(),
+    });
+    const context = await resolveWorkspaceContext(database, user);
+    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    res.json(buildTeamWorkspacePayload(context, user));
+  } catch (e) {
+    res.status(500).json({ error: "Không thể chấp nhận lời mời: " + e.message });
+  }
+});
+
+app.post("/api/team/invitations/:id/decline", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const memberId = Number(req.params.id);
+    const member = await database.getWorkspaceMemberById(memberId);
+    if (!member) return res.status(404).json({ error: "Không tìm thấy lời mời" });
+    const normalizedEmail = String(user.email || "").trim().toLowerCase();
+    const canDecline =
+      (member.user_id && Number(member.user_id) === Number(user.id)) ||
+      (normalizedEmail && String(member.email || "").trim().toLowerCase() === normalizedEmail);
+    if (!canDecline) {
+      return res.status(403).json({ error: "Bạn không thể từ chối lời mời này" });
+    }
+    if (normalizeWorkspaceStatus(member.status) !== "pending") {
+      return res.status(400).json({ error: "Lời mời này không còn ở trạng thái chờ" });
+    }
+    await database.deleteWorkspaceMember(memberId);
+    const context = await resolveWorkspaceContext(database, user);
+    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    res.json(buildTeamWorkspacePayload(context, user));
+  } catch (e) {
+    res.status(500).json({ error: "Không thể từ chối lời mời: " + e.message });
+  }
+});
+
 app.get("/api/bio/me", requireAuth, async (req, res) => {
   try {
     const user = await resolveUser(req);
@@ -2493,6 +2961,7 @@ app.post("/api/shorten", async (req, res) => {
       link_type,
       video_url,
       video_overlay_text,
+      team_template_id,
     } = req.body;
 
     alias = sanitizeAliasInput(alias, 40);
@@ -2517,6 +2986,8 @@ app.post("/api/shorten", async (req, res) => {
     const isAdminPlan = plan === "admin" || user?.role === "admin";
     const hasAffiliateAccess =
       plan === "pro" || plan === "business" || isAdminPlan;
+    let selectedWorkspaceId = null;
+    let selectedTemplateId = null;
     if (isAffiliateUrl && !user) {
       return res.status(401).json({
         error: "Link affiliate cần đăng nhập hoặc đăng ký để rút gọn",
@@ -2562,6 +3033,32 @@ app.post("/api/shorten", async (req, res) => {
       og_title = null;
       og_desc = null;
       og_image = null;
+    }
+
+    const normalizedTemplateId = Number(team_template_id);
+    if (user && Number.isInteger(normalizedTemplateId) && normalizedTemplateId > 0) {
+      const workspaceContext = await resolveWorkspaceContext(database, user, {
+        ensureOwnerWorkspace: false,
+      });
+      if (!workspaceContext) {
+        return res.status(403).json({ error: "Bạn chưa thuộc workspace nào để dùng mẫu chung" });
+      }
+      const template = await database.getWorkspaceTemplateById(normalizedTemplateId);
+      if (!template || Number(template.workspace_id) !== Number(workspaceContext.workspace.id)) {
+        return res.status(404).json({ error: "Không tìm thấy mẫu chung hoặc bạn không có quyền dùng mẫu này" });
+      }
+      if (workspaceContext.membership.status !== "active") {
+        return res.status(403).json({ error: "Chỉ thành viên đang hoạt động mới có thể lấy link từ mẫu chung" });
+      }
+      selectedWorkspaceId = template.workspace_id;
+      selectedTemplateId = template.id;
+      og_title = normalizeShareTitleInput(template.og_title, 120);
+      og_desc = template.og_desc || null;
+      og_image = template.og_image || null;
+      link_type = template.link_type || "direct";
+      video_url = template.video_url || null;
+      video_overlay_text = template.video_overlay_text || null;
+      domain_hostname = template.domain_hostname || null;
     }
 
     if (alias) {
@@ -2619,6 +3116,11 @@ app.post("/api/shorten", async (req, res) => {
       video_overlay_text || null,
       guestSessionId,
       selectedDomainHostname,
+      {
+        workspace_id: selectedWorkspaceId,
+        template_id: selectedTemplateId,
+        created_from_template: !!selectedTemplateId,
+      },
     );
     const code = alias || shortCode;
     const shortBaseUrl = selectedDomainHostname
@@ -2631,6 +3133,8 @@ app.post("/api/shorten", async (req, res) => {
       clicks: 0,
       link_type,
       domain_hostname: selectedDomainHostname,
+      template_id: selectedTemplateId,
+      workspace_id: selectedWorkspaceId,
     });
   } catch (e) {
     console.error(e);
@@ -2757,6 +3261,9 @@ app.get("/api/stats", async (req, res) => {
     const clickRows = await database.getClickAnalytics(userId, guestSessionId);
     const analytics = buildStatsAnalytics(clickRows);
     const latestLoginEvent = user ? await database.getLatestLoginEvent(user.id) : null;
+    const workspaceContext = user
+      ? await resolveWorkspaceContext(database, user, { ensureOwnerWorkspace: false })
+      : null;
     const alerts = buildStatsAlertPayload({
       planName: user?.plan || "guest",
       linksToday: today.linksToday || 0,
@@ -2764,6 +3271,11 @@ app.get("/api/stats", async (req, res) => {
       clickRows,
       latestLoginEvent,
     });
+    const workspaceInviteAlert = buildWorkspaceInvitationAlert(workspaceContext);
+    if (workspaceInviteAlert) {
+      alerts.active = Array.isArray(alerts.active) ? alerts.active : [];
+      alerts.active.push(workspaceInviteAlert);
+    }
     const recent = (await database.getRecentLinks(userId, guestSessionId)).map(
       (l) => ({
         ...l,

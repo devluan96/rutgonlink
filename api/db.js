@@ -234,6 +234,208 @@ async function init() {
       return data || [];
     },
 
+    async getWorkspaceByOwnerUserId(ownerUserId) {
+      if (!ownerUserId) return null;
+      const { data, error } = await sb
+        .from('workspaces')
+        .select('*')
+        .eq('owner_user_id', ownerUserId)
+        .maybeSingle();
+      check(error, 'workspace_owner');
+      return data;
+    },
+
+    async getWorkspaceById(workspaceId) {
+      if (!workspaceId) return null;
+      const { data, error } = await sb
+        .from('workspaces')
+        .select('*')
+        .eq('id', workspaceId)
+        .maybeSingle();
+      check(error, 'workspace_id');
+      return data;
+    },
+
+    async createWorkspace(ownerUserId, name) {
+      const payload = {
+        owner_user_id: ownerUserId,
+        name: name || 'Workspace',
+      };
+      const { data, error } = await sb
+        .from('workspaces')
+        .insert(payload)
+        .select('*')
+        .single();
+      check(error, 'workspace_create');
+      return data;
+    },
+
+    async updateWorkspace(workspaceId, fields = {}) {
+      const updates = {};
+      if (Object.prototype.hasOwnProperty.call(fields, 'name')) {
+        updates.name = fields.name || 'Workspace';
+      }
+      if (!Object.keys(updates).length) return null;
+      updates.updated_at = new Date().toISOString();
+      const { data, error } = await sb
+        .from('workspaces')
+        .update(updates)
+        .eq('id', workspaceId)
+        .select('*')
+        .single();
+      check(error, 'workspace_update');
+      return data;
+    },
+
+    async listWorkspaceMembershipsForIdentity(userId, email) {
+      const normalizedEmail = String(email || '').trim().toLowerCase();
+      let query = sb
+        .from('workspace_members')
+        .select('*, workspaces(*)')
+        .order('created_at', { ascending: true });
+      if (userId && normalizedEmail) {
+        query = query.or(`user_id.eq.${userId},email.eq.${normalizedEmail}`);
+      } else if (userId) {
+        query = query.eq('user_id', userId);
+      } else if (normalizedEmail) {
+        query = query.eq('email', normalizedEmail);
+      } else {
+        return [];
+      }
+      const { data, error } = await query;
+      check(error, 'workspace_memberships_identity');
+      return data || [];
+    },
+
+    async getWorkspaceMemberById(memberId) {
+      if (!memberId) return null;
+      const { data, error } = await sb
+        .from('workspace_members')
+        .select('*')
+        .eq('id', memberId)
+        .maybeSingle();
+      check(error, 'workspace_member_id');
+      return data;
+    },
+
+    async getWorkspaceMemberByWorkspaceAndEmail(workspaceId, email) {
+      const normalizedEmail = String(email || '').trim().toLowerCase();
+      if (!workspaceId || !normalizedEmail) return null;
+      const { data, error } = await sb
+        .from('workspace_members')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .eq('email', normalizedEmail)
+        .maybeSingle();
+      check(error, 'workspace_member_email');
+      return data;
+    },
+
+    async listWorkspaceMembers(workspaceId) {
+      if (!workspaceId) return [];
+      const { data, error } = await sb
+        .from('workspace_members')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: true });
+      check(error, 'workspace_member_list');
+      return data || [];
+    },
+
+    async upsertWorkspaceMember(workspaceId, payload = {}) {
+      const insertPayload = {
+        workspace_id: workspaceId,
+        user_id: payload.user_id || null,
+        email: String(payload.email || '').trim().toLowerCase(),
+        display_name: payload.display_name || null,
+        role: payload.role || 'editor',
+        status: payload.status || 'pending',
+        invited_by: payload.invited_by || null,
+        joined_at: payload.joined_at || null,
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error } = await sb
+        .from('workspace_members')
+        .upsert(insertPayload, { onConflict: 'workspace_id,email' })
+        .select('*')
+        .single();
+      check(error, 'workspace_member_upsert');
+      return data;
+    },
+
+    async updateWorkspaceMember(memberId, fields = {}) {
+      const updates = {};
+      const allowed = ['user_id', 'display_name', 'role', 'status', 'joined_at'];
+      for (const [key, value] of Object.entries(fields)) {
+        if (allowed.includes(key)) {
+          updates[key] = value ?? null;
+        }
+      }
+      if (!Object.keys(updates).length) return null;
+      updates.updated_at = new Date().toISOString();
+      const { data, error } = await sb
+        .from('workspace_members')
+        .update(updates)
+        .eq('id', memberId)
+        .select('*')
+        .single();
+      check(error, 'workspace_member_update');
+      return data;
+    },
+
+    async deleteWorkspaceMember(memberId) {
+      const { error } = await sb
+        .from('workspace_members')
+        .delete()
+        .eq('id', memberId);
+      check(error, 'workspace_member_delete');
+    },
+
+    async listWorkspaceTemplates(workspaceId) {
+      if (!workspaceId) return [];
+      const { data, error } = await sb
+        .from('workspace_link_templates')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: false });
+      check(error, 'workspace_template_list');
+      return data || [];
+    },
+
+    async getWorkspaceTemplateById(templateId) {
+      if (!templateId) return null;
+      const { data, error } = await sb
+        .from('workspace_link_templates')
+        .select('*')
+        .eq('id', templateId)
+        .maybeSingle();
+      check(error, 'workspace_template_id');
+      return data;
+    },
+
+    async createWorkspaceTemplate(payload = {}) {
+      const insertPayload = {
+        workspace_id: payload.workspace_id,
+        created_by_user_id: payload.created_by_user_id || null,
+        source_link_id: payload.source_link_id || null,
+        name: payload.name || 'Template',
+        og_title: payload.og_title || null,
+        og_desc: payload.og_desc || null,
+        og_image: payload.og_image || null,
+        link_type: payload.link_type || 'direct',
+        video_url: payload.video_url || null,
+        video_overlay_text: payload.video_overlay_text || null,
+        domain_hostname: payload.domain_hostname || null,
+      };
+      const { data, error } = await sb
+        .from('workspace_link_templates')
+        .insert(insertPayload)
+        .select('*')
+        .single();
+      check(error, 'workspace_template_create');
+      return data;
+    },
+
     async countUsers() {
       const { count, error } = await sb.from('users').select('*', { count: 'exact', head: true });
       check(error);
@@ -256,7 +458,7 @@ async function init() {
         await Promise.all([
           sb
             .from('login_events')
-            .select('id')
+            .select('*')
             .eq('user_id', userId)
             .eq('device_fingerprint', deviceFingerprint)
             .limit(1),
@@ -278,6 +480,7 @@ async function init() {
       check(priorCountError);
 
       const isNewDevice = !((knownDevices || []).length) && (priorCount || 0) > 0;
+      const existingDevice = (knownDevices || [])[0] || null;
       const payload = {
         user_id: userId,
         device_fingerprint: deviceFingerprint,
@@ -289,7 +492,30 @@ async function init() {
         user_agent: userAgent || null,
         is_new_device: isNewDevice,
       };
-      const { data, error } = await sb.from('login_events').insert(payload).select().single();
+      let data = null;
+      let error = null;
+      if (existingDevice?.id) {
+        const result = await sb
+          .from('login_events')
+          .update({
+            device_label: deviceLabel || existingDevice.device_label || null,
+            browser_name: browserName || existingDevice.browser_name || null,
+            os_name: osName || existingDevice.os_name || null,
+            device_type: deviceType || existingDevice.device_type || null,
+            ip: ip || existingDevice.ip || null,
+            user_agent: userAgent || existingDevice.user_agent || null,
+            occurred_at: new Date().toISOString(),
+          })
+          .eq('id', existingDevice.id)
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      } else {
+        const result = await sb.from('login_events').insert(payload).select().single();
+        data = result.data;
+        error = result.error;
+      }
       if (error && /login_events|relation .*login_events|schema cache/i.test(error.message || '')) {
         return null;
       }
@@ -325,11 +551,19 @@ async function init() {
         return [];
       }
       check(error, 'login_event_list');
-      return data || [];
+      const seenFingerprints = new Set();
+      return (data || [])
+        .filter((event) => {
+          const key = String(event?.device_fingerprint || event?.id || '');
+          if (!key || seenFingerprints.has(key)) return false;
+          seenFingerprints.add(key);
+          return true;
+        })
+        .slice(0, safeLimit);
     },
 
     // ── Links ──────────────────────────────────────────────────────────
-    async createLink(shortCode, originalUrl, alias, ogTitle, ogDesc, ogImage, userId, linkType, videoUrl, videoOverlayText, guestSessionId, domainHostname) {
+    async createLink(shortCode, originalUrl, alias, ogTitle, ogDesc, ogImage, userId, linkType, videoUrl, videoOverlayText, guestSessionId, domainHostname, extra = {}) {
       const payload = {
         short_code: shortCode,
         original_url: originalUrl,
@@ -347,15 +581,26 @@ async function init() {
       if (domainHostname) {
         payload.domain_hostname = domainHostname;
       }
+      if (extra.workspace_id) {
+        payload.workspace_id = extra.workspace_id;
+      }
+      if (extra.template_id) {
+        payload.template_id = extra.template_id;
+      }
+      if (Object.prototype.hasOwnProperty.call(extra, 'created_from_template')) {
+        payload.created_from_template = !!extra.created_from_template;
+      }
 
       let result = await sb.from('links').insert(payload).select().single();
       if (
         result.error &&
-        domainHostname &&
-        /domain_hostname|schema cache/i.test(result.error.message || '')
+        /domain_hostname|workspace_id|template_id|created_from_template|schema cache/i.test(result.error.message || '')
       ) {
         const fallbackPayload = { ...payload };
         delete fallbackPayload.domain_hostname;
+        delete fallbackPayload.workspace_id;
+        delete fallbackPayload.template_id;
+        delete fallbackPayload.created_from_template;
         result = await sb.from('links').insert(fallbackPayload).select().single();
       }
       check(result.error, 'link');

@@ -203,16 +203,30 @@
 
   const getSafeNextTarget = () => {
     const url = new URL(window.location.href);
-    const rawNext = url.searchParams.get("next") || "/";
+    const rawNext = url.searchParams.get("next") || "/dashboard";
     try {
       const target = new URL(rawNext, window.location.origin);
-      if (target.origin !== window.location.origin) return "/";
-      if (/^\/(?:user\/)?(login|register)\/?$/.test(target.pathname)) return "/";
+      if (target.origin !== window.location.origin) return "/dashboard";
+      if (
+        target.pathname === "/" ||
+        /^\/(?:user\/)?(login|register)\/?$/.test(target.pathname)
+      ) {
+        return "/dashboard";
+      }
       const path = `${target.pathname}${target.search}${target.hash}`;
-      return path || "/";
+      return path || "/dashboard";
     } catch {
-      return "/";
+      return "/dashboard";
     }
+  };
+
+  const resolvePostLoginTarget = (user) => {
+    const target = getSafeNextTarget();
+    const isAdmin = user?.role === "admin" || user?.plan === "admin";
+    if (target === "/admin" || target.startsWith("/admin?") || target.startsWith("/admin#")) {
+      return isAdmin ? target : "/dashboard";
+    }
+    return target;
   };
 
   const syncPointer = (event) => {
@@ -271,7 +285,7 @@
         return;
       }
       authRedirecting = true;
-      location.replace(getSafeNextTarget());
+      location.replace(resolvePostLoginTarget(data.user));
     } catch {
       setError("Lỗi kết nối");
     } finally {
@@ -322,7 +336,7 @@
       return;
     }
     authRedirecting = true;
-    location.replace(getSafeNextTarget());
+    location.replace(resolvePostLoginTarget(data.user));
   };
 
   const submitTwoFactorCode = async () => {
@@ -359,7 +373,7 @@
         return;
       }
       authRedirecting = true;
-      location.replace(getSafeNextTarget());
+      location.replace(resolvePostLoginTarget(data.user));
     } catch {
       setError("Lỗi kết nối");
     } finally {

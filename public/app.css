@@ -812,6 +812,9 @@
         justify-content: center;
         box-shadow: 0 8px 18px rgba(239, 68, 68, 0.28);
       }
+      .tb-bell span[hidden] {
+        display: none !important;
+      }
       .notification-popup {
         position: absolute;
         right: 70px;
@@ -1189,12 +1192,12 @@
         margin-top: 12px;
       }
       .user-btn {
-        flex: 1;
-        min-width: 120px;
-        padding: 10px 12px;
+        flex: 0 0 auto;
+        min-width: 104px;
+        padding: 8px 12px;
         border: none;
-        border-radius: 8px;
-        font-size: 13px;
+        border-radius: 10px;
+        font-size: 12px;
         font-weight: 700;
         cursor: pointer;
         transition: 0.15s;
@@ -1327,7 +1330,7 @@
       }
       .payment-bank-meta {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 10px;
       }
       .payment-bank-meta div {
@@ -1349,7 +1352,12 @@
         font-size: 13px;
         color: var(--text);
         line-height: 1.5;
+        word-break: normal;
+        overflow-wrap: normal;
+      }
+      .payment-bank-meta div:nth-child(2) b {
         word-break: break-word;
+        overflow-wrap: anywhere;
       }
       .payment-qr-panel {
         justify-items: center;
@@ -3541,6 +3549,7 @@
       }
       .team-invite-cta .user-btn {
         width: 100%;
+        min-width: 0;
       }
       .team-panel-stack {
         display: grid;
