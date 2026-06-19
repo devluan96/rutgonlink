@@ -28,6 +28,13 @@ const JWT_SECRET =
   (process.env.NODE_ENV === "production"
     ? null
     : crypto.randomBytes(32).toString("hex"));
+const TWO_FACTOR_ENCRYPTION_SECRET =
+  process.env.TWO_FACTOR_ENCRYPTION_SECRET || JWT_SECRET;
+const TWO_FACTOR_ISSUER = (process.env.TWO_FACTOR_ISSUER || "BocLink").trim() || "BocLink";
+const TWO_FACTOR_PERIOD_SECONDS = 30;
+const TWO_FACTOR_DIGITS = 6;
+const TWO_FACTOR_WINDOW_STEPS = 1;
+const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is required in production");
 }
@@ -102,6 +109,31 @@ const PLANS = {
     videoLink: true,
   },
 };
+const BILLING_PLANS = {
+  pro: { code: "pro", label: "Pro", amount: 99000 },
+  business: { code: "business", label: "Business", amount: 299000 },
+};
+function readEnvValue(...names) {
+  for (const name of names) {
+    const value = String(process.env[name] || "").trim();
+    if (value) return value;
+  }
+  return "";
+}
+const PAYMENT_BANK_ID = readEnvValue("PAYMENT_BANK_ID", "VITE_PAYMENT_BANK_ID");
+const PAYMENT_BANK_NAME = readEnvValue("PAYMENT_BANK_NAME", "VITE_PAYMENT_BANK_NAME");
+const PAYMENT_BANK_ACCOUNT = readEnvValue(
+  "PAYMENT_BANK_ACCOUNT",
+  "PAYMENT_ACCOUNT_NO",
+  "VITE_PAYMENT_ACCOUNT_NO",
+);
+const PAYMENT_ACCOUNT_HOLDER = readEnvValue(
+  "PAYMENT_ACCOUNT_HOLDER",
+  "PAYMENT_ACCOUNT_NAME",
+  "VITE_PAYMENT_ACCOUNT_NAME",
+);
+const PAYMENT_QR_IMAGE_URL = readEnvValue("PAYMENT_QR_IMAGE_URL", "VITE_PAYMENT_QR_IMAGE_URL");
+const PAYMENT_CONTACT = (process.env.PAYMENT_CONTACT || "Zalo 0969.361.607").trim();
 
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
@@ -166,6 +198,8 @@ const appShellRoutes = [
   "/pricing/",
   "/stats",
   "/stats/",
+  "/account",
+  "/account/",
   "/admin",
   "/admin/",
   "/app",
@@ -1283,9 +1317,229 @@ function buildAuthUserPayload(user, isAdmin = false) {
     id: user.id,
     email: user.email,
     name: user.name,
+    phone: user.phone || null,
+    avatar_url: user.avatar_url || null,
     plan: isAdmin ? "admin" : user.plan,
     role: isAdmin ? "admin" : user.role || "user",
+    two_factor_enabled: !!user.two_factor_enabled,
     created_at: user.created_at,
+  };
+}
+
+function getTwoFactorEncryptionKey() {
+  return crypto
+    .createHash("sha256")
+    .update(String(TWO_FACTOR_ENCRYPTION_SECRET || JWT_SECRET || "boclink"))
+    .digest();
+}
+
+function encryptSensitiveValue(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", getTwoFactorEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(raw, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `v1.${iv.toString("hex")}.${tag.toString("hex")}.${encrypted.toString("hex")}`;
+}
+
+function decryptSensitiveValue(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const parts = raw.split(".");
+  if (parts.length !== 4 || parts[0] !== "v1") {
+    return null;
+  }
+  try {
+    const [, ivHex, tagHex, dataHex] = parts;
+    const decipher = crypto.createDecipheriv(
+      "aes-256-gcm",
+      getTwoFactorEncryptionKey(),
+      Buffer.from(ivHex, "hex"),
+    );
+    decipher.setAuthTag(Buffer.from(tagHex, "hex"));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(dataHex, "hex")),
+      decipher.final(),
+    ]);
+    return decrypted.toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
+function encodeBase32(buffer) {
+  let bits = 0;
+  let value = 0;
+  let output = "";
+  for (const byte of buffer) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      output += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) {
+    output += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+  }
+  return output;
+}
+
+function decodeBase32(input) {
+  const normalized = String(input || "")
+    .toUpperCase()
+    .replace(/[^A-Z2-7]/g, "");
+  let bits = 0;
+  let value = 0;
+  const output = [];
+  for (const char of normalized) {
+    const index = BASE32_ALPHABET.indexOf(char);
+    if (index < 0) continue;
+    value = (value << 5) | index;
+    bits += 5;
+    if (bits >= 8) {
+      output.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(output);
+}
+
+function generateTwoFactorSecret() {
+  return encodeBase32(crypto.randomBytes(20));
+}
+
+function sanitizeTwoFactorCode(input) {
+  return String(input || "")
+    .replace(/\D/g, "")
+    .slice(0, TWO_FACTOR_DIGITS);
+}
+
+function generateTotpCode(secret, counter) {
+  const secretBuffer = decodeBase32(secret);
+  if (!secretBuffer.length) return null;
+  const counterBuffer = Buffer.alloc(8);
+  const normalizedCounter = BigInt(counter);
+  counterBuffer.writeBigUInt64BE(normalizedCounter);
+  const hmac = crypto.createHmac("sha1", secretBuffer).update(counterBuffer).digest();
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const binary =
+    ((hmac[offset] & 0x7f) << 24) |
+    ((hmac[offset + 1] & 0xff) << 16) |
+    ((hmac[offset + 2] & 0xff) << 8) |
+    (hmac[offset + 3] & 0xff);
+  const modulo = 10 ** TWO_FACTOR_DIGITS;
+  return String(binary % modulo).padStart(TWO_FACTOR_DIGITS, "0");
+}
+
+function verifyTotpCode(secret, code, windowSteps = TWO_FACTOR_WINDOW_STEPS) {
+  const normalizedCode = sanitizeTwoFactorCode(code);
+  if (normalizedCode.length !== TWO_FACTOR_DIGITS) return false;
+  const currentCounter = Math.floor(Date.now() / 1000 / TWO_FACTOR_PERIOD_SECONDS);
+  for (let delta = -windowSteps; delta <= windowSteps; delta += 1) {
+    if (generateTotpCode(secret, currentCounter + delta) === normalizedCode) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function buildTwoFactorProvisioningUri(user, secret) {
+  const accountName = encodeURIComponent(user.email || `user-${user.id}`);
+  const issuer = encodeURIComponent(TWO_FACTOR_ISSUER);
+  return `otpauth://totp/${issuer}:${accountName}?secret=${encodeURIComponent(secret)}&issuer=${issuer}&algorithm=SHA1&digits=${TWO_FACTOR_DIGITS}&period=${TWO_FACTOR_PERIOD_SECONDS}`;
+}
+
+function readEnabledTwoFactorSecret(user) {
+  if (!user?.two_factor_enabled) return null;
+  const secret = decryptSensitiveValue(user.two_factor_secret);
+  if (!secret) throw new Error("TWO_FACTOR_SECRET_INVALID");
+  return secret;
+}
+
+function readPendingTwoFactorSecret(user) {
+  return decryptSensitiveValue(user?.two_factor_pending_secret);
+}
+
+function buildTwoFactorChallengeToken(userId) {
+  return jwt.sign({ purpose: "2fa-login", userId }, JWT_SECRET, {
+    expiresIn: "10m",
+  });
+}
+
+function parseTwoFactorChallengeToken(token) {
+  const payload = jwt.verify(String(token || ""), JWT_SECRET);
+  if (payload?.purpose !== "2fa-login" || !payload?.userId) {
+    throw new Error("INVALID_TWO_FACTOR_CHALLENGE");
+  }
+  return payload;
+}
+
+function buildTwoFactorChallengeResponse(user) {
+  return {
+    twoFactorRequired: true,
+    challenge_token: buildTwoFactorChallengeToken(user.id),
+    user: {
+      email: user.email,
+      name: user.name || user.email?.split("@")[0] || "User",
+      avatar_url: user.avatar_url || null,
+    },
+    message: "Tài khoản này đã bật xác thực 2 lớp. Vui lòng nhập mã 6 số.",
+  };
+}
+
+function normalizePhoneInput(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+  const normalized = raw.replace(/[^\d+\s().-]/g, "").replace(/\s+/g, " ").slice(0, 32);
+  const digits = normalized.replace(/\D/g, "");
+  if (digits.length < 8) return null;
+  return normalized;
+}
+
+function normalizeAvatarUrlInput(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+  if (/^\/uploads\/[a-z0-9._/-]+$/i.test(raw)) {
+    return raw.slice(0, 500);
+  }
+  try {
+    const parsed = new URL(raw);
+    if (!/^https?:$/i.test(parsed.protocol)) return null;
+    return parsed.toString().slice(0, 500);
+  } catch {
+    return null;
+  }
+}
+
+function getBillingPlanMeta(plan) {
+  return BILLING_PLANS[String(plan || "").trim().toLowerCase()] || null;
+}
+
+function resolvePublicAssetUrl(url) {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/")) return `${BASE_URL}${raw}`;
+  return `${BASE_URL}/${raw.replace(/^\/+/, "")}`;
+}
+
+function buildPaymentTransferNote(user, planCode, referenceCode) {
+  const planMeta = getBillingPlanMeta(planCode);
+  const code = String(referenceCode || "").trim();
+  return `BOCLINK ${planMeta?.label?.toUpperCase() || String(planCode || "").toUpperCase()} U${user?.id || "0"} ${code}`.slice(0, 80);
+}
+
+function getPaymentConfig() {
+  return {
+    bank_id: PAYMENT_BANK_ID,
+    bank_name: PAYMENT_BANK_NAME,
+    bank_account: PAYMENT_BANK_ACCOUNT,
+    account_holder: PAYMENT_ACCOUNT_HOLDER,
+    qr_image_url: resolvePublicAssetUrl(PAYMENT_QR_IMAGE_URL),
+    contact: PAYMENT_CONTACT,
+    plans: Object.values(BILLING_PLANS),
   };
 }
 
@@ -1324,6 +1578,13 @@ async function issueAuthSession(req, res, user, isAdmin = false) {
     sameSite: "lax",
   });
   res.json({ user: buildAuthUserPayload(user, isAdmin) });
+}
+
+function maybeStartTwoFactorChallenge(res, user) {
+  const secret = readEnabledTwoFactorSecret(user);
+  if (!secret) return false;
+  res.status(202).json(buildTwoFactorChallengeResponse(user));
+  return true;
 }
 
 async function verifyGoogleCredential(credential) {
@@ -1415,8 +1676,8 @@ app.post("/api/auth/login", async (req, res) => {
       user.role = "admin";
       user.plan = "admin";
     }
-    if (req.guestSessionId) {
-      await database.claimGuestLinks(req.guestSessionId, user.id);
+    if (maybeStartTwoFactorChallenge(res, user)) {
+      return;
     }
     return issueAuthSession(req, res, user, isAdmin);
   } catch (e) {
@@ -1463,6 +1724,9 @@ app.post("/api/auth/google", async (req, res) => {
     }
 
     const effectiveIsAdmin = await promoteAdminIfNeeded(database, user);
+    if (maybeStartTwoFactorChallenge(res, user)) {
+      return;
+    }
     return issueAuthSession(req, res, user, effectiveIsAdmin || isAdmin);
   } catch (e) {
     console.error(e);
@@ -1532,6 +1796,9 @@ app.post("/api/auth/supabase", async (req, res) => {
     }
 
     const effectiveIsAdmin = await promoteAdminIfNeeded(database, user);
+    if (maybeStartTwoFactorChallenge(res, user)) {
+      return;
+    }
     return issueAuthSession(req, res, user, effectiveIsAdmin || isAdmin);
   } catch (e) {
     if (e.message === "SUPABASE_LOGIN_DISABLED") {
@@ -1555,16 +1822,7 @@ app.post("/api/auth/logout", (_, res) => {
 app.get("/api/auth/me", async (req, res) => {
   const user = await resolveUser(req);
   if (!user) return res.json({ user: null });
-  res.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      plan: user.plan,
-      role: user.role || "user",
-      created_at: user.created_at,
-    },
-  });
+  res.json({ user: buildAuthUserPayload(user, user.role === "admin" || isAdminEmail(user.email)) });
 });
 
 app.patch("/api/auth/me", requireAuth, async (req, res) => {
@@ -1573,23 +1831,210 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
     const name = String(req.body?.name || "").trim().slice(0, 80);
-    await database.updateUserName(user.id, name || null);
+    const phoneInput = String(req.body?.phone || "").trim();
+    const avatarInput = String(req.body?.avatar_url || "").trim();
+    const phone = phoneInput ? normalizePhoneInput(phoneInput) : null;
+    const avatarUrl = avatarInput ? normalizeAvatarUrlInput(avatarInput) : null;
+    if (phoneInput && !phone) {
+      return res.status(400).json({ error: "Số điện thoại chưa đúng định dạng" });
+    }
+    if (avatarInput && !avatarUrl) {
+      return res.status(400).json({ error: "Avatar phải là URL hợp lệ hoặc ảnh đã upload" });
+    }
+    await database.updateUserProfile(user.id, {
+      name: name || null,
+      phone,
+      avatar_url: avatarUrl,
+    });
     const updated = await database.getUserById(user.id);
     if (updated.email.toLowerCase() === ADMIN_EMAIL || updated.role === "admin") {
       updated.plan = "admin";
       updated.role = "admin";
     }
+    res.json({ user: buildAuthUserPayload(updated, updated.role === "admin" || isAdminEmail(updated.email)) });
+  } catch (e) {
+    res.status(500).json({ error: "Lỗi server: " + e.message });
+  }
+});
+
+app.get("/api/auth/login-events", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const events = await database.listLoginEvents(user.id, Number(req.query?.limit || 20));
+    res.json({ events });
+  } catch (e) {
+    res.status(500).json({ error: "Lỗi server: " + e.message });
+  }
+});
+
+app.post("/api/auth/2fa/setup", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const secret = generateTwoFactorSecret();
+    await database.updateUserTwoFactor(user.id, {
+      two_factor_pending_secret: encryptSensitiveValue(secret),
+    });
     res.json({
-      user: {
-        id: updated.id,
-        email: updated.email,
-        name: updated.name,
-        plan: updated.plan,
-        role: updated.role || "user",
+      setup: {
+        secret,
+        manual_entry_key: secret.match(/.{1,4}/g)?.join(" ") || secret,
+        otpauth_url: buildTwoFactorProvisioningUri(user, secret),
       },
     });
   } catch (e) {
-    res.status(500).json({ error: "Lỗi server: " + e.message });
+    res.status(500).json({ error: "Không thể khởi tạo 2FA: " + e.message });
+  }
+});
+
+app.post("/api/auth/2fa/enable", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const pendingSecret = readPendingTwoFactorSecret(user);
+    if (!pendingSecret) {
+      return res.status(400).json({ error: "Chưa có phiên thiết lập 2FA nào đang mở" });
+    }
+    if (!verifyTotpCode(pendingSecret, req.body?.code)) {
+      return res.status(400).json({ error: "Mã 2FA không đúng hoặc đã hết hạn" });
+    }
+    const database = await getDb();
+    await database.updateUserTwoFactor(user.id, {
+      two_factor_enabled: true,
+      two_factor_secret: encryptSensitiveValue(pendingSecret),
+      two_factor_pending_secret: null,
+      two_factor_enabled_at: new Date().toISOString(),
+    });
+    const updated = await database.getUserById(user.id);
+    res.json({
+      ok: true,
+      user: buildAuthUserPayload(updated, updated.role === "admin" || isAdminEmail(updated.email)),
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Không thể bật 2FA: " + e.message });
+  }
+});
+
+app.post("/api/auth/2fa/disable", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const secret = readEnabledTwoFactorSecret(user);
+    if (!secret) {
+      return res.status(400).json({ error: "Tài khoản chưa bật 2FA" });
+    }
+    if (!verifyTotpCode(secret, req.body?.code)) {
+      return res.status(400).json({ error: "Mã 2FA không đúng hoặc đã hết hạn" });
+    }
+    const database = await getDb();
+    await database.updateUserTwoFactor(user.id, {
+      two_factor_enabled: false,
+      two_factor_secret: null,
+      two_factor_pending_secret: null,
+      two_factor_enabled_at: null,
+    });
+    const updated = await database.getUserById(user.id);
+    res.json({
+      ok: true,
+      user: buildAuthUserPayload(updated, updated.role === "admin" || isAdminEmail(updated.email)),
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Không thể tắt 2FA: " + e.message });
+  }
+});
+
+app.post("/api/auth/2fa/login", async (req, res) => {
+  try {
+    const payload = parseTwoFactorChallengeToken(req.body?.challenge_token);
+    const database = await getDb();
+    const user = await database.getUserById(payload.userId);
+    if (!user) {
+      return res.status(401).json({ error: "Phiên xác minh đã hết hạn" });
+    }
+    if (user.role === "admin" || isAdminEmail(user.email)) {
+      user.plan = "admin";
+      user.role = "admin";
+    }
+    const secret = readEnabledTwoFactorSecret(user);
+    if (!secret) {
+      return res.status(400).json({ error: "Tài khoản chưa bật 2FA" });
+    }
+    if (!verifyTotpCode(secret, req.body?.code)) {
+      return res.status(400).json({ error: "Mã 2FA không đúng hoặc đã hết hạn" });
+    }
+    const isAdmin = user.role === "admin" || isAdminEmail(user.email);
+    return issueAuthSession(req, res, user, isAdmin);
+  } catch (e) {
+    if (e.message === "INVALID_TWO_FACTOR_CHALLENGE" || /jwt/i.test(e.message || "")) {
+      return res.status(401).json({ error: "Phiên xác minh 2FA không còn hợp lệ" });
+    }
+    res.status(500).json({ error: "Không thể hoàn tất đăng nhập 2FA: " + e.message });
+  }
+});
+
+app.get("/api/billing/config", requireAuth, async (req, res) => {
+  const user = await resolveUser(req);
+  if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+  const database = await getDb();
+  const requests = await database.listPaymentRequestsByUser(user.id, 5);
+  res.json({
+    config: getPaymentConfig(),
+    requests,
+  });
+});
+
+app.post("/api/billing/requests", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const planMeta = getBillingPlanMeta(req.body?.plan);
+    if (!planMeta) {
+      return res.status(400).json({ error: "Gói thanh toán không hợp lệ" });
+    }
+    const database = await getDb();
+    const referenceCode = `PAY${Date.now().toString(36).toUpperCase()}${nanoid(4).toUpperCase()}`;
+    const transferNote = buildPaymentTransferNote(user, planMeta.code, referenceCode);
+    const request = await database.createPaymentRequest({
+      user_id: user.id,
+      user_email: user.email,
+      user_name: user.name || null,
+      plan: planMeta.code,
+      amount: planMeta.amount,
+      status: "awaiting_payment",
+      reference_code: referenceCode,
+      transfer_note: transferNote,
+      payer_note: String(req.body?.payer_note || "").trim().slice(0, 240) || null,
+    });
+    res.status(201).json({
+      request,
+      config: getPaymentConfig(),
+    });
+  } catch (e) {
+    res.status(500).json({ error: "Không thể tạo yêu cầu thanh toán: " + e.message });
+  }
+});
+
+app.patch("/api/billing/requests/:id/submit", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const requestId = Number(req.params.id);
+    const database = await getDb();
+    const request = await database.getPaymentRequestById(requestId);
+    if (!request || Number(request.user_id) !== Number(user.id)) {
+      return res.status(404).json({ error: "Không tìm thấy yêu cầu thanh toán" });
+    }
+    const updated = await database.updatePaymentRequest(requestId, {
+      status: "submitted",
+      payer_note: String(req.body?.payer_note || request.payer_note || "").trim().slice(0, 240) || null,
+      submitted_at: new Date().toISOString(),
+    });
+    res.json({ request: updated });
+  } catch (e) {
+    res.status(500).json({ error: "Không thể gửi xác nhận thanh toán: " + e.message });
   }
 });
 
@@ -1677,7 +2122,9 @@ app.post(
   async (req, res) => {
     const user = await resolveUser(req);
     const plan = user?.plan || "free";
-    if (!PLANS[plan]?.upload)
+    const uploadScope = String(req.query?.scope || "").trim().toLowerCase();
+    const isAvatarUpload = uploadScope === "avatar";
+    if (!isAvatarUpload && !PLANS[plan]?.upload)
       return res
         .status(403)
         .json({ error: "Tính năng này yêu cầu gói Pro", upgrade: true });
@@ -1748,6 +2195,51 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
     const database = await getDb();
     const users = await database.getAllUsers();
     res.json({ users });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/admin/payments", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
+  try {
+    const database = await getDb();
+    const requests = await database.listPaymentRequests(300);
+    res.json({ requests, config: getPaymentConfig() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch("/api/admin/payments/:id", requireAdmin, async (req, res) => {
+  const adminUser = await checkAdmin(req, res);
+  if (!adminUser) return;
+  try {
+    const database = await getDb();
+    const requestId = Number(req.params.id);
+    const action = String(req.body?.status || "").trim().toLowerCase();
+    const paymentRequest = await database.getPaymentRequestById(requestId);
+    if (!paymentRequest) {
+      return res.status(404).json({ error: "Không tìm thấy yêu cầu thanh toán" });
+    }
+    if (!["approved", "rejected"].includes(action)) {
+      return res.status(400).json({ error: "Trạng thái duyệt không hợp lệ" });
+    }
+    const patch = {
+      status: action,
+      admin_note: String(req.body?.admin_note || "").trim().slice(0, 240) || null,
+      reviewed_by: adminUser.id,
+      reviewed_at: new Date().toISOString(),
+    };
+    const updated = await database.updatePaymentRequest(requestId, patch);
+    if (action === "approved") {
+      const planMeta = getBillingPlanMeta(updated.plan);
+      if (planMeta) {
+        await database.updateUserPlan(updated.user_id, planMeta.code);
+      }
+    }
+    const requests = await database.listPaymentRequests(300);
+    res.json({ request: updated, requests });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

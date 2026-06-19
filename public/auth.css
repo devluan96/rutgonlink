@@ -679,6 +679,37 @@ body.auth-page::after {
   gap: 12px;
 }
 
+.auth-2fa-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-2fa-copy {
+  padding: 0.85rem 0.95rem;
+  border-radius: 16px;
+  border: 1px dashed rgba(59, 130, 246, 0.2);
+  background: rgba(239, 246, 255, 0.8);
+  color: #1d4ed8;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.auth-link-button {
+  margin-top: 10px;
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.auth-link-button:hover {
+  text-decoration: underline;
+}
+
 .auth-field {
   display: grid;
   gap: 7px;

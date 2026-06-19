@@ -225,7 +225,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>
-    <link rel="stylesheet" href="/app.css?v=20260619b" />
+    <link rel="stylesheet" href="/app.css?v=20260619c" />
   </head>
   <body class="app-shell-booting">
     <div id="appBootSplash" role="status" aria-live="polite">
@@ -805,8 +805,8 @@
           <button
             class="user-tab"
             type="button"
-            id="userTabPublic"
-            onclick="openPublicProfile()"
+            id="userTabAccount"
+            onclick="openAccountPage()"
           >
             <span class="user-menu-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -863,7 +863,7 @@
             <div class="billing-card">
               <div class="user-title" style="margin-bottom: 6px">Thanh toán</div>
               <div class="user-note" style="margin-top: 0">
-                Theo dõi gói hiện tại và mở trang bảng giá khi cần nâng cấp.
+                Chọn gói, mở mã QR chuyển khoản và gửi xác nhận để admin duyệt.
               </div>
               <div class="billing-plan" style="margin-top: 10px">
                 <div class="billing-plan-label">Gói hiện tại</div>
@@ -888,9 +888,24 @@
                   class="user-btn primary"
                   type="button"
                   id="billingUpgradeBtn"
+                  onclick="openPaymentCenter()"
+                >
+                  Thanh toán / nâng cấp
+                </button>
+                <button
+                  class="user-btn secondary"
+                  type="button"
                   onclick="navigate('pricing')"
                 >
                   Xem bảng giá
+                </button>
+              </div>
+              <div class="billing-actions" style="margin-top:8px">
+                <button class="user-btn secondary" type="button" onclick="openPaymentCenter('pro')">
+                  Gói Pro
+                </button>
+                <button class="user-btn secondary" type="button" onclick="openPaymentCenter('business')">
+                  Gói Business
                 </button>
               </div>
               <div class="billing-promo" id="billingPromo">
@@ -898,6 +913,9 @@
               </div>
               <div class="billing-note" id="billingNote">
                 Billing nằm trong popup tài khoản để sidebar gọn hơn.
+              </div>
+              <div class="billing-note" id="billingRequestStatus">
+                Chưa có yêu cầu thanh toán nào gần đây.
               </div>
             </div>
           </div>
@@ -935,29 +953,28 @@
                 Cài đặt
               </div>
               <div class="user-note" style="margin-top: 0">
-                Cập nhật tên hiển thị và xem thông tin tài khoản.
+                Nên gom cài đặt thành các nhóm thao tác nhanh, còn chỉnh dữ liệu cá nhân để ở trang Tài khoản.
               </div>
-              <div style="margin-top: 12px">
-                <label class="fl">Tên hiển thị</label>
-                <input
-                  type="text"
-                  class="user-input"
-                  id="profileNameInput"
-                  placeholder="Nhập tên hiển thị"
-                />
-              </div>
-              <div class="user-actions">
-                <button
-                  class="user-btn primary"
-                  type="button"
-                  id="saveProfileBtn"
-                  onclick="saveProfile()"
-                >
-                  Lưu hồ sơ
+              <div class="settings-quick-list">
+                <button class="settings-quick-item" type="button" onclick="openAccountPage()">
+                  <strong>Hồ sơ & tài khoản</strong>
+                  <span>Sửa tên, số điện thoại, avatar và xem thiết bị đăng nhập.</span>
+                </button>
+                <button class="settings-quick-item" type="button" onclick="toggleTheme()">
+                  <strong>Giao diện</strong>
+                  <span id="settingsThemeHint">Đổi nhanh giữa chế độ sáng và tối.</span>
+                </button>
+                <button class="settings-quick-item" type="button" onclick="openAccountSecurityFromPopup()">
+                  <strong>Bảo mật nâng cao</strong>
+                  <span>Bật 2FA và xem phiên đăng nhập trong trang Tài khoản.</span>
+                </button>
+                <button class="settings-quick-item" type="button" onclick="openNotificationCenterFromPopup()">
+                  <strong>Thông báo realtime</strong>
+                  <span>Kiểm tra nhanh các cảnh báo mới từ chuông thông báo.</span>
                 </button>
               </div>
               <div class="user-note" id="profileHint">
-                Tên này sẽ hiển thị trong giao diện và danh sách quản trị.
+                Đề xuất nhóm cài đặt đầy đủ: Hồ sơ, Giao diện, Thông báo, Bảo mật, Thanh toán, Tích hợp.
               </div>
             </div>
           </div>
@@ -1146,6 +1163,20 @@
               <span class="slabel">Làm việc nhóm</span>
             </div>
             <div class="sgroup" style="margin-top: 6px">Tài khoản</div>
+            <div class="sitem" onclick="navigate('account', this)">
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21c1.8-4 5-6 8-6s6.2 2 8 6" />
+              </svg>
+              <span class="slabel">Tài khoản</span>
+            </div>
             <div
               class="sitem"
               id="adminNavItem"
@@ -2455,6 +2486,157 @@
             </div>
           </div>
 
+          <div class="page" id="page-account">
+            <div class="ph">
+              <h1>Tài khoản</h1>
+              <p>Quản lý hồ sơ cá nhân, lịch sử đăng nhập và xác thực 2 lớp</p>
+            </div>
+            <div class="account-shell">
+              <section class="account-hero">
+                <div class="account-hero-main">
+                  <div class="account-avatar account-avatar--xl" id="accountHeroAvatar">U</div>
+                  <div class="account-hero-copy">
+                    <div class="account-kicker">BocLink ID</div>
+                    <h2 id="accountHeroName">Tài khoản cá nhân</h2>
+                    <div class="account-hero-meta">
+                      <span id="accountHeroEmail">user@example.com</span>
+                      <span id="accountHeroPlan">FREE</span>
+                      <span id="accountHero2fa">2FA chưa bật</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="account-hero-actions">
+                  <button class="user-btn secondary" type="button" onclick="navigate('bio')">
+                    Mở bio public
+                  </button>
+                  <button class="user-btn primary" type="button" onclick="scrollAccountToSecurity()">
+                    Bảo mật tài khoản
+                  </button>
+                </div>
+              </section>
+
+              <div class="account-grid">
+                <section class="account-card">
+                  <div class="account-card-head">
+                    <div>
+                      <h3>Hồ sơ cá nhân</h3>
+                      <p>Cập nhật tên hiển thị, số điện thoại và avatar dùng trong dashboard.</p>
+                    </div>
+                  </div>
+                  <div class="account-profile-grid">
+                    <div class="account-profile-preview">
+                      <div class="account-avatar account-avatar--preview" id="accountProfileAvatarPreview">U</div>
+                      <div class="account-profile-preview-copy">
+                        <strong id="accountPreviewName">User</strong>
+                        <span id="accountPreviewEmail">user@example.com</span>
+                      </div>
+                    </div>
+                    <div class="account-profile-fields">
+                      <div class="fg full">
+                        <label class="fl">Tên hiển thị</label>
+                        <input type="text" class="fi" id="accountNameInput" placeholder="Tên hiển thị của bạn" oninput="renderAccountProfilePreview()" />
+                      </div>
+                      <div class="fg">
+                        <label class="fl">Số điện thoại</label>
+                        <input type="text" class="fi" id="accountPhoneInput" placeholder="Ví dụ: 09xx xxx xxx" />
+                      </div>
+                      <div class="fg">
+                        <label class="fl">Email đăng nhập</label>
+                        <input type="text" class="fi" id="accountEmailInput" disabled />
+                      </div>
+                      <div class="fg full">
+                        <label class="fl">URL avatar</label>
+                        <div class="account-inline-actions">
+                          <input type="text" class="fi" id="accountAvatarInput" placeholder="https://... hoặc /uploads/..." oninput="renderAccountProfilePreview()" />
+                          <button class="user-btn secondary account-upload-btn" type="button" onclick="triggerAccountAvatarUpload()">
+                            Upload ảnh
+                          </button>
+                          <input type="file" id="accountAvatarFileInput" accept="image/png,image/jpeg,image/webp,image/gif" hidden onchange="handleAccountAvatarUpload(event)" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="account-actions">
+                    <button class="user-btn primary" type="button" id="accountSaveProfileBtn" onclick="saveAccountProfile()">
+                      Lưu hồ sơ
+                    </button>
+                    <button class="user-btn secondary" type="button" onclick="resetAccountProfileForm()">
+                      Hoàn tác
+                    </button>
+                  </div>
+                  <div class="account-note" id="accountProfileHint">
+                    Avatar có thể dùng ảnh đã upload hoặc URL tuyệt đối.
+                  </div>
+                </section>
+
+                <section class="account-card" id="accountSecuritySection">
+                  <div class="account-card-head">
+                    <div>
+                      <h3>Bảo mật & 2FA</h3>
+                      <p>Bật xác thực 2 lớp bằng ứng dụng OTP để bảo vệ đăng nhập.</p>
+                    </div>
+                    <span class="account-status-chip" id="account2faStatusChip">Đang kiểm tra</span>
+                  </div>
+                  <div class="account-security-block" id="account2faSummary">
+                    Chưa tải dữ liệu bảo mật.
+                  </div>
+                  <div class="account-security-setup" id="account2faSetupWrap" hidden>
+                    <div class="account-qr-wrap">
+                      <div class="account-qr-box" id="account2faQr"></div>
+                      <div class="account-qr-copy">
+                        <label class="fl">Khóa thiết lập thủ công</label>
+                        <div class="account-secret-row">
+                          <input type="text" class="fi" id="account2faSecretInput" readonly />
+                          <button class="user-btn secondary account-copy-btn" type="button" onclick="copyAccountSetupSecret()">
+                            Sao chép
+                          </button>
+                        </div>
+                        <div class="account-note">
+                          Quét mã bằng Google Authenticator, 1Password, Authy hoặc app OTP tương tự.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="account-security-actions">
+                    <button class="user-btn primary" type="button" id="account2faPrimaryBtn" onclick="startTwoFactorSetup()">
+                      Bật 2FA
+                    </button>
+                    <button class="user-btn secondary" type="button" id="account2faSecondaryBtn" hidden onclick="cancelTwoFactorSetup()">
+                      Hủy thiết lập
+                    </button>
+                  </div>
+                  <div class="account-verify-row" id="account2faVerifyRow" hidden>
+                    <div class="fg">
+                      <label class="fl" id="account2faCodeLabel">Mã xác minh 6 số</label>
+                      <input type="text" class="fi" id="account2faCodeInput" inputmode="numeric" maxlength="6" placeholder="123456" />
+                    </div>
+                    <button class="user-btn primary" type="button" id="account2faSubmitBtn" onclick="submitTwoFactorAction()">
+                      Xác minh
+                    </button>
+                  </div>
+                </section>
+              </div>
+
+              <section class="account-card">
+                <div class="account-card-head">
+                  <div>
+                    <h3>Thiết bị đã đăng nhập</h3>
+                    <p>Xem các lần đăng nhập gần đây theo trình duyệt, hệ điều hành và IP.</p>
+                  </div>
+                  <button class="user-btn secondary account-refresh-btn" type="button" onclick="loadAccountLoginEvents(true)">
+                    Làm mới
+                  </button>
+                </div>
+                <div class="account-note" id="accountDevicesHint">
+                  Đang tải lịch sử đăng nhập...
+                </div>
+                <div class="account-device-list" id="accountDevicesList">
+                  <div class="account-device-empty">Chưa có lịch sử đăng nhập nào để hiển thị.</div>
+                </div>
+              </section>
+            </div>
+          </div>
+
           <!-- ADMIN PAGE -->
           <div class="page" id="page-admin">
             <div class="ph">
@@ -2483,6 +2665,17 @@
                 onclick="setAdminSection('users')"
               >
                 Người dùng
+              </button>
+              <button
+                class="admin-tab-btn"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="adminPanelPayments"
+                data-admin-section="payments"
+                onclick="setAdminSection('payments')"
+              >
+                Thanh toán
               </button>
               <button
                 class="admin-tab-btn"
@@ -2656,6 +2849,47 @@
 
             <section
               class="admin-panel"
+              id="adminPanelPayments"
+              data-admin-panel="payments"
+              role="tabpanel"
+              hidden
+            >
+              <div class="tbl-card">
+                <div class="tbl-head">
+                  <h3>💳 Yêu cầu thanh toán (<span id="adPaymentCount">0</span>)</h3>
+                  <div class="tbl-head-actions">
+                    <button class="user-btn secondary" type="button" onclick="loadAdminData()">
+                      Tải lại
+                    </button>
+                  </div>
+                </div>
+                <div style="overflow-x:auto">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Mã</th>
+                        <th>User</th>
+                        <th>Gói</th>
+                        <th>Số tiền</th>
+                        <th>Trạng thái</th>
+                        <th>Chuyển lúc</th>
+                        <th>Ghi chú</th>
+                        <th>Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody id="adPaymentBody">
+                      <tr>
+                        <td colspan="8" class="tbl-empty">⏳ Đang tải yêu cầu thanh toán...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="tbl-pagination" id="adPaymentPagination"></div>
+              </div>
+            </section>
+
+            <section
+              class="admin-panel"
               id="adminPanelSystem"
               data-admin-panel="system"
               role="tabpanel"
@@ -2824,6 +3058,61 @@
     <!-- ══ CONFIRM MODAL ══ -->
     <div
       class="modal-backdrop hidden"
+      id="paymentModal"
+      onclick="if (event.target === this) closePaymentModal();"
+    >
+      <div class="modal modal-payment">
+        <div class="modal-head">
+          <h3 id="paymentModalTitle">Thanh toán nâng cấp</h3>
+          <div class="modal-close" onclick="closePaymentModal()">✕</div>
+        </div>
+        <div class="payment-modal-body">
+          <div class="payment-modal-copy">
+            <div class="payment-plan-pills" id="paymentPlanPills"></div>
+            <div class="payment-summary-card">
+              <div class="payment-summary-row">
+                <span>Gói chọn</span>
+                <strong id="paymentPlanLabel">Pro</strong>
+              </div>
+              <div class="payment-summary-row">
+                <span>Số tiền</span>
+                <strong id="paymentAmountLabel">99.000đ</strong>
+              </div>
+              <div class="payment-summary-row">
+                <span>Nội dung CK</span>
+                <strong id="paymentTransferNote">Đang tạo...</strong>
+              </div>
+            </div>
+            <div class="payment-bank-meta">
+              <div><span>Ngân hàng</span><b id="paymentBankName">Chưa cấu hình</b></div>
+              <div><span>Số tài khoản</span><b id="paymentBankAccount">—</b></div>
+              <div><span>Chủ tài khoản</span><b id="paymentAccountHolder">—</b></div>
+            </div>
+            <textarea class="fi" id="paymentPayerNote" rows="3" placeholder="Ghi chú thêm cho admin, ví dụ số điện thoại hoặc thời gian chuyển khoản"></textarea>
+            <div class="payment-note" id="paymentModalNote">
+              Sau khi chuyển khoản xong, bấm "Đã thanh toán" để đẩy yêu cầu sang tab Quản trị > Thanh toán.
+            </div>
+          </div>
+          <div class="payment-qr-panel">
+            <div class="payment-qr-box" id="paymentQrBox"></div>
+            <div class="payment-note" id="paymentQrHint">
+              Có thể quét QR hoặc nhập tay thông tin chuyển khoản nếu QR chưa được cấu hình.
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" type="button" onclick="closePaymentModal()">
+            Đóng
+          </button>
+          <button class="btn-save" type="button" id="paymentSubmitBtn" onclick="submitPaymentRequest()">
+            Đã thanh toán
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="modal-backdrop hidden"
       id="confirmModal"
       onclick="if (event.target === this) closeConfirmModal(false);"
     >
@@ -2899,8 +3188,8 @@
               onchange="onEditLinkTypeChange()"
             >
               <option value="direct">🔗 Trực tiếp</option>
-              <option value="deeplink">📱 Mở App</option>
-              <option value="video">🎬 Video + Deeplink</option>
+              <option value="deeplink">📱 Deeplink App</option>
+              <option value="video">🎬 Video Overlay</option>
             </select>
           </div>
           <div>
@@ -3011,6 +3300,6 @@
     <div class="toast" id="toast"></div>
 
     <script src="/shared-client.js"></script>
-    <script src="/app.js?v=20260619b"></script>
+    <script src="/app.js?v=20260619c"></script>
   </body>
 </html>

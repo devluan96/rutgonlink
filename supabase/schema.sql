@@ -9,10 +9,23 @@ CREATE TABLE IF NOT EXISTS users (
   email      TEXT UNIQUE NOT NULL,
   password   TEXT NOT NULL,
   name       TEXT,
+  phone      TEXT,
+  avatar_url TEXT,
   plan       TEXT DEFAULT 'free',
   role       TEXT DEFAULT 'user',
+  two_factor_enabled BOOLEAN DEFAULT FALSE,
+  two_factor_secret TEXT,
+  two_factor_pending_secret TEXT,
+  two_factor_enabled_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_pending_secret TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled_at TIMESTAMPTZ;
 
 -- Links
 CREATE TABLE IF NOT EXISTS links (
@@ -102,6 +115,29 @@ CREATE TABLE IF NOT EXISTS login_events (
 CREATE INDEX IF NOT EXISTS idx_login_events_user_id ON login_events(user_id);
 CREATE INDEX IF NOT EXISTS idx_login_events_occurred_at ON login_events(occurred_at);
 CREATE INDEX IF NOT EXISTS idx_login_events_fingerprint ON login_events(device_fingerprint);
+
+-- Billing requests
+CREATE TABLE IF NOT EXISTS payment_requests (
+  id            BIGSERIAL PRIMARY KEY,
+  user_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_email    TEXT NOT NULL,
+  user_name     TEXT,
+  plan          TEXT NOT NULL,
+  amount        INTEGER NOT NULL DEFAULT 0,
+  status        TEXT NOT NULL DEFAULT 'awaiting_payment',
+  reference_code TEXT NOT NULL UNIQUE,
+  transfer_note TEXT,
+  payer_note    TEXT,
+  reviewed_by   BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  admin_note    TEXT,
+  submitted_at  TIMESTAMPTZ,
+  reviewed_at   TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_requests_user_id ON payment_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests(status);
+CREATE INDEX IF NOT EXISTS idx_payment_requests_created_at ON payment_requests(created_at);
 
 -- Uploads dedup
 CREATE TABLE IF NOT EXISTS uploads (

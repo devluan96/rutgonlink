@@ -87,6 +87,35 @@ async function init() {
       check(error);
     },
 
+    async updateUserProfile(userId, profile = {}) {
+      const payload = {
+        name: profile.name || null,
+        phone: profile.phone || null,
+        avatar_url: profile.avatar_url || null,
+      };
+      const { error } = await sb.from('users').update(payload).eq('id', userId);
+      check(error);
+    },
+
+    async updateUserTwoFactor(userId, state = {}) {
+      const payload = {};
+      if (Object.prototype.hasOwnProperty.call(state, 'two_factor_enabled')) {
+        payload.two_factor_enabled = !!state.two_factor_enabled;
+      }
+      if (Object.prototype.hasOwnProperty.call(state, 'two_factor_secret')) {
+        payload.two_factor_secret = state.two_factor_secret || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(state, 'two_factor_pending_secret')) {
+        payload.two_factor_pending_secret = state.two_factor_pending_secret || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(state, 'two_factor_enabled_at')) {
+        payload.two_factor_enabled_at = state.two_factor_enabled_at || null;
+      }
+      if (!Object.keys(payload).length) return;
+      const { error } = await sb.from('users').update(payload).eq('id', userId);
+      check(error);
+    },
+
     async deleteUser(userId) {
       const { error } = await sb.from('users').delete().eq('id', userId);
       check(error);
@@ -148,6 +177,60 @@ async function init() {
         .select('id,email,name,plan,role,created_at')
         .order('created_at', { ascending: false });
       check(error);
+      return data || [];
+    },
+
+    async createPaymentRequest(payload) {
+      const { data, error } = await sb
+        .from('payment_requests')
+        .insert(payload)
+        .select('*')
+        .single();
+      check(error, 'payment_request');
+      return data;
+    },
+
+    async updatePaymentRequest(requestId, patch = {}) {
+      const { data, error } = await sb
+        .from('payment_requests')
+        .update(patch)
+        .eq('id', requestId)
+        .select('*')
+        .single();
+      check(error, 'payment_request_update');
+      return data;
+    },
+
+    async getPaymentRequestById(requestId) {
+      const { data, error } = await sb
+        .from('payment_requests')
+        .select('*')
+        .eq('id', requestId)
+        .maybeSingle();
+      check(error, 'payment_request_get');
+      return data;
+    },
+
+    async listPaymentRequestsByUser(userId, limit = 20) {
+      const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+      const { data, error } = await sb
+        .from('payment_requests')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(safeLimit);
+      check(error, 'payment_request_user_list');
+      return data || [];
+    },
+
+    async listPaymentRequests(limit = 200) {
+      const safeLimit = Math.min(Math.max(Number(limit) || 200, 1), 500);
+      const { data, error } = await sb
+        .from('payment_requests')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(safeLimit);
+      check(error, 'payment_request_list');
       return data || [];
     },
 
@@ -227,6 +310,22 @@ async function init() {
       }
       check(error, 'login_event_latest');
       return (data || [])[0] || null;
+    },
+
+    async listLoginEvents(userId, limit = 20) {
+      if (!userId) return [];
+      const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+      const { data, error } = await sb
+        .from('login_events')
+        .select('*')
+        .eq('user_id', userId)
+        .order('occurred_at', { ascending: false })
+        .limit(safeLimit);
+      if (error && /login_events|relation .*login_events|schema cache/i.test(error.message || '')) {
+        return [];
+      }
+      check(error, 'login_event_list');
+      return data || [];
     },
 
     // ── Links ──────────────────────────────────────────────────────────

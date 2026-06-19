@@ -15,6 +15,7 @@
 
   let supabaseClientPromise = null;
   let authRedirecting = false;
+  let pendingTwoFactor = null;
 
   const ensureLoadingOverlay = () => {
     let overlay = document.getElementById("authLoadingOverlay");
@@ -101,6 +102,105 @@
     });
   };
 
+  const ensureTwoFactorUi = () => {
+    if (mode !== "login" || !form || !submitBtn) return null;
+    let wrap = document.getElementById("authTwoFactorWrap");
+    let back = document.getElementById("authTwoFactorBack");
+    if (!wrap) {
+      wrap = document.createElement("div");
+      wrap.id = "authTwoFactorWrap";
+      wrap.className = "auth-2fa-wrap";
+      wrap.hidden = true;
+      wrap.innerHTML = `
+        <div class="auth-field">
+          <label class="auth-label" for="authTwoFactorCode">Mã xác minh 2 lớp</label>
+          <input
+            type="text"
+            id="authTwoFactorCode"
+            class="auth-input"
+            inputmode="numeric"
+            maxlength="6"
+            placeholder="Nhập mã 6 số"
+            autocomplete="one-time-code"
+          />
+        </div>
+        <div class="auth-2fa-copy" id="authTwoFactorCopy"></div>`;
+      submitBtn.before(wrap);
+      back = document.createElement("button");
+      back.type = "button";
+      back.id = "authTwoFactorBack";
+      back.className = "auth-link-button";
+      back.hidden = true;
+      back.textContent = "Dùng tài khoản khác";
+      submitBtn.after(back);
+      back.addEventListener("click", () => {
+        pendingTwoFactor = null;
+        updateTwoFactorUi();
+      });
+    }
+    return {
+      wrap,
+      input: document.getElementById("authTwoFactorCode"),
+      copy: document.getElementById("authTwoFactorCopy"),
+      back,
+    };
+  };
+
+  const updateTwoFactorUi = () => {
+    if (mode !== "login" || !form) return;
+    const ui = ensureTwoFactorUi();
+    if (!ui) return;
+    const emailField = document.getElementById("loginEmail")?.closest(".auth-field");
+    const passwordField = document.getElementById("loginPass")?.closest(".auth-field");
+    const oauthSection = document.querySelector(".auth-oauth");
+    const divider = document.querySelector(".auth-divider");
+    const authFoot = document.querySelector(".auth-foot");
+    const authCardTop = document.querySelector(".auth-card-top");
+    const active = !!pendingTwoFactor;
+    if (emailField) emailField.hidden = active;
+    if (passwordField) passwordField.hidden = active;
+    if (oauthSection) oauthSection.hidden = active;
+    if (divider) divider.hidden = active;
+    if (authFoot) authFoot.hidden = active;
+    ui.wrap.hidden = !active;
+    ui.back.hidden = !active;
+    if (authCardTop) {
+      const titleEl = authCardTop.querySelector("h2");
+      const copyEl = authCardTop.querySelector("p");
+      if (titleEl) {
+        titleEl.textContent = active ? "Xác thực 2 lớp" : "Đăng nhập";
+      }
+      if (copyEl) {
+        copyEl.textContent = active
+          ? `Nhập mã OTP đang hiển thị trong ứng dụng xác thực cho ${pendingTwoFactor?.email || "tài khoản của bạn"}.`
+          : "Vào lại bảng điều khiển để tiếp tục theo dõi link, QR và bio.";
+      }
+    }
+    if (submitBtn) {
+      submitBtn.textContent = active ? "Xác minh và đăng nhập" : "Đăng nhập";
+    }
+    if (ui.copy) {
+      ui.copy.textContent = active
+        ? "Bạn vừa hoàn tất bước đăng nhập đầu tiên. Chỉ còn mã 6 số từ ứng dụng OTP."
+        : "";
+    }
+    if (!active && ui.input) {
+      ui.input.value = "";
+    }
+  };
+
+  const beginTwoFactorStep = (payload) => {
+    pendingTwoFactor = {
+      token: payload.challenge_token,
+      email: payload.user?.email || "",
+    };
+    setError("");
+    setBusy(false);
+    setAuthLoading(false);
+    updateTwoFactorUi();
+    document.getElementById("authTwoFactorCode")?.focus();
+  };
+
   const getSafeNextTarget = () => {
     const url = new URL(window.location.href);
     const rawNext = url.searchParams.get("next") || "/";
@@ -166,6 +266,10 @@
         setError(data.error || (mode === "register" ? "Lỗi đăng ký" : "Lỗi đăng nhập"));
         return;
       }
+      if (data.twoFactorRequired) {
+        beginTwoFactorStep(data);
+        return;
+      }
       authRedirecting = true;
       location.replace(getSafeNextTarget());
     } catch {
@@ -213,8 +317,57 @@
     if (!response.ok) {
       throw new Error(data.error || "Đăng nhập bằng Supabase thất bại");
     }
+    if (data.twoFactorRequired) {
+      beginTwoFactorStep(data);
+      return;
+    }
     authRedirecting = true;
     location.replace(getSafeNextTarget());
+  };
+
+  const submitTwoFactorCode = async () => {
+    const code = document.getElementById("authTwoFactorCode")?.value.trim() || "";
+    if (!pendingTwoFactor?.token) {
+      setError("Phiên xác minh 2FA không còn hợp lệ. Vui lòng đăng nhập lại.");
+      pendingTwoFactor = null;
+      updateTwoFactorUi();
+      return;
+    }
+    if (!/^\d{6}$/.test(code)) {
+      setError("Nhập mã OTP gồm 6 chữ số.");
+      return;
+    }
+    authRedirecting = false;
+    setBusy(true);
+    setError("");
+    setAuthLoading(true, {
+      title: "Đang xác minh 2 lớp",
+      subtitle: "BocLink đang kiểm tra mã OTP trước khi mở lại bảng điều khiển của bạn.",
+    });
+    try {
+      const response = await fetch("/api/auth/2fa/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          challenge_token: pendingTwoFactor.token,
+          code,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data.error || "Mã xác minh chưa đúng");
+        return;
+      }
+      authRedirecting = true;
+      location.replace(getSafeNextTarget());
+    } catch {
+      setError("Lỗi kết nối");
+    } finally {
+      if (!authRedirecting) {
+        setBusy(false);
+        setAuthLoading(false);
+      }
+    }
   };
 
   const handleOAuthCallback = async (supabase) => {
@@ -337,6 +490,10 @@
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     setError("");
+    if (pendingTwoFactor) {
+      await submitTwoFactorCode();
+      return;
+    }
     const payload = readFormPayload();
     if (!payload.email || !payload.password) {
       setError("Vui lòng nhập đầy đủ");
@@ -354,5 +511,6 @@
   root.addEventListener("blur", resetPointer, true);
 
   ensureLoadingOverlay();
+  updateTwoFactorUi();
   void initSupabaseOAuth();
 })();

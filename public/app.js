@@ -21,6 +21,8 @@
           (currentUser?.name || currentUser?.email || "U")
             .charAt(0)
             .toUpperCase());
+      const getUserAvatarUrl = (currentUser) =>
+        String(currentUser?.avatar_url || "").trim() || "";
 
       function stripVietnameseMarks(value) {
         return String(value || "")
@@ -84,6 +86,11 @@
       let adminNotificationSnapshot = null;
       let notificationPollTimer = null;
       let confirmModalResolver = null;
+      let accountLoginEvents = [];
+      let accountLoginEventsLoading = false;
+      let accountTwoFactorSetup = null;
+      let accountTwoFactorMode = "";
+      let accountTwoFactorQr = null;
       const notificationSeenStorageKey = "rutgonlink-notification-seen";
       let seenNotificationKeys = {};
       const KNOWN_APP_PAGES = new Set([
@@ -96,6 +103,7 @@
         "team",
         "pricing",
         "stats",
+        "account",
         "admin",
       ]);
 
@@ -1187,6 +1195,9 @@
       async function doLogout() {
         await fetch("/api/auth/logout", { method: "POST" });
         user = null;
+        accountLoginEvents = [];
+        accountTwoFactorSetup = null;
+        accountTwoFactorMode = "";
         document.getElementById("userDropdown").classList.remove("show");
         document
           .getElementById("userDropdown")
@@ -1529,6 +1540,28 @@
         }, 30000);
       }
 
+      function setAvatarNode(target, currentUser, fallbackText) {
+        const el = typeof target === "string" ? document.getElementById(target) : target;
+        if (!el) return;
+        const avatarUrl = getUserAvatarUrl(currentUser);
+        if (avatarUrl) {
+          el.classList.add("has-image");
+          el.innerHTML = `<img src="${esc(avatarUrl)}" alt="${esc(getUserDisplayName(currentUser) || fallbackText || "Avatar")}" />`;
+          return;
+        }
+        el.classList.remove("has-image");
+        el.textContent = fallbackText || getUserInitials(currentUser);
+      }
+
+      function formatAccountDateTime(value) {
+        if (!value) return "Không rõ";
+        try {
+          return new Date(value).toLocaleString("vi-VN");
+        } catch {
+          return "Không rõ";
+        }
+      }
+
       function updateTopbar() {
         const plan = user?.plan || "guest";
         const role = user?.role || "user";
@@ -1540,9 +1573,9 @@
         const badge = document.getElementById("tbPlanBadge");
         badge.textContent = plan === "guest" ? "GUEST" : plan.toUpperCase();
         badge.className = "tb-plan-badge " + (plan === "guest" ? "free" : plan);
-        document.getElementById("tbAvatar").textContent = getUserInitials(user);
+        setAvatarNode("tbAvatar", user, getUserInitials(user));
         document.getElementById("tbUname").textContent = name;
-        document.getElementById("popupAvatar").textContent = getUserInitials(user);
+        setAvatarNode("popupAvatar", user, getUserInitials(user));
         document.getElementById("popupName").textContent = name;
         document.getElementById("popupEmail").textContent = email;
         document.getElementById("popupFullName").textContent = user?.name || name;
@@ -1588,6 +1621,12 @@
           : "Đăng nhập để chỉnh sửa hồ sơ cá nhân.";
         document.getElementById("ddLogout").style.display = user ? "" : "none";
         document.getElementById("ddLogin").style.display = user ? "none" : "";
+        const accountShortcut = document.getElementById("userTabAccount");
+        if (accountShortcut) {
+          accountShortcut.querySelector("span:last-child").textContent = user
+            ? "Hồ sơ cá nhân"
+            : "Đăng nhập để quản lý";
+        }
         document.getElementById("popupAdminBtn").style.display =
           plan === "admin" || role === "admin" ? "" : "none";
 
@@ -1600,6 +1639,9 @@
 
         renderNotificationCenter();
         updatePricingUI();
+        if (document.getElementById("page-account")?.classList.contains("active")) {
+          renderAccountPage();
+        }
       }
 
       function clearUserMenuSection() {
@@ -1644,10 +1686,10 @@
           ?.classList.add("active");
       }
 
-      function openPublicProfile() {
+      function openAccountPage() {
         closeUserPopup();
-        const bioNav = document.querySelector(".sitem[onclick*=\"navigate('bio'\"]");
-        navigate("bio", bioNav);
+        const accountNav = document.querySelector(".sitem[onclick*=\"navigate('account'\"]");
+        navigate("account", accountNav);
       }
 
       function openHelpCenter() {
@@ -1671,6 +1713,28 @@
             toast(d.error || "Không thể lưu hồ sơ", "err");
             return;
           }
+          if (d.twoFactorRequired) {
+            const code = window.prompt("Tài khoản này đã bật 2FA. Nhập mã OTP 6 số:");
+            if (!code) return;
+            const verifyResponse = await fetch("/api/auth/2fa/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                challenge_token: d.challenge_token,
+                code,
+              }),
+            });
+            const verifyData = await verifyResponse.json().catch(() => ({}));
+            if (!verifyResponse.ok) {
+              errEl.textContent = verifyData.error || "Mã 2FA chưa đúng";
+              errEl.classList.add("show");
+              return;
+            }
+            user = verifyData.user;
+            showApp();
+            toast("✅ Đăng nhập thành công!", "ok");
+            return;
+          }
           user = d.user;
           updateTopbar();
           addNotification({
@@ -1687,6 +1751,893 @@
           btn.textContent = "Lưu hồ sơ";
         }
       }
+      function renderAccountProfilePreview() {
+        if (!user) return;
+        const draftUser = {
+          ...user,
+          name: document.getElementById("accountNameInput")?.value.trim() || user.name || "",
+          avatar_url: document.getElementById("accountAvatarInput")?.value.trim() || "",
+        };
+        setAvatarNode("accountHeroAvatar", draftUser, getUserInitials(draftUser));
+        setAvatarNode("accountProfileAvatarPreview", draftUser, getUserInitials(draftUser));
+        document.getElementById("accountPreviewName").textContent =
+          getUserDisplayName(draftUser);
+        document.getElementById("accountPreviewEmail").textContent =
+          draftUser.email || "Chưa có email";
+      }
+
+      function resetAccountProfileForm() {
+        if (!user) return;
+        document.getElementById("accountNameInput").value = user.name || "";
+        document.getElementById("accountPhoneInput").value = user.phone || "";
+        document.getElementById("accountEmailInput").value = user.email || "";
+        document.getElementById("accountAvatarInput").value = user.avatar_url || "";
+        renderAccountProfilePreview();
+      }
+
+      function renderAccountTwoFactorQr(uri = "") {
+        const wrap = document.getElementById("account2faQr");
+        if (!wrap) return;
+        wrap.innerHTML = "";
+        if (!uri) return;
+        if (window.QRCodeStyling) {
+          if (!accountTwoFactorQr) {
+            accountTwoFactorQr = new QRCodeStyling({
+              width: 180,
+              height: 180,
+              type: "canvas",
+              data: uri,
+              margin: 6,
+              dotsOptions: { color: "#2563eb", type: "rounded" },
+              cornersSquareOptions: { color: "#111827", type: "extra-rounded" },
+              backgroundOptions: { color: "transparent" },
+            });
+          } else {
+            accountTwoFactorQr.update({ data: uri });
+          }
+          accountTwoFactorQr.append(wrap);
+          return;
+        }
+        wrap.innerHTML = '<div class="account-note" style="margin:0;padding:18px;text-align:center">QR chưa sẵn sàng. Hãy dùng khóa thủ công bên cạnh.</div>';
+      }
+
+      function renderAccountTwoFactorState() {
+        if (!user) return;
+        const chip = document.getElementById("account2faStatusChip");
+        const summary = document.getElementById("account2faSummary");
+        const setupWrap = document.getElementById("account2faSetupWrap");
+        const verifyRow = document.getElementById("account2faVerifyRow");
+        const primaryBtn = document.getElementById("account2faPrimaryBtn");
+        const secondaryBtn = document.getElementById("account2faSecondaryBtn");
+        const submitBtn = document.getElementById("account2faSubmitBtn");
+        const codeLabel = document.getElementById("account2faCodeLabel");
+        const hero2fa = document.getElementById("accountHero2fa");
+        const secretInput = document.getElementById("account2faSecretInput");
+        if (hero2fa) {
+          hero2fa.textContent = user.two_factor_enabled ? "2FA đã bật" : "2FA chưa bật";
+        }
+        if (secretInput) {
+          secretInput.value = accountTwoFactorSetup?.manual_entry_key || "";
+        }
+        renderAccountTwoFactorQr(accountTwoFactorSetup?.otpauth_url || "");
+
+        if (user.two_factor_enabled) {
+          chip.textContent = "Đã bảo vệ";
+          chip.className = "account-status-chip ok";
+          summary.textContent =
+            "Tài khoản đang bật xác thực 2 lớp. Mỗi lần đăng nhập mới sẽ cần thêm mã 6 số từ app OTP.";
+          setupWrap.hidden = true;
+          secondaryBtn.hidden = true;
+          primaryBtn.textContent = "Tắt 2FA";
+          verifyRow.hidden = accountTwoFactorMode !== "disable";
+          codeLabel.textContent = "Nhập mã 6 số hiện tại để tắt 2FA";
+          submitBtn.textContent = "Tắt 2FA";
+          return;
+        }
+
+        chip.className = "account-status-chip warn";
+        if (accountTwoFactorSetup) {
+          chip.textContent = "Chờ xác minh";
+          summary.textContent =
+            "Thiết lập đã sẵn sàng. Quét mã QR hoặc nhập khóa thủ công, sau đó điền mã đầu tiên để bật 2FA.";
+          setupWrap.hidden = false;
+          verifyRow.hidden = false;
+          primaryBtn.textContent = "Tạo lại mã";
+          secondaryBtn.hidden = false;
+          codeLabel.textContent = "Mã xác minh 6 số";
+          submitBtn.textContent = "Bật 2FA";
+          return;
+        }
+
+        chip.textContent = "Chưa bật";
+        summary.textContent =
+          "Bật 2FA để yêu cầu thêm lớp xác minh khi đăng nhập từ trình duyệt hoặc thiết bị mới.";
+        setupWrap.hidden = true;
+        verifyRow.hidden = true;
+        primaryBtn.textContent = "Bật 2FA";
+        secondaryBtn.hidden = true;
+      }
+
+      function renderAccountDevices() {
+        const hint = document.getElementById("accountDevicesHint");
+        const list = document.getElementById("accountDevicesList");
+        if (!hint || !list) return;
+        if (accountLoginEventsLoading) {
+          hint.textContent = "Đang tải lịch sử đăng nhập...";
+          list.innerHTML =
+            '<div class="account-device-empty">Đang tổng hợp thiết bị và phiên đăng nhập gần đây...</div>';
+          return;
+        }
+        if (!accountLoginEvents.length) {
+          hint.textContent = "Chưa có lịch sử đăng nhập nào được ghi nhận.";
+          list.innerHTML =
+            '<div class="account-device-empty">Thiết bị mới sẽ xuất hiện tại đây sau khi bạn đăng nhập.</div>';
+          return;
+        }
+        hint.textContent = `${accountLoginEvents.length} phiên gần đây được ghi nhận trên tài khoản này.`;
+        list.innerHTML = accountLoginEvents
+          .map((event) => `
+            <article class="account-device-card">
+              <div class="account-device-top">
+                <div>
+                  <div class="account-device-title">${esc(event.device_label || "Thiết bị không rõ")}</div>
+                  <div class="account-device-sub">${esc(event.browser_name || "Trình duyệt lạ")} • ${esc(event.os_name || "Hệ điều hành lạ")} • ${esc(event.device_type || "desktop")}</div>
+                </div>
+                ${event.is_new_device ? '<span class="account-device-badge">Thiết bị mới</span>' : ""}
+              </div>
+              <div class="account-device-meta">
+                <span><small>IP</small><b>${esc(event.ip || "Không rõ")}</b></span>
+                <span><small>Lúc đăng nhập</small><b>${esc(formatAccountDateTime(event.occurred_at))}</b></span>
+                <span><small>User-Agent</small><b>${esc((event.user_agent || "Không rõ").slice(0, 44))}</b></span>
+              </div>
+            </article>`)
+          .join("");
+      }
+
+      async function loadAccountLoginEvents(force = false) {
+        if (!user?.id) return;
+        if (accountLoginEventsLoading) return;
+        if (accountLoginEvents.length && !force) {
+          renderAccountDevices();
+          return;
+        }
+        accountLoginEventsLoading = true;
+        renderAccountDevices();
+        try {
+          const response = await fetch("/api/auth/login-events?limit=20");
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || "Không thể tải lịch sử đăng nhập");
+          }
+          accountLoginEvents = Array.isArray(data.events) ? data.events : [];
+        } catch (error) {
+          toast(error.message || "Không thể tải lịch sử đăng nhập", "err");
+        } finally {
+          accountLoginEventsLoading = false;
+          renderAccountDevices();
+        }
+      }
+
+      function renderAccountPage() {
+        if (!user) {
+          redirectToAuth("login", "Cần đăng nhập để quản lý tài khoản.");
+          return;
+        }
+        document.getElementById("accountHeroName").textContent = getUserDisplayName(user);
+        document.getElementById("accountHeroEmail").textContent = user.email || "Chưa có email";
+        document.getElementById("accountHeroPlan").textContent =
+          (user.plan || "free").toUpperCase();
+        resetAccountProfileForm();
+        renderAccountTwoFactorState();
+        if (!accountLoginEvents.length) {
+          void loadAccountLoginEvents();
+        } else {
+          renderAccountDevices();
+        }
+      }
+
+      function triggerAccountAvatarUpload() {
+        document.getElementById("accountAvatarFileInput")?.click();
+      }
+
+      async function handleAccountAvatarUpload(event) {
+        const input = event?.target;
+        const file = input?.files?.[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append("image", file);
+        const hint = document.getElementById("accountProfileHint");
+        if (hint) hint.textContent = "Đang upload avatar...";
+        try {
+          const response = await fetch("/api/upload-image?scope=avatar", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || "Upload avatar thất bại");
+          }
+          document.getElementById("accountAvatarInput").value = data.url || "";
+          renderAccountProfilePreview();
+          if (hint) hint.textContent = "Avatar đã upload xong. Nhớ bấm Lưu hồ sơ để áp dụng.";
+          toast("✅ Avatar đã sẵn sàng", "ok");
+        } catch (error) {
+          if (hint) hint.textContent = error.message || "Không thể upload avatar.";
+          toast(error.message || "Không thể upload avatar", "err");
+        } finally {
+          if (input) input.value = "";
+        }
+      }
+
+      async function saveAccountProfile() {
+        if (!user) return;
+        const btn = document.getElementById("accountSaveProfileBtn");
+        const hint = document.getElementById("accountProfileHint");
+        btn.disabled = true;
+        btn.textContent = "Đang lưu...";
+        try {
+          const response = await fetch("/api/auth/me", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: document.getElementById("accountNameInput").value.trim(),
+              phone: document.getElementById("accountPhoneInput").value.trim(),
+              avatar_url: document.getElementById("accountAvatarInput").value.trim(),
+            }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || "Không thể lưu hồ sơ");
+          }
+          user = data.user;
+          accountTwoFactorMode = "";
+          if (hint) hint.textContent = "Thông tin cá nhân đã được cập nhật thành công.";
+          updateTopbar();
+          toast("✅ Đã cập nhật hồ sơ cá nhân", "ok");
+        } catch (error) {
+          if (hint) hint.textContent = error.message || "Không thể lưu hồ sơ.";
+          toast(error.message || "Không thể lưu hồ sơ", "err");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Lưu hồ sơ";
+        }
+      }
+
+      function scrollAccountToSecurity() {
+        document.getElementById("accountSecuritySection")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+
+      async function startTwoFactorSetup() {
+        if (!user) return;
+        if (user.two_factor_enabled) {
+          accountTwoFactorMode = "disable";
+          renderAccountTwoFactorState();
+          document.getElementById("account2faCodeInput")?.focus();
+          return;
+        }
+        const response = await fetch("/api/auth/2fa/setup", { method: "POST" });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          toast(data.error || "Không thể khởi tạo 2FA", "err");
+          return;
+        }
+        accountTwoFactorSetup = data.setup || null;
+        accountTwoFactorMode = "setup";
+        renderAccountTwoFactorState();
+        document.getElementById("account2faCodeInput").value = "";
+        document.getElementById("account2faCodeInput")?.focus();
+      }
+
+      function cancelTwoFactorSetup() {
+        accountTwoFactorSetup = null;
+        accountTwoFactorMode = "";
+        document.getElementById("account2faCodeInput").value = "";
+        renderAccountTwoFactorState();
+      }
+
+      async function copyAccountSetupSecret() {
+        const value = document.getElementById("account2faSecretInput")?.value || "";
+        if (!value) return;
+        try {
+          await navigator.clipboard.writeText(value);
+        } catch {}
+        toast("📋 Đã sao chép khóa 2FA", "ok");
+      }
+
+      async function submitTwoFactorAction() {
+        const code = document.getElementById("account2faCodeInput")?.value.trim() || "";
+        if (!code) {
+          toast("Nhập mã 2FA 6 số trước", "warn");
+          return;
+        }
+        const endpoint =
+          accountTwoFactorMode === "disable"
+            ? "/api/auth/2fa/disable"
+            : "/api/auth/2fa/enable";
+        const button = document.getElementById("account2faSubmitBtn");
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Đang xác minh...";
+        try {
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || "Xác minh 2FA thất bại");
+          }
+          user = data.user;
+          accountTwoFactorSetup = null;
+          accountTwoFactorMode = "";
+          document.getElementById("account2faCodeInput").value = "";
+          updateTopbar();
+          renderAccountTwoFactorState();
+          toast(
+            user.two_factor_enabled ? "✅ 2FA đã được bật" : "↩️ 2FA đã được tắt",
+            "ok",
+          );
+        } catch (error) {
+          toast(error.message || "Xác minh 2FA thất bại", "err");
+        } finally {
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      }
+
+      function formatCurrencyVnd(amount) {
+        return `${Number(amount || 0).toLocaleString("vi-VN")}đ`;
+      }
+
+      function openNotificationCenterFromPopup() {
+        closeUserPopup();
+        const dropdown = document.getElementById("notificationDropdown");
+        const bell = document.getElementById("notificationBellBtn");
+        dropdown?.classList.add("show");
+        dropdown?.setAttribute("aria-hidden", "false");
+        bell?.classList.add("is-open");
+      }
+
+      function openAccountSecurityFromPopup() {
+        closeUserPopup();
+        const accountNav = document.querySelector(".sitem[onclick*=\"navigate('account'\"]");
+        navigate("account", accountNav);
+        setTimeout(() => scrollAccountToSecurity(), 50);
+      }
+
+      async function doLogin() {
+        const email = document.getElementById("loginEmail").value.trim();
+        const pass = document.getElementById("loginPass").value;
+        const errEl = document.getElementById("authErr");
+        errEl.classList.remove("show");
+        if (!email || !pass) {
+          errEl.textContent = "Vui lòng nhập đầy đủ";
+          errEl.classList.add("show");
+          return;
+        }
+        try {
+          const r = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password: pass }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            errEl.textContent = d.error || "Lỗi đăng nhập";
+            errEl.classList.add("show");
+            return;
+          }
+          if (d.twoFactorRequired) {
+            const code = window.prompt("Tài khoản này đã bật 2FA. Nhập mã OTP 6 số:");
+            if (!code) return;
+            const verifyResponse = await fetch("/api/auth/2fa/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                challenge_token: d.challenge_token,
+                code,
+              }),
+            });
+            const verifyData = await verifyResponse.json().catch(() => ({}));
+            if (!verifyResponse.ok) {
+              errEl.textContent = verifyData.error || "Mã 2FA chưa đúng";
+              errEl.classList.add("show");
+              return;
+            }
+            user = verifyData.user;
+            showApp();
+            toast("✅ Đăng nhập thành công!", "ok");
+            return;
+          }
+          user = d.user;
+          showApp();
+          toast("✅ Đăng nhập thành công!", "ok");
+        } catch {
+          errEl.textContent = "Lỗi kết nối";
+          errEl.classList.add("show");
+        }
+      }
+
+      async function saveProfile() {
+        const input = document.getElementById("profileNameInput");
+        const btn = document.getElementById("saveProfileBtn");
+        if (!input || !btn) return;
+        const name = input.value.trim();
+        btn.disabled = true;
+        btn.textContent = "Đang lưu...";
+        try {
+          const r = await fetch("/api/auth/me", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            toast(d.error || "Không thể lưu hồ sơ", "err");
+            return;
+          }
+          user = d.user;
+          updateTopbar();
+          toast("✅ Đã cập nhật hồ sơ", "ok");
+        } catch {
+          toast("Lỗi kết nối", "err");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Lưu hồ sơ";
+        }
+      }
+
+      async function loadBillingData() {
+        if (!user?.id) {
+          billingConfig = null;
+          billingRequests = [];
+          return;
+        }
+        try {
+          const response = await fetch("/api/billing/config");
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) return;
+          billingConfig = data.config || null;
+          billingRequests = Array.isArray(data.requests) ? data.requests : [];
+        } catch {}
+      }
+
+      function renderPaymentPlanPills() {
+        const wrap = document.getElementById("paymentPlanPills");
+        if (!wrap) return;
+        const plans = billingConfig?.plans || [
+          { code: "pro", label: "Pro", amount: 99000 },
+          { code: "business", label: "Business", amount: 299000 },
+        ];
+        wrap.innerHTML = plans
+          .map(
+            (plan) => `<button type="button" class="payment-pill ${paymentSelectedPlan === plan.code ? "active" : ""}" onclick="openPaymentCenter('${plan.code}')">${esc(plan.label)} • ${esc(formatCurrencyVnd(plan.amount))}</button>`,
+          )
+          .join("");
+      }
+
+      function renderPaymentQr() {
+        const box = document.getElementById("paymentQrBox");
+        if (!box) return;
+        box.innerHTML = "";
+        const qrImageUrl = billingConfig?.qr_image_url || "";
+        if (qrImageUrl) {
+          box.innerHTML = `<img src="${esc(qrImageUrl)}" alt="QR thanh toán" />`;
+          return;
+        }
+        if (!window.QRCodeStyling || !paymentRequestDraft) {
+          box.innerHTML = '<div class="payment-qr-empty">QR thanh toán chưa được cấu hình.</div>';
+          return;
+        }
+        const payload = [
+          billingConfig?.bank_name || "BocLink Payment",
+          billingConfig?.bank_account || "",
+          paymentRequestDraft.transfer_note || "",
+          formatCurrencyVnd(paymentRequestDraft.amount),
+        ]
+          .filter(Boolean)
+          .join("\n");
+        if (!paymentQrStyler) {
+          paymentQrStyler = new QRCodeStyling({
+            width: 240,
+            height: 240,
+            type: "canvas",
+            data: payload,
+            margin: 8,
+            dotsOptions: { color: "#2563eb", type: "rounded" },
+            cornersSquareOptions: { color: "#111827", type: "extra-rounded" },
+            backgroundOptions: { color: "#ffffff" },
+          });
+        } else {
+          paymentQrStyler.update({ data: payload });
+        }
+        paymentQrStyler.append(box);
+      }
+
+      function renderPaymentModal() {
+        const modal = document.getElementById("paymentModal");
+        if (!modal || !paymentRequestDraft) return;
+        document.getElementById("paymentModalTitle").textContent =
+          `Thanh toán gói ${String(paymentRequestDraft.plan || "").toUpperCase()}`;
+        document.getElementById("paymentPlanLabel").textContent =
+          String(paymentRequestDraft.plan || "").toUpperCase();
+        document.getElementById("paymentAmountLabel").textContent =
+          formatCurrencyVnd(paymentRequestDraft.amount);
+        document.getElementById("paymentTransferNote").textContent =
+          paymentRequestDraft.transfer_note || paymentRequestDraft.reference_code || "Đang tạo...";
+        document.getElementById("paymentBankName").textContent =
+          billingConfig?.bank_name || "Chưa cấu hình";
+        document.getElementById("paymentBankAccount").textContent =
+          billingConfig?.bank_account || "—";
+        document.getElementById("paymentAccountHolder").textContent =
+          billingConfig?.account_holder || "—";
+        document.getElementById("paymentQrHint").textContent =
+          billingConfig?.contact
+            ? `Cần hỗ trợ xác nhận nhanh? Liên hệ ${billingConfig.contact}.`
+            : "Có thể quét QR hoặc nhập tay thông tin chuyển khoản nếu QR chưa được cấu hình.";
+        renderPaymentPlanPills();
+        renderPaymentQr();
+        modal.classList.remove("hidden");
+      }
+
+      function closePaymentModal() {
+        document.getElementById("paymentModal")?.classList.add("hidden");
+        const payerNote = document.getElementById("paymentPayerNote");
+        if (payerNote) payerNote.value = "";
+      }
+
+      async function createPaymentDraft(planCode = "pro") {
+        const response = await fetch("/api/billing/requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan: planCode }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || "Không thể tạo yêu cầu thanh toán");
+        }
+        billingConfig = data.config || billingConfig;
+        paymentRequestDraft = data.request || null;
+        paymentSelectedPlan = paymentRequestDraft?.plan || planCode;
+      }
+
+      async function openPaymentCenter(planCode = "pro") {
+        if (!user?.id) {
+          redirectToAuth("login", "Cần đăng nhập để tạo yêu cầu thanh toán.");
+          return;
+        }
+        paymentSelectedPlan = String(planCode || "pro").trim().toLowerCase() || "pro";
+        try {
+          await createPaymentDraft(paymentSelectedPlan);
+          renderPaymentModal();
+        } catch (error) {
+          toast(error.message || "Không thể mở thanh toán", "err");
+        }
+      }
+
+      async function submitPaymentRequest() {
+        if (!paymentRequestDraft?.id) return;
+        const btn = document.getElementById("paymentSubmitBtn");
+        const payerNote = document.getElementById("paymentPayerNote")?.value.trim() || "";
+        btn.disabled = true;
+        btn.textContent = "Đang gửi...";
+        try {
+          const response = await fetch(`/api/billing/requests/${paymentRequestDraft.id}/submit`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ payer_note: payerNote }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || "Không thể gửi xác nhận thanh toán");
+          }
+          paymentRequestDraft = data.request;
+          await loadBillingData();
+          closePaymentModal();
+          updateTopbar();
+          addNotification({
+            key: `payment-${paymentRequestDraft.id}-${Date.now()}`,
+            title: "Đã gửi xác nhận thanh toán",
+            message: `Yêu cầu ${paymentRequestDraft.reference_code} đã được chuyển sang admin để kiểm tra.`,
+            kind: "info",
+            page: "admin",
+          });
+          toast("✅ Đã gửi xác nhận thanh toán", "ok");
+        } catch (error) {
+          toast(error.message || "Không thể gửi xác nhận thanh toán", "err");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Đã thanh toán";
+        }
+      }
+
+      async function contactUpgrade(plan) {
+        await openPaymentCenter(plan);
+      }
+
+      function setAdminPaymentPage(page) {
+        adminPaymentPage = page;
+        renderAdminPayments();
+      }
+
+      function renderAdminPayments() {
+        const body = document.getElementById("adPaymentBody");
+        const countEl = document.getElementById("adPaymentCount");
+        if (!body) return;
+        if (countEl) countEl.textContent = adminPayments.length;
+        const pagination = paginateAdminRows(adminPayments, adminPaymentPage);
+        adminPaymentPage = pagination.page;
+        if (!pagination.total) {
+          body.innerHTML =
+            '<tr><td colspan="8" class="tbl-empty">Chưa có yêu cầu thanh toán nào.</td></tr>';
+          renderAdminPagination("adPaymentPagination", pagination, "setAdminPaymentPage");
+          return;
+        }
+        body.innerHTML = pagination.rows
+          .map((request) => `<tr>
+            <td><code>${esc(request.reference_code || "—")}</code></td>
+            <td>
+              <div style="display:grid;gap:4px">
+                <strong>${esc(request.user_email || "—")}</strong>
+                <span style="font-size:11px;color:var(--text3)">${esc(request.user_name || "Không rõ tên")}</span>
+              </div>
+            </td>
+            <td>${esc(String(request.plan || "").toUpperCase())}</td>
+            <td>${esc(formatCurrencyVnd(request.amount))}</td>
+            <td><span class="payment-status ${esc(request.status || "awaiting_payment")}">${esc(request.status || "awaiting_payment")}</span></td>
+            <td>${esc(formatAdminDateTime(request.submitted_at || request.created_at))}</td>
+            <td class="td-orig" title="${esc(request.payer_note || request.admin_note || "")}">${esc(request.payer_note || request.transfer_note || "—")}</td>
+            <td style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn-cp" type="button" onclick="reviewAdminPayment(${request.id},'approved')" ${request.status === "approved" ? "disabled" : ""}>Duyệt</button>
+              <button class="btn-del" type="button" onclick="reviewAdminPayment(${request.id},'rejected')" ${request.status === "rejected" ? "disabled" : ""}>Từ chối</button>
+            </td>
+          </tr>`)
+          .join("");
+        renderAdminPagination("adPaymentPagination", pagination, "setAdminPaymentPage");
+      }
+
+      async function reviewAdminPayment(requestId, status) {
+        const label = status === "approved" ? "duyệt thanh toán" : "từ chối thanh toán";
+        const confirmed = await showConfirmDialog({
+          title: "Xác nhận thanh toán",
+          message: `Bạn có chắc muốn ${label} yêu cầu #${requestId}?`,
+          note: status === "approved"
+            ? "Nếu duyệt, hệ thống sẽ mở gói tương ứng cho user."
+            : "Yêu cầu sẽ chuyển sang trạng thái rejected.",
+          confirmLabel: status === "approved" ? "Duyệt" : "Từ chối",
+          tone: status === "approved" ? "primary" : "danger",
+        });
+        if (!confirmed) return;
+        try {
+          const response = await fetch(`/api/admin/payments/${requestId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || "Không thể cập nhật thanh toán");
+          }
+          adminPayments = data.requests || [];
+          renderAdminPayments();
+          toast(status === "approved" ? "✅ Đã duyệt thanh toán" : "↩️ Đã từ chối thanh toán", "ok");
+        } catch (error) {
+          toast(error.message || "Không thể cập nhật thanh toán", "err");
+        }
+      }
+
+      function syncAdminSectionUI() {
+        const availableSections = new Set([
+          "overview",
+          "users",
+          "payments",
+          "system",
+          "logs",
+        ]);
+        if (!availableSections.has(adminSection)) {
+          adminSection = "overview";
+        }
+        document.querySelectorAll(".admin-tab-btn").forEach((btn) => {
+          const isActive = btn.dataset.adminSection === adminSection;
+          btn.classList.toggle("active", isActive);
+          btn.setAttribute("aria-selected", isActive ? "true" : "false");
+        });
+        document.querySelectorAll(".admin-panel").forEach((panel) => {
+          const isActive = panel.dataset.adminPanel === adminSection;
+          panel.classList.toggle("active", isActive);
+          panel.hidden = !isActive;
+        });
+      }
+
+      function setAdminSection(section) {
+        adminSection = section || "overview";
+        syncAdminSectionUI();
+      }
+
+      async function loadAdminData() {
+        if (!isAdminUser()) {
+          return;
+        }
+        try {
+          const [sr, dr, ur, rr, pr] = await Promise.all([
+            fetch("/api/admin/stats"),
+            fetch("/api/admin/domains"),
+            fetch("/api/admin/users"),
+            fetch("/api/admin/redirects?limit=500"),
+            fetch("/api/admin/payments"),
+          ]);
+          let statsPayload = null;
+          let redirectPayload = null;
+          if (sr.ok) {
+            statsPayload = await sr.json();
+            document.getElementById("adTotalUsers").textContent =
+              statsPayload.totalUsers || 0;
+            document.getElementById("adTotalLinks").textContent =
+              statsPayload.totalLinks || 0;
+            document.getElementById("adTotalClicks").textContent =
+              statsPayload.totalClicks || 0;
+            enqueueAdminAlerts(statsPayload);
+          }
+          if (dr.ok) {
+            const d = await dr.json();
+            adminDomains = d.domains || [];
+            renderAdminDomains(adminDomains);
+            syncAvailableDomainsFromAdmin(adminDomains);
+          }
+          if (ur.ok) {
+            const u = await ur.json();
+            adminUsers = u.users || [];
+            adminSelectedUserIds = new Set(
+              [...adminSelectedUserIds].filter((id) =>
+                adminUsers.some((userItem) => Number(userItem.id) === Number(id)),
+              ),
+            );
+            renderAdminUsers();
+          }
+          if (rr.ok) {
+            redirectPayload = await rr.json();
+            adminRedirects = redirectPayload.events || [];
+            renderAdminRedirects(
+              adminRedirects,
+              redirectPayload.file || "logs/redirect.log",
+            );
+          }
+          if (pr.ok) {
+            const paymentsPayload = await pr.json();
+            adminPayments = paymentsPayload.requests || [];
+            renderAdminPayments();
+          }
+          if (statsPayload || redirectPayload) {
+            rememberAdminNotificationSnapshot(
+              statsPayload || {},
+              redirectPayload || { events: adminRedirects },
+            );
+          }
+        } catch (e) {
+          console.error("loadAdminData", e);
+        }
+      }
+
+      async function showApp() {
+        closeLandingNav();
+        document.getElementById("authScreen").style.display = "none";
+        document.getElementById("appScreen").classList.add("show");
+        finishShellBoot();
+        loadThemePreference();
+        await loadBillingData();
+        updateTopbar();
+        loadBioConfig();
+        renderForms();
+        updateIntegrationUI();
+        void syncBioProfileFromServer();
+        syncRouteFromLocation();
+        loadData();
+        startRealtimeNotificationLoop();
+      }
+
+      function updateTopbar() {
+        const plan = user?.plan || "guest";
+        const role = user?.role || "user";
+        const name = getUserDisplayName(user) || "Khách";
+        const email = user?.email || "Chưa đăng nhập";
+        const createdAt = user?.created_at
+          ? new Date(user.created_at).toLocaleDateString("vi-VN")
+          : "—";
+        const badge = document.getElementById("tbPlanBadge");
+        if (badge) {
+          badge.textContent = plan === "guest" ? "GUEST" : plan.toUpperCase();
+          badge.className = "tb-plan-badge " + (plan === "guest" ? "free" : plan);
+        }
+        setAvatarNode("tbAvatar", user, getUserInitials(user));
+        document.getElementById("tbUname").textContent = name;
+        setAvatarNode("popupAvatar", user, getUserInitials(user));
+        document.getElementById("popupName").textContent = name;
+        document.getElementById("popupEmail").textContent = email;
+        document.getElementById("popupFullName").textContent = user?.name || name;
+        document.getElementById("popupUserId").textContent = user?.id || "—";
+        document.getElementById("popupCreatedAt").textContent = createdAt;
+        document.getElementById("popupPlan").textContent =
+          plan === "guest" ? "GUEST" : plan.toUpperCase();
+        document.getElementById("popupRole").textContent = role || "user";
+        document.getElementById("popupSessionStatus").textContent = user
+          ? "Đang đăng nhập"
+          : "Khách / chưa xác thực";
+        const billingCurrentPlan = document.getElementById("billingCurrentPlan");
+        if (billingCurrentPlan) {
+          billingCurrentPlan.textContent = plan === "guest" ? "FREE" : plan.toUpperCase();
+        }
+        const billingCurrentRole = document.getElementById("billingCurrentRole");
+        if (billingCurrentRole) billingCurrentRole.textContent = role || "user";
+        const billingStatus = document.getElementById("billingStatus");
+        if (billingStatus) {
+          billingStatus.textContent =
+            plan === "pro" || plan === "business" || plan === "admin"
+              ? "Đã kích hoạt"
+              : "Dùng thử";
+        }
+        const billingPromo = document.getElementById("billingPromo");
+        if (billingPromo) {
+          billingPromo.textContent =
+            plan === "pro" || plan === "business" || plan === "admin"
+              ? "Tài khoản của bạn đang mở đầy đủ tính năng cao cấp."
+              : "Gói Pro mở khóa deeplink, custom OG preview và upload ảnh.";
+        }
+        const billingNote = document.getElementById("billingNote");
+        if (billingNote) {
+          billingNote.textContent =
+            plan === "pro" || plan === "business" || plan === "admin"
+              ? "Bạn có thể mở modal thanh toán để gia hạn hoặc đổi sang gói khác ngay trong popup."
+              : "Mở modal thanh toán để quét QR, chuyển khoản và gửi xác nhận cho admin duyệt.";
+        }
+        const latestRequest = Array.isArray(billingRequests) ? billingRequests[0] : null;
+        const billingRequestStatus = document.getElementById("billingRequestStatus");
+        if (billingRequestStatus) {
+          billingRequestStatus.textContent = latestRequest
+            ? `Yêu cầu gần nhất: ${String(latestRequest.plan || "").toUpperCase()} • ${latestRequest.status || "awaiting_payment"} • ${formatAdminDateTime(latestRequest.submitted_at || latestRequest.created_at)}`
+            : "Chưa có yêu cầu thanh toán nào gần đây.";
+        }
+        const profileHint = document.getElementById("profileHint");
+        if (profileHint) {
+          profileHint.textContent = user
+            ? "Đề xuất nhóm cài đặt đầy đủ: Hồ sơ, Giao diện, Thông báo, Bảo mật, Thanh toán, Tích hợp."
+            : "Đăng nhập để mở các cài đặt tài khoản và nâng cấp gói.";
+        }
+        const settingsThemeHint = document.getElementById("settingsThemeHint");
+        if (settingsThemeHint) {
+          settingsThemeHint.textContent =
+            appTheme === "light"
+              ? "Hiện đang dùng giao diện sáng. Bấm để chuyển sang tối."
+              : "Hiện đang dùng giao diện tối. Bấm để chuyển sang sáng.";
+        }
+        document.getElementById("ddLogout").style.display = user ? "" : "none";
+        document.getElementById("ddLogin").style.display = user ? "none" : "";
+        const accountShortcut = document.getElementById("userTabAccount");
+        if (accountShortcut) {
+          accountShortcut.querySelector("span:last-child").textContent = user
+            ? "Hồ sơ cá nhân"
+            : "Đăng nhập để quản lý";
+        }
+        document.getElementById("popupAdminBtn").style.display =
+          plan === "admin" || role === "admin" ? "" : "none";
+        const isAdmin = plan === "admin" || role === "admin";
+        const adminNav = document.getElementById("adminNavItem");
+        if (adminNav) adminNav.style.display = isAdmin ? "" : "none";
+        const sf = document.getElementById("sidebarFooter");
+        if (sf) {
+          sf.style.display =
+            plan === "pro" || plan === "business" || isAdmin ? "none" : "";
+        }
+        renderNotificationCenter();
+        updatePricingUI();
+        if (document.getElementById("page-account")?.classList.contains("active")) {
+          renderAccountPage();
+        }
+      }
+
       document.addEventListener("click", (e) => {
         const userToggle = document.getElementById("tbUser");
         const userDropdown = document.getElementById("userDropdown");
@@ -1784,6 +2735,7 @@
         if (page === "bio") renderBioPage();
         if (page === "integrations") renderIntegrationsPage();
         if (page === "team") renderTeamPage();
+        if (page === "account") renderAccountPage();
         if (page === "admin") {
           syncAdminSectionUI();
           loadAdminData();
@@ -3924,12 +4876,19 @@
       let adminUsers = [];
       let adminDomains = [];
       let adminRedirects = [];
+      let adminPayments = [];
       let adminSection = "overview";
       let adminUserSearchQuery = "";
       let adminUserPlanFilter = "all";
       let adminUserPage = 1;
+      let adminPaymentPage = 1;
       let adminRedirectPage = 1;
       let adminSelectedUserIds = new Set();
+      let billingConfig = null;
+      let billingRequests = [];
+      let paymentRequestDraft = null;
+      let paymentSelectedPlan = "pro";
+      let paymentQrStyler = null;
       const ADMIN_PAGE_SIZE = 20;
 
       function syncAdminSectionUI() {
