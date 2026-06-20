@@ -2177,6 +2177,16 @@
       .url-bar input::placeholder {
         color: var(--text3);
       }
+      .url-inline-hint {
+        display: none;
+        margin: -6px 0 10px;
+        padding-left: 4px;
+        font-size: 12px;
+        color: #fca5a5;
+      }
+      .url-inline-hint.show {
+        display: block;
+      }
       .btn-go {
         padding: 10px 18px;
         background: var(--brand);
@@ -3698,7 +3708,7 @@
       /* ══ TOAST ══ */
       .toast {
         position: fixed;
-        bottom: 22px;
+        top: max(18px, env(safe-area-inset-top, 0px) + 12px);
         right: 22px;
         background: var(--bg3);
         border: 1px solid var(--border2);
@@ -3708,7 +3718,7 @@
         font-weight: 600;
         color: var(--text);
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-        transform: translateY(16px);
+        transform: translateY(-16px);
         opacity: 0;
         transition: 0.3s;
         pointer-events: none;

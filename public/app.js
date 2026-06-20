@@ -2991,6 +2991,7 @@ function renderForm(containerId) {
         ⚡ Rút gọn
       </button>
     </div>
+    <div class="url-inline-hint" id="${containerId}_urlhint"></div>
 
     <!-- Detect badge -->
     <div class="det" id="${containerId}_det" style="margin-bottom:10px"></div>
@@ -3181,23 +3182,53 @@ function renderForm(containerId) {
       if (e.key === "Enter") doShorten(containerId);
     });
   }
+  syncVideoOptionAvailability(containerId);
   updateCreateDomainDisplay(containerId);
+}
+
+function setCreateUrlHint(cid, message) {
+  const hint = document.getElementById(`${cid}_urlhint`);
+  if (!hint) return;
+  hint.textContent = message || "";
+  hint.classList.toggle("show", !!message);
+}
+
+function syncVideoOptionAvailability(cid) {
+  const url = document.getElementById(`${cid}_url`)?.value.trim() || "";
+  const select = document.getElementById(`${cid}_ltype`);
+  const videoOption = select?.querySelector('option[value="video"]');
+  const videoSection = document.getElementById(`${cid}_videosec`);
+  if (!select || !videoOption) return;
+
+  const shouldShowVideoOption = !url || isShopeeUrlCandidate(url);
+  videoOption.hidden = !shouldShowVideoOption;
+  videoOption.disabled = !shouldShowVideoOption;
+
+  if (!shouldShowVideoOption && select.value === "video") {
+    select.value = "direct";
+    if (videoSection) videoSection.className = "video-sec";
+    setCreateUrlHint(cid, "Kiểu link Video Overlay chỉ hỗ trợ link Shopee");
+  } else if (shouldShowVideoOption) {
+    setCreateUrlHint(cid, "");
+  }
 }
 
 function onUrlInput(cid) {
   const url = document.getElementById(`${cid}_url`)?.value.trim() || "";
   const det = document.getElementById(`${cid}_det`);
-  if (!det) return;
-  if (/shopee\.vn/i.test(url)) {
-    det.className = "det shopee show";
-    det.innerHTML = "🛒 Đã phát hiện link Shopee – Deeplink mở thẳng App!";
-  } else if (/tiktok\.com/i.test(url)) {
-    det.className = "det tiktok show";
-    det.innerHTML = "🎵 Đã phát hiện link TikTok – Deeplink mở thẳng App!";
-  } else {
-    det.className = "det";
+  if (det) {
+    if (/shopee\.vn/i.test(url)) {
+      det.className = "det shopee show";
+      det.innerHTML = "🛒 Đã phát hiện link Shopee – Deeplink mở thẳng App!";
+    } else if (/tiktok\.com/i.test(url)) {
+      det.className = "det tiktok show";
+      det.innerHTML = "🎵 Đã phát hiện link TikTok – Deeplink mở thẳng App!";
+    } else {
+      det.className = "det";
+    }
   }
 
+  syncVideoOptionAvailability(cid);
   updateCreateDomainDisplay(cid);
   document.getElementById(`${cid}_res`)?.classList.remove("show");
   document.getElementById(`${cid}_err`)?.classList.remove("show");
@@ -4364,6 +4395,50 @@ function updateOgPreview(cid) {
   }
 }
 
+let toastTimer = null;
+
+function isShopeeUrlCandidate(value) {
+  try {
+    const rawValue = String(value || "").trim();
+    if (!rawValue) return false;
+    const normalizedValue = /^https?:\/\//i.test(rawValue)
+      ? rawValue
+      : `https://${rawValue}`;
+    const url = new URL(normalizedValue);
+    const hostname = url.hostname.toLowerCase();
+    return hostname === "shopee.vn" || hostname.endsWith(".shopee.vn");
+  } catch {
+    return false;
+  }
+}
+
+async function persistGeneratedThumb(dataUrl, inputId, onAfterSet) {
+  if (!dataUrl) return null;
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  const file = new File([blob], `video-thumb-${Date.now()}.jpg`, {
+    type: "image/jpeg",
+  });
+  const fd = new FormData();
+  fd.append("image", file);
+  const uploadRes = await fetch("/api/upload-image", {
+    method: "POST",
+    body: fd,
+  });
+  const uploadData = await uploadRes.json();
+  if (!uploadRes.ok) {
+    throw new Error(uploadData.error || "Upload thumbnail thất bại");
+  }
+  const input = document.getElementById(inputId);
+  if (input) {
+    input.value = uploadData.url.startsWith("/")
+      ? window.location.origin + uploadData.url
+      : uploadData.url;
+  }
+  if (typeof onAfterSet === "function") onAfterSet();
+  return uploadData.url;
+}
+
 async function handleVideoUpload(event, cid) {
   const file = event.target.files[0];
   if (!file) return;
@@ -4408,7 +4483,10 @@ async function handleVideoUpload(event, cid) {
     // Auto-fill thumbnail from Cloudinary
     if (d.thumb) {
       const imgInput = document.getElementById(cid + "_ogimg");
-      if (imgInput && !imgInput.value) {
+      if (
+        imgInput &&
+        (!imgInput.value || String(imgInput.value).startsWith("data:image/"))
+      ) {
         imgInput.value = d.thumb;
         updateVideoThumbPreview(cid);
       }
@@ -4427,7 +4505,7 @@ async function handleVideoUpload(event, cid) {
 function extractThumbFromVideoElement(videoEl, cid) {
   try {
     videoEl.currentTime = 1;
-    videoEl.onseeked = () => {
+    videoEl.onseeked = async () => {
       try {
         const canvas = document.createElement("canvas");
         canvas.width = 1200;
@@ -4436,10 +4514,13 @@ function extractThumbFromVideoElement(videoEl, cid) {
         const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
         const imgInput = document.getElementById(cid + "_ogimg");
         if (imgInput && !imgInput.value) {
-          imgInput.value = dataUrl;
-          updateVideoThumbPreview(cid);
+          await persistGeneratedThumb(dataUrl, cid + "_ogimg", () =>
+            updateVideoThumbPreview(cid),
+          );
         }
-      } catch (_) {}
+      } catch (error) {
+        console.warn("[video-thumb]", error?.message || error);
+      }
     };
   } catch (_) {}
 }
@@ -4501,11 +4582,9 @@ async function extractThumbFromUrl(cid) {
     canvas.height = 630;
     canvas.getContext("2d").drawImage(vid, 0, 0, 1200, 630);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-    const imgInput = document.getElementById(cid + "_ogimg");
-    if (imgInput) {
-      imgInput.value = dataUrl;
-      updateVideoThumbPreview(cid);
-    }
+    await persistGeneratedThumb(dataUrl, cid + "_ogimg", () =>
+      updateVideoThumbPreview(cid),
+    );
     toast("✅ Đã cắt thumbnail từ video!", "ok");
   } catch (e) {
     toast("Không lấy được thumbnail: " + (e?.message || "lỗi"), "err");
@@ -4572,6 +4651,7 @@ async function handleFileUpload(event, cid) {
 function onLinkTypeChange(cid) {
   const val = document.getElementById(cid + "_ltype")?.value;
   const vidSec = document.getElementById(cid + "_videosec");
+  const url = document.getElementById(cid + "_url")?.value.trim() || "";
   const plan = user?.plan || "free";
   const isAdm = plan === "admin" || user?.role === "admin";
   const canOg = plan === "pro" || plan === "business" || isAdm;
@@ -4584,6 +4664,16 @@ function onLinkTypeChange(cid) {
     if (vidSec) vidSec.className = "video-sec";
     return;
   }
+
+  if (val === "video" && url && !isShopeeUrlCandidate(url)) {
+    setCreateUrlHint(cid, "Kiểu link Video Overlay chỉ hỗ trợ link Shopee");
+    const el = document.getElementById(cid + "_ltype");
+    if (el) el.value = "direct";
+    if (vidSec) vidSec.className = "video-sec";
+    return;
+  }
+
+  setCreateUrlHint(cid, "");
 
   // Hiện/ẩn video section
   if (vidSec) vidSec.className = "video-sec" + (val === "video" ? " show" : "");
@@ -4674,6 +4764,11 @@ async function doShorten(cid, confirmAffiliate = false) {
 
   if (link_type === "video" && !video_url) {
     errEl.textContent = "Link video cần URL video hoặc upload video trước khi tạo";
+    errEl.classList.add("show");
+    return;
+  }
+  if (link_type === "video" && !isShopeeUrlCandidate(url)) {
+    errEl.textContent = "Link video hiện chỉ hỗ trợ URL Shopee";
     errEl.classList.add("show");
     return;
   }
@@ -5432,9 +5527,14 @@ function esc(s) {
 }
 function toast(msg, type = "ok") {
   const t = document.getElementById("toast");
+  if (!t) return;
+  if (toastTimer) clearTimeout(toastTimer);
   t.textContent = msg;
   t.className = "toast show " + type;
-  setTimeout(() => (t.className = "toast"), 2600);
+  toastTimer = setTimeout(() => {
+    t.className = "toast";
+    toastTimer = null;
+  }, 2600);
 }
 
 // Ctrl+K
@@ -6707,13 +6807,13 @@ async function autoExtractThumb() {
           canvas.width = 1200;
           canvas.height = 630;
           canvas.getContext("2d").drawImage(vidEl, 0, 0, 1200, 630);
-          document.getElementById("editOgImage").value = canvas.toDataURL(
-            "image/jpeg",
-            0.85,
-          );
-          updateEditThumbPreview();
-          toast("✅ Đã cắt thumbnail từ video!", "ok");
-          resolve();
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          persistGeneratedThumb(dataUrl, "editOgImage", updateEditThumbPreview)
+            .then(() => {
+              toast("✅ Đã cắt thumbnail từ video!", "ok");
+              resolve();
+            })
+            .catch((e) => reject(e));
         } catch (e) {
           reject(e);
         }

@@ -828,6 +828,43 @@ function getAnalyticsDayKey(input) {
   }
 }
 
+function isShopeeUrl(input) {
+  try {
+    const url = new URL(String(input || "").trim());
+    const hostname = url.hostname.toLowerCase();
+    return hostname === "shopee.vn" || hostname.endsWith(".shopee.vn");
+  } catch {
+    return false;
+  }
+}
+
+async function resolveShopeeShortUrl(input) {
+  try {
+    const url = new URL(String(input || "").trim());
+    const hostname = url.hostname.toLowerCase();
+    if (hostname !== "s.shopee.vn") return input;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    try {
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          "user-agent":
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+        },
+      });
+      return response.url || input;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch {
+    return input;
+  }
+}
+
 function getLinkAnalyticsPlatform(link) {
   if ((link?.link_type || "").trim() === "video") {
     return {
@@ -3034,6 +3071,11 @@ app.post("/api/shorten", async (req, res) => {
       return res
         .status(403)
         .json({ error: "Link Video yêu cầu gói Pro trở lên", upgrade: true });
+    if (link_type === "video" && !isShopeeUrl(url)) {
+      return res.status(400).json({
+        error: "Link video hiện chỉ hỗ trợ URL Shopee",
+      });
+    }
 
     if (!planCfg.ogMeta) {
       og_title = null;
@@ -3223,6 +3265,11 @@ app.patch("/api/links/:id", async (req, res) => {
         error: "Link video cần URL video hoặc upload video trước khi lưu",
       });
     }
+    if (nextLinkType === "video" && !isShopeeUrl(link.original_url)) {
+      return res.status(400).json({
+        error: "Link video hiện chỉ hỗ trợ URL Shopee",
+      });
+    }
     const updateFields = {
       og_title: normalizeShareTitleInput(og_title, 120),
       og_desc,
@@ -3370,7 +3417,15 @@ app.get("/go/:code", async (req, res) => {
     const codeValue = link.alias || link.short_code;
     const uaKind = getRedirectUaKind(ua);
     const linkType = (link.link_type || "direct").trim();
-    const info = detectPlatformDeep(link.original_url, platform);
+    const resolvedOriginalUrl =
+      linkType === "video"
+        ? await resolveShopeeShortUrl(link.original_url)
+        : link.original_url;
+    const launchLink =
+      resolvedOriginalUrl === link.original_url
+        ? link
+        : { ...link, original_url: resolvedOriginalUrl };
+    const info = detectPlatformDeep(launchLink.original_url, platform);
     const isFacebookInApp = isFacebookInAppBrowser(ua);
 
     // Route này chỉ dùng khi người xem bấm overlay video, nên không recordClick
@@ -3393,7 +3448,7 @@ app.get("/go/:code", async (req, res) => {
         platform: info.platform_name,
         uaKind,
         status: 200,
-        target: info.fallback || link.original_url,
+        target: info.fallback || launchLink.original_url,
         referer,
       });
       res.set({
@@ -3402,7 +3457,7 @@ app.get("/go/:code", async (req, res) => {
         "Content-Type": "text/html;charset=utf-8",
         "X-Frame-Options": "SAMEORIGIN",
       });
-      return res.send(buildShopeeFacebookBridgePage(link, publicBaseUrl, info));
+      return res.send(buildShopeeFacebookBridgePage(launchLink, publicBaseUrl, info));
     }
 
     if (platform === "desktop") {
@@ -3418,14 +3473,14 @@ app.get("/go/:code", async (req, res) => {
         platform: info.platform_name,
         uaKind,
         status: 302,
-        target: link.original_url,
+        target: launchLink.original_url,
         referer,
       });
-      return res.redirect(302, link.original_url);
+      return res.redirect(302, launchLink.original_url);
     }
 
     if (info.platform_name === "shopee") {
-      const shopeeTarget = info.deeplink || link.original_url;
+      const shopeeTarget = info.deeplink || launchLink.original_url;
       setRedirectDebugHeaders(res, {
         mode: "video-launch-shopee-direct-redirect",
         platform: info.platform_name,
@@ -3445,7 +3500,7 @@ app.get("/go/:code", async (req, res) => {
     }
 
     if (info.deeplink || linkType === "deeplink") {
-      const shortUrl = buildLinkShortUrl(link, publicBaseUrl);
+      const shortUrl = buildLinkShortUrl(launchLink, publicBaseUrl);
       setRedirectDebugHeaders(res, {
         mode: "video-launch-deeplink-bridge",
         platform: info.platform_name,
@@ -3458,14 +3513,14 @@ app.get("/go/:code", async (req, res) => {
         platform: info.platform_name,
         uaKind,
         status: 200,
-        target: info.deeplink || link.original_url,
+        target: info.deeplink || launchLink.original_url,
         referer,
       });
       res.set({
         "Cache-Control": "no-cache,no-store,must-revalidate",
         Pragma: "no-cache",
       });
-      return res.send(buildDirectBridgePage(link, shortUrl, info));
+      return res.send(buildDirectBridgePage(launchLink, shortUrl, info));
     }
 
     setRedirectDebugHeaders(res, {
@@ -3480,10 +3535,10 @@ app.get("/go/:code", async (req, res) => {
       platform: info.platform_name,
       uaKind,
       status: 302,
-      target: link.original_url,
+      target: launchLink.original_url,
       referer,
     });
-    return res.redirect(302, link.original_url);
+    return res.redirect(302, launchLink.original_url);
   } catch (e) {
     console.error(e);
     res.status(500).send("Server error");
@@ -4479,7 +4534,15 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
   window.fitVideo = function(v) {
     if (!v.videoWidth) return;
     var sw=window.innerWidth, sh=window.innerHeight;
-    var scale = Math.min(sw/v.videoWidth, sh/v.videoHeight);
+    var isDesktop = sw >= 768;
+    var isPortrait = v.videoHeight >= v.videoWidth;
+    var maxW = isDesktop
+      ? Math.min(sw - 40, isPortrait ? 520 : 960)
+      : sw;
+    var maxH = isDesktop
+      ? Math.min(sh - 40, isPortrait ? 820 : 720)
+      : sh;
+    var scale = Math.min(maxW/v.videoWidth, maxH/v.videoHeight);
     var w = v.videoWidth*scale, h = v.videoHeight*scale;
     var box = document.getElementById('vbox');
     box.style.width = w+'px'; box.style.height = h+'px';
@@ -4540,6 +4603,16 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
     window.location.href=LAUNCH_URL;
   }
   window.goApp=goApp;
+
+  document.getElementById('vbox').addEventListener('click', function(e){
+    if(!unlocked || launching) return;
+    if(e.target === overlay || e.target === xBtn) return;
+    if(overlay.contains(e.target) || xBtn.contains(e.target)) return;
+    if(videoEl && videoEl.tagName === 'VIDEO'){
+      if(videoEl.paused) videoEl.play();
+      else videoEl.pause();
+    }
+  });
 
   window.addEventListener('focus', function(){
     if(!document.hidden&&shown&&launching){
