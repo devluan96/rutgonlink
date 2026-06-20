@@ -23,6 +23,7 @@ const BASE_URL =
   (process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : "http://localhost:3000");
+const MIDDLE_DOMAIN = (process.env.MIDDLE_DOMAIN || "").replace(/\/$/, "");
 const JWT_SECRET =
   process.env.JWT_SECRET ||
   (process.env.NODE_ENV === "production"
@@ -338,6 +339,13 @@ function buildLinkShortUrl(link, fallbackBaseUrl) {
     return buildShortUrl(`https://${domainHostname}`, link.alias || link.short_code);
   }
   return buildShortUrl(fallbackBaseUrl, link.alias || link.short_code);
+}
+
+function buildVideoLaunchUrl(link) {
+  const code = encodeURIComponent(link?.alias || link?.short_code || "");
+  if (!code) return "/go";
+  if (MIDDLE_DOMAIN) return `${MIDDLE_DOMAIN}/go/${code}`;
+  return `/go/${code}`;
 }
 
 function normalizeDomainHost(input) {
@@ -4358,8 +4366,7 @@ app.post(
 );
 
 function buildVideoPage(link) {
-  const launchCode = link.alias || link.short_code;
-  const launchUrl = `/go/${encodeURIComponent(launchCode)}`;
+  const launchUrl = buildVideoLaunchUrl(link);
   const overlayText = esc(
     link.video_overlay_text || "Bấm vào đây để ủng hộ và xem sản phẩm →",
   );
