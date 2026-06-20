@@ -23,7 +23,6 @@ const BASE_URL =
   (process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : "http://localhost:3000");
-const MIDDLE_DOMAIN = (process.env.MIDDLE_DOMAIN || "").replace(/\/$/, "");
 const JWT_SECRET =
   process.env.JWT_SECRET ||
   (process.env.NODE_ENV === "production"
@@ -344,7 +343,6 @@ function buildLinkShortUrl(link, fallbackBaseUrl) {
 function buildVideoLaunchUrl(link) {
   const code = encodeURIComponent(link?.alias || link?.short_code || "");
   if (!code) return "/go";
-  if (MIDDLE_DOMAIN) return `${MIDDLE_DOMAIN}/go/${code}`;
   return `/go/${code}`;
 }
 
@@ -3094,6 +3092,11 @@ app.post("/api/shorten", async (req, res) => {
         video_url = null;
       }
     }
+    if (link_type === "video" && !video_url) {
+      return res.status(400).json({
+        error: "Link video cần URL video hoặc upload video trước khi tạo",
+      });
+    }
 
     let selectedDomainHostname = null;
     if (domain_hostname) {
@@ -3204,12 +3207,28 @@ app.patch("/api/links/:id", async (req, res) => {
       video_url,
       video_overlay_text,
     } = req.body;
+    const nextLinkType = String(link_type || link.link_type || "direct").trim() || "direct";
+    let nextVideoUrl = typeof video_url === "string" ? video_url.trim() : video_url;
+    if (nextVideoUrl) {
+      try {
+        new URL(nextVideoUrl);
+      } catch {
+        nextVideoUrl = null;
+      }
+    } else {
+      nextVideoUrl = null;
+    }
+    if (nextLinkType === "video" && !nextVideoUrl) {
+      return res.status(400).json({
+        error: "Link video cần URL video hoặc upload video trước khi lưu",
+      });
+    }
     const updateFields = {
       og_title: normalizeShareTitleInput(og_title, 120),
       og_desc,
       og_image,
-      link_type,
-      video_url,
+      link_type: nextLinkType,
+      video_url: nextVideoUrl,
       video_overlay_text,
     };
     if (typeof domain_hostname !== "undefined") {

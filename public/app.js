@@ -4672,6 +4672,11 @@ async function doShorten(cid, confirmAffiliate = false) {
     return;
   }
 
+  if (link_type === "video" && !video_url) {
+    errEl.textContent = "Link video cần URL video hoặc upload video trước khi tạo";
+    errEl.classList.add("show");
+    return;
+  }
   if (affiliateUrl && !loggedInUser) {
     showAffiliateShortenPrompt(
       cid,
@@ -6727,7 +6732,14 @@ async function saveEditLink() {
   const id = document.getElementById("editLinkId").value;
   const btn = document.getElementById("editSaveBtn");
   const errEl = document.getElementById("editErr");
+  const nextLinkType = document.getElementById("editLinkType").value;
+  const nextVideoUrl = document.getElementById("editVideoUrl").value.trim();
   errEl.classList.remove("show");
+  if (nextLinkType === "video" && !nextVideoUrl) {
+    errEl.textContent = "Link video cần URL video hoặc upload video trước khi lưu";
+    errEl.classList.add("show");
+    return;
+  }
   btn.disabled = true;
   btn.textContent = "⏳ Đang lưu...";
   try {
@@ -6738,8 +6750,8 @@ async function saveEditLink() {
         og_title: document.getElementById("editOgTitle").value.trim(),
         og_desc: document.getElementById("editOgDesc").value.trim(),
         og_image: document.getElementById("editOgImage").value.trim(),
-        link_type: document.getElementById("editLinkType").value,
-        video_url: document.getElementById("editVideoUrl").value.trim(),
+        link_type: nextLinkType,
+        video_url: nextVideoUrl,
         video_overlay_text: document
           .getElementById("editVideoText")
           .value.trim(),
