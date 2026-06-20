@@ -4439,7 +4439,7 @@ async function persistGeneratedThumb(dataUrl, inputId, onAfterSet) {
   return uploadData.url;
 }
 
-async function handleVideoUpload(event, cid) {
+async function handleVideoUploadLegacy(event, cid) {
   const file = event.target.files[0];
   if (!file) return;
   // Show local preview immediately + extract thumb via canvas
@@ -4497,6 +4497,131 @@ async function handleVideoUpload(event, cid) {
     if (area) area.style.borderColor = "var(--green)";
   } catch {
     toast("Lỗi upload video", "err");
+    if (area) area.style.borderColor = "var(--border2)";
+  }
+}
+
+function buildCloudinaryVideoThumb(uploadData) {
+  return (
+    uploadData?.eager?.[0]?.secure_url ||
+    uploadData?.secure_url
+      ?.replace("/upload/", "/upload/so_0,w_1200,h_630,c_fill,f_jpg/")
+      ?.replace(/\.[^.]+$/, ".jpg") ||
+    null
+  );
+}
+
+async function fetchVideoUploadSignature() {
+  const response = await fetch("/api/upload-video/signature");
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error(data.error || "Khong lay duoc cau hinh upload video");
+    error.status = response.status;
+    error.payload = data;
+    throw error;
+  }
+  return data;
+}
+
+async function uploadVideoDirectToCloudinary(file) {
+  const signatureData = await fetchVideoUploadSignature();
+  if (
+    signatureData.max_bytes &&
+    Number.isFinite(signatureData.max_bytes) &&
+    file.size > signatureData.max_bytes
+  ) {
+    throw new Error(
+      `Video vuot gioi han ${Math.round(signatureData.max_bytes / (1024 * 1024))}MB`,
+    );
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("api_key", signatureData.api_key);
+  formData.append("timestamp", String(signatureData.timestamp));
+  formData.append("signature", signatureData.signature);
+  formData.append("folder", signatureData.folder);
+  formData.append("public_id", signatureData.public_id);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${signatureData.cloud_name}/video/upload`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error?.message || "Upload video len Cloudinary that bai");
+  }
+  return {
+    url: data.secure_url,
+    thumb: buildCloudinaryVideoThumb(data),
+    source: "cloudinary-direct",
+    duration: data.duration,
+  };
+}
+
+async function handleVideoUpload(event, cid) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const preview = document.getElementById(cid + "_vpreview");
+  if (preview) {
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = "block";
+    preview.onloadeddata = () => extractThumbFromVideoElement(preview, cid);
+  }
+
+  const area = document.getElementById(cid + "_vuploadarea");
+  if (area) area.style.borderColor = "var(--brand)";
+
+  try {
+    let uploadData;
+    try {
+      uploadData = await uploadVideoDirectToCloudinary(file);
+    } catch (directError) {
+      const canFallback =
+        directError?.status === 503 ||
+        /Cloudinary/i.test(String(directError?.message || ""));
+      if (!canFallback) throw directError;
+
+      await handleVideoUploadLegacy(event, cid);
+      return;
+    }
+
+    const urlInput = document.getElementById(cid + "_videourl");
+    if (urlInput) {
+      urlInput.value = uploadData.url.startsWith("/")
+        ? window.location.origin + uploadData.url
+        : uploadData.url;
+    }
+
+    if (uploadData.thumb) {
+      const imgInput = document.getElementById(cid + "_ogimg");
+      if (
+        imgInput &&
+        (!imgInput.value || String(imgInput.value).startsWith("data:image/"))
+      ) {
+        imgInput.value = uploadData.thumb;
+        updateVideoThumbPreview(cid);
+      }
+      toast("Upload xong! Thumbnail da tu dong lay tu video.", "ok");
+    } else {
+      toast("Upload video thanh cong!", "ok");
+    }
+
+    if (area) area.style.borderColor = "var(--green)";
+  } catch (error) {
+    if (error?.status === 401) {
+      redirectToAuth("login", "Can dang nhap de upload video.");
+      return;
+    }
+    if (error?.status === 403 && error?.payload?.upgrade) {
+      toast(error.payload.error || "Tinh nang nay yeu cau goi Pro", "warn");
+      return;
+    }
+    toast(error?.message || "Loi upload video", "err");
     if (area) area.style.borderColor = "var(--border2)";
   }
 }

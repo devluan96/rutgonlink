@@ -253,6 +253,8 @@ try {
 } catch (_) {}
 
 const memStorage = multer.memoryStorage();
+const CLOUDINARY_VIDEO_MAX_BYTES = 200 * 1024 * 1024;
+const CLOUDINARY_VIDEO_FOLDER = "rutgonlink/videos";
 
 const upload = multer({
   storage: CLOUDINARY_OK
@@ -275,7 +277,7 @@ const videoUploadMw = multer({
         filename: (_, file, cb) =>
           cb(null, nanoid(12) + path.extname(file.originalname).toLowerCase()),
       }),
-  limits: { fileSize: 200 * 1024 * 1024 },
+  limits: { fileSize: CLOUDINARY_VIDEO_MAX_BYTES },
   fileFilter: (_, file, cb) =>
     cb(null, /\.(mp4|webm|mov|avi|mkv)$/i.test(file.originalname)),
 });
@@ -1249,6 +1251,35 @@ function buildDomainAlerts(domains = [], currentTime = Date.now()) {
     if (severityDiff !== 0) return severityDiff;
     return String(left.hostname || "").localeCompare(String(right.hostname || ""));
   });
+}
+
+function buildCloudinaryVideoThumbUrl(result) {
+  return (
+    result?.eager?.[0]?.secure_url ||
+    result?.secure_url
+      ?.replace("/upload/", "/upload/so_0,w_1200,h_630,c_fill,f_jpg/")
+      ?.replace(/\.[^.]+$/, ".jpg") ||
+    null
+  );
+}
+
+function createCloudinaryVideoUploadSignature() {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const publicId = nanoid(12);
+  const paramsToSign = {
+    folder: CLOUDINARY_VIDEO_FOLDER,
+    public_id: publicId,
+    timestamp,
+  };
+  const signature = cloudinary.utils.api_sign_request(
+    paramsToSign,
+    process.env.CLOUDINARY_API_SECRET,
+  );
+  return {
+    timestamp,
+    publicId,
+    signature,
+  };
 }
 
 function buildSessionAlertsFromLoginEvent(loginEvent) {
@@ -2667,6 +2698,38 @@ app.post(
     }
   },
 );
+
+app.get("/api/upload-video/signature", requireAuth, async (req, res) => {
+  const user = await resolveUser(req);
+  const plan = user?.plan || "free";
+  if (!PLANS[plan]?.videoLink) {
+    return res
+      .status(403)
+      .json({ error: "Tính năng này yêu cầu gói Pro", upgrade: true });
+  }
+  if (!CLOUDINARY_OK) {
+    return res.status(503).json({
+      error: "Cloudinary chưa được cấu hình cho upload trực tiếp",
+    });
+  }
+  try {
+    const signed = createCloudinaryVideoUploadSignature();
+    return res.json({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      folder: CLOUDINARY_VIDEO_FOLDER,
+      timestamp: signed.timestamp,
+      public_id: signed.publicId,
+      signature: signed.signature,
+      max_bytes: CLOUDINARY_VIDEO_MAX_BYTES,
+    });
+  } catch (e) {
+    console.error("[upload-video-signature]", e.message);
+    return res.status(500).json({
+      error: "Không tạo được chữ ký upload video",
+    });
+  }
+});
 
 async function handleAdminInit(req, res) {
   const user = await resolveUser(req);
@@ -4411,14 +4474,9 @@ app.post(
           req.file.originalname,
           "video",
         );
-        const thumbUrl =
-          result.eager?.[0]?.secure_url ||
-          result.secure_url
-            .replace("/upload/", "/upload/so_0,w_1200,h_630,c_fill,f_jpg/")
-            .replace(/\.[^.]+$/, ".jpg");
         return res.json({
           url: result.secure_url,
-          thumb: thumbUrl,
+          thumb: buildCloudinaryVideoThumbUrl(result),
           public_id: result.public_id,
           source: "cloudinary",
           duration: result.duration,
