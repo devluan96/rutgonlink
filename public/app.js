@@ -3164,13 +3164,17 @@ function renderForm(containerId) {
 
     <!-- Result -->
     <div class="res-card" id="${containerId}_res">
-      <div class="res-lbl">✅ Link rút gọn của bạn</div>
       <div class="res-row">
-        <a class="res-url" id="${containerId}_resurl" href="#" target="_blank"></a>
-        <button class="btn-cp" id="${containerId}_cpbtn" onclick="copyResult('${containerId}')">Sao chép</button>
+        <div class="res-main">
+          <a class="res-url" id="${containerId}_resurl" href="#" target="_blank"></a>
+          <div class="res-meta" id="${containerId}_resmeta"></div>
+          <div class="res-dl" id="${containerId}_resdl" style="display:none"></div>
+        </div>
+        <div class="res-side">
+          <div class="res-lbl">✅ Link rút gọn của bạn</div>
+          <button class="btn-cp" id="${containerId}_cpbtn" onclick="copyResult('${containerId}')">Sao chép</button>
+        </div>
       </div>
-      <div class="res-meta" id="${containerId}_resmeta"></div>
-      <div class="res-dl" id="${containerId}_resdl" style="display:none"></div>
     </div>
   </div>`;
 

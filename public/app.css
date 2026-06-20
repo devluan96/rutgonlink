@@ -2551,18 +2551,30 @@
       .res-card.show {
         display: block;
       }
+      .res-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .res-main {
+        flex: 1;
+        min-width: 0;
+      }
+      .res-side {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 10px;
+        flex-shrink: 0;
+      }
       .res-lbl {
         font-size: 10px;
         font-weight: 700;
         color: var(--brand);
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        margin-bottom: 7px;
-      }
-      .res-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        text-align: right;
       }
       .res-url {
         flex: 1;
@@ -2602,6 +2614,22 @@
         margin-top: 5px;
         font-size: 11px;
         color: var(--brand);
+      }
+      @media (max-width: 640px) {
+        .res-row {
+          flex-direction: column-reverse;
+          gap: 10px;
+        }
+        .res-side {
+          width: 100%;
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .res-lbl {
+          text-align: left;
+        }
       }
 
       /* Error */

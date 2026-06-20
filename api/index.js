@@ -4499,6 +4499,7 @@ app.post(
 
 function buildVideoPage(link) {
   const launchUrl = buildVideoLaunchUrl(link);
+  const unlockKey = `video-unlocked:${link.alias || link.short_code || link.id || "video"}`;
   const overlayText = esc(
     link.video_overlay_text || "Bấm vào đây để ủng hộ và xem sản phẩm →",
   );
@@ -4538,8 +4539,9 @@ ${ogImage ? `<meta property="og:image" content="${ogImage}"/>` : ""}
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
-.scene{position:relative;width:100vw;height:100dvh;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
-.vbox{position:relative;width:100%;height:100%}
+.scene{position:relative;width:100vw;height:100dvh;padding:16px 12px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.vbox{position:relative;width:min(90vw,420px);height:min(76dvh,640px);max-width:calc(100vw - 24px);max-height:calc(100dvh - 32px)}
+@media (min-width:768px){.scene{padding:20px}.vbox{width:min(82vw,960px);height:min(80dvh,720px);max-width:calc(100vw - 40px);max-height:calc(100dvh - 40px)}}
 .cd-wrap{position:absolute;top:14px;right:14px;z-index:30;display:flex;align-items:center;justify-content:center}
 .cd-svg{width:44px;height:44px}
 .cd-bg{fill:none;stroke:rgba(255,255,255,.2);stroke-width:3}
@@ -4577,6 +4579,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
 <script>
 (function(){
   var LAUNCH_URL = ${JSON.stringify(launchUrl)};
+  var UNLOCK_KEY = ${JSON.stringify(unlockKey)};
   var CIRC = 120.6, DELAY = 5000;
 
   var videoEl = document.getElementById('videoEl');
@@ -4589,6 +4592,12 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
   var shown   = false;
   var launching = false;
   var unlocked = false;
+  var timerStarted = false;
+  var hasSavedUnlock = false;
+
+  try {
+    hasSavedUnlock = window.sessionStorage.getItem(UNLOCK_KEY) === '1';
+  } catch (_) {}
 
   function primeVideoPlayback() {
     if (!(videoEl && videoEl.tagName === 'VIDEO')) return;
@@ -4646,15 +4655,21 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
 
   var t0=Date.now();
   function tick(){
+    if(unlocked) return;
     var left=Math.max(0,DELAY-(Date.now()-t0));
     cdProg.style.strokeDashoffset=CIRC*(1-left/DELAY);
     cdNum.textContent=Math.ceil(left/1000);
     if(left>0) requestAnimationFrame(tick); else showOverlay();
   }
-  requestAnimationFrame(tick);
+  function startCountdown(){
+    if(timerStarted || unlocked) return;
+    timerStarted = true;
+    t0 = Date.now();
+    requestAnimationFrame(tick);
+  }
 
   function showOverlay(){
-    if(shown)return; shown=true;
+    if(shown || unlocked)return; shown=true;
     pausePlayback();
     pf.classList.add('show');
     setTimeout(function(){pf.classList.remove('show');},600);
@@ -4684,9 +4699,21 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
     overlay.classList.remove('launching');
   }
 
+  function markUnlocked(){
+    unlocked = true;
+    shown = true;
+    cdWrap.style.display = 'none';
+    overlay.classList.remove('show');
+    overlay.classList.remove('launching');
+    xBtn.classList.remove('show');
+    try {
+      window.sessionStorage.setItem(UNLOCK_KEY, '1');
+    } catch (_) {}
+  }
+
   function goApp(){
     if(launching) return;
-    unlocked = true;
+    markUnlocked();
     launching = true;
     overlay.classList.remove('show');
     overlay.classList.add('launching');
@@ -4710,20 +4737,21 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
     if(!document.hidden&&shown&&launching){
       finalizeLaunchUi();
     }
-    primeVideoPlayback();
   });
 
   document.addEventListener('visibilitychange',function(){
     if(!document.hidden&&shown){
-      resumePlayback();
       if(launching){
         finalizeLaunchUi();
       }
     }
-    if(!document.hidden){
-      primeVideoPlayback();
-    }
   });
+
+  if (hasSavedUnlock) {
+    markUnlocked();
+  } else {
+    startCountdown();
+  }
 })();
 </script>
 </body>
