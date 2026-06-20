@@ -4461,9 +4461,10 @@ function buildVideoPage(link) {
       style="position:absolute;top:0;left:0;width:100%;height:100%;border:0"></iframe>`;
   } else if (videoUrl) {
     videoHtml = `<video id="videoEl" src="${esc(videoUrl)}"
-      autoplay muted playsinline
+      ${ogImage ? `poster="${ogImage}"` : ""}
+      autoplay muted playsinline webkit-playsinline preload="auto" disableRemotePlayback
       style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#000"
-      onloadedmetadata="fitVideo(this)"></video>`;
+      onloadedmetadata="fitVideo(this)" onloadeddata="fitVideo(this)"></video>`;
   } else {
     videoHtml = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.4);font-size:16px">Không có video</div>`;
   }
@@ -4531,6 +4532,23 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
   var launching = false;
   var unlocked = false;
 
+  function primeVideoPlayback() {
+    if (!(videoEl && videoEl.tagName === 'VIDEO')) return;
+    try {
+      videoEl.muted = true;
+      videoEl.defaultMuted = true;
+      videoEl.playsInline = true;
+      videoEl.setAttribute('muted', '');
+      videoEl.setAttribute('playsinline', '');
+      videoEl.setAttribute('webkit-playsinline', '');
+      videoEl.setAttribute('preload', 'auto');
+      var playPromise = videoEl.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(function(){});
+      }
+    } catch(_){}
+  }
+
   window.fitVideo = function(v) {
     if (!v.videoWidth) return;
     var sw=window.innerWidth, sh=window.innerHeight;
@@ -4554,6 +4572,19 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
   window.addEventListener('resize', function(){
     if(videoEl && videoEl.tagName==='VIDEO') fitVideo(videoEl);
   });
+  if (videoEl && videoEl.tagName === 'VIDEO') {
+    videoEl.addEventListener('loadeddata', function(){
+      fitVideo(videoEl);
+      primeVideoPlayback();
+    });
+    videoEl.addEventListener('canplay', primeVideoPlayback);
+    setTimeout(primeVideoPlayback, 0);
+    setTimeout(primeVideoPlayback, 240);
+    document.addEventListener('touchstart', function onFirstTouch(){
+      primeVideoPlayback();
+      document.removeEventListener('touchstart', onFirstTouch, true);
+    }, true);
+  }
 
   var t0=Date.now();
   function tick(){
@@ -4621,6 +4652,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
     if(!document.hidden&&shown&&launching){
       finalizeLaunchUi();
     }
+    primeVideoPlayback();
   });
 
   document.addEventListener('visibilitychange',function(){
@@ -4629,6 +4661,9 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
       if(launching){
         finalizeLaunchUi();
       }
+    }
+    if(!document.hidden){
+      primeVideoPlayback();
     }
   });
 })();
