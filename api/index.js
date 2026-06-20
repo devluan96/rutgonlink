@@ -4536,12 +4536,15 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
     var sw=window.innerWidth, sh=window.innerHeight;
     var isDesktop = sw >= 768;
     var isPortrait = v.videoHeight >= v.videoWidth;
-    var maxW = isDesktop
-      ? Math.min(sw - 40, isPortrait ? 520 : 960)
-      : sw;
-    var maxH = isDesktop
-      ? Math.min(sh - 40, isPortrait ? 820 : 720)
-      : sh;
+    var maxW;
+    var maxH;
+    if (isDesktop) {
+      maxW = Math.min(sw - 40, isPortrait ? 520 : 960);
+      maxH = Math.min(sh - 40, isPortrait ? 820 : 720);
+    } else {
+      maxW = Math.min(sw - 24, isPortrait ? sw * 0.9 : sw * 0.94);
+      maxH = Math.min(sh - 32, isPortrait ? sh * 0.76 : sh * 0.62);
+    }
     var scale = Math.min(maxW/v.videoWidth, maxH/v.videoHeight);
     var w = v.videoWidth*scale, h = v.videoHeight*scale;
     var box = document.getElementById('vbox');
