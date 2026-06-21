@@ -57,6 +57,9 @@ let user = null; // { id, email, name, plan }
 let links = [];
 let chart = null;
 let chartDays = 7;
+let adminOverviewChartInst = null;
+let adminOverviewRangeDays = 7;
+let adminOverviewTrendPayload = null;
 let statsAnalytics = null;
 let linkSearchQuery = "";
 let linkTypeFilter = "all";
@@ -98,7 +101,6 @@ const KNOWN_APP_PAGES = new Set([
   "create",
   "qr",
   "bio",
-  "integrations",
   "team",
   "pricing",
   "stats",
@@ -1526,7 +1528,9 @@ async function pollRealtimeNotifications() {
       if (document.getElementById("page-admin")?.classList.contains("active")) {
         void loadAdminData();
       }
-      if (document.getElementById("page-account")?.classList.contains("active")) {
+      if (
+        document.getElementById("page-account")?.classList.contains("active")
+      ) {
         void loadAccountLoginEvents(true);
       }
       notificationStatsSnapshot = next;
@@ -2399,6 +2403,15 @@ function renderPaymentModal() {
   document.getElementById("paymentQrHint").textContent = billingConfig?.contact
     ? `Cần hỗ trợ xác nhận nhanh? Liên hệ ${billingConfig.contact}.`
     : "Có thể quét QR hoặc nhập tay thông tin chuyển khoản nếu QR chưa được cấu hình.";
+  const submitBtn = document.getElementById("paymentSubmitBtn");
+  if (submitBtn) {
+    const alreadySubmitted =
+      String(paymentRequestDraft.status || "") === "submitted";
+    submitBtn.disabled = alreadySubmitted;
+    submitBtn.textContent = alreadySubmitted
+      ? "Đang chờ duyệt"
+      : "Đã thanh toán";
+  }
   renderPaymentPlanPills();
   renderPaymentQr();
   modal.classList.remove("hidden");
@@ -2417,10 +2430,14 @@ async function createPaymentDraft(planCode = "pro") {
     body: JSON.stringify({ plan: planCode }),
   });
   const data = await response.json().catch(() => ({}));
+  billingConfig = data.config || billingConfig;
+  if (data.request) {
+    paymentRequestDraft = data.request;
+    paymentSelectedPlan = paymentRequestDraft?.plan || planCode;
+  }
   if (!response.ok) {
     throw new Error(data.error || "Không thể tạo yêu cầu thanh toán");
   }
-  billingConfig = data.config || billingConfig;
   paymentRequestDraft = data.request || null;
   paymentSelectedPlan = paymentRequestDraft?.plan || planCode;
 }
@@ -2438,6 +2455,7 @@ async function openPaymentCenter(planCode = "pro") {
     await createPaymentDraft(paymentSelectedPlan);
     renderPaymentModal();
   } catch (error) {
+    if (paymentRequestDraft?.id) renderPaymentModal();
     toast(error.message || "Không thể mở thanh toán", "err");
   }
 }
@@ -2510,8 +2528,9 @@ function renderAdminPayments() {
     return;
   }
   body.innerHTML = pagination.rows
-    .map(
-      (request) => `<tr>
+    .map((request) => {
+      const canReview = String(request.status || "") === "submitted";
+      return `<tr>
             <td><code>${esc(request.reference_code || "—")}</code></td>
             <td>
               <div style="display:grid;gap:4px">
@@ -2525,11 +2544,11 @@ function renderAdminPayments() {
             <td>${esc(formatAdminDateTime(request.submitted_at || request.created_at))}</td>
             <td class="td-orig" title="${esc(request.payer_note || request.admin_note || "")}">${esc(request.payer_note || request.transfer_note || "—")}</td>
             <td style="display:flex;gap:6px;flex-wrap:wrap">
-              <button class="btn-cp" type="button" onclick="reviewAdminPayment(${request.id},'approved')" ${request.status === "approved" ? "disabled" : ""}>Duyệt</button>
-              <button class="btn-del" type="button" onclick="reviewAdminPayment(${request.id},'rejected')" ${request.status === "rejected" ? "disabled" : ""}>Từ chối</button>
+              <button class="btn-cp" type="button" onclick="reviewAdminPayment(${request.id},'approved')" ${canReview ? "" : "disabled"}>Duyệt</button>
+              <button class="btn-del" type="button" onclick="reviewAdminPayment(${request.id},'rejected')" ${canReview ? "" : "disabled"}>Từ chối</button>
             </td>
-          </tr>`,
-    )
+          </tr>`;
+    })
     .join("");
   renderAdminPagination(
     "adPaymentPagination",
@@ -2539,6 +2558,13 @@ function renderAdminPayments() {
 }
 
 async function reviewAdminPayment(requestId, status) {
+  const request = adminPayments.find(
+    (entry) => Number(entry.id) === Number(requestId),
+  );
+  if (!request || String(request.status || "") !== "submitted") {
+    toast("Chỉ yêu cầu đã gửi xác nhận mới được duyệt hoặc từ chối", "warn");
+    return;
+  }
   const label =
     status === "approved" ? "duyệt thanh toán" : "từ chối thanh toán";
   const confirmed = await showConfirmDialog({
@@ -2603,6 +2629,248 @@ function setAdminSection(section) {
   syncAdminSectionUI();
 }
 
+function renderAdminOverview(payload = {}) {
+  const overview = payload?.overview || {};
+  const cards = overview.cards || {};
+  const health = overview.health || {};
+  const actions = Array.isArray(overview.actions) ? overview.actions : [];
+
+  const setText = (id, value) => {
+    const node = document.getElementById(id);
+    if (node) node.textContent = value;
+  };
+
+  setText("adTotalUsers", Number(cards.total_users || 0).toLocaleString());
+  setText("adUsersToday", Number(cards.users_today || 0).toLocaleString());
+  setText("adTotalLinks", Number(cards.total_links || 0).toLocaleString());
+  setText("adLinksToday", Number(cards.links_today || 0).toLocaleString());
+  setText(
+    "adUniqueClicksToday",
+    Number(cards.unique_clicks_today || 0).toLocaleString(),
+  );
+  setText(
+    "adPendingPayments",
+    Number(cards.pending_payments || 0).toLocaleString(),
+  );
+  setText(
+    "adTotalClicksSub",
+    `Tổng raw click: ${Number(health.total_raw_clicks || payload.totalClicks || 0).toLocaleString()}`,
+  );
+  setText(
+    "adAwaitingPaymentsSub",
+    `Đang chờ chuyển khoản: ${Number(health.awaiting_payments || 0).toLocaleString()}`,
+  );
+
+  setText(
+    "adHealthActiveDomains",
+    Number(health.active_domains || 0).toLocaleString(),
+  );
+  setText(
+    "adHealthPendingDomains",
+    Number(health.pending_domains || 0).toLocaleString(),
+  );
+  setText(
+    "adHealthFailedDomains",
+    Number(health.failed_domains || 0).toLocaleString(),
+  );
+  setText(
+    "adHealthExpiringDomains",
+    Number(health.expiring_domains || 0).toLocaleString(),
+  );
+  setText(
+    "adHealthApprovedToday",
+    Number(health.approved_today || 0).toLocaleString(),
+  );
+  setText(
+    "adHealthApprovedRevenueMonth",
+    formatCurrencyVnd(Number(health.approved_revenue_month || 0)),
+  );
+  setText(
+    "adHealthClicksToday",
+    `${Number(health.raw_clicks_today || 0).toLocaleString()} / ${Number(
+      health.unique_clicks_today || 0,
+    ).toLocaleString()}`,
+  );
+
+  const actionWrap = document.getElementById("adminOverviewActionList");
+  if (actionWrap) {
+    actionWrap.innerHTML = actions.length
+      ? actions
+          .map(
+            (item) => `<div class="admin-overview-item ${esc(item.tone || "info")}">
+              <strong>${esc(item.title || "Cần theo dõi")}</strong>
+              <span>${esc(item.message || "")}</span>
+            </div>`,
+          )
+          .join("")
+      : '<div class="admin-overview-empty">Chưa có cảnh báo nào cần xử lý ngay.</div>';
+  }
+
+  const planWrap = document.getElementById("adminOverviewPlanList");
+  if (planWrap) {
+    planWrap.innerHTML = plans.length
+      ? plans
+          .map(
+            (item) => `<div class="admin-plan-chip">
+              <strong>${esc(item.label || item.key || "Plan")}</strong>
+              <span>${Number(item.count || 0).toLocaleString()} user</span>
+            </div>`,
+          )
+          .join("")
+      : '<div class="admin-overview-empty">Chưa có dữ liệu gói người dùng.</div>';
+  }
+
+  const topLinksWrap = document.getElementById("adminOverviewTopLinks");
+  if (topLinksWrap) {
+    topLinksWrap.innerHTML = topLinks.length
+      ? topLinks
+          .map(
+            (item) => `<div class="admin-top-link-item">
+              <div class="admin-top-link-meta">
+                <strong class="admin-top-link-code">${esc(item.short_code || "link")}</strong>
+                <span class="admin-top-link-type">${esc(item.link_type || "direct")}</span>
+              </div>
+              <span class="admin-top-link-url">${esc(item.original_url || "—")}</span>
+              <strong>${Number(item.clicks || 0).toLocaleString()} click</strong>
+            </div>`,
+          )
+          .join("")
+      : '<div class="admin-overview-empty">Chưa có link nào đủ dữ liệu click.</div>';
+  }
+  adminOverviewTrendPayload = overview.trends || null;
+  renderAdminOverviewTrend();
+}
+
+function setAdminOverviewRange(days) {
+  adminOverviewRangeDays = Number(days) === 30 ? 30 : 7;
+  renderAdminOverviewTrend();
+}
+
+function renderAdminOverviewTrend() {
+  const canvas = document.getElementById("adminOverviewChart");
+  if (!canvas) return;
+
+  const trend = adminOverviewTrendPayload || {};
+  const labels = Array.isArray(trend.labels) ? trend.labels : [];
+  const users = Array.isArray(trend.users) ? trend.users : [];
+  const clicks = Array.isArray(trend.clicks) ? trend.clicks : [];
+  const payments = Array.isArray(trend.payments) ? trend.payments : [];
+  const visibleDays = adminOverviewRangeDays === 30 ? 30 : 7;
+  const startAt = Math.max(labels.length - visibleDays, 0);
+  const visibleLabels = labels.slice(startAt);
+  const userSeries = users.slice(startAt);
+  const clickSeries = clicks.slice(startAt);
+  const paymentSeries = payments.slice(startAt);
+
+  document
+    .getElementById("adminOverviewRange7")
+    ?.classList.toggle("active", adminOverviewRangeDays === 7);
+  document
+    .getElementById("adminOverviewRange30")
+    ?.classList.toggle("active", adminOverviewRangeDays === 30);
+
+  const meta = document.getElementById("adminOverviewChartMeta");
+  if (meta) {
+    const sum = (arr) =>
+      arr.reduce((total, value) => total + Number(value || 0), 0);
+    meta.innerHTML = [
+      `User mới: ${sum(userSeries).toLocaleString("vi-VN")}`,
+      `Click unique: ${sum(clickSeries).toLocaleString("vi-VN")}`,
+      `Thanh toán: ${sum(paymentSeries).toLocaleString("vi-VN")}`,
+    ]
+      .map((text) => `<span>${esc(text)}</span>`)
+      .join("");
+  }
+
+  if (adminOverviewChartInst) adminOverviewChartInst.destroy();
+  adminOverviewChartInst = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels: visibleLabels,
+      datasets: [
+        {
+          label: "User mới",
+          data: userSeries,
+          borderColor: "#8b5cf6",
+          backgroundColor: "rgba(139, 92, 246, 0.14)",
+          tension: 0.35,
+          fill: false,
+          pointRadius: 3,
+          pointHoverRadius: 4,
+          borderWidth: 2,
+        },
+        {
+          label: "Click unique",
+          data: clickSeries,
+          borderColor: "#22c55e",
+          backgroundColor: "rgba(34, 197, 94, 0.14)",
+          tension: 0.35,
+          fill: false,
+          pointRadius: 3,
+          pointHoverRadius: 4,
+          borderWidth: 2,
+        },
+        {
+          label: "Thanh toán",
+          data: paymentSeries,
+          borderColor: "#f59e0b",
+          backgroundColor: "rgba(245, 158, 11, 0.14)",
+          tension: 0.35,
+          fill: false,
+          pointRadius: 3,
+          pointHoverRadius: 4,
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false,
+      },
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            color: "#94a3b8",
+            boxWidth: 10,
+            boxHeight: 10,
+            usePointStyle: true,
+            pointStyle: "circle",
+          },
+        },
+        tooltip: {
+          backgroundColor: "#1e2535",
+          borderColor: "#2a3347",
+          borderWidth: 1,
+          titleColor: "#e2e8f0",
+          bodyColor: "#94a3b8",
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: "rgba(255,255,255,.03)" },
+          ticks: {
+            color: "#64748b",
+            font: { size: 11 },
+          },
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: "rgba(255,255,255,.03)" },
+          ticks: {
+            color: "#94a3b8",
+            font: { size: 11 },
+            precision: 0,
+          },
+        },
+      },
+    },
+  });
+}
+
 async function loadAdminData() {
   if (!isAdminUser()) {
     return;
@@ -2619,12 +2887,7 @@ async function loadAdminData() {
     let redirectPayload = null;
     if (sr.ok) {
       statsPayload = await sr.json();
-      document.getElementById("adTotalUsers").textContent =
-        statsPayload.totalUsers || 0;
-      document.getElementById("adTotalLinks").textContent =
-        statsPayload.totalLinks || 0;
-      document.getElementById("adTotalClicks").textContent =
-        statsPayload.totalClicks || 0;
+      renderAdminOverview(statsPayload);
       enqueueAdminAlerts(statsPayload);
     }
     if (dr.ok) {
@@ -2885,7 +3148,6 @@ function navigate(page, el) {
   if (page === "links") applyLinkFilters();
   if (page === "qr") renderQrPage();
   if (page === "bio") renderBioPage();
-  if (page === "integrations") renderIntegrationsPage();
   if (page === "team") renderTeamPage();
   if (page === "account") renderAccountPage();
   if (page === "admin") {
@@ -3633,58 +3895,65 @@ function formatTeamDateTime(value, fallback = "Chưa cập nhật") {
   return date.toLocaleString("vi-VN");
 }
 
-      function formatTeamTemplateType(type) {
-        if (type === "deeplink") return "Deeplink App";
-        if (type === "video") return "Video Overlay";
-        return "Trực tiếp";
-      }
+function formatTeamTemplateType(type) {
+  if (type === "deeplink") return "Deeplink App";
+  if (type === "video") return "Video Overlay";
+  return "Trực tiếp";
+}
 
-      function normalizeTeamTemplateSectionCopy() {
-        const card = document.getElementById("teamTemplatesCard");
-        const count = document.getElementById("teamTemplateCount");
-        if (!card || !count) return;
-        const titleEl = card.querySelector(".tbl-head h3");
-        if (titleEl) {
-          titleEl.innerHTML = `Mẫu link chung (<span id="teamTemplateCount">${count.textContent || "0"}</span>)`;
-        }
-        const fieldLabels = card.querySelectorAll(".fg .fl");
-        if (fieldLabels[0]) fieldLabels[0].textContent = "Chọn link nguồn của bạn";
-        if (fieldLabels[1]) fieldLabels[1].textContent = "Tên mẫu chung";
-        const sourceSelect = document.getElementById("teamTemplateSourceLink");
-        if (sourceSelect?.options?.[0]) {
-          sourceSelect.options[0].textContent = "Chọn link để chụp snapshot nội dung";
-        }
-        const nameInput = document.getElementById("teamTemplateName");
-        if (nameInput) {
-          nameInput.placeholder = "Ví dụ: Template TikTok campaign A";
-        }
-        const createBtn = document.getElementById("teamTemplateCreateBtn");
-        if (createBtn) createBtn.textContent = "Tạo mẫu chung";
-        const actionButtons = card.querySelectorAll(".user-actions .user-btn");
-        if (actionButtons[1]) actionButtons[1].textContent = "Tạo link cá nhân";
-        const noteEl = card.querySelector(".user-note");
-        if (noteEl) {
-          noteEl.innerHTML =
-            'Mẫu chung chỉ lưu nội dung share, kiểu link, video overlay và domain. Khi bấm <strong>Lấy link cho tôi</strong>, user sẽ qua tab Tạo link với nội dung đã khóa sẵn, còn URL đích là do user tự dán.';
-        }
-        const headers = card.querySelectorAll("thead th");
-        const headerLabels = ["Mẫu", "Người tạo", "Kiểu", "Domain", "Cập nhật", "Thao tác"];
-        headers.forEach((header, index) => {
-          if (headerLabels[index]) header.textContent = headerLabels[index];
-        });
-        const emptyCell = document.querySelector("#teamTemplateBody .tbl-empty");
-        if (
-          emptyCell &&
-          /Äang|Ã¢ÂÂ³|mÃ¡ÂºÂ«u link chung/i.test(emptyCell.textContent || "")
-        ) {
-          emptyCell.textContent = "Đang tải mẫu link chung...";
-        }
-      }
+function normalizeTeamTemplateSectionCopy() {
+  const card = document.getElementById("teamTemplatesCard");
+  const count = document.getElementById("teamTemplateCount");
+  if (!card || !count) return;
+  const titleEl = card.querySelector(".tbl-head h3");
+  if (titleEl) {
+    titleEl.innerHTML = `Mẫu link chung (<span id="teamTemplateCount">${count.textContent || "0"}</span>)`;
+  }
+  const fieldLabels = card.querySelectorAll(".fg .fl");
+  if (fieldLabels[0]) fieldLabels[0].textContent = "Chọn link nguồn của bạn";
+  if (fieldLabels[1]) fieldLabels[1].textContent = "Tên mẫu chung";
+  const sourceSelect = document.getElementById("teamTemplateSourceLink");
+  if (sourceSelect?.options?.[0]) {
+    sourceSelect.options[0].textContent = "Chọn link để chụp snapshot nội dung";
+  }
+  const nameInput = document.getElementById("teamTemplateName");
+  if (nameInput) {
+    nameInput.placeholder = "Ví dụ: Template TikTok campaign A";
+  }
+  const createBtn = document.getElementById("teamTemplateCreateBtn");
+  if (createBtn) createBtn.textContent = "Tạo mẫu chung";
+  const actionButtons = card.querySelectorAll(".user-actions .user-btn");
+  if (actionButtons[1]) actionButtons[1].textContent = "Tạo link cá nhân";
+  const noteEl = card.querySelector(".user-note");
+  if (noteEl) {
+    noteEl.innerHTML =
+      "Mẫu chung chỉ lưu nội dung share, kiểu link, video overlay và domain. Khi bấm <strong>Lấy link cho tôi</strong>, user sẽ qua tab Tạo link với nội dung đã khóa sẵn, còn URL đích là do user tự dán.";
+  }
+  const headers = card.querySelectorAll("thead th");
+  const headerLabels = [
+    "Mẫu",
+    "Người tạo",
+    "Kiểu",
+    "Domain",
+    "Cập nhật",
+    "Thao tác",
+  ];
+  headers.forEach((header, index) => {
+    if (headerLabels[index]) header.textContent = headerLabels[index];
+  });
+  const emptyCell = document.querySelector("#teamTemplateBody .tbl-empty");
+  if (
+    emptyCell &&
+    /Äang|Ã¢ÂÂ³|mÃ¡ÂºÂ«u link chung/i.test(emptyCell.textContent || "")
+  ) {
+    emptyCell.textContent = "Đang tải mẫu link chung...";
+  }
+}
 
-      function findTeamTemplateById(templateId) {
-        const normalizedId = Number(templateId);
-        return (teamWorkspaceData?.templates || []).find(
-          (template) => Number(template.id) === normalizedId,
+function findTeamTemplateById(templateId) {
+  const normalizedId = Number(templateId);
+  return (teamWorkspaceData?.templates || []).find(
+    (template) => Number(template.id) === normalizedId,
   );
 }
 
@@ -3729,15 +3998,15 @@ function renderTeamMembers(members) {
   }
 
   const canManageMembers = canInviteTeamMembers();
-        body.innerHTML = members
-          .map((member) => {
-            const isOwner = member.role === "owner";
-            const isPending = member.status === "pending";
-            const nextStatus =
-              member.status === "pending"
-                ? "active"
-                : member.status === "active"
-                  ? "paused"
+  body.innerHTML = members
+    .map((member) => {
+      const isOwner = member.role === "owner";
+      const isPending = member.status === "pending";
+      const nextStatus =
+        member.status === "pending"
+          ? "active"
+          : member.status === "active"
+            ? "paused"
             : "active";
       const nextLabel =
         member.status === "pending"
@@ -3760,7 +4029,7 @@ function renderTeamMembers(members) {
         ${
           isOwner
             ? '<button class="btn-cp" disabled>Owner</button>'
-            : `<button class="btn-cp" ${(canManageMembers && !isPending) ? "" : "disabled"} onclick="cycleTeamMemberStatus(${Number(member.id)}, '${nextStatus}')">${isPending ? "Chờ user xác nhận" : nextLabel}</button>
+            : `<button class="btn-cp" ${canManageMembers && !isPending ? "" : "disabled"} onclick="cycleTeamMemberStatus(${Number(member.id)}, '${nextStatus}')">${isPending ? "Chờ user xác nhận" : nextLabel}</button>
                <button class="btn-del" ${canManageMembers ? "" : "disabled"} onclick="removeTeamMember(${Number(member.id)})">Xóa</button>`
         }
       </td>
@@ -3972,11 +4241,11 @@ function renderTeamWorkspaceSummary() {
   }
 }
 
-      async function renderTeamPage() {
-        normalizeTeamTemplateSectionCopy();
-        renderTeamMembers([]);
-        renderTeamTemplates([]);
-        renderTeamWorkspaceSummary();
+async function renderTeamPage() {
+  normalizeTeamTemplateSectionCopy();
+  renderTeamMembers([]);
+  renderTeamTemplates([]);
+  renderTeamWorkspaceSummary();
   const body = document.getElementById("teamMemberBody");
   const templateBody = document.getElementById("teamTemplateBody");
   if (user && body) {
@@ -4559,7 +4828,9 @@ async function fetchVideoUploadSignature() {
   const response = await fetch("/api/upload-video/signature");
   const data = await response.json();
   if (!response.ok) {
-    const error = new Error(data.error || "Khong lay duoc cau hinh upload video");
+    const error = new Error(
+      data.error || "Khong lay duoc cau hinh upload video",
+    );
     error.status = response.status;
     error.payload = data;
     throw error;
@@ -4596,7 +4867,9 @@ async function uploadVideoDirectToCloudinary(file) {
   );
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data?.error?.message || "Upload video len Cloudinary that bai");
+    throw new Error(
+      data?.error?.message || "Upload video len Cloudinary that bai",
+    );
   }
   return {
     url: buildCloudinaryPlayableVideoUrl(data.secure_url),
@@ -4932,7 +5205,8 @@ async function doShorten(cid, confirmAffiliate = false) {
   }
 
   if (link_type === "video" && !video_url) {
-    errEl.textContent = "Link video cần URL video hoặc upload video trước khi tạo";
+    errEl.textContent =
+      "Link video cần URL video hoặc upload video trước khi tạo";
     errEl.classList.add("show");
     return;
   }
@@ -5104,34 +5378,36 @@ async function loadData(prefetched = null) {
       })());
     statsAnalytics = d.analytics || null;
     links = d.recent || [];
+    const displayTotalClicks = Number(
+      d.uniqueTotalClicks ?? d.totalClicks ?? 0,
+    );
+    const displayClicksToday = Number(
+      d.uniqueClicksToday ?? d.clicksToday ?? 0,
+    );
     selectedLinkIds = new Set(
       [...selectedLinkIds].filter((id) =>
         links.some((link) => Number(link.id) === Number(id)),
       ),
     );
-    document.getElementById("dClicks").textContent = (
-      d.totalClicks || 0
-    ).toLocaleString();
+    document.getElementById("dClicks").textContent =
+      displayTotalClicks.toLocaleString();
     document.getElementById("dLinks").textContent = (
       d.totalLinks || 0
     ).toLocaleString();
     if (document.getElementById("dClicksToday"))
-      document.getElementById("dClicksToday").textContent = (
-        d.clicksToday || 0
-      ).toLocaleString();
+      document.getElementById("dClicksToday").textContent =
+        displayClicksToday.toLocaleString();
     if (document.getElementById("dLinksToday"))
       document.getElementById("dLinksToday").textContent = (
         d.linksToday || 0
       ).toLocaleString();
     // Stats page
     if (document.getElementById("stTotalClicks"))
-      document.getElementById("stTotalClicks").textContent = (
-        d.totalClicks || 0
-      ).toLocaleString();
+      document.getElementById("stTotalClicks").textContent =
+        displayTotalClicks.toLocaleString();
     if (document.getElementById("stClicksToday"))
-      document.getElementById("stClicksToday").textContent = (
-        d.clicksToday || 0
-      ).toLocaleString();
+      document.getElementById("stClicksToday").textContent =
+        displayClicksToday.toLocaleString();
     if (document.getElementById("stTotalLinks"))
       document.getElementById("stTotalLinks").textContent = (
         d.totalLinks || 0
@@ -5155,10 +5431,6 @@ async function loadData(prefetched = null) {
       renderQrPage();
     if (document.getElementById("page-bio")?.classList.contains("active"))
       renderBioPage();
-    if (
-      document.getElementById("page-integrations")?.classList.contains("active")
-    )
-      renderIntegrationsPage();
     if (document.getElementById("page-team")?.classList.contains("active"))
       renderTeamPage();
     if (document.getElementById("page-links")?.classList.contains("active"))
@@ -5787,10 +6059,9 @@ function getStatsTimelineSeries() {
   const labels = [];
   const vals = [];
   const timelineMap = new Map(
-    (statsAnalytics?.timeline || []).map((item) => [
-      String(item.date || ""),
-      Number(item.clicks || 0),
-    ]),
+    (statsAnalytics?.unique_timeline || statsAnalytics?.timeline || []).map(
+      (item) => [String(item.date || ""), Number(item.clicks || 0)],
+    ),
   );
   const hasTimeline = [...timelineMap.values()].some((value) => value > 0);
   const now = new Date();
@@ -5817,11 +6088,22 @@ function renderStatsCountryMap() {
   const summaryEl = document.getElementById("statsGeoSummary");
   if (!mapEl) return;
   const geo = statsAnalytics?.geo || {};
-  const countries = Array.isArray(geo.countries)
-    ? geo.countries.filter((item) => item.country_name_en && item.clicks > 0)
-    : [];
-  const trackedClicks = Number(geo.tracked_clicks || 0);
-  const totalClicks = Number(statsAnalytics?.total_clicks || 0);
+  const countries =
+    Array.isArray(geo.unique_countries) && geo.unique_countries.length
+      ? geo.unique_countries.filter(
+          (item) => item.country_name_en && item.clicks > 0,
+        )
+      : Array.isArray(geo.countries)
+        ? geo.countries.filter(
+            (item) => item.country_name_en && item.clicks > 0,
+          )
+        : [];
+  const trackedClicks = Number(
+    geo.unique_tracked_clicks ?? geo.tracked_clicks ?? 0,
+  );
+  const totalClicks = Number(
+    statsAnalytics?.unique_clicks ?? statsAnalytics?.total_clicks ?? 0,
+  );
 
   if (summaryEl) {
     summaryEl.textContent = trackedClicks
@@ -5895,9 +6177,13 @@ function renderStatsCountryMap() {
 function renderStatsCountryTable() {
   const tb = document.getElementById("statsCountryBody");
   if (!tb) return;
-  const rows = Array.isArray(statsAnalytics?.geo?.top_countries)
-    ? statsAnalytics.geo.top_countries
-    : [];
+  const rows =
+    Array.isArray(statsAnalytics?.geo?.unique_top_countries) &&
+    statsAnalytics.geo.unique_top_countries.length
+      ? statsAnalytics.geo.unique_top_countries
+      : Array.isArray(statsAnalytics?.geo?.top_countries)
+        ? statsAnalytics.geo.top_countries
+        : [];
   if (!rows.length) {
     tb.innerHTML =
       '<tr><td colspan="3" class="tbl-empty">Chưa có click nào có dữ liệu quốc gia.</td></tr>';
@@ -5918,12 +6204,18 @@ function renderStatsPlatformChart() {
   const ctx = document.getElementById("platformChart");
   const summaryEl = document.getElementById("statsPlatformSummary");
   if (!ctx) return;
-  const distribution = statsAnalytics?.platforms?.distribution?.length
-    ? statsAnalytics.platforms.distribution
-    : getFallbackPlatformDistribution();
-  const usingFallback = !statsAnalytics?.platforms?.distribution?.length;
+  const distribution = statsAnalytics?.platforms?.unique_distribution?.length
+    ? statsAnalytics.platforms.unique_distribution
+    : statsAnalytics?.platforms?.distribution?.length
+      ? statsAnalytics.platforms.distribution
+      : getFallbackPlatformDistribution();
+  const usingFallback =
+    !statsAnalytics?.platforms?.unique_distribution?.length &&
+    !statsAnalytics?.platforms?.distribution?.length;
   if (summaryEl) {
-    const totalClicks = Number(statsAnalytics?.total_clicks || 0);
+    const totalClicks = Number(
+      statsAnalytics?.unique_clicks ?? statsAnalytics?.total_clicks ?? 0,
+    );
     summaryEl.textContent = usingFallback
       ? "Chưa có click, đang tạm dùng phân bố link"
       : `${totalClicks.toLocaleString()} click đã được phân loại`;
@@ -6259,12 +6551,7 @@ async function loadAdminData() {
     let redirectPayload = null;
     if (sr.ok) {
       statsPayload = await sr.json();
-      document.getElementById("adTotalUsers").textContent =
-        statsPayload.totalUsers || 0;
-      document.getElementById("adTotalLinks").textContent =
-        statsPayload.totalLinks || 0;
-      document.getElementById("adTotalClicks").textContent =
-        statsPayload.totalClicks || 0;
+      renderAdminOverview(statsPayload);
       enqueueAdminAlerts(statsPayload);
     }
     if (dr.ok) {
@@ -6466,8 +6753,8 @@ function renderAdminUsers() {
     .map((u) => {
       const userId = Number(u.id);
       const isSelected = adminSelectedUserIds.has(userId);
-      return `<tr class="${isSelected ? "admin-row-selected" : ""}">
-    <td class="td-check">
+      return `<tr class="admin-user-row ${isSelected ? "admin-row-selected" : ""}" onclick="openAdminUserDetailModal(${userId})">
+    <td class="td-check" onclick="event.stopPropagation()">
       <label class="tbl-check">
         <input type="checkbox" ${isSelected ? "checked" : ""} onchange="toggleAdminUserSelection(${userId}, this.checked)" />
         <span></span>
@@ -6476,7 +6763,7 @@ function renderAdminUsers() {
     <td style="color:var(--text3)">${u.id}</td>
     <td style="font-weight:600">${esc(u.email)}</td>
     <td>${esc(u.name || "—")}</td>
-    <td>
+    <td onclick="event.stopPropagation()">
       <select class="plan-select" data-current-plan="${esc(u.plan || "free")}" onchange="adminSetPlan(${u.id},this)">
         ${["free", "pro", "business", "admin"].map((p) => `<option value="${p}"${u.plan === p ? " selected" : ""}>${p}</option>`).join("")}
       </select>
@@ -6489,6 +6776,91 @@ function renderAdminUsers() {
     .join("");
   syncAdminUserSelectionUI(filteredUsers, pageRows);
   renderAdminPagination("adUserPagination", pagination, "setAdminUserPage");
+}
+
+function formatAdminUserDateTime(value) {
+  if (!value) return "none";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("vi-VN");
+}
+
+function renderAdminUserDetailField(label, value) {
+  return `
+    <div class="admin-user-detail-item">
+      <span class="admin-user-detail-label">${esc(label)}</span>
+      <strong class="admin-user-detail-value">${esc(value || "â€”")}</strong>
+    </div>`;
+}
+
+function openAdminUserDetailModal(userId, event) {
+  const clickTarget = event?.target;
+  if (
+    clickTarget &&
+    typeof clickTarget.closest === "function" &&
+    clickTarget.closest(
+      "input, select, button, a, .tbl-check, .btn-del, .plan-select",
+    )
+  ) {
+    return;
+  }
+
+  const modal = document.getElementById("adminUserDetailModal");
+  const userItem = adminUsers.find(
+    (entry) => Number(entry.id) === Number(userId),
+  );
+  if (!modal || !userItem) return;
+
+  const name = String(userItem.name || "").trim() || "ChÆ°a cáº­p nháº­t";
+  const email = String(userItem.email || "").trim() || "â€”";
+  const plan = String(userItem.plan || "free").trim() || "free";
+  const role = String(userItem.role || "user").trim() || "user";
+  const avatarText = (name || email || "U").charAt(0).toUpperCase();
+
+  const titleEl = document.getElementById("adminUserDetailTitle");
+  const subtitleEl = document.getElementById("adminUserDetailSubtitle");
+  const avatarEl = document.getElementById("adminUserDetailAvatar");
+  const summaryEl = document.getElementById("adminUserDetailSummary");
+  const metaEl = document.getElementById("adminUserDetailMeta");
+  const rawEl = document.getElementById("adminUserDetailRaw");
+
+  if (titleEl) titleEl.textContent = name;
+  if (subtitleEl) subtitleEl.textContent = email;
+  if (avatarEl) avatarEl.textContent = avatarText || "U";
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <span class="admin-user-plan">${esc(plan)}</span>
+      <span class="badge-role ${esc(role)}">${esc(role)}</span>
+      <span class="admin-user-detail-id">ID #${esc(String(userItem.id || "â€”"))}</span>`;
+  }
+  if (metaEl) {
+    metaEl.innerHTML = [
+      renderAdminUserDetailField("Tên hiển thị", name),
+      renderAdminUserDetailField("Email", email),
+      renderAdminUserDetailField("Gói hiện tại", plan),
+      renderAdminUserDetailField("Role", role),
+      renderAdminUserDetailField(
+        "Ngày tạo",
+        formatAdminUserDateTime(userItem.created_at),
+      ),
+      renderAdminUserDetailField(
+        "Cập nhật gần nhất",
+        formatAdminUserDateTime(userItem.updated_at),
+      ),
+      renderAdminUserDetailField(
+        "Số điện thoại",
+        userItem.phone || userItem.phone_number || "none",
+      ),
+      renderAdminUserDetailField("Avatar URL", userItem.avatar_url || "none"),
+    ].join("");
+  }
+  if (rawEl) rawEl.textContent = JSON.stringify(userItem, null, 2);
+
+  modal.classList.remove("hidden");
+}
+
+function closeAdminUserDetailModal() {
+  document.getElementById("adminUserDetailModal")?.classList.add("hidden");
 }
 
 function filterAdminUsers(q) {
@@ -7005,7 +7377,8 @@ async function saveEditLink() {
   const nextVideoUrl = document.getElementById("editVideoUrl").value.trim();
   errEl.classList.remove("show");
   if (nextLinkType === "video" && !nextVideoUrl) {
-    errEl.textContent = "Link video cần URL video hoặc upload video trước khi lưu";
+    errEl.textContent =
+      "Link video cần URL video hoặc upload video trước khi lưu";
     errEl.classList.add("show");
     return;
   }

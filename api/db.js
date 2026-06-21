@@ -1,7 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const rawTimeZoneOffset = Number(process.env.APP_TIME_ZONE_OFFSET_MINUTES);
 const APP_TIME_ZONE_OFFSET_MINUTES = Number.isFinite(rawTimeZoneOffset) ? rawTimeZoneOffset : 420;
-const CLICK_DEDUP_WINDOW_MS = 3000;
+const CLICK_DEDUP_WINDOW_MS = 30000;
 
 let _client = null;
 
@@ -221,6 +221,19 @@ async function init() {
         .limit(safeLimit);
       check(error, 'payment_request_user_list');
       return data || [];
+    },
+
+    async getLatestActivePaymentRequestByUser(userId) {
+      const { data, error } = await sb
+        .from('payment_requests')
+        .select('*')
+        .eq('user_id', userId)
+        .in('status', ['awaiting_payment', 'submitted'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      check(error, 'payment_request_active_latest');
+      return data || null;
     },
 
     async listPaymentRequests(limit = 200) {
@@ -823,6 +836,33 @@ async function init() {
       return { linksToday: linksToday || 0, clicksToday: clicksToday || 0 };
     },
 
+    async getAdminTodayStats() {
+      const { start, end } = getDayWindowUtc();
+      const [
+        { count: usersToday },
+        { count: linksToday },
+        { count: clicksToday },
+      ] = await Promise.all([
+        sb.from('users')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', start)
+          .lt('created_at', end),
+        sb.from('links')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', start)
+          .lt('created_at', end),
+        sb.from('clicks')
+          .select('*', { count: 'exact', head: true })
+          .gte('clicked_at', start)
+          .lt('clicked_at', end),
+      ]);
+      return {
+        usersToday: usersToday || 0,
+        linksToday: linksToday || 0,
+        clicksToday: clicksToday || 0,
+      };
+    },
+
     async getClickAnalytics(userId, guestSessionId, limit = 5000) {
       const buildQuery = (selectExpr) => {
         let q = sb
@@ -837,17 +877,44 @@ async function init() {
       };
 
       let result = await buildQuery(
-        'id,link_id,user_agent,referrer,clicked_at,country_code,country_name,city,links!inner(id,original_url,link_type,user_id,guest_session_id)',
+        'id,link_id,ip,user_agent,referrer,clicked_at,country_code,country_name,city,links!inner(id,original_url,link_type,user_id,guest_session_id)',
       );
       if (
         result.error &&
         /country_code|country_name|city|schema cache/i.test(result.error.message || '')
       ) {
         result = await buildQuery(
-          'id,link_id,user_agent,referrer,clicked_at,links!inner(id,original_url,link_type,user_id,guest_session_id)',
+          'id,link_id,ip,user_agent,referrer,clicked_at,links!inner(id,original_url,link_type,user_id,guest_session_id)',
         );
       }
       check(result.error, 'click_analytics');
+      return (result.data || []).map((row) => ({
+        ...row,
+        link: row.links || null,
+        links: undefined,
+      }));
+    },
+
+    async getAdminClickAnalytics(limit = 5000) {
+      const buildQuery = (selectExpr) =>
+        sb
+          .from('clicks')
+          .select(selectExpr)
+          .order('clicked_at', { ascending: false })
+          .limit(limit);
+
+      let result = await buildQuery(
+        'id,link_id,ip,user_agent,referrer,clicked_at,country_code,country_name,city,links!inner(id,original_url,link_type,user_id,guest_session_id)',
+      );
+      if (
+        result.error &&
+        /country_code|country_name|city|schema cache/i.test(result.error.message || '')
+      ) {
+        result = await buildQuery(
+          'id,link_id,ip,user_agent,referrer,clicked_at,links!inner(id,original_url,link_type,user_id,guest_session_id)',
+        );
+      }
+      check(result.error, 'admin_click_analytics');
       return (result.data || []).map((row) => ({
         ...row,
         link: row.links || null,

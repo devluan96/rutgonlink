@@ -897,57 +897,58 @@ function getLinkAnalyticsPlatform(link) {
   };
 }
 
-function buildStatsAnalytics(clickRows = []) {
-  const timelineMap = new Map();
-  const countryMap = new Map();
-  const platformMap = new Map();
-  let trackedGeoClicks = 0;
+const UNIQUE_CLICK_WINDOW_MS = 30 * 60 * 1000;
 
-  for (const row of clickRows) {
-    const clickedAt = row?.clicked_at;
-    if (clickedAt) {
-      const dayKey = getAnalyticsDayKey(clickedAt);
-      timelineMap.set(dayKey, (timelineMap.get(dayKey) || 0) + 1);
-    }
+function getAnalyticsVisitorKey(row = {}) {
+  const linkId = Number(row?.link_id || row?.links?.id || 0) || 0;
+  const ip = String(row?.ip || "").trim() || "no-ip";
+  const ua = String(row?.user_agent || "").trim() || "no-ua";
+  return `${linkId}:${ip}:${ua}`;
+}
 
-    const countryCode = normalizeCountryCode(row?.country_code);
-    const countryName =
-      normalizeAnalyticsText(row?.country_name, 120) ||
-      getCountryNameFromCode(countryCode) ||
-      "Không rõ";
-    const cityName = normalizeAnalyticsText(row?.city, 120) || "Không rõ";
-    if (countryCode) {
-      trackedGeoClicks += 1;
-      if (!countryMap.has(countryCode)) {
-        countryMap.set(countryCode, {
-          country_code: countryCode,
-          country_name: countryName,
-          clicks: 0,
-          cities: new Map(),
-        });
-      }
-      const countryEntry = countryMap.get(countryCode);
-      countryEntry.clicks += 1;
-      countryEntry.cities.set(cityName, (countryEntry.cities.get(cityName) || 0) + 1);
-    }
-
-    const platform = getLinkAnalyticsPlatform(row?.link || row);
-    if (!platformMap.has(platform.key)) {
-      platformMap.set(platform.key, {
-        key: platform.key,
-        label: platform.label,
-        color: platform.color,
-        clicks: 0,
-      });
-    }
-    platformMap.get(platform.key).clicks += 1;
+function accumulateAnalyticsMaps(target, row, { unique = false } = {}) {
+  const clickedAt = row?.clicked_at;
+  if (clickedAt) {
+    const dayKey = getAnalyticsDayKey(clickedAt);
+    target.timelineMap.set(dayKey, (target.timelineMap.get(dayKey) || 0) + 1);
   }
 
-  const totalClicks = clickRows.length;
-  const timeline = [...timelineMap.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([date, clicks]) => ({ date, clicks }));
-  const topCountries = [...countryMap.values()]
+  const countryCode = normalizeCountryCode(row?.country_code);
+  const countryName =
+    normalizeAnalyticsText(row?.country_name, 120) ||
+    getCountryNameFromCode(countryCode) ||
+    "Không rõ";
+  const cityName = normalizeAnalyticsText(row?.city, 120) || "Không rõ";
+  if (countryCode) {
+    target.trackedGeoClicks += 1;
+    if (!target.countryMap.has(countryCode)) {
+      target.countryMap.set(countryCode, {
+        country_code: countryCode,
+        country_name: countryName,
+        clicks: 0,
+        cities: new Map(),
+      });
+    }
+    const countryEntry = target.countryMap.get(countryCode);
+    countryEntry.clicks += 1;
+    countryEntry.cities.set(cityName, (countryEntry.cities.get(cityName) || 0) + 1);
+  }
+
+  const platform = getLinkAnalyticsPlatform(row?.links || row?.link || row);
+  if (!target.platformMap.has(platform.key)) {
+    target.platformMap.set(platform.key, {
+      key: platform.key,
+      label: platform.label,
+      color: platform.color,
+      clicks: 0,
+      unique,
+    });
+  }
+  target.platformMap.get(platform.key).clicks += 1;
+}
+
+function finalizeAnalyticsCountryList(countryMap = new Map()) {
+  return [...countryMap.values()]
     .sort((a, b) => b.clicks - a.clicks)
     .map((country) => {
       const topCity =
@@ -961,7 +962,16 @@ function buildStatsAnalytics(clickRows = []) {
         city_clicks: topCity[1] || 0,
       };
     });
-  const platformDistribution = [...platformMap.values()]
+}
+
+function finalizeAnalyticsTimeline(timelineMap = new Map()) {
+  return [...timelineMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, clicks]) => ({ date, clicks }));
+}
+
+function finalizePlatformDistribution(platformMap = new Map(), totalClicks = 0) {
+  return [...platformMap.values()]
     .sort((a, b) => b.clicks - a.clicks)
     .map((platform) => ({
       ...platform,
@@ -969,13 +979,68 @@ function buildStatsAnalytics(clickRows = []) {
         ? Math.round((platform.clicks / totalClicks) * 1000) / 10
         : 0,
     }));
+}
+
+function buildStatsAnalytics(clickRows = []) {
+  const rawState = {
+    timelineMap: new Map(),
+    countryMap: new Map(),
+    platformMap: new Map(),
+    trackedGeoClicks: 0,
+  };
+  const uniqueState = {
+    timelineMap: new Map(),
+    countryMap: new Map(),
+    platformMap: new Map(),
+    trackedGeoClicks: 0,
+  };
+  const sortedRows = [...clickRows].sort((a, b) => {
+    const left = new Date(a?.clicked_at || 0).getTime();
+    const right = new Date(b?.clicked_at || 0).getTime();
+    return left - right;
+  });
+  const lastSeenByVisitor = new Map();
+
+  for (const row of sortedRows) {
+    accumulateAnalyticsMaps(rawState, row, { unique: false });
+
+    const clickedAtMs = new Date(row?.clicked_at || 0).getTime();
+    if (!Number.isFinite(clickedAtMs)) continue;
+    const visitorKey = getAnalyticsVisitorKey(row);
+    const lastSeenMs = lastSeenByVisitor.get(visitorKey) || 0;
+    const isUnique =
+      !lastSeenMs || clickedAtMs - lastSeenMs > UNIQUE_CLICK_WINDOW_MS;
+    if (!isUnique) continue;
+    lastSeenByVisitor.set(visitorKey, clickedAtMs);
+    accumulateAnalyticsMaps(uniqueState, row, { unique: true });
+  }
+
+  const rawClicks = sortedRows.length;
+  const uniqueClicks = [...uniqueState.timelineMap.values()].reduce(
+    (sum, value) => sum + value,
+    0,
+  );
+  const timeline = finalizeAnalyticsTimeline(rawState.timelineMap);
+  const uniqueTimeline = finalizeAnalyticsTimeline(uniqueState.timelineMap);
+  const topCountries = finalizeAnalyticsCountryList(rawState.countryMap);
+  const uniqueTopCountries = finalizeAnalyticsCountryList(uniqueState.countryMap);
+  const platformDistribution = finalizePlatformDistribution(
+    rawState.platformMap,
+    rawClicks,
+  );
+  const uniquePlatformDistribution = finalizePlatformDistribution(
+    uniqueState.platformMap,
+    uniqueClicks,
+  );
 
   return {
-    total_clicks: totalClicks,
+    total_clicks: rawClicks,
+    unique_clicks: uniqueClicks,
     timeline,
+    unique_timeline: uniqueTimeline,
     geo: {
-      tracked_clicks: trackedGeoClicks,
-      unknown_clicks: Math.max(totalClicks - trackedGeoClicks, 0),
+      tracked_clicks: rawState.trackedGeoClicks,
+      unknown_clicks: Math.max(rawClicks - rawState.trackedGeoClicks, 0),
       countries: topCountries.map((country) => ({
         country_code: country.country_code,
         country_name: country.country_name,
@@ -983,10 +1048,21 @@ function buildStatsAnalytics(clickRows = []) {
         clicks: country.clicks,
       })),
       top_countries: topCountries.slice(0, 8),
+      unique_tracked_clicks: uniqueState.trackedGeoClicks,
+      unique_unknown_clicks: Math.max(uniqueClicks - uniqueState.trackedGeoClicks, 0),
+      unique_countries: uniqueTopCountries.map((country) => ({
+        country_code: country.country_code,
+        country_name: country.country_name,
+        country_name_en: country.country_name_en,
+        clicks: country.clicks,
+      })),
+      unique_top_countries: uniqueTopCountries.slice(0, 8),
     },
     platforms: {
       distribution: platformDistribution,
       top_platforms: platformDistribution.slice(0, 8),
+      unique_distribution: uniquePlatformDistribution,
+      unique_top_platforms: uniquePlatformDistribution.slice(0, 8),
     },
   };
 }
@@ -1420,6 +1496,186 @@ function buildAdminAlertPayload(domains = []) {
       kind: alertLevelToNotificationKind(item.level),
       page: "admin",
     })),
+  };
+}
+
+function buildAdminOverviewPayload({
+  totals = {},
+  today = {},
+  analytics = {},
+  users = [],
+  links = [],
+  payments = [],
+  domains = [],
+  currentTime = new Date(),
+} = {}) {
+  const dayKey = getAnalyticsDayKey(currentTime);
+  const monthKey = dayKey.slice(0, 7);
+  const uniqueClicksToday =
+    (analytics.unique_timeline || []).find((item) => item.date === dayKey)?.clicks || 0;
+  const rawClicksToday =
+    (analytics.timeline || []).find((item) => item.date === dayKey)?.clicks || 0;
+  const pendingPayments = payments.filter((item) => item?.status === "submitted");
+  const awaitingPayments = payments.filter((item) => item?.status === "awaiting_payment");
+  const approvedToday = payments.filter(
+    (item) =>
+      item?.status === "approved" &&
+      item?.reviewed_at &&
+      getAnalyticsDayKey(item.reviewed_at) === dayKey,
+  );
+  const rejectedToday = payments.filter(
+    (item) =>
+      item?.status === "rejected" &&
+      item?.reviewed_at &&
+      getAnalyticsDayKey(item.reviewed_at) === dayKey,
+  );
+  const approvedThisMonth = payments.filter(
+    (item) =>
+      item?.status === "approved" &&
+      item?.reviewed_at &&
+      getAnalyticsDayKey(item.reviewed_at).slice(0, 7) === monthKey,
+  );
+  const domainAlerts = buildDomainAlerts(domains, currentTime.getTime());
+  const activeDomains = domains.filter((item) => item?.is_active !== false);
+  const failedDomains = activeDomains.filter(
+    (item) => normalizeDomainVerificationStatus(item?.verification_status) === "failed",
+  );
+  const pendingDomains = activeDomains.filter(
+    (item) => normalizeDomainVerificationStatus(item?.verification_status) === "pending",
+  );
+  const expiringDomains = domainAlerts.filter((item) => item?.type === "expiring");
+
+  const planCounts = new Map();
+  for (const userItem of users) {
+    const planKey = String(userItem?.plan || "free").trim().toLowerCase() || "free";
+    planCounts.set(planKey, (planCounts.get(planKey) || 0) + 1);
+  }
+  const plans = [...planCounts.entries()]
+    .map(([key, count]) => ({
+      key,
+      label: key === "admin" ? "Admin" : key.toUpperCase(),
+      count,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const actions = [];
+  if (pendingPayments.length) {
+    actions.push({
+      tone: "warn",
+      title: `${pendingPayments.length} yêu cầu thanh toán chờ duyệt`,
+      message: "Mở tab Thanh toán để duyệt hoặc từ chối các yêu cầu mới gửi.",
+    });
+  }
+  if (failedDomains.length) {
+    actions.push({
+      tone: "err",
+      title: `${failedDomains.length} domain verify lỗi`,
+      message: "Kiểm tra cấu hình DNS hoặc trạng thái verify trong tab Hệ thống.",
+    });
+  }
+  if (pendingDomains.length) {
+    actions.push({
+      tone: "info",
+      title: `${pendingDomains.length} domain đang chờ verify`,
+      message: "Theo dõi các domain pending để tránh ảnh hưởng luồng tạo link.",
+    });
+  }
+  if (Number(today.usersToday || 0) > 0) {
+    actions.push({
+      tone: "ok",
+      title: `${Number(today.usersToday || 0).toLocaleString("vi-VN")} user mới hôm nay`,
+      message: "Tab Người dùng vừa có thêm thành viên mới cần theo dõi onboarding.",
+    });
+  }
+  if (uniqueClicksToday > 0) {
+    actions.push({
+      tone: "ok",
+      title: `${Number(uniqueClicksToday || 0).toLocaleString("vi-VN")} click unique hôm nay`,
+      message: "Traffic hôm nay đang có tín hiệu, có thể rà tiếp ở tab Thống kê.",
+    });
+  }
+
+  const trendDayKeys = [];
+  for (let i = 29; i >= 0; i--) {
+    const pointDate = new Date(currentTime);
+    pointDate.setDate(pointDate.getDate() - i);
+    trendDayKeys.push(getAnalyticsDayKey(pointDate));
+  }
+  const createSeriesMap = () =>
+    new Map(trendDayKeys.map((key) => [key, 0]));
+  const userTrendMap = createSeriesMap();
+  const clickTrendMap = createSeriesMap();
+  const paymentTrendMap = createSeriesMap();
+
+  for (const userItem of users) {
+    const key = getAnalyticsDayKey(userItem?.created_at);
+    if (!userTrendMap.has(key)) continue;
+    userTrendMap.set(key, (userTrendMap.get(key) || 0) + 1);
+  }
+  for (const item of analytics.unique_timeline || []) {
+    const key = String(item?.date || "");
+    if (!clickTrendMap.has(key)) continue;
+    clickTrendMap.set(key, Number(item?.clicks || 0));
+  }
+  for (const payment of payments) {
+    const paymentDate =
+      payment?.submitted_at ||
+      (payment?.status && payment.status !== "awaiting_payment"
+        ? payment?.reviewed_at || payment?.created_at
+        : null);
+    if (!paymentDate) continue;
+    const key = getAnalyticsDayKey(paymentDate);
+    if (!paymentTrendMap.has(key)) continue;
+    paymentTrendMap.set(key, (paymentTrendMap.get(key) || 0) + 1);
+  }
+
+  return {
+    cards: {
+      total_users: Number(totals.totalUsers || 0),
+      users_today: Number(today.usersToday || 0),
+      total_links: Number(totals.totalLinks || 0),
+      links_today: Number(today.linksToday || 0),
+      unique_clicks_today: Number(uniqueClicksToday || 0),
+      pending_payments: pendingPayments.length,
+    },
+    actions: actions.slice(0, 5),
+    health: {
+      active_domains: activeDomains.length,
+      pending_domains: pendingDomains.length,
+      failed_domains: failedDomains.length,
+      expiring_domains: expiringDomains.length,
+      awaiting_payments: awaitingPayments.length,
+      approved_today: approvedToday.length,
+      rejected_today: rejectedToday.length,
+      approved_revenue_month: approvedThisMonth.reduce(
+        (sum, item) => sum + Number(item?.amount || 0),
+        0,
+      ),
+      raw_clicks_today: Number(today.clicksToday || 0),
+      unique_clicks_today: Number(uniqueClicksToday || 0),
+      total_unique_clicks: Number(analytics.unique_clicks || 0),
+      total_raw_clicks: Number(totals.totalClicks || 0),
+    },
+    plans,
+    top_links: [...links]
+      .sort((a, b) => Number(b?.clicks || 0) - Number(a?.clicks || 0))
+      .slice(0, 5)
+      .map((item) => ({
+        short_code: item?.short_code || item?.alias || "link",
+        original_url: item?.original_url || "",
+        clicks: Number(item?.clicks || 0),
+        link_type: item?.link_type || "direct",
+      })),
+    trends: {
+      day_keys: trendDayKeys,
+      labels: trendDayKeys.map((key) => {
+        const [year, month, day] = String(key).split("-");
+        return `${day}/${month}`;
+      }),
+      users: trendDayKeys.map((key) => Number(userTrendMap.get(key) || 0)),
+      clicks: trendDayKeys.map((key) => Number(clickTrendMap.get(key) || 0)),
+      payments: trendDayKeys.map((key) => Number(paymentTrendMap.get(key) || 0)),
+    },
   };
 }
 
@@ -2347,6 +2603,36 @@ app.post("/api/billing/requests", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Gói thanh toán không hợp lệ" });
     }
     const database = await getDb();
+    const activeRequest = await database.getLatestActivePaymentRequestByUser(user.id);
+    if (activeRequest?.status === "submitted") {
+      return res.status(409).json({
+        error: "Bạn đã có yêu cầu thanh toán đang chờ admin duyệt",
+        request: activeRequest,
+        config: getPaymentConfig(),
+        active: true,
+      });
+    }
+    if (activeRequest?.status === "awaiting_payment") {
+      const transferNote = buildPaymentTransferNote(
+        user,
+        planMeta.code,
+        activeRequest.reference_code,
+      );
+      const reusedRequest = await database.updatePaymentRequest(activeRequest.id, {
+        plan: planMeta.code,
+        amount: planMeta.amount,
+        transfer_note: transferNote,
+        payer_note:
+          String(req.body?.payer_note || activeRequest.payer_note || "")
+            .trim()
+            .slice(0, 240) || null,
+      });
+      return res.status(200).json({
+        request: reusedRequest,
+        config: getPaymentConfig(),
+        reused: true,
+      });
+    }
     const referenceCode = `PAY${Date.now().toString(36).toUpperCase()}${nanoid(4).toUpperCase()}`;
     const transferNote = buildPaymentTransferNote(user, planMeta.code, referenceCode);
     const request = await database.createPaymentRequest({
@@ -2378,6 +2664,14 @@ app.patch("/api/billing/requests/:id/submit", requireAuth, async (req, res) => {
     const request = await database.getPaymentRequestById(requestId);
     if (!request || Number(request.user_id) !== Number(user.id)) {
       return res.status(404).json({ error: "Không tìm thấy yêu cầu thanh toán" });
+    }
+    if (request.status === "submitted") {
+      return res.status(409).json({ error: "Yêu cầu này đã được gửi chờ admin duyệt" });
+    }
+    if (request.status !== "awaiting_payment") {
+      return res.status(400).json({
+        error: "Chỉ yêu cầu đang chờ thanh toán mới được gửi xác nhận",
+      });
     }
     const updated = await database.updatePaymentRequest(requestId, {
       status: "submitted",
@@ -2833,6 +3127,11 @@ app.patch("/api/admin/payments/:id", requireAdmin, async (req, res) => {
     if (!["approved", "rejected"].includes(action)) {
       return res.status(400).json({ error: "Trạng thái duyệt không hợp lệ" });
     }
+    if (paymentRequest.status !== "submitted") {
+      return res.status(400).json({
+        error: "Chỉ yêu cầu đã gửi xác nhận mới được duyệt hoặc từ chối",
+      });
+    }
     const patch = {
       status: action,
       admin_note: String(req.body?.admin_note || "").trim().slice(0, 240) || null,
@@ -2935,10 +3234,38 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
-    const totals = await database.getAdminTotals();
-    const domains = await database.getDomains();
+    const [
+      totals,
+      today,
+      domains,
+      users,
+      links,
+      payments,
+      clickRows,
+    ] = await Promise.all([
+      database.getAdminTotals(),
+      database.getAdminTodayStats(),
+      database.getDomains(),
+      database.getAllUsers(),
+      database.getAllLinks(),
+      database.listPaymentRequests(300),
+      database.getAdminClickAnalytics(5000),
+    ]);
+    const analytics = buildStatsAnalytics(clickRows);
     res.json({
       ...totals,
+      ...today,
+      analytics,
+      overview: buildAdminOverviewPayload({
+        totals,
+        today,
+        analytics,
+        users,
+        links,
+        payments,
+        domains,
+        currentTime: new Date(),
+      }),
       alerts: buildAdminAlertPayload(domains),
     });
   } catch (e) {
@@ -3431,6 +3758,9 @@ app.get("/api/stats", async (req, res) => {
     const today = await database.getTodayStats(userId, guestSessionId);
     const clickRows = await database.getClickAnalytics(userId, guestSessionId);
     const analytics = buildStatsAnalytics(clickRows);
+    const todayKey = getAnalyticsDayKey(new Date());
+    const uniqueClicksToday =
+      (analytics.unique_timeline || []).find((item) => item.date === todayKey)?.clicks || 0;
     const latestLoginEvent = user ? await database.getLatestLoginEvent(user.id) : null;
     const workspaceContext = user
       ? await resolveWorkspaceContext(database, user, { ensureOwnerWorkspace: false })
@@ -3456,6 +3786,12 @@ app.get("/api/stats", async (req, res) => {
     res.json({
       ...totals,
       ...today,
+      totalClicks: analytics.unique_clicks || 0,
+      uniqueTotalClicks: analytics.unique_clicks || 0,
+      rawTotalClicks: totals.totalClicks || 0,
+      clicksToday: uniqueClicksToday,
+      uniqueClicksToday,
+      rawClicksToday: today.clicksToday || 0,
       recent,
       analytics,
       alerts,

@@ -1235,22 +1235,6 @@
               </svg>
               <span class="slabel">Trang tiểu sử</span>
             </div>
-            <div class="sitem" onclick="navigate('integrations', this)">
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path d="M7 7h10v10H7z" />
-                <path d="M10 10h4v4h-4z" />
-                <path d="M4 12H2" />
-                <path d="M22 12h-2" />
-              </svg>
-              <span class="slabel">Tích hợp</span>
-            </div>
             <div class="sitem" onclick="navigate('team', this)">
               <svg
                 width="15"
@@ -1753,34 +1737,6 @@
             </div>
           </div>
 
-          <!-- INTEGRATIONS -->
-          <div class="page" id="page-integrations">
-            <div class="ph">
-              <h1>Tích hợp</h1>
-              <p>Nối BocLink với công cụ tự động hóa, CMS và API</p>
-            </div>
-            <div class="integration-head">
-              <div class="integration-banner">
-                <div class="tool-kicker">Tích hợp 3D</div>
-                <h3>Kết nối workflow thay vì chỉ rút gọn link</h3>
-                <p>Bật những integration cần thiết cho team, agency hoặc affiliate workflow. Các thẻ dưới đây mô phỏng kiểu panel 3D.</p>
-              </div>
-              <div class="integration-summary">
-                <div class="integration-summary-card"><span class="k">API</span><b>Developer access</b><p>Webhook, API key, payload và tài liệu quick-start.</p></div>
-                <div class="integration-summary-card"><span class="k">CMS</span><b>WordPress / Site</b><p>Nhúng link card vào bài viết, trang bán hàng hoặc landing page.</p></div>
-                <div class="integration-summary-card"><span class="k">Automation</span><b>Zapier / Shortcuts</b><p>Tự động tạo link và đẩy dữ liệu sang hệ thống ngoài.</p></div>
-              </div>
-            </div>
-            <div class="integration-grid">
-              <div class="integration-card" data-integration="zapier"><div class="integration-card-top"><div><div class="integration-name">Zapier</div><div class="integration-desc">Kéo link mới vào flow tự động hóa.</div></div><span class="integration-status" id="intZapierState">Chưa kết nối</span></div><div class="integration-tags"><span>Trigger</span><span>Webhook</span><span>No-code</span></div><div class="integration-actions"><button class="user-btn primary" type="button" onclick="toggleIntegration('zapier')">Kết nối</button><button class="user-btn secondary" type="button" onclick="copyIntegrationSnippet('zapier')">Sao chép</button></div></div>
-              <div class="integration-card" data-integration="wordpress"><div class="integration-card-top"><div><div class="integration-name">WordPress</div><div class="integration-desc">Gắn link card hoặc shortcode vào bài viết.</div></div><span class="integration-status" id="intWpState">Chưa kết nối</span></div><div class="integration-tags"><span>Shortcode</span><span>Embed</span><span>CMS</span></div><div class="integration-actions"><button class="user-btn primary" type="button" onclick="toggleIntegration('wordpress')">Kết nối</button><button class="user-btn secondary" type="button" onclick="copyIntegrationSnippet('wordpress')">Sao chép</button></div></div>
-              <div class="integration-card" data-integration="shortcuts"><div class="integration-card-top"><div><div class="integration-name">Shortcuts</div><div class="integration-desc">Tạo link nhanh từ iOS Shortcuts / macOS.</div></div><span class="integration-status" id="intShortcutState">Chưa kết nối</span></div><div class="integration-tags"><span>iOS</span><span>macOS</span><span>Share sheet</span></div><div class="integration-actions"><button class="user-btn primary" type="button" onclick="toggleIntegration('shortcuts')">Kết nối</button><button class="user-btn secondary" type="button" onclick="copyIntegrationSnippet('shortcuts')">Sao chép</button></div></div>
-              <div class="integration-card" data-integration="webhook"><div class="integration-card-top"><div><div class="integration-name">Webhook</div><div class="integration-desc">Đẩy payload khi link được tạo hoặc có click mới.</div></div><span class="integration-status" id="intWebhookState">Chưa kết nối</span></div><div class="integration-tags"><span>POST</span><span>JSON</span><span>Realtime</span></div><div class="integration-actions"><button class="user-btn primary" type="button" onclick="toggleIntegration('webhook')">Kết nối</button><button class="user-btn secondary" type="button" onclick="copyIntegrationSnippet('webhook')">Sao chép</button></div></div>
-              <div class="integration-card" data-integration="developer"><div class="integration-card-top"><div><div class="integration-name">Developer API</div><div class="integration-desc">API key, docs endpoint và token management.</div></div><span class="integration-status" id="intDevState">Chưa kích hoạt</span></div><div class="integration-tags"><span>API key</span><span>Docs</span><span>Business</span></div><div class="integration-actions"><button class="user-btn primary" type="button" onclick="toggleIntegration('developer')">Kích hoạt</button><button class="user-btn secondary" type="button" onclick="copyIntegrationSnippet('developer')">Sao chép</button></div></div>
-              <div class="integration-card integration-card-spot"><div class="integration-card-top"><div><div class="integration-name">Google Sheets</div><div class="integration-desc">Đang nghiên cứu sync hàng loạt từ sheet.</div></div><span class="integration-status warning">Sắp có</span></div><div class="integration-tags"><span>Batch</span><span>Import</span><span>Reporting</span></div><div class="integration-actions"><button class="user-btn secondary" type="button" disabled>Sắp có</button></div></div>
-            </div>
-          </div>
-
           <div class="page" id="page-team">
             <div class="ph">
               <h1>Làm việc nhóm</h1>
@@ -1827,7 +1783,7 @@
             <div class="team-panel-stack">
               <div class="team-panel-grid">
                 <div class="integration-card"><div class="integration-card-top"><div><div class="integration-name">Quy trình giao việc</div><div class="integration-desc">Chia nhỏ công việc theo role để không dồn mọi thứ vào một người.</div></div><span class="integration-status success">Đề xuất</span></div><div class="integration-tags"><span>Owner</span><span>Editor</span><span>Analyst</span></div><div class="card-p" style="padding: 0; border: 0"><div class="user-note">1. Owner chốt rule, domain, pricing.</div><div class="user-note">2. Editor tạo/sửa link, QR, bio.</div><div class="user-note">3. Analyst đọc stats và phản hồi nhanh.</div></div></div>
-                <div class="integration-card"><div class="integration-card-top"><div><div class="integration-name">Domain & phê duyệt</div><div class="integration-desc">Giữ domain chính, bio public và affiliate confirmation theo cùng chuẩn.</div></div><span class="integration-status" id="teamDomainLabel">boclink.click</span></div><div class="integration-tags"><span>Domain</span><span>Approval</span><span>Affiliate</span></div><div class="integration-actions"><button class="user-btn secondary" type="button" onclick="navigate('integrations')">Xem tích hợp</button><button class="user-btn secondary" type="button" onclick="navigate('bio')">Mô phỏng bio</button></div></div>
+                <div class="integration-card"><div class="integration-card-top"><div><div class="integration-name">Domain & phê duyệt</div><div class="integration-desc">Giữ domain chính, bio public và affiliate confirmation theo cùng chuẩn.</div></div><span class="integration-status" id="teamDomainLabel">boclink.click</span></div><div class="integration-tags"><span>Domain</span><span>Approval</span><span>Affiliate</span></div><div class="integration-actions"><button class="user-btn secondary" type="button" onclick="navigate('links')">Xem liên kết</button><button class="user-btn secondary" type="button" onclick="navigate('bio')">Mô phỏng bio</button></div></div>
               </div>
               <div class="integration-card team-quick-card"><div class="integration-card-top"><div><div class="integration-name">Quick action</div><div class="integration-desc">Chuyển nhanh sang các tab nhóm thường xuyên phối hợp.</div></div><span class="integration-status warning">Nhẹ & nhanh</span></div><div class="integration-actions"><button class="user-btn primary" type="button" onclick="navigate('create')">Tạo link</button><button class="user-btn secondary" type="button" onclick="navigate('links')">Rà link</button><button class="user-btn secondary" type="button" onclick="navigate('stats')">Xem stats</button></div></div>
             </div>
@@ -2555,6 +2511,18 @@
                 </div>
                 <div class="sc">
                   <div class="sc-top">
+                    <span class="sc-lbl">Người dùng mới hôm nay</span>
+                    <div
+                      class="sc-icon"
+                      style="background: rgba(16, 185, 129, 0.12)"
+                    >
+                      🆕
+                    </div>
+                  </div>
+                  <div class="sc-val" id="adUsersToday">–</div>
+                </div>
+                <div class="sc">
+                  <div class="sc-top">
                     <span class="sc-lbl">Tổng link</span>
                     <div
                       class="sc-icon"
@@ -2567,7 +2535,19 @@
                 </div>
                 <div class="sc">
                   <div class="sc-top">
-                    <span class="sc-lbl">Tổng lượt click</span>
+                    <span class="sc-lbl">Link mới hôm nay</span>
+                    <div
+                      class="sc-icon"
+                      style="background: rgba(14, 165, 233, 0.12)"
+                    >
+                      ⚡
+                    </div>
+                  </div>
+                  <div class="sc-val" id="adLinksToday">–</div>
+                </div>
+                <div class="sc">
+                  <div class="sc-top">
+                    <span class="sc-lbl">Click unique hôm nay</span>
                     <div
                       class="sc-icon"
                       style="background: rgba(34, 197, 94, 0.12)"
@@ -2575,7 +2555,58 @@
                       📊
                     </div>
                   </div>
-                  <div class="sc-val" id="adTotalClicks">–</div>
+                  <div class="sc-val" id="adUniqueClicksToday">–</div>
+                  <div class="sc-sub" id="adTotalClicksSub">Tổng raw click: –</div>
+                </div>
+                <div class="sc">
+                  <div class="sc-top">
+                    <span class="sc-lbl">Thanh toán chờ duyệt</span>
+                    <div
+                      class="sc-icon"
+                      style="background: rgba(245, 158, 11, 0.14)"
+                    >
+                      💳
+                    </div>
+                  </div>
+                  <div class="sc-val" id="adPendingPayments">–</div>
+                  <div class="sc-sub" id="adAwaitingPaymentsSub">Đang chờ chuyển khoản: –</div>
+                </div>
+              </div>
+
+              <div class="admin-overview-grid">
+                <div class="tbl-card admin-overview-chart-card">
+                  <div class="tbl-head admin-overview-chart-head">
+                    <div>
+                      <h3>Xu hướng vận hành</h3>
+                      <p>User mới, click unique và yêu cầu thanh toán theo ngày</p>
+                    </div>
+                    <div class="admin-overview-range">
+                      <button
+                        class="admin-overview-range-btn active"
+                        type="button"
+                        id="adminOverviewRange7"
+                        onclick="setAdminOverviewRange(7)"
+                      >
+                        7 ngày
+                      </button>
+                      <button
+                        class="admin-overview-range-btn"
+                        type="button"
+                        id="adminOverviewRange30"
+                        onclick="setAdminOverviewRange(30)"
+                      >
+                        30 ngày
+                      </button>
+                    </div>
+                  </div>
+                  <div class="admin-overview-chart-meta" id="adminOverviewChartMeta">
+                    <span>User mới: –</span>
+                    <span>Click unique: –</span>
+                    <span>Thanh toán: –</span>
+                  </div>
+                  <div class="admin-overview-chart-wrap">
+                    <canvas id="adminOverviewChart"></canvas>
+                  </div>
                 </div>
               </div>
             </section>
@@ -3167,6 +3198,46 @@
           <button class="btn-cancel" onclick="closeEditModal()">Hủy</button>
           <button class="btn-save" id="editSaveBtn" onclick="saveEditLink()">
             💾 Lưu thay đổi
+          </button>
+        </div>
+      </div>
+    </div>
+    <div
+      class="modal-backdrop hidden"
+      id="adminUserDetailModal"
+      onclick="if (event.target === this) closeAdminUserDetailModal();"
+    >
+      <div class="modal admin-user-detail-modal">
+        <div class="modal-head">
+          <h3>Thông tin người dùng</h3>
+          <div class="modal-close" onclick="closeAdminUserDetailModal()">✕</div>
+        </div>
+        <div class="admin-user-detail-hero">
+          <div class="admin-user-detail-avatar" id="adminUserDetailAvatar">U</div>
+          <div class="admin-user-detail-hero-copy">
+            <div class="admin-user-detail-title" id="adminUserDetailTitle">
+              Người dùng
+            </div>
+            <div
+              class="admin-user-detail-subtitle"
+              id="adminUserDetailSubtitle"
+            >
+              user@example.com
+            </div>
+            <div
+              class="admin-user-detail-summary"
+              id="adminUserDetailSummary"
+            ></div>
+          </div>
+        </div>
+        <div class="admin-user-detail-grid" id="adminUserDetailMeta"></div>
+        <div class="admin-user-detail-raw-wrap">
+          <div class="admin-user-detail-raw-label">Dữ liệu thô</div>
+          <pre class="admin-user-detail-raw" id="adminUserDetailRaw"></pre>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" onclick="closeAdminUserDetailModal()">
+            Đóng
           </button>
         </div>
       </div>
