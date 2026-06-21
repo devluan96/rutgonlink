@@ -72,6 +72,9 @@ let qrRenderedText = "";
 let qrStyler = null;
 let bioConfig = null;
 let appTheme = localStorage.getItem("rutgonlink-theme") || "dark";
+const appLanguageStorageKey = "rutgonlink-lang";
+let appLanguage =
+  localStorage.getItem(appLanguageStorageKey) === "en" ? "en" : "vi";
 const integrationStorageKey = "rutgonlink-integrations";
 const teamStorageKey = "rutgonlink-teamspace";
 let teamState = null;
@@ -95,6 +98,497 @@ let accountTwoFactorMode = "";
 let accountTwoFactorQr = null;
 const notificationSeenStorageKey = "rutgonlink-notification-seen";
 let seenNotificationKeys = {};
+const landingIntroCopy = {
+  vi: {
+    brandSubline: "Rút gọn link, QR, bio public và analytics",
+    heroKicker: "Bước tiếp theo",
+    heroTitle: "Tạo link ở một chỗ, xem dữ liệu ở một chỗ",
+    heroDesc:
+      "Dùng cùng một luồng như trong app: tạo link, tinh chỉnh preview và theo dõi hiệu quả mà không phải đổi giữa quá nhiều màn hình khác nhau.",
+    heroPrimary: "Bắt đầu miễn phí",
+    heroSecondary: "Đăng nhập",
+    heroQuick: "Thử rút gọn nhanh",
+    stepsTitle: "Lộ trình ngắn",
+    stepsBadge: "3 bước",
+    step1Title: "Tạo link",
+    step1Desc: "Dán URL và chọn kiểu link phù hợp.",
+    step2Title: "Tối ưu preview",
+    step2Desc: "Chỉnh OG, alias hoặc video overlay nếu cần.",
+    step3Title: "Theo dõi hiệu quả",
+    step3Desc: "Kiểm tra click và hiệu suất ngay trong dashboard.",
+    quickPlaceholder: "Dán URL dài",
+    quickSubmit: "Rút gọn",
+    resultMessage:
+      "Liên kết đã được rút gọn thành công. Muốn thêm tùy chọn tùy chỉnh?",
+    resultCta: "Bắt đầu",
+    searchPlaceholder: "Tìm link... (Ctrl+K)",
+  },
+  en: {
+    brandSubline: "Short links, QR, public bio and analytics",
+    heroKicker: "Next step",
+    heroTitle: "Create links in one place, track results in one place",
+    heroDesc:
+      "Use the same flow as the app: create links, tune previews, and review performance without jumping across too many separate screens.",
+    heroPrimary: "Start free",
+    heroSecondary: "Log in",
+    heroQuick: "Try quick shorten",
+    stepsTitle: "Quick path",
+    stepsBadge: "3 steps",
+    step1Title: "Create a link",
+    step1Desc: "Paste a URL and choose the right link type.",
+    step2Title: "Optimize preview",
+    step2Desc: "Adjust OG, alias, or video overlay when needed.",
+    step3Title: "Track performance",
+    step3Desc: "Review clicks and performance right in the dashboard.",
+    quickPlaceholder: "Paste a long URL",
+    quickSubmit: "Shorten",
+    resultMessage:
+      "Your link has been shortened. Want more control and customization?",
+    resultCta: "Get started",
+    searchPlaceholder: "Search links... (Ctrl+K)",
+  },
+};
+const appUiTextTranslations = {
+  en: {
+    "Thông báo realtime": "Realtime notifications",
+    "Chưa có thông báo mới": "No new notifications",
+    "Đã xem hết": "Mark all read",
+    "Chuông sẽ hiện các thay đổi mới về click, link, domain và quản trị.":
+      "The bell shows new changes for clicks, links, domains, and admin activity.",
+    "Khách": "Guest",
+    "Chưa đăng nhập": "Not signed in",
+    "Hồ sơ công khai": "Public profile",
+    "Thanh toán": "Billing",
+    "Bảo mật": "Security",
+    "Cài đặt": "Settings",
+    "Gói hiện tại": "Current plan",
+    "Vai trò": "Role",
+    "Trạng thái": "Status",
+    "Dùng thử": "Trial",
+    "Thanh toán / nâng cấp": "Pay / upgrade",
+    "Xem bảng giá": "View pricing",
+    "Gói Pro": "Pro plan",
+    "Gói Business": "Business plan",
+    "Chưa có yêu cầu thanh toán nào gần đây.": "No recent payment requests.",
+    "Kiểm tra nhanh trạng thái tài khoản và phiên đang dùng.":
+      "Quickly review your account status and active session.",
+    "Họ và tên": "Full name",
+    "ID người dùng": "User ID",
+    "Ngày tham gia": "Joined",
+    "Phiên hiện tại": "Current session",
+    "Đang hoạt động": "Active",
+    "Hồ sơ & tài khoản": "Profile & account",
+    "Giao diện": "Appearance",
+    "Bảo mật nâng cao": "Advanced security",
+    "Trung tâm trợ giúp": "Help center",
+    "Quản trị": "Admin",
+    "Đăng nhập": "Log in",
+    "Đăng xuất": "Log out",
+    "Tổng quan": "Overview",
+    "Bảng điều khiển": "Dashboard",
+    "Thống kê": "Analytics",
+    "Quản lý liên kết": "Link management",
+    "Liên kết": "Links",
+    "Tạo liên kết": "Create link",
+    "Mã QR": "QR",
+    "Trang tiểu sử": "Bio page",
+    "Làm việc nhóm": "Team workspace",
+    "Tài khoản": "Account",
+    "✨ Nâng cấp Pro": "✨ Upgrade to Pro",
+    "Xem gói Pro →": "View Pro plan →",
+    "Tổng quan nhanh, hành động tiếp theo và tín hiệu chính":
+      "Quick overview, next actions, and key signals",
+    "Tổng lượt nhấp": "Total clicks",
+    "Click unique": "Unique clicks",
+    "Tất cả thời gian": "All time",
+    "Click hôm nay": "Clicks today",
+    "Click unique hôm nay": "Unique clicks today",
+    "Trong ngày": "Today",
+    "Link đã tạo": "Created links",
+    "Tổng số liên kết": "Total links",
+    "Link hôm nay": "Links today",
+    "Tạo trong ngày": "Created today",
+    "Shopee deeplink": "Shopee deeplink",
+    "Click Shopee": "Shopee clicks",
+    "Link Shopee": "Shopee links",
+    "TikTok deeplink": "TikTok deeplink",
+    "Click TikTok": "TikTok clicks",
+    "Link TikTok": "TikTok links",
+    "Bước tiếp theo": "Next step",
+    "Tạo link ở một chỗ, xem dữ liệu ở một chỗ":
+      "Create links in one place, see data in one place",
+    "Dashboard chỉ giữ phần tổng quan và điều hướng nhanh. Phần tạo link, OG preview và video overlay đã được dồn về trang Tạo liên kết để giảm rối khi sử dụng.":
+      "The dashboard now focuses on overview and quick navigation. Link creation, OG preview, and video overlay have been moved into Create Link to keep the workflow cleaner.",
+    "+ Tạo link mới": "+ Create new link",
+    "Xem danh sách link": "View link list",
+    "Mở thống kê chi tiết": "Open detailed analytics",
+    "Lộ trình ngắn": "Quick path",
+    "3 bước": "3 steps",
+    "Tạo link": "Create link",
+    "Dán URL và chọn kiểu link phù hợp.":
+      "Paste a URL and choose the right link type.",
+    "Tối ưu preview": "Optimize preview",
+    "Chỉnh OG, alias hoặc video overlay nếu cần.":
+      "Adjust OG, alias, or video overlay when needed.",
+    "Theo dõi hiệu quả": "Track performance",
+    "Kiểm tra click trong tab Thống kê hoặc Liên kết.":
+      "Review clicks in Analytics or Links.",
+    "Lượt nhấp theo thời gian": "Clicks over time",
+    "Hoạt động gần đây": "Recent activity",
+    "Điều hướng nhanh": "Quick navigation",
+    "So sánh gói và nâng cấp từ menu tài khoản.":
+      "Compare plans and upgrade from the account menu.",
+    "Rút gọn với deeplink tự động & custom preview":
+      "Shorten links with automatic deeplinks and custom preview",
+    "Link mới tạo": "Latest link",
+    "Link vừa rút gọn xong để copy nhanh hoặc mở ngay.":
+      "The link you just shortened, ready to copy or open right away.",
+    "Vừa tạo": "Just created",
+    "Link mới nhất để copy, mở QR hoặc ghim vào bio.":
+      "Your latest link for quick copy, QR, or pinning to bio.",
+    "Tạo mới, deeplink, OG preview và video overlay.":
+      "Create new links, deeplinks, OG previews, and video overlays.",
+    "Tìm, lọc và quản lý link đã tạo.":
+      "Search, filter, and manage created links.",
+    "Tạo link thông minh": "Smart link builder",
+    "Dán URL, chọn kiểu link và chỉnh preview trước khi chia sẻ.":
+      "Paste a URL, choose a link type, and tune the preview before sharing.",
+    "Dán link Shopee, TikTok hoặc bất kỳ URL nào...":
+      "Paste a Shopee, TikTok, or any URL...",
+    "🔗 Trực tiếp": "🔗 Direct",
+    "Trực tiếp": "Direct",
+    "Tạo mã QR nhanh": "Create QR fast",
+    "Dùng cho poster, sticker, social post hoặc landing page.":
+      "Great for posters, stickers, social posts, or landing pages.",
+    "Kích thước": "Size",
+    "Màu QR": "QR color",
+    "Màu brand": "Brand color",
+    "Đen": "Black",
+    "Tím": "Purple",
+    "Xanh lá": "Green",
+    "Tạo / cập nhật": "Create / update",
+    "Sao chép URL": "Copy URL",
+    "Sao chép": "Copy",
+    "Rút gọn": "Shorten",
+    "Domain tạo link": "Link domain",
+    "Alias tùy chỉnh": "Custom alias",
+    "Kiểu link": "Link type",
+    "Deeplink App": "App deeplink",
+    "Video Overlay": "Video Overlay",
+    "URL video (YouTube / MP4)": "Video URL (YouTube / MP4)",
+    "Nội dung CTA (hiện sau 5s)": "CTA copy (shows after 5s)",
+    "🛒 Bấm để xem sản phẩm →": "🛒 Tap to view product →",
+    "Preview khi share (Facebook · Zalo · TikTok)":
+      "Share preview (Facebook · Zalo · TikTok)",
+    "Ảnh preview (1200×630px)": "Preview image (1200×630px)",
+    "Ảnh preview (OG Image)": "Preview image (OG image)",
+    "BocLink có QR riêng cho link, chiến dịch và bio profile. Ở đây bạn có thể tạo nhanh từ bất kỳ URL nào.":
+      "BocLink supports dedicated QR codes for links, campaigns, and bio profiles. You can create one here from any URL.",
+    "Xem trước QR": "QR preview",
+    "Chưa tạo mã QR nào": "No QR code yet",
+    "Nhập URL rồi bấm": "Enter a URL and click",
+    "Builder link-in-bio đơn giản với preview theo phong cách 3D":
+      "Simple link-in-bio builder with a 3D-style preview",
+    "Tạo trang tiểu sử": "Create a bio page",
+    "Thiết lập hồ sơ, mô tả và danh sách link nổi bật.":
+      "Set up your profile, description, and featured links.",
+    "Slug public": "Public slug",
+    "Tiêu đề": "Title",
+    "Mô tả ngắn": "Short description",
+    "Avatar / chữ cái": "Avatar / initials",
+    "Màu nhấn": "Accent color",
+    "Số link tối đa": "Max links",
+    "Nguồn dự phòng": "Fallback source",
+    "Link gần đây": "Recent links",
+    "Tất cả link": "All links",
+    "Danh sách link public": "Public link list",
+    "Kéo thả để sắp xếp. Khi đã ghim link, public page sẽ ưu tiên đúng thứ tự này.":
+      "Drag to reorder. Once pinned, the public page will preserve this exact order.",
+    "Dùng link gần đây": "Use recent links",
+    "Dùng tất cả": "Use all",
+    "Xóa thứ tự": "Clear order",
+    "Có thể ghim tối đa 20 link. Dùng nút ↑ ↓ trên mobile nếu không tiện kéo.":
+      "You can pin up to 20 links. Use the ↑ ↓ buttons on mobile if drag-and-drop feels awkward.",
+    "Link có sẵn": "Available links",
+    "Lưu cục bộ": "Save locally",
+    "Làm mới preview": "Refresh preview",
+    "Xem trước tiểu sử": "Bio preview",
+    "Preview sẽ tự cập nhật theo dữ liệu bên trái và thứ tự link public":
+      "The preview updates automatically from the fields on the left and your public link order.",
+    "Làm việc nhóm": "Team workspace",
+    "Gom người, quy trình và quick action cho workspace vào cùng một chỗ.":
+      "Bring people, workflow, and quick actions into one workspace.",
+    "Thành viên": "Members",
+    "Workspace cá nhân": "Personal workspace",
+    "Những người có thể thao tác ngay": "People who can act right away",
+    "Lời mời": "Invitations",
+    "Đang chờ xác nhận": "Awaiting confirmation",
+    "Workspace": "Workspace",
+    "Owner + editor + analyst trong một luồng.":
+      "Owner + editor + analyst in one shared flow.",
+    "Thành viên workspace": "Workspace members",
+    "Email có thể mời": "Invite email",
+    "Mời thành viên": "Invite member",
+    "Người dùng": "Users",
+    "Hoạt động gần nhất": "Last activity",
+    "Mẫu link chung": "Shared templates",
+    "Mẫu chung chỉ lưu nội dung share, kiểu link, video overlay và domain. Khi bấm":
+      "Shared templates only store shared copy, link type, video overlay, and domain. When you click",
+    "Mẫu link chung chỉ lưu nội dung share, kiểu link, video overlay và domain. Khi bấm Lấy link cho tôi, user sẽ qua tab Tạo link với nội dung đã khóa sẵn, còn URL đích là do user tự dán.":
+      "Shared templates only store shared copy, link type, video overlay, and domain. When the user clicks Get link for me, they will move to Create Link with the template content prefilled while the destination URL stays theirs to paste.",
+    "Lấy link cho tôi": "Get link for me",
+    "user sẽ qua tab Tạo link với nội dung đã khóa sẵn, còn URL đích là do user tự dán.":
+      "the user is taken to Create Link with the template content prefilled, while the destination URL remains theirs to paste.",
+    "Tên mẫu chung": "Shared template name",
+    "Tạo mẫu chung": "Create shared template",
+    "Tạo link cá nhân": "Create personal link",
+    "Quy trình giao việc": "Workflow split",
+    "Chia nhỏ công việc theo role để không dồn mọi thứ vào một người.":
+      "Split work by role so everything does not land on one person.",
+    "Đề xuất": "Suggested",
+    "Domain & phê duyệt": "Domain & approvals",
+    "Xem liên kết": "View links",
+    "Mô phỏng bio": "Preview bio",
+    "Nhẹ & nhanh": "Light & fast",
+    "Rà link": "Review links",
+    "Xem stats": "View stats",
+    "Tất cả link đã tạo": "All created links",
+    "Danh sách liên kết": "Link list",
+    "Tất cả": "All",
+    "Khác": "Other",
+    "OG Meta": "OG meta",
+    "Clicks": "Clicks",
+    "Bỏ chọn": "Clear selection",
+    "Xóa đã chọn": "Delete selected",
+    "Link rút gọn": "Short link",
+    "Link gốc": "Original link",
+    "Nền tảng": "Platform",
+    "Ngày tạo": "Created",
+    "Bảo mật tài khoản": "Account security",
+    "Hồ sơ cá nhân": "Personal profile",
+    "Cập nhật tên hiển thị, số điện thoại và avatar dùng trong dashboard.":
+      "Update your display name, phone number, and avatar used across the dashboard.",
+    "Mở bio public": "Open public bio",
+    "Tên hiển thị": "Display name",
+    "Tên hiển thị của bạn": "Your display name",
+    "Số điện thoại": "Phone number",
+    "Ví dụ: 09xx xxx xxx": "Example: 09xx xxx xxx",
+    "Email đăng nhập": "Login email",
+    "URL avatar": "Avatar URL",
+    "Upload ảnh": "Upload image",
+    "Lưu hồ sơ": "Save profile",
+    "Hoàn tác": "Revert",
+    "Avatar có thể dùng ảnh đã upload hoặc URL tuyệt đối.":
+      "Your avatar can use an uploaded image or an absolute URL.",
+    "Bảo mật & 2FA": "Security & 2FA",
+    "Bật xác thực 2 lớp bằng ứng dụng OTP để bảo vệ đăng nhập.":
+      "Enable two-factor authentication with an OTP app to protect sign-in.",
+    "Chưa bật": "Not enabled",
+    "Bật 2FA để yêu cầu thêm lớp xác minh khi đăng nhập từ trình duyệt hoặc thiết bị mới.":
+      "Enable 2FA to require an extra verification step when signing in from a browser or a new device.",
+    "Bật 2FA": "Enable 2FA",
+    "Hủy thiết lập": "Cancel setup",
+    "Mã xác minh 6 số": "6-digit verification code",
+    "Đang kiểm tra": "Checking",
+    "Chưa tải dữ liệu bảo mật.": "Security data has not loaded yet.",
+    "Khóa thiết lập thủ công": "Manual setup key",
+    "Quét mã bằng Google Authenticator, 1Password, Authy hoặc app OTP tương tự.":
+      "Scan the code with Google Authenticator, 1Password, Authy, or a similar OTP app.",
+    "Quản trị hệ thống": "System admin",
+    "🛡️ Quản trị hệ thống": "🛡️ System admin",
+    "Quản lý người dùng, liên kết, domain và nhật ký vận hành toàn hệ thống.":
+      "Manage users, links, domains, and system-wide operations logs.",
+    "Hệ thống": "System",
+    "Nhật ký": "Logs",
+    "Tổng người dùng": "Total users",
+    "Người dùng mới hôm nay": "New users today",
+    "Tổng link": "Total links",
+    "Link mới hôm nay": "New links today",
+    "Click unique hôm nay": "Unique clicks today",
+    "Thanh toán chờ duyệt": "Payments awaiting review",
+    "Xu hướng vận hành": "Operational trend",
+    "User mới, click unique và yêu cầu thanh toán theo ngày":
+      "New users, unique clicks, and payment requests by day",
+    "7 ngày": "7 days",
+    "30 ngày": "30 days",
+    "Tất cả gói": "All plans",
+    "Tìm email...": "Search email...",
+    "Chưa chọn người dùng nào.": "No users selected.",
+    "Chọn trang này": "Select this page",
+    "Chọn theo bộ lọc": "Select by filter",
+    "Tên": "Name",
+    "Gói hiện tại": "Current plan",
+    "Yêu cầu thanh toán": "Payment requests",
+    "Điều hướng quản trị": "Admin navigation",
+    "Tìm theo mã thanh toán...": "Search by payment code...",
+    "Tải lại": "Reload",
+    "Mã": "Code",
+    "Gói": "Plan",
+    "Số tiền": "Amount",
+    "Chuyển lúc": "Paid at",
+    "Ghi chú": "Note",
+    "Thao tác": "Actions",
+    "Duyệt": "Approve",
+    "Từ chối": "Reject",
+    "Đang tải...": "Loading...",
+    "Đang tải yêu cầu thanh toán...": "Loading payment requests...",
+    "Đang tải team workspace...": "Loading team workspace...",
+    "Đang tải mẫu link chung...": "Loading shared templates...",
+    "Bộ lọc hiện có 6 người dùng": "The current filter contains 6 users",
+    "Nhãn hiển thị": "Display label",
+    "Domain chính": "Primary domain",
+    "Hết hạn": "Expires",
+    "Đặt làm domain chính": "Set as primary domain",
+    "Thêm domain": "Add domain",
+    "Nhãn": "Label",
+    "Chính": "Primary",
+    "Nguồn log:": "Log source:",
+    "Thời gian": "Time",
+    "Tạo QR cho link ngắn, chiến dịch hoặc trang tiểu sử":
+      "Create QR codes for short links, campaigns, or bio pages",
+    "Dán URL hoặc link rút gọn...": "Paste a URL or short link...",
+    "Tìm kiếm...": "Search...",
+    "Tìm link... (Ctrl+K)": "Search links... (Ctrl+K)",
+    "Theo dõi gói hiện tại và lựa chọn nâng cấp phù hợp":
+      "Track your current plan and choose the right upgrade.",
+    "Dùng thử không cần đăng ký": "Try it without signing up",
+    "Upload ảnh banner": "Upload banner image",
+    "Thống kê nâng cao": "Advanced analytics",
+    "Gói hiện tại": "Current plan",
+    "Phổ biến nhất": "Most popular",
+    "Đầy đủ tính năng cho affiliate marketer":
+      "Full feature set for affiliate marketers",
+    "Không giới hạn cho team & agency":
+      "Unlimited for teams and agencies",
+    "Không giới hạn link": "Unlimited links",
+    "Tất cả tính năng Pro": "All Pro features",
+    "Custom domain (sắp có)": "Custom domain (coming soon)",
+    "Liên hệ →": "Contact →",
+    "Liên hệ nâng cấp qua Zalo:": "Upgrade contact via Zalo:",
+    "Phân tích lưu lượng chi tiết": "Detailed traffic analytics",
+    "Đã tạo": "Created",
+    "Phân bố nền tảng": "Platform distribution",
+    "Đang tổng hợp dữ liệu click": "Aggregating click data",
+    "Quốc gia": "Country",
+    "Chưa có dữ liệu địa lý": "No geographic data yet",
+    "Quốc gia hàng đầu": "Top countries",
+    "Thành phố": "City",
+    "Đang tổng hợp quốc gia...": "Aggregating countries...",
+    "Nền tảng": "Platform",
+    "Nền tảng hàng đầu": "Top platforms",
+    "Tỷ trọng": "Share",
+    "Đang tổng hợp nền tảng...": "Aggregating platforms...",
+    "Quản lý hồ sơ cá nhân, lịch sử đăng nhập và xác thực 2 lớp":
+      "Manage your personal profile, login history, and two-factor authentication",
+    "Tài khoản cá nhân": "Personal account",
+    "2FA chưa bật": "2FA not enabled",
+    "Xác minh": "Verify",
+    "Thiết bị đã đăng nhập": "Signed-in devices",
+    "Xem các lần đăng nhập gần đây theo trình duyệt, hệ điều hành và IP.":
+      "Review recent sign-ins by browser, operating system, and IP address.",
+    "Làm mới": "Refresh",
+    "Đang tải lịch sử đăng nhập...": "Loading login history...",
+    "Chưa có lịch sử đăng nhập nào để hiển thị.":
+      "No login history to display yet.",
+    "Tên miền hệ thống": "System domains",
+    "Tìm domain...": "Search domain...",
+    "Redirect gần đây": "Recent redirects",
+    "Thanh toán nâng cấp": "Upgrade payment",
+    "Gói chọn": "Selected plan",
+    "Số tiền": "Amount",
+    "Nội dung CK": "Transfer note",
+    "Đang tạo...": "Generating...",
+    "Ngân hàng": "Bank",
+    "Chưa cấu hình": "Not configured",
+    "Số tài khoản": "Account number",
+    "Chủ tài khoản": "Account holder",
+    "Ghi chú thêm cho admin, ví dụ số điện thoại hoặc thời gian chuyển khoản":
+      "Optional note for admin, for example phone number or transfer time",
+    'Sau khi chuyển khoản xong, bấm "Đã thanh toán" để đẩy yêu cầu sang tab Quản trị > Thanh toán.':
+      'After the transfer, click "Paid" to send the request to Admin > Payments.',
+    "Có thể quét QR hoặc nhập tay thông tin chuyển khoản nếu QR chưa được cấu hình.":
+      "You can scan the QR or manually enter the transfer details if the QR is not configured.",
+    "Đóng": "Close",
+    "Đã thanh toán": "Paid",
+    "Xác nhận hành động": "Confirm action",
+    "Bạn có chắc muốn tiếp tục thao tác này không?":
+      "Are you sure you want to continue?",
+    "Hủy": "Cancel",
+    "Mở menu": "Open menu",
+    "Đổi giao diện": "Toggle theme",
+    "Mở thông báo": "Open notifications",
+    "Chọn ngôn ngữ": "Choose language",
+    "👥 Người dùng (": "👥 Users (",
+    "💳 Yêu cầu thanh toán (": "💳 Payment requests (",
+    "🌐 Tên miền hệ thống (": "🌐 System domains (",
+    "🧭 Redirect gần đây (": "🧭 Recent redirects (",
+    "Danh sách liên kết (": "Link list (",
+    "Mẫu link chung (": "Shared templates (",
+  },
+};
+const appUiTextPatterns = {
+  en: [
+    {
+      regex: /^Danh sách liên kết \((\d+)\)$/,
+      replace: (_match, count) => `Link list (${count})`,
+    },
+    {
+      regex: /^Mẫu link chung \((\d+)\)$/,
+      replace: (_match, count) => `Shared templates (${count})`,
+    },
+    {
+      regex: /^👥 Người dùng \((\d+)\)$/,
+      replace: (_match, count) => `👥 Users (${count})`,
+    },
+    {
+      regex: /^💳 Yêu cầu thanh toán \((\d+)\)$/,
+      replace: (_match, count) => `💳 Payment requests (${count})`,
+    },
+    {
+      regex: /^Đang hiển thị (\d+) link$/,
+      replace: (_match, count) => `Showing ${count} links`,
+    },
+    {
+      regex: /^Bộ lọc hiện có (\d+) người dùng$/,
+      replace: (_match, count) => `The current filter contains ${count} users`,
+    },
+    {
+      regex: /^Hiển thị (\d+)-(\d+) \/ (\d+)$/,
+      replace: (_match, from, to, total) => `Showing ${from}-${to} / ${total}`,
+    },
+    {
+      regex: /^Tổng raw click: (.+)$/,
+      replace: (_match, value) => `Total raw clicks: ${value}`,
+    },
+    {
+      regex: /^Đang chờ chuyển khoản: (.+)$/,
+      replace: (_match, value) => `Awaiting transfer: ${value}`,
+    },
+    {
+      regex: /^User mới: (.+)$/,
+      replace: (_match, value) => `New users: ${value}`,
+    },
+    {
+      regex: /^Click unique: (.+)$/,
+      replace: (_match, value) => `Unique clicks: ${value}`,
+    },
+    {
+      regex: /^Thanh toán: (.+)$/,
+      replace: (_match, value) => `Payments: ${value}`,
+    },
+    {
+      regex: /^Đang tạo cho (.+)$/,
+      replace: (_match, value) => `Generating for ${value}`,
+    },
+    {
+      regex: /^(\d+) thiết bị đã được ghi nhận trên tài khoản này\.$/,
+      replace: (_match, count) => `${count} devices have been recorded for this account.`,
+    },
+  ],
+};
+const translatedTextNodes = new WeakMap();
+const translatedAttributeNodes = new WeakMap();
+let uiTranslationObserver = null;
 const KNOWN_APP_PAGES = new Set([
   "dashboard",
   "links",
@@ -146,7 +640,44 @@ function getAppPageFromLocation() {
   return normalizeAppPage(hashPage || "dashboard");
 }
 
+function isDirectAppPath(pathname = location.pathname) {
+  const normalized = String(pathname || "")
+    .trim()
+    .replace(/\/+$/, "") || "/";
+  if (normalized === "/") return false;
+  if (normalized === "/app") return true;
+  if (normalized.startsWith("/app/")) {
+    return KNOWN_APP_PAGES.has(normalized.slice("/app/".length));
+  }
+  return KNOWN_APP_PAGES.has(normalized.replace(/^\/+/, ""));
+}
+
+function isAuthPath(pathname = location.pathname) {
+  const normalized = String(pathname || "")
+    .trim()
+    .replace(/\/+$/, "") || "/";
+  return (
+    normalized === "/login" ||
+    normalized === "/register" ||
+    normalized === "/user/login" ||
+    normalized === "/user/register"
+  );
+}
+
+function shouldUseAppShell(pathname = location.pathname) {
+  const normalized = String(pathname || "")
+    .trim()
+    .replace(/\/+$/, "") || "/";
+  if (normalized === "/index.html") return true;
+  if (normalized === "/app" || normalized.startsWith("/app/")) return true;
+  if (isAuthPath(normalized)) return true;
+  return isDirectAppPath(normalized);
+}
+
 function canonicalizeAppLocation() {
+  if (!shouldUseAppShell(location.pathname)) {
+    return null;
+  }
   const page = getAppPageFromLocation();
   const cleanUrl = `${buildAppPath(page)}${location.search}`;
   if (`${location.pathname}${location.search}` !== cleanUrl || location.hash) {
@@ -510,6 +1041,187 @@ function toggleTheme() {
   applyTheme(appTheme === "light" ? "dark" : "light");
 }
 
+function syncLanguageSwitches() {
+  document.querySelectorAll("[data-lang-option]").forEach((button) => {
+    const isActive = button.dataset.langOption === appLanguage;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+}
+
+function syncLandingIntroLanguage() {
+  const copy = landingIntroCopy[appLanguage] || landingIntroCopy.vi;
+  const textMap = {
+    landingBrandSubline: copy.brandSubline,
+    landingHeroKicker: copy.heroKicker,
+    landingHeroTitle: copy.heroTitle,
+    landingHeroDesc: copy.heroDesc,
+    landingHeroPrimary: copy.heroPrimary,
+    landingHeroSecondary: copy.heroSecondary,
+    landingHeroQuick: copy.heroQuick,
+    landingStepsTitle: copy.stepsTitle,
+    landingStepsBadge: copy.stepsBadge,
+    landingStep1Title: copy.step1Title,
+    landingStep1Desc: copy.step1Desc,
+    landingStep2Title: copy.step2Title,
+    landingStep2Desc: copy.step2Desc,
+    landingStep3Title: copy.step3Title,
+    landingStep3Desc: copy.step3Desc,
+    landingQuickSubmit: copy.quickSubmit,
+    landingResultMessage: copy.resultMessage,
+    landingResultCta: copy.resultCta,
+  };
+  Object.entries(textMap).forEach(([id, value]) => {
+    const node = document.getElementById(id);
+    if (node) node.textContent = value;
+  });
+  const quickInput = document.getElementById("landingQuickUrl");
+  if (quickInput) quickInput.placeholder = copy.quickPlaceholder;
+  const topbarSearch = document.getElementById("tbSearch");
+  if (topbarSearch) topbarSearch.placeholder = copy.searchPlaceholder;
+  const langSwitch = document.getElementById("tbLangSwitch");
+  if (langSwitch) {
+    langSwitch.setAttribute(
+      "aria-label",
+      appLanguage === "en" ? "Choose language" : "Chọn ngôn ngữ",
+    );
+  }
+}
+
+function applyAppLanguage(lang = appLanguage) {
+  appLanguage = lang === "en" ? "en" : "vi";
+  localStorage.setItem(appLanguageStorageKey, appLanguage);
+  document.documentElement.lang = appLanguage;
+  syncLanguageSwitches();
+  syncLandingIntroLanguage();
+  translateUiTree(document.body);
+  ensureUiTranslationObserver();
+}
+
+function setAppLanguage(lang) {
+  applyAppLanguage(lang);
+}
+
+function translateUiCoreValue(original) {
+  const source = String(original || "");
+  if (!source || appLanguage !== "en") return source;
+  const directMap = appUiTextTranslations.en || {};
+  if (Object.prototype.hasOwnProperty.call(directMap, source)) {
+    return directMap[source];
+  }
+  for (const rule of appUiTextPatterns.en || []) {
+    if (!rule?.regex || typeof rule.replace !== "function") continue;
+    const match = source.match(rule.regex);
+    if (match) {
+      return rule.replace(...match);
+    }
+  }
+  return source;
+}
+
+function translateUiTextValue(original) {
+  const source = String(original || "");
+  if (!source.trim()) return source;
+  const leading = source.match(/^\s*/)?.[0] || "";
+  const trailing = source.match(/\s*$/)?.[0] || "";
+  const core = source.trim();
+  const translated = translateUiCoreValue(core);
+  return translated === core ? source : `${leading}${translated}${trailing}`;
+}
+
+function translateTextNode(node) {
+  if (!node || node.nodeType !== Node.TEXT_NODE) return;
+  const parentTag = node.parentElement?.tagName;
+  if (
+    !node.nodeValue?.trim() ||
+    parentTag === "SCRIPT" ||
+    parentTag === "STYLE" ||
+    parentTag === "NOSCRIPT"
+  ) {
+    return;
+  }
+  if (!translatedTextNodes.has(node)) {
+    translatedTextNodes.set(node, node.nodeValue);
+  }
+  const original = translatedTextNodes.get(node) || node.nodeValue;
+  const nextValue =
+    appLanguage === "en" ? translateUiTextValue(original) : original;
+  if (node.nodeValue !== nextValue) {
+    node.nodeValue = nextValue;
+  }
+}
+
+function translateElementAttributes(element) {
+  if (!element || element.nodeType !== Node.ELEMENT_NODE) return;
+  const attrs = ["placeholder", "title", "aria-label"];
+  let originalMap = translatedAttributeNodes.get(element);
+  if (!originalMap) {
+    originalMap = {};
+    translatedAttributeNodes.set(element, originalMap);
+  }
+  attrs.forEach((attr) => {
+    if (!element.hasAttribute(attr)) return;
+    if (!(attr in originalMap)) {
+      originalMap[attr] = element.getAttribute(attr) || "";
+    }
+    const original = originalMap[attr];
+    const nextValue =
+      appLanguage === "en" ? translateUiCoreValue(original) : original;
+    if (element.getAttribute(attr) !== nextValue) {
+      element.setAttribute(attr, nextValue);
+    }
+  });
+}
+
+function translateUiTree(root = document.body) {
+  if (!root) return;
+  if (root.nodeType === Node.TEXT_NODE) {
+    translateTextNode(root);
+    return;
+  }
+  if (root.nodeType === Node.ELEMENT_NODE) {
+    translateElementAttributes(root);
+  }
+  const walker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+  );
+  let current = walker.currentNode;
+  while (current) {
+    if (current.nodeType === Node.TEXT_NODE) {
+      translateTextNode(current);
+    } else if (current.nodeType === Node.ELEMENT_NODE) {
+      translateElementAttributes(current);
+    }
+    current = walker.nextNode();
+  }
+}
+
+function ensureUiTranslationObserver() {
+  if (uiTranslationObserver || typeof MutationObserver === "undefined") return;
+  uiTranslationObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === "characterData") {
+        translateTextNode(mutation.target);
+        return;
+      }
+      if (mutation.type === "attributes") {
+        translateElementAttributes(mutation.target);
+      }
+      mutation.addedNodes.forEach((node) => {
+        translateUiTree(node);
+      });
+    });
+  });
+  uiTranslationObserver.observe(document.body, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ["placeholder", "title", "aria-label"],
+  });
+}
+
 function toggleLandingNav(force) {
   const nav = document.getElementById("landingNav");
   const shouldOpen = typeof force === "boolean" ? force : !landingNavOpen;
@@ -708,7 +1420,17 @@ function getAuthRouteMode() {
   if (pathname === "/register" || pathname === "/user/register") {
     return "register";
   }
+  if (isDirectAppPath(pathname)) {
+    return "login";
+  }
   return "landing";
+}
+
+function redirectToLoginPage(pathname = location.pathname) {
+  const targetPath = String(pathname || "/dashboard").trim() || "/dashboard";
+  const query = location.search || "";
+  const next = `${targetPath}${query}` || "/dashboard";
+  window.location.replace(`/login?next=${encodeURIComponent(next)}`);
 }
 
 function setAuthRouteMode(mode) {
@@ -753,6 +1475,7 @@ function startLandingShorten() {
     return;
   }
   renderLandingShortenResult("https://boclink.click/short");
+  syncLandingIntroLanguage();
   document
     .getElementById("output-result")
     ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1061,6 +1784,10 @@ function renderBioManager() {
 //  AUTH
 // ══════════════════════════════════════════════════
 function showAuthScreen(mode = "landing") {
+  if (mode === "landing") {
+    window.location.replace("/");
+    return;
+  }
   closeLandingNav();
   setAuthRouteMode(mode);
   document.getElementById("authScreen").style.display = "flex";
@@ -1068,6 +1795,7 @@ function showAuthScreen(mode = "landing") {
   stopRealtimeNotificationLoop();
   closeNotificationDropdown();
   finishShellBoot();
+  applyAppLanguage(appLanguage);
   if (mode === "landing") {
     initLandingTypedText();
   } else {
@@ -1087,6 +1815,7 @@ function showApp() {
   document.getElementById("appScreen").classList.add("show");
   finishShellBoot();
   loadThemePreference();
+  applyAppLanguage(appLanguage);
   updateTopbar();
   loadBioConfig();
   renderForms();
@@ -1097,6 +1826,10 @@ function showApp() {
   startRealtimeNotificationLoop();
 }
 function showAuth(mode = "landing") {
+  if (mode === "landing") {
+    window.location.replace("/");
+    return;
+  }
   closeLandingNav();
   setAuthRouteMode(mode);
   document.getElementById("appScreen").classList.remove("show");
@@ -1104,6 +1837,7 @@ function showAuth(mode = "landing") {
   stopRealtimeNotificationLoop();
   closeNotificationDropdown();
   finishShellBoot();
+  applyAppLanguage(appLanguage);
   if (mode === "landing") {
     initLandingTypedText();
   } else {
@@ -1125,6 +1859,7 @@ function continueAsGuest() {
   document.getElementById("appScreen").classList.add("show");
   finishShellBoot();
   loadThemePreference();
+  applyAppLanguage(appLanguage);
   updateTopbar();
   loadBioConfig();
   renderForms();
@@ -1227,7 +1962,7 @@ async function doLogout() {
   document.getElementById("userDropdown").classList.remove("show");
   document.getElementById("userDropdown").setAttribute("aria-hidden", "true");
   stopRealtimeNotificationLoop();
-  showAuthScreen();
+  window.location.replace("/");
 }
 
 function getNotificationIconSvg(kind = "info") {
@@ -1645,9 +2380,7 @@ function updateTopbar() {
   const createdAt = user?.created_at
     ? new Date(user.created_at).toLocaleDateString("vi-VN")
     : "—";
-  const badge = document.getElementById("tbPlanBadge");
-  badge.textContent = plan === "guest" ? "GUEST" : plan.toUpperCase();
-  badge.className = "tb-plan-badge " + (plan === "guest" ? "free" : plan);
+  syncLanguageSwitches();
   setAvatarNode("tbAvatar", user, getUserInitials(user));
   document.getElementById("tbUname").textContent = name;
   setAvatarNode("popupAvatar", user, getUserInitials(user));
@@ -2955,11 +3688,7 @@ function updateTopbar() {
   const createdAt = user?.created_at
     ? new Date(user.created_at).toLocaleDateString("vi-VN")
     : "—";
-  const badge = document.getElementById("tbPlanBadge");
-  if (badge) {
-    badge.textContent = plan === "guest" ? "GUEST" : plan.toUpperCase();
-    badge.className = "tb-plan-badge " + (plan === "guest" ? "free" : plan);
-  }
+  syncLanguageSwitches();
   setAvatarNode("tbAvatar", user, getUserInitials(user));
   document.getElementById("tbUname").textContent = name;
   setAvatarNode("popupAvatar", user, getUserInitials(user));
@@ -5368,6 +6097,27 @@ async function copyResult(cid) {
 // ══════════════════════════════════════════════════
 //  DATA
 // ══════════════════════════════════════════════════
+function getDashboardPlatformMetrics() {
+  const uniqueRows = Array.isArray(statsAnalytics?.platforms?.unique_distribution)
+    ? statsAnalytics.platforms.unique_distribution
+    : [];
+  const rawRows = Array.isArray(statsAnalytics?.platforms?.distribution)
+    ? statsAnalytics.platforms.distribution
+    : [];
+  const readMetric = (key) => ({
+    unique: Number(
+      uniqueRows.find((item) => String(item?.key || "") === key)?.clicks || 0,
+    ),
+    raw: Number(
+      rawRows.find((item) => String(item?.key || "") === key)?.clicks || 0,
+    ),
+  });
+  return {
+    shopee: readMetric("shopee"),
+    tiktok: readMetric("tiktok"),
+  };
+}
+
 async function loadData(prefetched = null) {
   try {
     const d =
@@ -5418,12 +6168,22 @@ async function loadData(prefetched = null) {
       ).toLocaleString();
     document.getElementById("navCount").textContent = d.totalLinks || 0;
     document.getElementById("linkCountLabel").textContent = d.totalLinks || 0;
-    document.getElementById("dShopee").textContent = links.filter((l) =>
-      /shopee\.vn/i.test(l.original_url),
-    ).length;
-    document.getElementById("dTiktok").textContent = links.filter((l) =>
-      /tiktok\.com/i.test(l.original_url),
-    ).length;
+    const dashboardPlatformMetrics = getDashboardPlatformMetrics();
+    document.getElementById("dClicksSub").textContent = `Raw clicks: ${Number(
+      d.rawTotalClicks ?? statsAnalytics?.total_clicks ?? 0,
+    ).toLocaleString()}`;
+    document.getElementById("dShopee").textContent = Number(
+      dashboardPlatformMetrics.shopee.unique,
+    ).toLocaleString();
+    document.getElementById("dShopeeSub").textContent = `Raw clicks: ${Number(
+      dashboardPlatformMetrics.shopee.raw,
+    ).toLocaleString()}`;
+    document.getElementById("dTiktok").textContent = Number(
+      dashboardPlatformMetrics.tiktok.unique,
+    ).toLocaleString();
+    document.getElementById("dTiktokSub").textContent = `Raw clicks: ${Number(
+      dashboardPlatformMetrics.tiktok.raw,
+    ).toLocaleString()}`;
     renderActivity(links, "dashActivity");
     renderActivity(links, "createActivity");
     renderChart();
@@ -7438,6 +8198,11 @@ window.addEventListener("hashchange", () => {
 (async () => {
   try {
     loadThemePreference();
+    applyAppLanguage(appLanguage);
+    if (!shouldUseAppShell(location.pathname)) {
+      window.location.replace("/");
+      return;
+    }
     updateIntegrationUI();
     await loadAvailableDomains();
     const authMode = getAuthRouteMode();
@@ -7447,9 +8212,17 @@ window.addEventListener("hashchange", () => {
       user = d.user;
       showApp();
     } else {
+      if (isDirectAppPath(location.pathname)) {
+        redirectToLoginPage(location.pathname);
+        return;
+      }
       showAuthScreen(authMode);
     }
   } catch {
+    if (isDirectAppPath(location.pathname)) {
+      redirectToLoginPage(location.pathname);
+      return;
+    }
     showAuthScreen(getAuthRouteMode());
   }
 })();

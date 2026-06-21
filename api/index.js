@@ -164,11 +164,32 @@ app.use((req, res, next) => {
 });
 
 function serveLanding(_req, res) {
+  res.set("Cache-Control", "no-store");
   res.sendFile(path.join(__dirname, "..", "public", "landing.html"));
 }
 
 function serveAppShell(_req, res) {
+  res.set("Cache-Control", "no-store");
   res.sendFile(path.join(__dirname, "..", "public", "index.html"));
+}
+
+function requireAppShellSession(req, res, next) {
+  const token = parseToken(req);
+  if (!token) {
+    return res.redirect(
+      302,
+      `/login?next=${encodeURIComponent(req.originalUrl || "/dashboard")}`,
+    );
+  }
+  try {
+    jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    return res.redirect(
+      302,
+      `/login?next=${encodeURIComponent(req.originalUrl || "/dashboard")}`,
+    );
+  }
 }
 
 function redirectToCanonical(pathname) {
@@ -211,8 +232,9 @@ const appShellRoutes = [
 
 app.get("/", serveLanding);
 app.get(["/landing", "/landing/"], redirectToCanonical("/"));
-app.get(appShellRoutes, serveAppShell);
+app.get(appShellRoutes, requireAppShellSession, serveAppShell);
 const serveAuthHtml = (templatePath) => (_req, res) => {
+  res.set("Cache-Control", "no-store");
   const html = fs
     .readFileSync(templatePath, "utf8")
     .replaceAll("__GOOGLE_CLIENT_ID__", GOOGLE_CLIENT_ID)
@@ -665,12 +687,19 @@ function detectPlatformDeep(originalUrl, platform) {
   const sp = originalUrl.match(/shopee\.vn\/.*?-i\.(\d+)\.(\d+)/i);
   if (sp) {
     const [, shopId, itemId] = sp;
+    let hasTrackingQuery = false;
+    try {
+      hasTrackingQuery = new URL(originalUrl).searchParams.toString().length > 0;
+    } catch {}
     // Universal Link – OS tự mở app, không cần JS trick
     const universalLink = `https://shopee.vn/universal-link/product/${shopId}/${itemId}`;
+    const shopeeTarget = hasTrackingQuery ? originalUrl : universalLink;
     return {
-      deeplink: universalLink, // dùng Universal Link thay custom scheme
-      deeplink_ios: universalLink,
-      deeplink_android: universalLink,
+      // Với link có query tracking affiliate, giữ nguyên original URL để
+      // không làm rơi tham số hoa hồng khi redirect sang Shopee/App Links.
+      deeplink: shopeeTarget,
+      deeplink_ios: shopeeTarget,
+      deeplink_android: shopeeTarget,
       platform_name: "shopee",
       fallback: originalUrl,
       ios_store: `https://apps.apple.com/vn/app/shopee-vn/id${SHOPEE_APP_STORE_ID}`,
@@ -4273,6 +4302,33 @@ app.get("/u/:slug", async (req, res) => {
     console.error(e);
     return res.status(500).send("Server error");
   }
+});
+
+function shouldRedirectUnknownBrowserPath(req) {
+  if (req.method !== "GET") return false;
+  const pathname = String(req.path || "").trim() || "/";
+  if (pathname === "/" || pathname === "/landing") return false;
+  if (!pathname.includes("/", 1)) return false;
+  if (pathname.includes(".")) return false;
+  if (
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/go/") ||
+    pathname.startsWith("/u/") ||
+    pathname.startsWith("/_og/") ||
+    pathname === "/login" ||
+    pathname === "/register" ||
+    pathname.startsWith("/user/")
+  ) {
+    return false;
+  }
+  return String(req.headers.accept || "").includes("text/html");
+}
+
+app.use((req, res, next) => {
+  if (!shouldRedirectUnknownBrowserPath(req)) {
+    return next();
+  }
+  return res.redirect(302, "/");
 });
 
 function buildAppLinkMetaTags(

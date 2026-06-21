@@ -287,7 +287,9 @@
             <div class="auth-brand-mark">🔗</div>
             <div class="auth-brand-text">
               <b>BocLink</b>
-              <span>Rút gọn link, QR, bio public và integrations</span>
+              <span id="landingBrandSubline"
+                >Rút gọn link, QR, bio public và analytics</span
+              >
             </div>
           </div>
           <button
@@ -367,118 +369,139 @@
               <path d="M17.66 6.34l1.41-1.41"></path>
             </svg>
           </button>
-          <div class="auth-kicker">Link shortener • QR • Bio • Analytics</div>
-          <h2 class="auth-hero-title">
-            <strong>
-              Trực quan, An toàn<br />
-              &amp; Năng động<br />
-              <span
-                class="auth-typed gradient-primary clip-text"
-                data-typed-list="Liên kết ngắn thông minh.,Mã QR.,Trang tiểu sử."
-                >Liên kết ngắn thông minh.</span
-              ><span class="typed-cursor" aria-hidden="true">|</span>
-            </strong>
-          </h2>
-          <p>
-            Tăng cường chiến dịch bằng cách tạo liên kết động, mã QR và trang
-            tiểu sử và nhận phân tích tức thì.
-          </p>
-          <form
-            class="auth-shortener auth-shortener-form"
-            method="post"
-            action="#"
-            data-trigger="shorten-form"
-            onsubmit="return false;"
-          >
-            <div class="auth-shortener-row">
-              <input
-                type="url"
-                id="landingQuickUrl"
-                class="auth-shortener-input"
-                placeholder="Dán URL dài"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <div class="auth-shortener-actions">
-                <button class="auth-copy-btn" type="button" hidden>
-                  Sao chép
-                </button>
-                <button
-                  class="auth-shortener-btn"
-                  type="button"
-                  onclick="startLandingShorten()"
-                >
-                  Rút gọn
-                </button>
+          <div class="auth-intro-hero">
+            <div class="dash-hero auth-dash-hero">
+              <div class="dash-hero-top">
+                <div class="dash-hero-copy auth-intro-copy">
+                  <div class="dash-hero-kicker" id="landingHeroKicker">
+                    Bước tiếp theo
+                  </div>
+                  <div class="dash-hero-title" id="landingHeroTitle">
+                    Tạo link ở một chỗ, xem dữ liệu ở một chỗ
+                  </div>
+                  <div class="dash-hero-desc" id="landingHeroDesc">
+                    Dùng cùng một luồng như trong app: tạo link, tinh chỉnh
+                    preview và theo dõi hiệu quả mà không phải đổi giữa quá
+                    nhiều màn hình khác nhau.
+                  </div>
+                  <div class="dash-actions auth-intro-actions">
+                    <a
+                      class="dash-action primary"
+                      id="landingHeroPrimary"
+                      href="/register"
+                      >Bắt đầu miễn phí</a
+                    >
+                    <a class="dash-action" id="landingHeroSecondary" href="/login"
+                      >Đăng nhập</a
+                    >
+                    <button
+                      class="dash-action"
+                      type="button"
+                      id="landingHeroQuick"
+                      onclick="document.getElementById('landingQuickUrl')?.focus()"
+                    >
+                      Thử rút gọn nhanh
+                    </button>
+                  </div>
+                </div>
+                <div class="act-card auth-intro-steps">
+                  <h3>
+                    <span id="landingStepsTitle">Lộ trình ngắn</span>
+                    <span
+                      id="landingStepsBadge"
+                      style="color: var(--text3); font-size: 11px"
+                      >3 bước</span
+                    >
+                  </h3>
+                  <div class="dash-steps">
+                    <div class="dash-step">
+                      <div class="dash-step-badge">1</div>
+                      <div>
+                        <div class="dash-step-title" id="landingStep1Title">
+                          Tạo link
+                        </div>
+                        <div class="dash-step-desc" id="landingStep1Desc">
+                          Dán URL và chọn kiểu link phù hợp.
+                        </div>
+                      </div>
+                    </div>
+                    <div class="dash-step">
+                      <div class="dash-step-badge">2</div>
+                      <div>
+                        <div class="dash-step-title" id="landingStep2Title">
+                          Tối ưu preview
+                        </div>
+                        <div class="dash-step-desc" id="landingStep2Desc">
+                          Chỉnh OG, alias hoặc video overlay nếu cần.
+                        </div>
+                      </div>
+                    </div>
+                    <div class="dash-step">
+                      <div class="dash-step-badge">3</div>
+                      <div>
+                        <div class="dash-step-title" id="landingStep3Title">
+                          Theo dõi hiệu quả
+                        </div>
+                        <div class="dash-step-desc" id="landingStep3Desc">
+                          Kiểm tra click và hiệu suất ngay trong dashboard.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </form>
-          <div id="output-result" class="auth-output-result" hidden>
-            <div id="qr-result" class="auth-output-qr"></div>
-            <div id="text-result" class="auth-output-text">
-              <p>
-                Liên kết đã được rút gọn thành công. Muốn thêm tùy chọn tùy
-                chỉnh?
-              </p>
-              <a href="/register" class="auth-result-btn">Bắt đầu</a>
-            </div>
-          </div>
-          <a class="auth-hero-action primary auth-hero-start" href="/register"
-            >Bắt đầu</a
-          >
-          <div class="auth-feel">
-            <span>Tên miền thương hiệu</span>
-            <span>Phân tích nhanh</span>
-            <span>Bí danh tùy chỉnh</span>
-            <span>Nhắm mục tiêu nâng cao</span>
-          </div>
-          <div class="auth-feel secondary">
-            <span>Liên kết sâu</span>
-            <span>Tham số tùy chỉnh</span>
-            <span>Kiểm tra A/B</span>
-            <span>Thẻ meta tùy chỉnh</span>
-          </div>
-          <div class="auth-stats">
-            <div class="auth-stat">
-              <span class="n">3</span>
-              <span class="l">luồng chính: link, QR, bio</span>
-            </div>
-            <div class="auth-stat">
-              <span class="n">1</span>
-              <span class="l">dashboard cho tổng quan</span>
-            </div>
-            <div class="auth-stat">
-              <span class="n">∞</span>
-              <span class="l">không gian để mở rộng integrations</span>
-            </div>
-          </div>
-          <div class="auth-feature-grid">
-            <div class="auth-feature">
-              <b>Trình rút gọn URL</b>
-              <span>Chuyển URL dài, phức tạp thành liên kết ngắn dễ nhớ.</span>
-            </div>
-            <div class="auth-feature" id="bio">
-              <b>Bio công khai</b>
-              <span
-                >Tạo trang đích gọn nhẹ, tối ưu cho mobile để ghim mọi link quan
-                trọng.</span
+            <div class="auth-intro-quick">
+              <div class="auth-track auth-intro-tags">
+                <span id="bio">Shopee deeplink</span>
+                <span id="qr">QR động</span>
+                <span>Bio công khai</span>
+                <span>Video overlay</span>
+              </div>
+              <form
+                class="auth-shortener auth-shortener-form"
+                method="post"
+                action="#"
+                data-trigger="shorten-form"
+                onsubmit="return false;"
               >
+                <div class="auth-shortener-row">
+                  <input
+                    type="url"
+                    id="landingQuickUrl"
+                    class="auth-shortener-input"
+                    placeholder="Dán URL dài"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <div class="auth-shortener-actions">
+                    <button class="auth-copy-btn" type="button" hidden>
+                      Sao chép
+                    </button>
+                    <button
+                      class="auth-shortener-btn"
+                      type="button"
+                      id="landingQuickSubmit"
+                      onclick="startLandingShorten()"
+                    >
+                      Rút gọn
+                    </button>
+                  </div>
+                </div>
+              </form>
+              <div id="output-result" class="auth-output-result" hidden>
+                <div id="qr-result" class="auth-output-qr"></div>
+                <div id="text-result" class="auth-output-text">
+                  <p id="landingResultMessage">
+                    Liên kết đã được rút gọn thành công. Muốn thêm tùy chọn tùy
+                    chỉnh?
+                  </p>
+                  <a href="/register" class="auth-result-btn" id="landingResultCta"
+                    >Bắt đầu</a
+                  >
+                </div>
+              </div>
             </div>
-            <div class="auth-feature" id="qr">
-              <b>QR thương hiệu</b>
-              <span
-                >Tạo QR động tùy chỉnh với màu thương hiệu và theo dõi thời gian
-                thực.</span
-              >
-            </div>
-            <div class="auth-feature">
-              <b>API nhà phát triển</b>
-              <span
-                >Dùng API và webhook để kết nối với hệ thống, automation hoặc
-                team.</span
-              >
-            </div>
-          </div>
           <div class="auth-surface" id="solutions">
             <div class="auth-surface-top">
               <div>
@@ -739,7 +762,29 @@
           <span class="kbd2">Ctrl K</span>
         </div>
         <div class="tb-right">
-          <span class="tb-plan-badge" id="tbPlanBadge">FREE</span>
+          <div
+            class="tb-lang-switch"
+            id="tbLangSwitch"
+            role="group"
+            aria-label="Chọn ngôn ngữ"
+          >
+            <button
+              class="tb-lang-btn active"
+              type="button"
+              data-lang-option="vi"
+              onclick="setAppLanguage('vi')"
+            >
+              VI
+            </button>
+            <button
+              class="tb-lang-btn"
+              type="button"
+              data-lang-option="en"
+              onclick="setAppLanguage('en')"
+            >
+              EN
+            </button>
+          </div>
           <button
             class="theme-toggle tb-theme"
             type="button"
@@ -1312,7 +1357,7 @@
             <div class="sg">
               <div class="sc">
                 <div class="sc-top">
-                  <span class="sc-lbl">Tổng lượt nhấp</span>
+                  <span class="sc-lbl" id="dClicksLabel">Click unique</span>
                   <div
                     class="sc-icon"
                     style="background: rgba(59, 130, 246, 0.12)"
@@ -1321,11 +1366,11 @@
                   </div>
                 </div>
                 <div class="sc-val" id="dClicks">0</div>
-                <div class="sc-sub">Tất cả thời gian</div>
+                <div class="sc-sub" id="dClicksSub">Raw clicks: 0</div>
               </div>
               <div class="sc">
                 <div class="sc-top">
-                  <span class="sc-lbl">Click hôm nay</span>
+                  <span class="sc-lbl">Click unique hôm nay</span>
                   <div
                     class="sc-icon"
                     style="background: rgba(34, 197, 94, 0.12)"
@@ -1364,7 +1409,7 @@
               </div>
               <div class="sc">
                 <div class="sc-top">
-                  <span class="sc-lbl">Shopee deeplink</span>
+                  <span class="sc-lbl" id="dShopeeLabel">Click Shopee</span>
                   <div
                     class="sc-icon"
                     style="background: rgba(238, 77, 45, 0.1)"
@@ -1373,11 +1418,11 @@
                   </div>
                 </div>
                 <div class="sc-val" id="dShopee">0</div>
-                <div class="sc-sub">Link Shopee</div>
+                <div class="sc-sub" id="dShopeeSub">Raw clicks: 0</div>
               </div>
               <div class="sc">
                 <div class="sc-top">
-                  <span class="sc-lbl">TikTok deeplink</span>
+                  <span class="sc-lbl" id="dTiktokLabel">Click TikTok</span>
                   <div
                     class="sc-icon"
                     style="background: rgba(105, 201, 208, 0.08)"
@@ -1386,7 +1431,7 @@
                   </div>
                 </div>
                 <div class="sc-val" id="dTiktok">0</div>
-                <div class="sc-sub">Link TikTok</div>
+                <div class="sc-sub" id="dTiktokSub">Raw clicks: 0</div>
               </div>
             </div>
             <div class="dash-hero" style="margin-bottom: 18px">
