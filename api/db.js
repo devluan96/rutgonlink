@@ -464,6 +464,9 @@ async function init() {
       deviceType,
       ip,
       userAgent,
+      countryCode,
+      countryName,
+      city,
     }) {
       if (!userId || !deviceFingerprint) return null;
 
@@ -503,6 +506,9 @@ async function init() {
         device_type: deviceType || null,
         ip: ip || null,
         user_agent: userAgent || null,
+        country_code: countryCode || null,
+        country_name: countryName || null,
+        city: city || null,
         is_new_device: isNewDevice,
       };
       let data = null;
@@ -517,6 +523,9 @@ async function init() {
             device_type: deviceType || existingDevice.device_type || null,
             ip: ip || existingDevice.ip || null,
             user_agent: userAgent || existingDevice.user_agent || null,
+            country_code: countryCode || existingDevice.country_code || null,
+            country_name: countryName || existingDevice.country_name || null,
+            city: city || existingDevice.city || null,
             occurred_at: new Date().toISOString(),
           })
           .eq('id', existingDevice.id)
@@ -576,6 +585,82 @@ async function init() {
     },
 
     // ── Links ──────────────────────────────────────────────────────────
+    async getAdminUserLocationAnalytics(limit = 5000) {
+      let result = await sb
+        .from('login_events')
+        .select('user_id,country_code,country_name,city,occurred_at')
+        .order('occurred_at', { ascending: false })
+        .limit(limit);
+      if (
+        result.error &&
+        /country_code|country_name|city|login_events|schema cache/i.test(result.error.message || '')
+      ) {
+        return {
+          total_users_with_location: 0,
+          total_users_without_location: 0,
+          countries: [],
+          top_countries: [],
+        };
+      }
+      check(result.error, 'admin_user_location_analytics');
+      const latestByUser = new Map();
+      for (const row of result.data || []) {
+        const normalizedUserId = Number(row?.user_id || 0);
+        if (!normalizedUserId || latestByUser.has(normalizedUserId)) continue;
+        latestByUser.set(normalizedUserId, row);
+      }
+
+      const countryMap = new Map();
+      let usersWithoutLocation = 0;
+      for (const row of latestByUser.values()) {
+        const countryCode = String(row?.country_code || '').trim().toUpperCase();
+        const countryName = String(row?.country_name || '').trim() || countryCode || 'Không rõ';
+        const cityName = String(row?.city || '').trim() || 'Không rõ';
+        if (!countryCode) {
+          usersWithoutLocation += 1;
+          continue;
+        }
+        if (!countryMap.has(countryCode)) {
+          countryMap.set(countryCode, {
+            country_code: countryCode,
+            country_name: countryName,
+            clicks: 0,
+            cities: new Map(),
+          });
+        }
+        const countryEntry = countryMap.get(countryCode);
+        countryEntry.clicks += 1;
+        countryEntry.cities.set(
+          cityName,
+          (countryEntry.cities.get(cityName) || 0) + 1,
+        );
+      }
+
+      const countries = [...countryMap.values()]
+        .sort((a, b) => b.clicks - a.clicks)
+        .map((country) => {
+          const topCity =
+            [...country.cities.entries()].sort((a, b) => b[1] - a[1])[0] || [];
+          return {
+            country_code: country.country_code,
+            country_name: country.country_name,
+            clicks: country.clicks,
+            city: topCity[0] || 'Không rõ',
+            city_clicks: topCity[1] || 0,
+          };
+        });
+
+      return {
+        total_users_with_location: countries.reduce(
+          (sum, item) => sum + Number(item.clicks || 0),
+          0,
+        ),
+        total_users_without_location: usersWithoutLocation,
+        countries,
+        top_countries: countries.slice(0, 8),
+      };
+    },
+
     async createLink(shortCode, originalUrl, alias, ogTitle, ogDesc, ogImage, userId, linkType, videoUrl, videoOverlayText, guestSessionId, domainHostname, extra = {}) {
       const payload = {
         short_code: shortCode,

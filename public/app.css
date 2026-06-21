@@ -2050,6 +2050,44 @@
         background: rgba(15, 23, 42, 0.16);
         overflow: hidden;
       }
+      .admin-user-geo-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+      .admin-user-geo-list {
+        display: grid;
+        gap: 10px;
+      }
+      .admin-user-geo-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: var(--bg2);
+      }
+      .admin-user-geo-item-main {
+        min-width: 0;
+        display: grid;
+        gap: 3px;
+      }
+      .admin-user-geo-country {
+        color: var(--text);
+        font-weight: 700;
+      }
+      .admin-user-geo-city {
+        color: var(--text3);
+        font-size: 12px;
+      }
+      .admin-user-geo-count {
+        color: var(--brand);
+        font-weight: 800;
+        white-space: nowrap;
+      }
       .stats-map-empty,
       .stats-table-empty {
         height: 100%;
@@ -4208,6 +4246,9 @@
         }
         .admin-overview-chart-meta {
           padding: 0 14px 12px;
+        }
+        .admin-user-geo-grid {
+          grid-template-columns: 1fr;
         }
         .admin-health-item.wide {
           grid-column: span 1;

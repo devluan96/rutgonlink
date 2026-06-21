@@ -3632,11 +3632,13 @@ async function loadAdminData() {
     if (ur.ok) {
       const u = await ur.json();
       adminUsers = u.users || [];
+      adminUserLocationAnalytics = u.locationAnalytics || null;
       adminSelectedUserIds = new Set(
         [...adminSelectedUserIds].filter((id) =>
           adminUsers.some((userItem) => Number(userItem.id) === Number(id)),
         ),
       );
+      renderAdminUserLocationAnalytics();
       renderAdminUsers();
     }
     if (rr.ok) {
@@ -7139,6 +7141,7 @@ async function deleteMyLink(id, shortDisplay) {
 // ══════════════════════════════════════════════════
 let adminLinks = [];
 let adminUsers = [];
+let adminUserLocationAnalytics = null;
 let adminDomains = [];
 let adminRedirects = [];
 let adminPayments = [];
@@ -7323,11 +7326,13 @@ async function loadAdminData() {
     if (ur.ok) {
       const u = await ur.json();
       adminUsers = u.users || [];
+      adminUserLocationAnalytics = u.locationAnalytics || null;
       adminSelectedUserIds = new Set(
         [...adminSelectedUserIds].filter((id) =>
           adminUsers.some((userItem) => Number(userItem.id) === Number(id)),
         ),
       );
+      renderAdminUserLocationAnalytics();
       renderAdminUsers();
     }
     if (rr.ok) {
@@ -7536,6 +7541,120 @@ function renderAdminUsers() {
     .join("");
   syncAdminUserSelectionUI(filteredUsers, pageRows);
   renderAdminPagination("adUserPagination", pagination, "setAdminUserPage");
+}
+
+function renderAdminUserLocationAnalytics() {
+  const mapEl = document.getElementById("adminUserGeoMap");
+  const summaryEl = document.getElementById("adminUserGeoSummary");
+  const topSummaryEl = document.getElementById("adminUserGeoTopSummary");
+  const listEl = document.getElementById("adminUserGeoList");
+  if (!mapEl || !listEl) return;
+
+  const countries = Array.isArray(adminUserLocationAnalytics?.countries)
+    ? adminUserLocationAnalytics.countries.filter(
+        (item) => item.country_name_en && Number(item.clicks || 0) > 0,
+      )
+    : [];
+  const usersWithLocation = Number(
+    adminUserLocationAnalytics?.total_users_with_location || 0,
+  );
+  const usersWithoutLocation = Number(
+    adminUserLocationAnalytics?.total_users_without_location || 0,
+  );
+  const totalUsers = usersWithLocation + usersWithoutLocation;
+
+  if (summaryEl) {
+    summaryEl.textContent = usersWithLocation
+      ? `${usersWithLocation}/${totalUsers || usersWithLocation} user có vị trí`
+      : "Chưa có dữ liệu địa lý";
+  }
+  if (topSummaryEl) {
+    topSummaryEl.textContent = usersWithoutLocation
+      ? `${usersWithoutLocation} user chưa ghi nhận vị trí`
+      : "Theo login gần nhất";
+  }
+
+  if (!countries.length) {
+    if (window.Plotly?.purge) window.Plotly.purge(mapEl);
+    mapEl.innerHTML =
+      '<div class="stats-map-empty">Chưa có dữ liệu vị trí user để hiển thị.</div>';
+    listEl.innerHTML =
+      '<div class="stats-map-empty">User cần đăng nhập ít nhất một lần trong môi trường có header địa lý.</div>';
+    return;
+  }
+
+  if (!window.Plotly) {
+    mapEl.innerHTML =
+      '<div class="stats-map-empty">Không tải được thư viện bản đồ để hiển thị vị trí user.</div>';
+  } else {
+    mapEl.innerHTML = "";
+    window.Plotly.react(
+      mapEl,
+      [
+        {
+          type: "choropleth",
+          locationmode: "country names",
+          locations: countries.map((item) => item.country_name_en),
+          z: countries.map((item) => Number(item.clicks || 0)),
+          text: countries.map(
+            (item) =>
+              `${item.country_name}: ${Number(item.clicks || 0).toLocaleString()} user`,
+          ),
+          hovertemplate: "%{text}<extra></extra>",
+          showscale: false,
+          colorscale: [
+            [0, "rgba(148,163,184,0.18)"],
+            [0.35, "rgba(59,130,246,0.5)"],
+            [1, "rgba(37,99,235,0.95)"],
+          ],
+          marker: {
+            line: {
+              color: "rgba(255,255,255,0.22)",
+              width: 0.4,
+            },
+          },
+        },
+      ],
+      {
+        paper_bgcolor: "transparent",
+        plot_bgcolor: "transparent",
+        margin: { l: 0, r: 0, t: 0, b: 0 },
+        geo: {
+          scope: "world",
+          projection: { type: "equirectangular" },
+          showframe: false,
+          showcoastlines: false,
+          showcountries: true,
+          countrycolor: "rgba(148,163,184,0.22)",
+          bgcolor: "transparent",
+          lakecolor: "transparent",
+        },
+      },
+      {
+        displayModeBar: false,
+        responsive: true,
+      },
+    );
+  }
+
+  listEl.innerHTML = countries
+    .slice(0, 8)
+    .map(
+      (country) => `<div class="admin-user-geo-item">
+        <div class="admin-user-geo-item-main">
+          <div class="admin-user-geo-country">${esc(
+            country.country_name || country.country_code || "Không rõ",
+          )}</div>
+          <div class="admin-user-geo-city">Top city: ${esc(
+            country.city || "Không rõ",
+          )}</div>
+        </div>
+        <div class="admin-user-geo-count">${Number(
+          country.clicks || 0,
+        ).toLocaleString()} user</div>
+      </div>`,
+    )
+    .join("");
 }
 
 function formatAdminUserDateTime(value) {

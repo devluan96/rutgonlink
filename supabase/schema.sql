@@ -169,6 +169,9 @@ CREATE TABLE IF NOT EXISTS login_events (
   device_type        TEXT,
   ip                 TEXT,
   user_agent         TEXT,
+  country_code       TEXT,
+  country_name       TEXT,
+  city               TEXT,
   is_new_device      BOOLEAN DEFAULT FALSE,
   occurred_at        TIMESTAMPTZ DEFAULT NOW()
 );
@@ -176,6 +179,7 @@ CREATE TABLE IF NOT EXISTS login_events (
 CREATE INDEX IF NOT EXISTS idx_login_events_user_id ON login_events(user_id);
 CREATE INDEX IF NOT EXISTS idx_login_events_occurred_at ON login_events(occurred_at);
 CREATE INDEX IF NOT EXISTS idx_login_events_fingerprint ON login_events(device_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_login_events_country_code ON login_events(country_code);
 
 -- Billing requests
 CREATE TABLE IF NOT EXISTS payment_requests (

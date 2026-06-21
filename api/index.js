@@ -655,9 +655,15 @@ function buildTikTokAppScheme(destinationUrl) {
     const profileMatch = path.match(/\/@([\w.]+)/);
     if (profileMatch)
       return `snssdk1233://user/profile/?uniqueId=${profileMatch[1]}`;
-    if (path.includes("/view/product/") || url.hostname.includes("shop")) {
-      const productMatch = path.match(/\/view\/product\/(\d+)/);
-      const productId = productMatch?.[1] || "";
+    const productMatch = path.match(/\/view\/product\/(\d+)/);
+    const queryProductId =
+      url.searchParams.get("product_id") ||
+      url.searchParams.get("productId") ||
+      url.searchParams.get("item_id") ||
+      url.searchParams.get("itemId") ||
+      "";
+    const productId = productMatch?.[1] || queryProductId || "";
+    if (productId) {
       const encodedUrl = encodeURIComponent(destinationUrl);
       const chainKey = url.searchParams.get("chain_key") || "";
       const trackParams = url.searchParams.get("trackParams") || "";
@@ -1166,6 +1172,7 @@ function buildLoginDeviceContext(req) {
   const browserName = detectBrowserFromUa(userAgent);
   const osName = detectOsFromUa(userAgent);
   const deviceType = detectDeviceTypeFromUa(userAgent);
+  const geo = extractClickGeo(req);
   const deviceLabel = [browserName, osName, getDeviceTypeLabel(deviceType)]
     .filter(Boolean)
     .join(" • ");
@@ -1181,6 +1188,9 @@ function buildLoginDeviceContext(req) {
     deviceType,
     ip: getRequestIp(req),
     userAgent,
+    countryCode: geo.country_code || null,
+    countryName: geo.country_name || null,
+    city: geo.city || null,
   };
 }
 
@@ -3124,8 +3134,27 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
-    const users = await database.getAllUsers();
-    res.json({ users });
+    const [users, locationAnalytics] = await Promise.all([
+      database.getAllUsers(),
+      database.getAdminUserLocationAnalytics(5000),
+    ]);
+    const countries = (locationAnalytics?.countries || []).map((country) => ({
+      ...country,
+      country_name_en: getCountryEnglishNameFromCode(country.country_code),
+    }));
+    res.json({
+      users,
+      locationAnalytics: {
+        total_users_with_location: Number(
+          locationAnalytics?.total_users_with_location || 0,
+        ),
+        total_users_without_location: Number(
+          locationAnalytics?.total_users_without_location || 0,
+        ),
+        countries,
+        top_countries: countries.slice(0, 8),
+      },
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
