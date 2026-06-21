@@ -2117,6 +2117,11 @@
         position: sticky;
         top: 18px;
       }
+      .create-side-stack {
+        display: grid;
+        gap: 16px;
+        align-self: start;
+      }
       .create-form-head {
         margin-bottom: 14px;
       }
@@ -2631,7 +2636,6 @@
           text-align: left;
         }
       }
-
       /* Error */
       .ferr {
         background: rgba(239, 68, 68, 0.08);

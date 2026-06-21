@@ -4500,10 +4500,20 @@ app.post(
 function buildVideoPage(link) {
   const launchUrl = buildVideoLaunchUrl(link);
   const unlockKey = `video-unlocked:${link.alias || link.short_code || link.id || "video"}`;
+  const overlayTextRaw =
+    typeof link.video_overlay_text === "string"
+      ? link.video_overlay_text.trim()
+      : "";
   const overlayText = esc(
-    link.video_overlay_text || "Bấm vào đây để ủng hộ và xem sản phẩm →",
+    overlayTextRaw &&
+      overlayTextRaw !== "Bấm vào đây để ủng hộ và xem sản phẩm →"
+      ? overlayTextRaw
+      : "Bấm vào đây để ủng hộ và quay lại để xem tiếp",
   );
   const ogTitle = esc(link.og_title || "Xem video");
+  const ogDesc = esc(
+    link.og_desc || "Nội dung đang sẵn sàng. Bấm vào màn hình để tiếp tục.",
+  );
   const ogImage = esc(link.og_image || "");
   const videoUrl = link.video_url || "";
 
@@ -4521,8 +4531,8 @@ function buildVideoPage(link) {
   } else if (videoUrl) {
     videoHtml = `<video id="videoEl" src="${esc(videoUrl)}"
       ${ogImage ? `poster="${ogImage}"` : ""}
-      autoplay muted playsinline webkit-playsinline preload="auto" disableRemotePlayback
-      style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#000"
+      autoplay muted playsinline webkit-playsinline preload="auto" disableRemotePlayback controls
+      style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#111827;border-radius:18px"
       onloadedmetadata="fitVideo(this)" onloadeddata="fitVideo(this)"></video>`;
   } else {
     videoHtml = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.4);font-size:16px">Không có video</div>`;
@@ -4538,49 +4548,85 @@ ${ogImage ? `<meta property="og:image" content="${ogImage}"/>` : ""}
 <meta property="og:title" content="${ogTitle}"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
-.scene{position:relative;width:100vw;height:100dvh;padding:16px 12px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
-.vbox{position:relative;width:min(90vw,420px);height:min(76dvh,640px);max-width:calc(100vw - 24px);max-height:calc(100dvh - 32px)}
-@media (min-width:768px){.scene{padding:20px}.vbox{width:min(82vw,960px);height:min(80dvh,720px);max-width:calc(100vw - 40px);max-height:calc(100dvh - 40px)}}
-.cd-wrap{position:absolute;top:14px;right:14px;z-index:30;display:flex;align-items:center;justify-content:center}
-.cd-svg{width:44px;height:44px}
-.cd-bg{fill:none;stroke:rgba(255,255,255,.2);stroke-width:3}
-.cd-prog{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-dasharray:120.6;stroke-dashoffset:0;transform:rotate(-90deg);transform-origin:50% 50%}
-.cd-num{position:absolute;font-size:14px;font-weight:800;color:#fff;top:50%;left:50%;transform:translate(-50%,-50%)}
+html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#f8fafc;background:#07111f}
+body{background:
+radial-gradient(circle at 14% 18%, rgba(34,211,238,.28), transparent 22%),
+radial-gradient(circle at 82% 20%, rgba(251,113,133,.22), transparent 24%),
+radial-gradient(circle at 76% 72%, rgba(245,158,11,.18), transparent 20%),
+linear-gradient(135deg,#030712 0%,#07111f 42%,#111827 100%)}
+.orb{position:fixed;border-radius:999px;filter:blur(12px);opacity:.9;pointer-events:none}
+.orb-1{inset:6% auto auto 8%;width:17rem;height:17rem;background:linear-gradient(135deg,rgba(34,211,238,.95),rgba(59,130,246,.25));box-shadow:1.6rem 1.8rem 0 rgba(8,47,73,.34)}
+.orb-2{inset:auto 12% 10% auto;width:15rem;height:15rem;background:linear-gradient(135deg,rgba(251,113,133,.96),rgba(168,85,247,.24));box-shadow:-1.4rem 1.3rem 0 rgba(76,29,149,.24)}
+.orb-3{inset:34% auto auto 68%;width:8rem;height:8rem;background:linear-gradient(135deg,rgba(245,158,11,.95),rgba(251,191,36,.26));box-shadow:.8rem 1rem 0 rgba(120,53,15,.25)}
+.shell{min-height:100vh;display:flex;justify-content:center;align-items:center;padding:1rem;position:relative}
+.card{position:relative;width:min(1040px,95vw);display:flex;flex-direction:column;background:rgba(9,18,32,.58);border:1px solid rgba(255,255,255,.14);border-radius:1rem;overflow:hidden;backdrop-filter:blur(24px) saturate(130%);box-shadow:0 1.5rem 4rem rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.08)}
+.media-panel{position:relative;width:100%;display:flex;justify-content:center;align-items:center;overflow:hidden;aspect-ratio:16/9;padding:1rem;background:linear-gradient(135deg,rgba(15,23,42,.95),rgba(17,24,39,.7))}
+.vbox{position:relative;width:min(100%,26rem);height:min(72vh,42rem);max-width:100%;max-height:100%;display:flex;align-items:center;justify-content:center}
+.content-panel{padding:1rem;border-top:1px solid rgba(255,255,255,.14)}
+.content-panel h1{margin:0 0 .5rem;font-size:1.25rem;line-height:1.4}
+.content-panel p{margin:0;font-size:.92rem;line-height:1.55;color:rgba(226,232,240,.78)}
+@media (min-width:768px){.content-panel{padding:1.1rem 1.2rem 1.2rem}.media-panel{padding:1.1rem}.vbox{width:min(100%,32rem);height:min(74vh,44rem)}}
+@media (max-width:900px){.media-panel{padding:.75rem}.vbox{width:min(100%,24rem);height:min(66vh,34rem)}.content-panel h1{font-size:clamp(.98rem,4.6vw,1.3rem)}}
+.cd-wrap{position:absolute;top:16px;right:16px;z-index:30;display:flex;align-items:center;justify-content:center}
+.countdown-chip{min-width:120px;padding:10px 12px;border-radius:16px;background:rgba(7,17,31,.72);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(14px);box-shadow:0 14px 30px rgba(0,0,0,.28)}
+.countdown-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.countdown-label{font-size:11px;font-weight:700;letter-spacing:.02em;color:rgba(226,232,240,.88)}
+.cd-num{font-size:18px;font-weight:900;color:#fff}
+.countdown-bar{position:relative;width:100%;height:5px;margin-top:8px;border-radius:999px;background:rgba(255,255,255,.12);overflow:hidden}
+.cd-prog{position:absolute;left:0;top:0;height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,#22d3ee 0%,#60a5fa 100%);transition:width .12s linear}
 .x-btn{position:absolute;top:14px;right:14px;z-index:40;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.6);border:1.5px solid rgba(255,255,255,.3);color:#fff;font-size:15px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .25s}
 .x-btn.show{opacity:1;pointer-events:all}
-.overlay{position:absolute;inset:0;z-index:31;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;padding-bottom:clamp(28px,7vh,70px);background:linear-gradient(to bottom,rgba(0,0,0,0) 0%,rgba(0,0,0,0) 40%,rgba(0,0,0,.5) 65%,rgba(0,0,0,.82) 100%);opacity:0;pointer-events:none;transition:opacity .3s}
+.overlay{position:fixed;inset:0;z-index:31;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(2,6,23,.86);backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .3s}
 .overlay.show{opacity:1;pointer-events:all}
 .overlay.launching{opacity:0;pointer-events:none}
-.cta-btn{background:linear-gradient(135deg,#ee4d2d,#ff6b35);color:#fff;border:none;border-radius:100px;padding:14px 28px;font-size:15px;font-weight:800;pointer-events:none;box-shadow:0 6px 28px rgba(238,77,45,.55);max-width:84vw;text-align:center;line-height:1.4;animation:pulse 2s ease-in-out infinite}
-@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+.overlay-hint{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.95rem;width:min(92vw,34rem);padding:1.5rem;text-align:center}
+.overlay-hint-icon{font-size:clamp(2.5rem,5vw,3.5rem);line-height:1;filter:drop-shadow(0 .5rem 1rem rgba(0,0,0,.25))}
+.overlay-hint-title{color:rgba(255,255,255,.98);font-size:clamp(1.05rem,2.2vw,1.25rem);font-weight:900;line-height:1.4;text-shadow:0 .2rem 1rem rgba(0,0,0,.34)}
 .pf{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:29;font-size:52px;opacity:0;pointer-events:none;transition:opacity .15s}
 .pf.show{opacity:1}
 </style>
 </head>
 <body>
-<div class="scene">
-  <div class="vbox" id="vbox">
-    ${videoHtml}
-    <div class="pf" id="pf">⏸</div>
-    <div class="cd-wrap" id="cdWrap">
-      <svg class="cd-svg" viewBox="0 0 42 42">
-        <circle class="cd-bg" cx="21" cy="21" r="19.2"/>
-        <circle class="cd-prog" cx="21" cy="21" r="19.2" id="cdProg"/>
-      </svg>
-      <span class="cd-num" id="cdNum">5</span>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+<main class="shell">
+  <section class="card">
+    <div class="media-panel">
+      <div class="vbox" id="vbox">
+        ${videoHtml}
+        <div class="pf" id="pf">⏸</div>
+        <div class="cd-wrap" id="cdWrap">
+          <div class="countdown-chip">
+            <div class="countdown-top">
+              <span class="countdown-label">Mở tiếp sau</span>
+              <span class="cd-num" id="cdNum">5</span>
+            </div>
+            <div class="countdown-bar">
+              <span class="cd-prog" id="cdProg"></span>
+            </div>
+          </div>
+        </div>
+        <div class="overlay" id="overlay" onclick="goApp()">
+          <div class="overlay-hint">
+            <div class="overlay-hint-icon">&#128070;</div>
+            <div class="overlay-hint-title">${overlayText}</div>
+          </div>
+        </div>
+        <div class="x-btn" id="xBtn" onclick="goApp()">✕</div>
+      </div>
     </div>
-    <div class="overlay" id="overlay" onclick="goApp()">
-      <div class="cta-btn">${overlayText}</div>
+    <div class="content-panel">
+      <h1>${ogTitle}</h1>
+      <p>${ogDesc}</p>
     </div>
-    <div class="x-btn" id="xBtn" onclick="goApp()">✕</div>
-  </div>
-</div>
+  </section>
+</main>
 <script>
 (function(){
   var LAUNCH_URL = ${JSON.stringify(launchUrl)};
   var UNLOCK_KEY = ${JSON.stringify(unlockKey)};
-  var CIRC = 120.6, DELAY = 5000;
+  var DELAY = 5000;
 
   var videoEl = document.getElementById('videoEl');
   var overlay = document.getElementById('overlay');
@@ -4594,10 +4640,28 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
   var unlocked = false;
   var timerStarted = false;
   var hasSavedUnlock = false;
+  var previewPlaybackMs = 0;
+  var previewPlaybackStartedAt = 0;
+  var countdownRaf = 0;
 
   try {
     hasSavedUnlock = window.sessionStorage.getItem(UNLOCK_KEY) === '1';
   } catch (_) {}
+
+  function getElapsedPlaybackMs() {
+    return previewPlaybackMs + (previewPlaybackStartedAt ? Date.now() - previewPlaybackStartedAt : 0);
+  }
+
+  function stopCountdownLoop() {
+    if (!countdownRaf) return;
+    cancelAnimationFrame(countdownRaf);
+    countdownRaf = 0;
+  }
+
+  function resetCountdownUi() {
+    cdProg.style.width = '0%';
+    cdNum.textContent = '5';
+  }
 
   function primeVideoPlayback() {
     if (!(videoEl && videoEl.tagName === 'VIDEO')) return;
@@ -4645,6 +4709,14 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
       primeVideoPlayback();
     });
     videoEl.addEventListener('canplay', primeVideoPlayback);
+    videoEl.addEventListener('playing', startPlaybackTracking);
+    videoEl.addEventListener('play', startPlaybackTracking);
+    videoEl.addEventListener('timeupdate', startPlaybackTracking);
+    videoEl.addEventListener('pause', stopPlaybackTracking);
+    videoEl.addEventListener('waiting', stopPlaybackTracking);
+    videoEl.addEventListener('seeking', stopPlaybackTracking);
+    videoEl.addEventListener('stalled', stopPlaybackTracking);
+    videoEl.addEventListener('ended', stopPlaybackTracking);
     setTimeout(primeVideoPlayback, 0);
     setTimeout(primeVideoPlayback, 240);
     document.addEventListener('touchstart', function onFirstTouch(){
@@ -4656,20 +4728,43 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
   var t0=Date.now();
   function tick(){
     if(unlocked) return;
-    var left=Math.max(0,DELAY-(Date.now()-t0));
-    cdProg.style.strokeDashoffset=CIRC*(1-left/DELAY);
+    var elapsed = videoEl && videoEl.tagName === 'VIDEO'
+      ? getElapsedPlaybackMs()
+      : Date.now()-t0;
+    var left=Math.max(0,DELAY-elapsed);
+    cdProg.style.width=(100*(1-left/DELAY))+'%';
     cdNum.textContent=Math.ceil(left/1000);
-    if(left>0) requestAnimationFrame(tick); else showOverlay();
+    if(left>0) countdownRaf = requestAnimationFrame(tick); else showOverlay();
   }
   function startCountdown(){
     if(timerStarted || unlocked) return;
     timerStarted = true;
     t0 = Date.now();
-    requestAnimationFrame(tick);
+    stopCountdownLoop();
+    countdownRaf = requestAnimationFrame(tick);
+  }
+
+  function startPlaybackTracking(){
+    if (!(videoEl && videoEl.tagName === 'VIDEO')) return;
+    if (unlocked || shown) return;
+    if (videoEl.paused || videoEl.ended || videoEl.seeking || videoEl.readyState < 2) return;
+    if (!timerStarted) timerStarted = true;
+    if (!previewPlaybackStartedAt) previewPlaybackStartedAt = Date.now();
+    if (!countdownRaf) countdownRaf = requestAnimationFrame(tick);
+  }
+
+  function stopPlaybackTracking(){
+    if (!(videoEl && videoEl.tagName === 'VIDEO')) return;
+    if (previewPlaybackStartedAt) {
+      previewPlaybackMs += Date.now() - previewPlaybackStartedAt;
+      previewPlaybackStartedAt = 0;
+    }
+    stopCountdownLoop();
   }
 
   function showOverlay(){
     if(shown || unlocked)return; shown=true;
+    stopPlaybackTracking();
     pausePlayback();
     pf.classList.add('show');
     setTimeout(function(){pf.classList.remove('show');},600);
@@ -4702,6 +4797,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
   function markUnlocked(){
     unlocked = true;
     shown = true;
+    stopPlaybackTracking();
     cdWrap.style.display = 'none';
     overlay.classList.remove('show');
     overlay.classList.remove('launching');
@@ -4727,10 +4823,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
     if(!unlocked || launching) return;
     if(e.target === overlay || e.target === xBtn) return;
     if(overlay.contains(e.target) || xBtn.contains(e.target)) return;
-    if(videoEl && videoEl.tagName === 'VIDEO'){
-      if(videoEl.paused) videoEl.play();
-      else videoEl.pause();
-    }
+    if(videoEl && videoEl.tagName === 'VIDEO') return;
   });
 
   window.addEventListener('focus', function(){
@@ -4750,7 +4843,12 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-ap
   if (hasSavedUnlock) {
     markUnlocked();
   } else {
-    startCountdown();
+    resetCountdownUi();
+    if (videoEl && videoEl.tagName === 'VIDEO') {
+      startPlaybackTracking();
+    } else {
+      startCountdown();
+    }
   }
 })();
 </script>

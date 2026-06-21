@@ -2969,6 +2969,21 @@ function renderForm(containerId) {
   const isAdmin = plan === "admin" || user?.role === "admin";
   const canOg = plan === "pro" || plan === "business" || isAdmin;
   const canUp = plan === "pro" || plan === "business" || isAdmin;
+  const shouldRenderInlineResult = containerId !== "createFormArea";
+  const resultCardMarkup = `
+    <div class="res-card" id="${containerId}_res">
+      <div class="res-row">
+        <div class="res-main">
+          <a class="res-url" id="${containerId}_resurl" href="#" target="_blank"></a>
+          <div class="res-meta" id="${containerId}_resmeta"></div>
+          <div class="res-dl" id="${containerId}_resdl" style="display:none"></div>
+        </div>
+        <div class="res-side">
+          <div class="res-lbl">✅ Link rút gọn của bạn</div>
+          <button class="btn-cp" id="${containerId}_cpbtn" onclick="copyResult('${containerId}')">Sao chép</button>
+        </div>
+      </div>
+    </div>`;
 
   c.innerHTML = `
   <div class="sf-card">
@@ -2982,108 +2997,108 @@ function renderForm(containerId) {
     </div>
     <div id="${containerId}_templateNotice" style="display:none"></div>
 
-    <!-- ① URL + nút rút gọn -->
-    <div class="url-bar" style="margin-bottom:12px">
-      <input type="url" id="${containerId}_url" class="url-bar-input"
-        placeholder="Dán link Shopee, TikTok hoặc bất kỳ URL nào..."
-        autocomplete="off" spellcheck="false"/>
-      <button class="btn-go" id="${containerId}_btn" onclick="doShorten('${containerId}')">
-        ⚡ Rút gọn
-      </button>
-    </div>
-    <div class="url-inline-hint" id="${containerId}_urlhint"></div>
-
-    <!-- Detect badge -->
-    <div class="det" id="${containerId}_det" style="margin-bottom:10px"></div>
-
-    <!-- ② Alias + Domain -->
-    <div class="create-form-grid create-form-grid--alias-domain">
-      <div>
-        <label class="fl" style="margin-bottom:4px">Alias tùy chỉnh</label>
-        <div class="pfx">
-          <span id="${containerId}_domainprefix" style="font-size:12px;color:var(--text3);white-space:nowrap">${getCreateDomainPreviewHost()}/</span>
-          <input type="text" id="${containerId}_alias" placeholder="ten-link" maxlength="40" autocomplete="off" spellcheck="false" oninput="onAliasInput('${containerId}')"/>
+        <!-- ① URL + nút rút gọn -->
+        <div class="url-bar" style="margin-bottom:12px">
+          <input type="url" id="${containerId}_url" class="url-bar-input"
+            placeholder="Dán link Shopee, TikTok hoặc bất kỳ URL nào..."
+            autocomplete="off" spellcheck="false"/>
+          <button class="btn-go" id="${containerId}_btn" onclick="doShorten('${containerId}')">
+            ⚡ Rút gọn
+          </button>
         </div>
-      </div>
-      ${buildCreateDomainFieldMarkup(containerId)}
-    </div>
+        <div class="url-inline-hint" id="${containerId}_urlhint"></div>
 
-    <!-- ③ Kiểu link -->
-    <div style="margin-bottom:12px">
-      <label class="fl" style="margin-bottom:4px">Kiểu link</label>
-      <select class="fi" id="${containerId}_ltype" onchange="onLinkTypeChange('${containerId}')">
-        <option value="direct">🔗 Trực tiếp</option>
-        <option value="deeplink">📱 Deeplink App</option>
-        <option value="video">🎬 Video Overlay</option>
-      </select>
-    </div>
+        <!-- Detect badge -->
+        <div class="det" id="${containerId}_det" style="margin-bottom:10px"></div>
 
-    <!-- ④ VIDEO SECTION (hiện khi chọn Video Overlay) -->
-    <div class="video-sec" id="${containerId}_videosec" style="margin-bottom:12px">
-
-      <!-- Hàng 1: Video upload + URL video -->
-      <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;margin-bottom:10px;align-items:start">
-        <!-- Upload box nhỏ gọn -->
-        <div>
-          <label class="fl" style="margin-bottom:4px">Video</label>
-          <div id="${containerId}_vuploadarea"
-            style="border:2px dashed var(--border2);border-radius:8px;padding:10px 6px;text-align:center;
-                   cursor:pointer;position:relative;transition:.2s;background:var(--bg4);min-height:72px;
-                   display:flex;flex-direction:column;align-items:center;justify-content:center">
-            <input type="file" id="${containerId}_vfile" accept="video/mp4,video/webm,video/quicktime"
-              style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
-              onchange="handleVideoUpload(event,'${containerId}')"/>
-            <div style="font-size:20px">🎬</div>
-            <p style="font-size:10px;color:var(--text3);margin-top:2px">Upload video</p>
-          </div>
-          <video id="${containerId}_vpreview"
-            style="width:100%;max-height:72px;border-radius:6px;display:none;object-fit:cover;background:#000;margin-top:4px"
-            muted></video>
-        </div>
-        <!-- URL + CTA text -->
-        <div style="display:flex;flex-direction:column;gap:7px">
+        <!-- ② Alias + Domain -->
+        <div class="create-form-grid create-form-grid--alias-domain">
           <div>
-            <label class="fl" style="margin-bottom:3px">URL video (YouTube / MP4)</label>
-            <div style="display:flex;gap:5px">
-              <input type="url" class="fi" id="${containerId}_videourl"
-                placeholder="https://youtube.com/watch?v=..."
-                style="font-size:12px;flex:1"
-                oninput="onVideoUrlInput('${containerId}')"/>
-              <button type="button" onclick="extractThumbFromUrl('${containerId}')"
-                style="padding:0 10px;background:var(--bg4);border:1px solid var(--border);border-radius:7px;
-                       color:var(--text2);font-size:11px;cursor:pointer;white-space:nowrap"
-                title="Lấy thumbnail tự động">🖼️ Thumb</button>
+            <label class="fl" style="margin-bottom:4px">Alias tùy chỉnh</label>
+            <div class="pfx">
+              <span id="${containerId}_domainprefix" style="font-size:12px;color:var(--text3);white-space:nowrap">${getCreateDomainPreviewHost()}/</span>
+              <input type="text" id="${containerId}_alias" placeholder="ten-link" maxlength="40" autocomplete="off" spellcheck="false" oninput="onAliasInput('${containerId}')"/>
             </div>
           </div>
-          <div>
-            <label class="fl" style="margin-bottom:3px">Nội dung CTA (hiện sau 5s)</label>
-            <input type="text" class="fi" id="${containerId}_videotext"
-              placeholder="🛒 Bấm để xem sản phẩm →" maxlength="80" style="font-size:12px"/>
+          ${buildCreateDomainFieldMarkup(containerId)}
+        </div>
+
+        <!-- ③ Kiểu link -->
+        <div style="margin-bottom:12px">
+          <label class="fl" style="margin-bottom:4px">Kiểu link</label>
+          <select class="fi" id="${containerId}_ltype" onchange="onLinkTypeChange('${containerId}')">
+            <option value="direct">🔗 Trực tiếp</option>
+            <option value="deeplink">📱 Deeplink App</option>
+            <option value="video">🎬 Video Overlay</option>
+          </select>
+        </div>
+
+        <!-- ④ VIDEO SECTION (hiện khi chọn Video Overlay) -->
+        <div class="video-sec" id="${containerId}_videosec" style="margin-bottom:12px">
+
+          <!-- Hàng 1: Video upload + URL video -->
+          <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;margin-bottom:10px;align-items:start">
+            <!-- Upload box nhỏ gọn -->
+            <div>
+              <label class="fl" style="margin-bottom:4px">Video</label>
+              <div id="${containerId}_vuploadarea"
+                style="border:2px dashed var(--border2);border-radius:8px;padding:10px 6px;text-align:center;
+                       cursor:pointer;position:relative;transition:.2s;background:var(--bg4);min-height:72px;
+                       display:flex;flex-direction:column;align-items:center;justify-content:center">
+                <input type="file" id="${containerId}_vfile" accept="video/mp4,video/webm,video/quicktime"
+                  style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%"
+                  onchange="handleVideoUpload(event,'${containerId}')"/>
+                <div style="font-size:20px">🎬</div>
+                <p style="font-size:10px;color:var(--text3);margin-top:2px">Upload video</p>
+              </div>
+              <video id="${containerId}_vpreview"
+                style="width:100%;max-height:72px;border-radius:6px;display:none;object-fit:cover;background:#000;margin-top:4px"
+                muted></video>
+            </div>
+            <!-- URL + CTA text -->
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <div>
+                <label class="fl" style="margin-bottom:3px">URL video (YouTube / MP4)</label>
+                <div style="display:flex;gap:5px">
+                  <input type="url" class="fi" id="${containerId}_videourl"
+                    placeholder="https://youtube.com/watch?v=..."
+                    style="font-size:12px;flex:1"
+                    oninput="onVideoUrlInput('${containerId}')"/>
+                  <button type="button" onclick="extractThumbFromUrl('${containerId}')"
+                    style="padding:0 10px;background:var(--bg4);border:1px solid var(--border);border-radius:7px;
+                           color:var(--text2);font-size:11px;cursor:pointer;white-space:nowrap"
+                    title="Lấy thumbnail tự động">🖼️ Thumb</button>
+                </div>
+              </div>
+              <div>
+                <label class="fl" style="margin-bottom:3px">Nội dung CTA (hiện sau 5s)</label>
+                <input type="text" class="fi" id="${containerId}_videotext"
+                  placeholder="🛒 Bấm để xem sản phẩm →" maxlength="80" style="font-size:12px"/>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:8px;padding:6px 10px;background:rgba(59,130,246,.07);border-radius:6px;
+                      font-size:11px;color:var(--text2)">
+            💡 Video autoplay → 5s → lớp phủ toàn màn hình → user bấm bất kỳ đâu → mở App Shopee/TikTok.<br/>
+            ✏️ Tiêu đề, mô tả và ảnh preview nhập ở phần <strong>Preview khi share</strong> bên dưới.
           </div>
         </div>
-      </div>
 
-      <div style="margin-top:8px;padding:6px 10px;background:rgba(59,130,246,.07);border-radius:6px;
-                  font-size:11px;color:var(--text2)">
-        💡 Video autoplay → 5s → lớp phủ toàn màn hình → user bấm bất kỳ đâu → mở App Shopee/TikTok.<br/>
-        ✏️ Tiêu đề, mô tả và ảnh preview nhập ở phần <strong>Preview khi share</strong> bên dưới.
-      </div>
-    </div>
-
-    <!-- ⑤ META SECTION (collapsible) -->
-    <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px">
+        <!-- ⑤ META SECTION (collapsible) -->
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px">
       <!-- Header toggle -->
-      <div onclick="toggleMeta('${containerId}')"
-        style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--bg3);
-               user-select:none;transition:.15s" onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background='var(--bg3)'">
-        <span style="font-size:13px">🖼️</span>
-        <span style="font-size:13px;font-weight:700;flex:1">Preview khi share (Facebook · Zalo · TikTok)</span>
-        ${!canOg ? '<span style="font-size:10px;font-weight:700;background:rgba(245,158,11,.15);color:#fcd34d;padding:2px 7px;border-radius:10px">🔒 Pro</span>' : '<span style="font-size:10px;font-weight:700;background:rgba(34,197,94,.1);color:var(--green);padding:2px 7px;border-radius:10px">✓ Active</span>'}
-        <span id="${containerId}_arrow" style="font-size:11px;color:var(--text3);transition:.2s">▼</span>
-      </div>
+          <div onclick="toggleMeta('${containerId}')"
+            style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--bg3);
+                   user-select:none;transition:.15s" onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background='var(--bg3)'">
+            <span style="font-size:13px">🖼️</span>
+            <span style="font-size:13px;font-weight:700;flex:1">Preview khi share (Facebook · Zalo · TikTok)</span>
+            ${!canOg ? '<span style="font-size:10px;font-weight:700;background:rgba(245,158,11,.15);color:#fcd34d;padding:2px 7px;border-radius:10px">🔒 Pro</span>' : '<span style="font-size:10px;font-weight:700;background:rgba(34,197,94,.1);color:var(--green);padding:2px 7px;border-radius:10px">✓ Active</span>'}
+            <span id="${containerId}_arrow" style="font-size:11px;color:var(--text3);transition:.2s">▼</span>
+          </div>
 
       <!-- Body -->
-      <div id="${containerId}_metabody" style="display:none;padding:14px;background:var(--bg2)">
+          <div id="${containerId}_metabody" style="display:none;padding:14px;background:var(--bg2)">
         ${
           !canOg
             ? `
@@ -3157,26 +3172,17 @@ function renderForm(containerId) {
           </div>`
         }
       </div>
-    </div>
-
-    <!-- Error -->
-    <div class="ferr" id="${containerId}_err"></div>
-
-    <!-- Result -->
-    <div class="res-card" id="${containerId}_res">
-      <div class="res-row">
-        <div class="res-main">
-          <a class="res-url" id="${containerId}_resurl" href="#" target="_blank"></a>
-          <div class="res-meta" id="${containerId}_resmeta"></div>
-          <div class="res-dl" id="${containerId}_resdl" style="display:none"></div>
         </div>
-        <div class="res-side">
-          <div class="res-lbl">✅ Link rút gọn của bạn</div>
-          <button class="btn-cp" id="${containerId}_cpbtn" onclick="copyResult('${containerId}')">Sao chép</button>
-        </div>
-      </div>
-    </div>
+
+        <!-- Error -->
+        <div class="ferr" id="${containerId}_err"></div>
+        ${shouldRenderInlineResult ? resultCardMarkup : ""}
   </div>`;
+
+  if (!shouldRenderInlineResult) {
+    const resultMount = document.getElementById("createLatestResultMount");
+    if (resultMount) resultMount.innerHTML = resultCardMarkup;
+  }
 
   // Attach URL input events
   const urlIn = document.getElementById(`${containerId}_url`);
