@@ -1263,6 +1263,40 @@ function buildCloudinaryVideoThumbUrl(result) {
   );
 }
 
+function buildCloudinaryPlayableVideoUrl(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch (_) {
+    return raw;
+  }
+
+  if (!/(\.|^)res\.cloudinary\.com$/i.test(parsed.hostname)) return raw;
+
+  const marker = "/video/upload/";
+  const markerIndex = parsed.pathname.indexOf(marker);
+  if (markerIndex === -1) return raw;
+
+  const prefix = parsed.pathname.slice(0, markerIndex + marker.length);
+  const suffix = parsed.pathname.slice(markerIndex + marker.length);
+  const parts = suffix.split("/").filter(Boolean);
+  if (!parts.length) return raw;
+
+  const versionIndex = parts.findIndex((part) => /^v\d+$/i.test(part));
+  const transformParts =
+    versionIndex === -1 ? [] : parts.slice(0, versionIndex);
+  const hasPlayableTransform = transformParts.some(
+    (part) => /(^|,)f_mp4(,|$)/i.test(part) || /(^|,)vc_h264(,|$)/i.test(part),
+  );
+  if (hasPlayableTransform) return raw;
+
+  parsed.pathname = `${prefix}f_mp4,vc_h264/${suffix}`;
+  return parsed.toString();
+}
+
 function createCloudinaryVideoUploadSignature() {
   const timestamp = Math.floor(Date.now() / 1000);
   const publicId = nanoid(12);
@@ -4475,7 +4509,7 @@ app.post(
           "video",
         );
         return res.json({
-          url: result.secure_url,
+          url: buildCloudinaryPlayableVideoUrl(result.secure_url),
           thumb: buildCloudinaryVideoThumbUrl(result),
           public_id: result.public_id,
           source: "cloudinary",
@@ -4515,13 +4549,14 @@ function buildVideoPage(link) {
     link.og_desc || "Nội dung đang sẵn sàng. Bấm vào màn hình để tiếp tục.",
   );
   const ogImage = esc(link.og_image || "");
-  const videoUrl = link.video_url || "";
+  const rawVideoUrl = String(link.video_url || "").trim();
+  const videoUrl = buildCloudinaryPlayableVideoUrl(rawVideoUrl);
 
   let videoHtml = "";
-  const ytMatch = videoUrl.match(
+  const ytMatch = rawVideoUrl.match(
     /(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/,
   );
-  const ytEmbed = videoUrl.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{11})/);
+  const ytEmbed = rawVideoUrl.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{11})/);
   if (ytMatch || ytEmbed) {
     const vid = ytMatch ? ytMatch[1] : ytEmbed[1];
     videoHtml = `<iframe id="videoEl"

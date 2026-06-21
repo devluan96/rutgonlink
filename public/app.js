@@ -4521,6 +4521,40 @@ function buildCloudinaryVideoThumb(uploadData) {
   );
 }
 
+function buildCloudinaryPlayableVideoUrl(url) {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return raw;
+  }
+
+  if (!/(\.|^)res\.cloudinary\.com$/i.test(parsed.hostname)) return raw;
+
+  const marker = "/video/upload/";
+  const markerIndex = parsed.pathname.indexOf(marker);
+  if (markerIndex === -1) return raw;
+
+  const prefix = parsed.pathname.slice(0, markerIndex + marker.length);
+  const suffix = parsed.pathname.slice(markerIndex + marker.length);
+  const parts = suffix.split("/").filter(Boolean);
+  if (!parts.length) return raw;
+
+  const versionIndex = parts.findIndex((part) => /^v\d+$/i.test(part));
+  const transformParts =
+    versionIndex === -1 ? [] : parts.slice(0, versionIndex);
+  const hasPlayableTransform = transformParts.some(
+    (part) => /(^|,)f_mp4(,|$)/i.test(part) || /(^|,)vc_h264(,|$)/i.test(part),
+  );
+  if (hasPlayableTransform) return raw;
+
+  parsed.pathname = `${prefix}f_mp4,vc_h264/${suffix}`;
+  return parsed.toString();
+}
+
 async function fetchVideoUploadSignature() {
   const response = await fetch("/api/upload-video/signature");
   const data = await response.json();
@@ -4565,7 +4599,7 @@ async function uploadVideoDirectToCloudinary(file) {
     throw new Error(data?.error?.message || "Upload video len Cloudinary that bai");
   }
   return {
-    url: data.secure_url,
+    url: buildCloudinaryPlayableVideoUrl(data.secure_url),
     thumb: buildCloudinaryVideoThumb(data),
     source: "cloudinary-direct",
     duration: data.duration,
