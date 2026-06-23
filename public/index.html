@@ -1796,10 +1796,10 @@
             <div id="teamInvitationBanner" style="display: none; margin-bottom: 18px"></div>
             <div class="tbl-card" id="teamMembersCard" style="margin-bottom: 18px">
               <div class="tbl-head"><h3>Thành viên workspace</h3><span style="font-size: 12px; color: var(--text3)" id="teamOwnerLabel">Owner</span></div>
-              <div class="card-p" style="border-bottom: 1px solid var(--border)">
+              <div class="card-p" id="teamInviteControls" style="border-bottom: 1px solid var(--border)">
                 <div class="team-invite-grid">
                   <div><label class="fl">Email có thể mời</label><input type="email" class="fi" id="teamInviteEmail" placeholder="ten@congty.com" /></div>
-                  <div><label class="fl">Vai trò</label><select class="fi" id="teamInviteRole"><option value="editor">Editor</option><option value="analyst">Analyst</option><option value="owner">Owner</option></select></div>
+                  <div><label class="fl">Vai trò</label><select class="fi" id="teamInviteRole"><option value="editor">Editor</option><option value="analyst">Analyst</option></select></div>
                   <div class="team-invite-cta"><label class="fl" style="opacity: 0">Mời</label><button class="user-btn primary" type="button" id="teamInviteBtn" onclick="inviteTeamMember()">Mời thành viên</button></div>
                 </div>
                 <div class="user-note" id="teamInviteHint" style="margin: 10px 0 0">Team workspace thật: owner mời, user xác nhận rồi mới thấy dữ liệu chung.</div>
@@ -1812,17 +1812,43 @@
               <div class="tbl-head"><h3>Mẫu link chung (<span id="teamTemplateCount">0</span>)</h3><span style="font-size: 12px; color: var(--text3)" id="teamTemplateHint">Snapshot metadata chung cho team</span></div>
               <div class="card-p" style="border-bottom: 1px solid var(--border)">
                 <div class="fg" style="margin-bottom: 0">
-                  <div><label class="fl">Chọn link nguồn của bạn</label><select class="fi" id="teamTemplateSourceLink"><option value="">Chọn link để chụp snapshot nội dung</option></select></div>
-                  <div><label class="fl">Tên mẫu chung</label><input type="text" class="fi" id="teamTemplateName" placeholder="Ví dụ: Template TikTok campaign A" /></div>
+                  <div>
+                    <label class="fl" id="teamTemplateSourceLabel">Chọn link nguồn của bạn</label>
+                    <button class="team-template-source-trigger" type="button" id="teamTemplateSourceTrigger" onclick="toggleTeamTemplateSourceDropdown()">
+                      Chọn tối đa 5 link nguồn
+                    </button>
+                    <div class="team-template-source-dropdown hidden" id="teamTemplateSourceDropdown">
+                      <div class="team-template-source-picker" id="teamTemplateSourcePicker"></div>
+                    </div>
+                    <div class="user-note" id="teamTemplateSourceStatus" style="margin-top: 8px">
+                      Chọn tối đa 5 link để gom vào cùng 1 mẫu chia sẻ.
+                    </div>
+                    <div class="user-actions" style="margin-top: 10px">
+                      <button class="user-btn secondary" type="button" id="teamTemplateUploadBtn" onclick="triggerTeamTemplateMediaUpload()">
+                        Tải video/ảnh từ máy
+                      </button>
+                      <input
+                        type="file"
+                        id="teamTemplateMediaFile"
+                        accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+                        hidden
+                        onchange="handleTeamTemplateMediaUpload(event)"
+                      />
+                    </div>
+                    <div class="user-note" id="teamTemplateUploadStatus" style="margin-top: 8px">
+                      Media sẽ tự lấy từ link đã chọn nếu có preview, hoặc bạn có thể tải file riêng từ máy.
+                    </div>
+                  </div>
+                  <div><label class="fl" id="teamTemplateNameLabel">Tên mẫu chung</label><input type="text" class="fi" id="teamTemplateName" placeholder="Ví dụ: Template TikTok campaign A" /></div>
                 </div>
                 <div class="user-actions" style="margin-top: 10px">
                   <button class="user-btn primary" type="button" id="teamTemplateCreateBtn" onclick="createTeamTemplate()">Tạo mẫu chung</button>
-                  <button class="user-btn secondary" type="button" onclick="clearTeamTemplateDraft(true); navigate('create');">Tạo link cá nhân</button>
+                  <button class="user-btn secondary" type="button" id="teamTemplateCreatePersonalBtn" onclick="clearTeamTemplateDraft(true); navigate('create');">Tạo link cá nhân</button>
                 </div>
-                <div class="user-note" style="margin-top: 10px">Mẫu chung chỉ lưu nội dung share, kiểu link, video overlay và domain. Khi bấm <strong>Lấy link cho tôi</strong>, user sẽ qua tab Tạo link với nội dung đã khóa sẵn, còn URL đích là do user tự dán.</div>
+                <div class="user-note" id="teamTemplateFormNote" style="margin-top: 10px">Mẫu chung chỉ khóa nội dung share, kiểu link, video overlay và domain. Khi bấm <strong>Lấy link cho tôi</strong>, editor sẽ mở popup để dán link gốc của riêng mình rồi tạo link ngay, không cần qua tab khác.</div>
               </div>
               <div style="overflow-x: auto">
-                <table><thead><tr><th>Mẫu</th><th>Người tạo</th><th>Kiểu</th><th>Domain</th><th>Cập nhật</th><th>Thao tác</th></tr></thead><tbody id="teamTemplateBody"><tr><td colspan="6" class="tbl-empty">⏳ Đang tải mẫu link chung...</td></tr></tbody></table>
+                <table><thead><tr><th>Mẫu chia sẻ</th></tr></thead><tbody id="teamTemplateBody"><tr><td colspan="1" class="tbl-empty">⏳ Đang tải mẫu link chung...</td></tr></tbody></table>
               </div>
             </div>
             <div class="team-panel-stack">
@@ -3108,6 +3134,47 @@
             onclick="closeConfirmModal(true)"
           >
             Xác nhận
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="modal-backdrop hidden"
+      id="teamTemplateModal"
+      onclick="if (event.target === this) closeTeamTemplateModal(false);"
+    >
+      <div class="modal team-template-modal-shell">
+        <div class="modal-head">
+          <h3 id="teamTemplateModalTitle">Mẫu link chung</h3>
+          <div class="modal-close" onclick="closeTeamTemplateModal(false)">✕</div>
+        </div>
+        <div class="modal-body team-template-modal-body">
+          <div class="team-template-modal-grid" id="teamTemplateEditFields">
+            <div>
+              <label class="fl">Link nguồn</label>
+              <select class="fi" id="teamTemplateModalSourceLink"></select>
+            </div>
+            <div>
+              <label class="fl">Tên mẫu</label>
+              <input class="fi" id="teamTemplateModalName" type="text" />
+            </div>
+          </div>
+          <div class="team-template-modal-grid hidden" id="teamTemplateUseFields">
+            <div class="team-template-span-2 team-template-modal-summary" id="teamTemplateModalSourceSummary"></div>
+            <div class="team-template-span-2">
+              <label class="fl">Link gốc của bạn</label>
+              <input class="fi" id="teamTemplateModalOriginalUrl" type="url" placeholder="Dán link gốc Shopee hoặc TikTok của bạn" />
+            </div>
+          </div>
+          <div class="team-template-modal-note" id="teamTemplateModalNote"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" type="button" onclick="closeTeamTemplateModal(false)">
+            Hủy
+          </button>
+          <button class="btn-save" type="button" id="teamTemplateModalActionBtn" onclick="closeTeamTemplateModal(true)">
+            Tạo link
           </button>
         </div>
       </div>

@@ -775,6 +775,35 @@ function sanitizeAliasInput(input, maxLength = 40) {
   return compact.slice(0, maxLength).replace(/-+$/g, "");
 }
 
+function appendAliasSuffix(alias, suffix, maxLength = 40) {
+  const baseAlias = sanitizeAliasInput(alias, maxLength);
+  const suffixAlias = sanitizeAliasInput(suffix, Math.max(8, maxLength));
+  if (!baseAlias) return suffixAlias.slice(0, maxLength);
+  if (!suffixAlias) return baseAlias;
+  const trimmedBase = baseAlias.slice(0, Math.max(1, maxLength - suffixAlias.length - 1)).replace(/-+$/g, "");
+  return `${trimmedBase}-${suffixAlias}`.slice(0, maxLength).replace(/-+$/g, "");
+}
+
+async function ensureAvailableAlias(database, requestedAlias, { allowAutoSuffix = false } = {}) {
+  let normalizedAlias = sanitizeAliasInput(requestedAlias, 40);
+  if (!normalizedAlias) return null;
+  if (normalizedAlias.length < 2) return normalizedAlias;
+  const existing =
+    (await database.getLinkByAlias(normalizedAlias)) ||
+    (await database.getLinkByCode(normalizedAlias));
+  if (!existing) return normalizedAlias;
+  if (!allowAutoSuffix) return null;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const candidate = appendAliasSuffix(normalizedAlias, nanoid(3).toLowerCase(), 40);
+    if (!candidate || candidate.length < 2) continue;
+    const duplicate =
+      (await database.getLinkByAlias(candidate)) ||
+      (await database.getLinkByCode(candidate));
+    if (!duplicate) return candidate;
+  }
+  return null;
+}
+
 function humanizeSlugTitle(input, maxLength = 120) {
   const compact = String(input || "")
     .trim()
@@ -1979,6 +2008,11 @@ function normalizeWorkspaceRole(input) {
   return "editor";
 }
 
+function normalizeInvitableWorkspaceRole(input) {
+  const value = String(input || "").trim().toLowerCase();
+  return value === "analyst" ? "analyst" : "editor";
+}
+
 function normalizeWorkspaceStatus(input) {
   const value = String(input || "").trim().toLowerCase();
   if (value === "pending" || value === "paused") return value;
@@ -2003,6 +2037,19 @@ function canManageWorkspaceMembers(membership, workspace, user) {
 
 function canManageWorkspaceTemplates(membership) {
   return !!membership && membership.status === "active" && ["owner", "editor"].includes(membership.role);
+}
+
+function canUseWorkspaceTemplates(membership) {
+  return !!membership && membership.status === "active" && membership.role === "editor";
+}
+
+function canEditWorkspaceTemplate(membership, template, user) {
+  return (
+    !!membership &&
+    membership.status === "active" &&
+    ["owner", "editor"].includes(membership.role) &&
+    Number(template?.created_by_user_id || 0) === Number(user?.id || 0)
+  );
 }
 
 function formatWorkspaceDisplayName(value, fallback = "Workspace") {
@@ -2037,19 +2084,41 @@ function buildWorkspaceMemberResponse(member) {
 function buildWorkspaceTemplateResponse(template, memberMap = new Map(), publicBaseUrl = BASE_URL) {
   const creator = memberMap.get(Number(template?.created_by_user_id || 0));
   const sourceLink = template?.source_link_id ? memberMap.get(`link:${template.source_link_id}`) : null;
+  const mediaLink = template?.media_link_id ? memberMap.get(`link:${template.media_link_id}`) : sourceLink;
+  const sourceLinkIds = Array.isArray(template?.source_link_ids_json)
+    ? template.source_link_ids_json
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    : [];
+  const groupedSourceLinks = sourceLinkIds
+    .map((linkId) => {
+      const link = memberMap.get(`link:${linkId}`);
+      if (!link) return null;
+      return {
+        id: linkId,
+        title: link.og_title || link.alias || link.short_code || `Link #${linkId}`,
+        short_url: link.short_url || "",
+        original_url: link.original_url || "",
+      };
+    })
+    .filter(Boolean);
   return {
     id: template?.id,
     workspace_id: template?.workspace_id,
     created_by_user_id: template?.created_by_user_id || null,
     creator_name: creator?.display_name || creator?.email || "Member",
     source_link_id: template?.source_link_id || null,
+    media_link_id: template?.media_link_id || template?.source_link_id || null,
+    source_link_ids: sourceLinkIds,
+    source_links: groupedSourceLinks,
     source_link_short_url: sourceLink?.short_url || null,
+    source_link_original_url: sourceLink?.original_url || null,
     name: formatWorkspaceDisplayName(template?.name, "Template"),
     og_title: template?.og_title || "",
     og_desc: template?.og_desc || "",
-    og_image: template?.og_image || "",
+    og_image: template?.og_image || mediaLink?.og_image || "",
     link_type: template?.link_type || "direct",
-    video_url: template?.video_url || "",
+    video_url: template?.video_url || mediaLink?.video_url || "",
     video_overlay_text: template?.video_overlay_text || "",
     domain_hostname: template?.domain_hostname || null,
     created_at: template?.created_at || null,
@@ -2128,19 +2197,51 @@ async function resolveWorkspaceContext(database, user, { ensureOwnerWorkspace = 
   const workspace = await database.getWorkspaceById(selected.workspace.id);
   const members = (await database.listWorkspaceMembers(workspace.id)).map(buildWorkspaceMemberResponse);
   const links = await database.getRecentLinks(user.id, null);
+  const templatesRaw = await database.listWorkspaceTemplates(workspace.id);
+  const buildLinkEntry = (link) => ({
+    short_url: buildLinkShortUrl(link, BASE_URL),
+    original_url: link.original_url || "",
+    og_title: link.og_title || "",
+    og_image: link.og_image || "",
+    video_url: link.video_url || "",
+    alias: link.alias || "",
+    short_code: link.alias || link.short_code || "",
+  });
   const linkMap = new Map(
     links.map((link) => [
       `link:${link.id}`,
-      {
-        short_url: buildLinkShortUrl(link, BASE_URL),
-      },
+      buildLinkEntry(link),
     ]),
   );
+  const templateLinkIds = [...new Set(
+    templatesRaw.flatMap((template) => {
+      const ids = [
+        Number(template?.source_link_id),
+        Number(template?.media_link_id),
+      ];
+      if (Array.isArray(template?.source_link_ids_json)) {
+        ids.push(
+          ...template.source_link_ids_json.map((value) => Number(value)),
+        );
+      }
+      return ids.filter((value) => Number.isInteger(value) && value > 0);
+    }),
+  )];
+  const missingTemplateLinkIds = templateLinkIds.filter((linkId) => !linkMap.has(`link:${linkId}`));
+  if (missingTemplateLinkIds.length) {
+    const templateLinks = await Promise.all(
+      missingTemplateLinkIds.map((linkId) => database.getLinkById(linkId)),
+    );
+    for (const link of templateLinks) {
+      if (!link?.id) continue;
+      linkMap.set(`link:${link.id}`, buildLinkEntry(link));
+    }
+  }
   const memberMap = new Map(members.map((member) => [Number(member.user_id || 0), member]));
   for (const [key, value] of linkMap.entries()) {
     memberMap.set(key, value);
   }
-  const templates = (await database.listWorkspaceTemplates(workspace.id)).map((template) =>
+  const templates = templatesRaw.map((template) =>
     buildWorkspaceTemplateResponse(template, memberMap, BASE_URL),
   );
 
@@ -2750,7 +2851,7 @@ app.post("/api/team/members", requireAuth, async (req, res) => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "Email mời không hợp lệ" });
     }
-    const role = normalizeWorkspaceRole(req.body?.role);
+    const role = normalizeInvitableWorkspaceRole(req.body?.role);
     const members = await database.listWorkspaceMembers(context.workspace.id);
     if (members.length >= getWorkspaceSeatLimitForUser(user)) {
       return res.status(403).json({
@@ -2852,9 +2953,115 @@ app.post("/api/team/templates", requireAuth, async (req, res) => {
     if (!canManageWorkspaceTemplates(context.membership)) {
       return res.status(403).json({ error: "Vai trò hiện tại không thể tạo mẫu chung" });
     }
+    const sourceLinkIds = Array.isArray(req.body?.source_link_ids)
+      ? req.body.source_link_ids
+      : [req.body?.source_link_id];
+    const normalizedSourceLinkIds = [...new Set(
+      sourceLinkIds
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    )];
+    if (!normalizedSourceLinkIds.length) {
+      return res.status(400).json({ error: "Thiếu link nguồn để tạo mẫu" });
+    }
+    if (normalizedSourceLinkIds.length > 5) {
+      return res.status(400).json({ error: "Chỉ được chọn tối đa 5 link nguồn mỗi lần" });
+    }
+    const requestedMediaLinkId = Number(req.body?.media_link_id);
+    const uploadedMediaKind = String(req.body?.uploaded_media_kind || "").trim().toLowerCase();
+    const uploadedMediaUrl = String(req.body?.uploaded_media_url || "").trim();
+    const uploadedMediaThumb = String(req.body?.uploaded_media_thumb || "").trim();
+    const hasUploadedMedia =
+      (uploadedMediaKind === "video" || uploadedMediaKind === "image") &&
+      !!uploadedMediaUrl;
+    if (!hasUploadedMedia && Number.isInteger(requestedMediaLinkId) && requestedMediaLinkId > 0 && !normalizedSourceLinkIds.includes(requestedMediaLinkId)) {
+      return res.status(400).json({ error: "Media đại diện phải nằm trong nhóm link đã chọn" });
+    }
+    const requestedName = String(req.body?.name || "").trim();
+    const sourceLinks = [];
+    for (const sourceLinkId of normalizedSourceLinkIds) {
+      const sourceLink = await database.getLinkById(sourceLinkId);
+      if (!sourceLink) {
+        return res.status(404).json({ error: "Không tìm thấy link nguồn" });
+      }
+      const canUseSourceLink =
+        Number(sourceLink.user_id || 0) === Number(user.id) ||
+        (sourceLink.workspace_id && Number(sourceLink.workspace_id) === Number(context.workspace.id));
+      if (!canUseSourceLink) {
+        return res.status(403).json({ error: "Bạn không có quyền dùng link này làm mẫu" });
+      }
+      sourceLinks.push(sourceLink);
+    }
+    const primarySourceLink = sourceLinks[0];
+    const mediaLink = hasUploadedMedia
+      ? null
+      : sourceLinks.find((link) => Number(link.id) === requestedMediaLinkId) ||
+        sourceLinks.find((link) => link.video_url || link.og_image) ||
+        null;
+    if (!hasUploadedMedia && (!mediaLink || (!mediaLink.video_url && !mediaLink.og_image))) {
+      return res.status(400).json({
+        error: "Can it nhat 1 link da chon co video hoac anh preview, hoac ban tai media tu may",
+      });
+    }
+    const baseTemplateName =
+      requestedName ||
+      mediaLink?.og_title ||
+      mediaLink?.alias ||
+      mediaLink?.short_code ||
+      primarySourceLink?.og_title ||
+      "Template";
+    const templateName = formatWorkspaceDisplayName(baseTemplateName, "Template");
+    await database.createWorkspaceTemplate({
+      workspace_id: context.workspace.id,
+      created_by_user_id: user.id,
+      source_link_id: primarySourceLink?.id || null,
+      media_link_id: mediaLink?.id || null,
+      source_link_ids_json: normalizedSourceLinkIds,
+      name: templateName,
+      og_title: mediaLink?.og_title || templateName,
+      og_desc: mediaLink?.og_desc || null,
+      og_image:
+        uploadedMediaKind === "image"
+          ? uploadedMediaUrl
+          : uploadedMediaKind === "video"
+            ? uploadedMediaThumb || mediaLink?.og_image || null
+            : mediaLink?.og_image || null,
+      link_type: mediaLink?.link_type || primarySourceLink?.link_type || "direct",
+      video_url:
+        uploadedMediaKind === "video"
+          ? uploadedMediaUrl
+          : mediaLink?.video_url || null,
+      video_overlay_text: mediaLink?.video_overlay_text || null,
+      domain_hostname: mediaLink?.domain_hostname || primarySourceLink?.domain_hostname || null,
+    });
+    const nextContext = await resolveWorkspaceContext(database, user);
+    res.json(buildTeamWorkspacePayload(nextContext, user));
+  } catch (e) {
+    res.status(500).json({ error: "Không thể tạo mẫu chung: " + e.message });
+  }
+});
+
+app.patch("/api/team/templates/:id", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const context = await resolveWorkspaceContext(database, user);
+    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    const templateId = Number(req.params.id);
+    if (!Number.isInteger(templateId) || templateId < 1) {
+      return res.status(400).json({ error: "Thiếu mẫu chung cần sửa" });
+    }
+    const template = await database.getWorkspaceTemplateById(templateId);
+    if (!template || Number(template.workspace_id || 0) !== Number(context.workspace.id)) {
+      return res.status(404).json({ error: "Không tìm thấy mẫu chung" });
+    }
+    if (!canEditWorkspaceTemplate(context.membership, template, user)) {
+      return res.status(403).json({ error: "Chi nguoi tao mau moi duoc sua mau chung" });
+    }
     const sourceLinkId = Number(req.body?.source_link_id);
     if (!Number.isInteger(sourceLinkId) || sourceLinkId < 1) {
-      return res.status(400).json({ error: "Thiếu link nguồn để tạo mẫu" });
+      return res.status(400).json({ error: "Thiếu link nguồn để cập nhật mẫu" });
     }
     const sourceLink = await database.getLinkById(sourceLinkId);
     if (!sourceLink) return res.status(404).json({ error: "Không tìm thấy link nguồn" });
@@ -2868,9 +3075,7 @@ app.post("/api/team/templates", requireAuth, async (req, res) => {
       req.body?.name || sourceLink.og_title || sourceLink.alias || sourceLink.short_code || "Template",
       "Template",
     );
-    await database.createWorkspaceTemplate({
-      workspace_id: context.workspace.id,
-      created_by_user_id: user.id,
+    await database.updateWorkspaceTemplate(template.id, {
       source_link_id: sourceLink.id,
       name: templateName,
       og_title: sourceLink.og_title || null,
@@ -2884,7 +3089,33 @@ app.post("/api/team/templates", requireAuth, async (req, res) => {
     const nextContext = await resolveWorkspaceContext(database, user);
     res.json(buildTeamWorkspacePayload(nextContext, user));
   } catch (e) {
-    res.status(500).json({ error: "Không thể tạo mẫu chung: " + e.message });
+    res.status(500).json({ error: "Không thể sửa mẫu chung: " + e.message });
+  }
+});
+
+app.delete("/api/team/templates/:id", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    const context = await resolveWorkspaceContext(database, user);
+    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    const templateId = Number(req.params.id);
+    if (!Number.isInteger(templateId) || templateId < 1) {
+      return res.status(400).json({ error: "Thiếu mẫu chung cần xóa" });
+    }
+    const template = await database.getWorkspaceTemplateById(templateId);
+    if (!template || Number(template.workspace_id || 0) !== Number(context.workspace.id)) {
+      return res.status(404).json({ error: "Không tìm thấy mẫu chung" });
+    }
+    if (!canEditWorkspaceTemplate(context.membership, template, user)) {
+      return res.status(403).json({ error: "Chi nguoi tao mau moi duoc xoa mau chung" });
+    }
+    await database.deleteWorkspaceTemplate(template.id);
+    const nextContext = await resolveWorkspaceContext(database, user);
+    res.json(buildTeamWorkspacePayload(nextContext, user));
+  } catch (e) {
+    res.status(500).json({ error: "Không thể xóa mẫu chung: " + e.message });
   }
 });
 
@@ -3580,6 +3811,9 @@ app.post("/api/shorten", async (req, res) => {
       if (workspaceContext.membership.status !== "active") {
         return res.status(403).json({ error: "Chỉ thành viên đang hoạt động mới có thể lấy link từ mẫu chung" });
       }
+      if (!canUseWorkspaceTemplates(workspaceContext.membership)) {
+        return res.status(403).json({ error: "Chi editor dang hoat dong moi duoc lay link tu mau chung" });
+      }
       selectedWorkspaceId = template.workspace_id;
       selectedTemplateId = template.id;
       og_title = normalizeShareTitleInput(template.og_title, 120);
@@ -3594,10 +3828,13 @@ app.post("/api/shorten", async (req, res) => {
     if (alias) {
       if (alias.length < 2)
         return res.status(400).json({ error: "Alias phải có ít nhất 2 ký tự" });
-      const taken =
-        (await database.getLinkByAlias(alias)) ||
-        (await database.getLinkByCode(alias));
-      if (taken) return res.status(400).json({ error: "Alias đã được dùng" });
+      const resolvedAlias = await ensureAvailableAlias(database, alias, {
+        allowAutoSuffix: Number.isInteger(normalizedTemplateId) && normalizedTemplateId > 0,
+      });
+      if (!resolvedAlias) {
+        return res.status(400).json({ error: "Alias đã được dùng" });
+      }
+      alias = resolvedAlias;
     } else {
       alias = null;
     }

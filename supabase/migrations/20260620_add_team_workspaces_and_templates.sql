@@ -62,3 +62,11 @@ CREATE TABLE IF NOT EXISTS workspace_link_templates (
 CREATE INDEX IF NOT EXISTS idx_workspace_link_templates_workspace_id ON workspace_link_templates(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_link_templates_created_by ON workspace_link_templates(created_by_user_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_link_templates_source_link_id ON workspace_link_templates(source_link_id);
+
+ALTER TABLE workspace_link_templates
+  ADD COLUMN IF NOT EXISTS media_link_id BIGINT REFERENCES links(id) ON DELETE SET NULL;
+
+ALTER TABLE workspace_link_templates
+  ADD COLUMN IF NOT EXISTS source_link_ids_json JSONB DEFAULT '[]'::jsonb;
+
+CREATE INDEX IF NOT EXISTS idx_workspace_link_templates_media_link_id ON workspace_link_templates(media_link_id);

@@ -39,6 +39,44 @@ function slugifyAliasValue(value, maxLength = 40) {
   return compact.slice(0, maxLength).replace(/-+$/g, "");
 }
 
+function extractAliasFromShortUrl(value) {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) return "";
+  try {
+    const parsed = new URL(rawValue);
+    return parsed.pathname.replace(/^\/+|\/+$/g, "");
+  } catch {
+    return rawValue.replace(/^\/+|\/+$/g, "");
+  }
+}
+
+function appendAliasSuffixPreview(alias, suffix, maxLength = 40) {
+  const baseAlias = slugifyAliasValue(alias, maxLength);
+  const suffixAlias = slugifyAliasValue(suffix, maxLength);
+  if (!baseAlias) return suffixAlias.slice(0, maxLength);
+  if (!suffixAlias) return baseAlias;
+  const trimmedBase = baseAlias
+    .slice(0, Math.max(1, maxLength - suffixAlias.length - 1))
+    .replace(/-+$/g, "");
+  return `${trimmedBase}-${suffixAlias}`.slice(0, maxLength).replace(/-+$/g, "");
+}
+
+function buildTeamTemplateAlias(template, sourceLink) {
+  const sourceAlias = slugifyAliasValue(
+    extractAliasFromShortUrl(sourceLink?.short_url) ||
+      sourceLink?.title ||
+      template?.name ||
+      "link",
+    40,
+  );
+  const userAliasWord = slugifyAliasValue(
+    user?.name || user?.email?.split("@")[0] || "user",
+    10,
+  );
+  const suffixWord = `${userAliasWord || "user"}${Date.now().toString(36).slice(-4)}`;
+  return appendAliasSuffixPreview(sourceAlias || "link", suffixWord, 40);
+}
+
 function humanizeSlugTitle(value) {
   const normalized = String(value || "")
     .trim()
@@ -80,6 +118,12 @@ const teamStorageKey = "rutgonlink-teamspace";
 let teamState = null;
 let teamWorkspaceData = null;
 let pendingTeamTemplateDraft = null;
+let editingTeamTemplateId = null;
+let teamTemplateModalState = null;
+let selectedTeamTemplateSourceIds = [];
+let selectedTeamTemplateMediaLinkId = null;
+let isTeamTemplateSourceDropdownOpen = false;
+let uploadedTeamTemplateMedia = null;
 let landingNavOpen = false;
 let landingQuickUrl = "";
 let landingTypedTimer = null;
@@ -155,7 +199,7 @@ const appUiTextTranslations = {
     "Đã xem hết": "Mark all read",
     "Chuông sẽ hiện các thay đổi mới về click, link, domain và quản trị.":
       "The bell shows new changes for clicks, links, domains, and admin activity.",
-    "Khách": "Guest",
+    Khách: "Guest",
     "Chưa đăng nhập": "Not signed in",
     "Hồ sơ công khai": "Public profile",
     "Thanh toán": "Billing",
@@ -263,8 +307,8 @@ const appUiTextTranslations = {
     "Kích thước": "Size",
     "Màu QR": "QR color",
     "Màu brand": "Brand color",
-    "Đen": "Black",
-    "Tím": "Purple",
+    Đen: "Black",
+    Tím: "Purple",
     "Xanh lá": "Green",
     "Tạo / cập nhật": "Create / update",
     "Sao chép URL": "Copy URL",
@@ -323,7 +367,7 @@ const appUiTextTranslations = {
     "Những người có thể thao tác ngay": "People who can act right away",
     "Lời mời": "Invitations",
     "Đang chờ xác nhận": "Awaiting confirmation",
-    "Workspace": "Workspace",
+    Workspace: "Workspace",
     "Owner + editor + analyst trong một luồng.":
       "Owner + editor + analyst in one shared flow.",
     "Thành viên workspace": "Workspace members",
@@ -334,14 +378,30 @@ const appUiTextTranslations = {
     "Mẫu link chung": "Shared templates",
     "Mẫu chung chỉ lưu nội dung share, kiểu link, video overlay và domain. Khi bấm":
       "Shared templates only store shared copy, link type, video overlay, and domain. When you click",
-    "Mẫu link chung chỉ lưu nội dung share, kiểu link, video overlay và domain. Khi bấm Lấy link cho tôi, user sẽ qua tab Tạo link với nội dung đã khóa sẵn, còn URL đích là do user tự dán.":
-      "Shared templates only store shared copy, link type, video overlay, and domain. When the user clicks Get link for me, they will move to Create Link with the template content prefilled while the destination URL stays theirs to paste.",
+    "Mẫu chung chỉ khóa nội dung share, kiểu link, video overlay và domain. Khi bấm Lấy link cho tôi, editor sẽ mở popup để dán link gốc của riêng mình rồi tạo link ngay, không cần qua tab khác.":
+      "Shared templates lock the shared copy, link type, video overlay, and domain. When editors click Get link for me, a popup opens so they can paste their own original URL and create the link right away without leaving this tab.",
     "Lấy link cho tôi": "Get link for me",
-    "user sẽ qua tab Tạo link với nội dung đã khóa sẵn, còn URL đích là do user tự dán.":
-      "the user is taken to Create Link with the template content prefilled, while the destination URL remains theirs to paste.",
+    "editor sẽ mở popup để dán link gốc của riêng mình rồi tạo link ngay, không cần qua tab khác.":
+      "editors get a popup to paste their own original URL and create the link right away without switching tabs.",
     "Tên mẫu chung": "Shared template name",
     "Tạo mẫu chung": "Create shared template",
     "Tạo link cá nhân": "Create personal link",
+    "Tải video/ảnh từ máy": "Upload video/image from device",
+    "Mẫu chung chỉ khóa nội dung share, kiểu link, video overlay và domain. Editor lấy theo từng link để sửa URL gốc của riêng mình, không ảnh hưởng tới mẫu chung.":
+      "Shared templates only lock shared copy, link type, video overlay, and domain. Editors use each link separately to edit their own original URL without affecting the shared template.",
+    "Đăng nhập để mời cộng tác viên.": "Log in to invite collaborators.",
+    "Đăng nhập để dùng mẫu liên kết chung.": "Log in to use shared link templates.",
+    "Chỉ owner quản lý": "Owner only",
+    "Chỉ editor được lấy": "Editors only",
+    "Lời mời workspace": "Workspace invitation",
+    "Chọn tối đa 5 link nguồn": "Select up to 5 source links",
+    "Chọn tối đa 5 link để gom vào cùng 1 mẫu chia sẻ.": "Select up to 5 links to bundle into one shared template.",
+    "Media sẽ tự lấy từ link đã tick nếu có preview, hoặc bạn có thể tải file riêng từ máy.":
+      "Media will be taken automatically from selected links if a preview exists, or you can upload a separate file from your device.",
+    "Sửa mẫu chung": "Edit shared template",
+    "Lưu mẫu": "Save template",
+    "Hủy sửa": "Cancel editing",
+    "Đồng ý tham gia": "Accept invitation",
     "Quy trình giao việc": "Workflow split",
     "Chia nhỏ công việc theo role để không dồn mọi thứ vào một người.":
       "Split work by role so everything does not land on one person.",
@@ -355,9 +415,9 @@ const appUiTextTranslations = {
     "Tất cả link đã tạo": "All created links",
     "Danh sách liên kết": "Link list",
     "Tất cả": "All",
-    "Khác": "Other",
+    Khác: "Other",
     "OG Meta": "OG meta",
-    "Clicks": "Clicks",
+    Clicks: "Clicks",
     "Bỏ chọn": "Clear selection",
     "Xóa đã chọn": "Delete selected",
     "Link rút gọn": "Short link",
@@ -416,19 +476,19 @@ const appUiTextTranslations = {
     "Chưa chọn người dùng nào.": "No users selected.",
     "Chọn trang này": "Select this page",
     "Chọn theo bộ lọc": "Select by filter",
-    "Tên": "Name",
+    Tên: "Name",
     "Gói hiện tại": "Current plan",
     "Yêu cầu thanh toán": "Payment requests",
     "Điều hướng quản trị": "Admin navigation",
     "Tìm theo mã thanh toán...": "Search by payment code...",
     "Tải lại": "Reload",
-    "Mã": "Code",
-    "Gói": "Plan",
+    Mã: "Code",
+    Gói: "Plan",
     "Số tiền": "Amount",
     "Chuyển lúc": "Paid at",
     "Ghi chú": "Note",
     "Thao tác": "Actions",
-    "Duyệt": "Approve",
+    Duyệt: "Approve",
     "Từ chối": "Reject",
     "Đang tải...": "Loading...",
     "Đang tải yêu cầu thanh toán...": "Loading payment requests...",
@@ -440,8 +500,8 @@ const appUiTextTranslations = {
     "Hết hạn": "Expires",
     "Đặt làm domain chính": "Set as primary domain",
     "Thêm domain": "Add domain",
-    "Nhãn": "Label",
-    "Chính": "Primary",
+    Nhãn: "Label",
+    Chính: "Primary",
     "Nguồn log:": "Log source:",
     "Thời gian": "Time",
     "Tạo QR cho link ngắn, chiến dịch hoặc trang tiểu sử":
@@ -458,8 +518,7 @@ const appUiTextTranslations = {
     "Phổ biến nhất": "Most popular",
     "Đầy đủ tính năng cho affiliate marketer":
       "Full feature set for affiliate marketers",
-    "Không giới hạn cho team & agency":
-      "Unlimited for teams and agencies",
+    "Không giới hạn cho team & agency": "Unlimited for teams and agencies",
     "Không giới hạn link": "Unlimited links",
     "Tất cả tính năng Pro": "All Pro features",
     "Custom domain (sắp có)": "Custom domain (coming soon)",
@@ -508,12 +567,12 @@ const appUiTextTranslations = {
       'After the transfer, click "Paid" to send the request to Admin > Payments.',
     "Có thể quét QR hoặc nhập tay thông tin chuyển khoản nếu QR chưa được cấu hình.":
       "You can scan the QR or manually enter the transfer details if the QR is not configured.",
-    "Đóng": "Close",
+    Đóng: "Close",
     "Đã thanh toán": "Paid",
     "Xác nhận hành động": "Confirm action",
     "Bạn có chắc muốn tiếp tục thao tác này không?":
       "Are you sure you want to continue?",
-    "Hủy": "Cancel",
+    Hủy: "Cancel",
     "Mở menu": "Open menu",
     "Đổi giao diện": "Toggle theme",
     "Mở thông báo": "Open notifications",
@@ -582,7 +641,26 @@ const appUiTextPatterns = {
     },
     {
       regex: /^(\d+) thiết bị đã được ghi nhận trên tài khoản này\.$/,
-      replace: (_match, count) => `${count} devices have been recorded for this account.`,
+      replace: (_match, count) =>
+        `${count} devices have been recorded for this account.`,
+    },
+    {
+      regex: /^Seat đang dùng (\d+)\/(\d+) · Quyền của bạn (.+)$/,
+      replace: (_match, used, total, role) =>
+        `Seats in use ${used}/${total} · Your role ${role}`,
+    },
+    {
+      regex: /^Đã chọn (\d+)\/5 link\. Media sẽ tự lấy từ link đầu tiên có preview, hoặc file upload\.$/,
+      replace: (_match, count) =>
+        `Selected ${count}/5 links. Media will be taken from the first link with a preview, or from an uploaded file.`,
+    },
+    {
+      regex: /^Đang dùng media tải từ máy: (.+)$/,
+      replace: (_match, label) => `Using uploaded media from device: ${label}`,
+    },
+    {
+      regex: /^Media sẽ lấy từ link đã chọn: (.+)$/,
+      replace: (_match, label) => `Media will be taken from the selected link: ${label}`,
     },
   ],
 };
@@ -641,9 +719,10 @@ function getAppPageFromLocation() {
 }
 
 function isDirectAppPath(pathname = location.pathname) {
-  const normalized = String(pathname || "")
-    .trim()
-    .replace(/\/+$/, "") || "/";
+  const normalized =
+    String(pathname || "")
+      .trim()
+      .replace(/\/+$/, "") || "/";
   if (normalized === "/") return false;
   if (normalized === "/app") return true;
   if (normalized.startsWith("/app/")) {
@@ -653,9 +732,10 @@ function isDirectAppPath(pathname = location.pathname) {
 }
 
 function isAuthPath(pathname = location.pathname) {
-  const normalized = String(pathname || "")
-    .trim()
-    .replace(/\/+$/, "") || "/";
+  const normalized =
+    String(pathname || "")
+      .trim()
+      .replace(/\/+$/, "") || "/";
   return (
     normalized === "/login" ||
     normalized === "/register" ||
@@ -665,9 +745,10 @@ function isAuthPath(pathname = location.pathname) {
 }
 
 function shouldUseAppShell(pathname = location.pathname) {
-  const normalized = String(pathname || "")
-    .trim()
-    .replace(/\/+$/, "") || "/";
+  const normalized =
+    String(pathname || "")
+      .trim()
+      .replace(/\/+$/, "") || "/";
   if (normalized === "/index.html") return true;
   if (normalized === "/app" || normalized.startsWith("/app/")) return true;
   if (isAuthPath(normalized)) return true;
@@ -3430,7 +3511,9 @@ function renderAdminOverview(payload = {}) {
     actionWrap.innerHTML = actions.length
       ? actions
           .map(
-            (item) => `<div class="admin-overview-item ${esc(item.tone || "info")}">
+            (
+              item,
+            ) => `<div class="admin-overview-item ${esc(item.tone || "info")}">
               <strong>${esc(item.title || "Cần theo dõi")}</strong>
               <span>${esc(item.message || "")}</span>
             </div>`,
@@ -4619,6 +4702,36 @@ function canCreateSharedTemplates() {
   );
 }
 
+function canUseSharedTemplates() {
+  const membership = getTeamMembership();
+  return membership?.status === "active" && membership?.role === "editor";
+}
+
+function getSelectedTeamTemplateSourceLinks(sourceLinks = []) {
+  return sourceLinks.filter((link) =>
+    selectedTeamTemplateSourceIds.includes(Number(link.id)),
+  );
+}
+
+function closeTeamTemplateSourceDropdown() {
+  isTeamTemplateSourceDropdownOpen = false;
+  const trigger = document.getElementById("teamTemplateSourceTrigger");
+  const dropdown = document.getElementById("teamTemplateSourceDropdown");
+  if (trigger) trigger.classList.remove("open");
+  if (dropdown) dropdown.classList.add("hidden");
+}
+
+function toggleTeamTemplateSourceDropdown(forceOpen = null) {
+  const trigger = document.getElementById("teamTemplateSourceTrigger");
+  const dropdown = document.getElementById("teamTemplateSourceDropdown");
+  if (!trigger || !dropdown || trigger.disabled) return;
+  const nextOpen =
+    typeof forceOpen === "boolean" ? forceOpen : !isTeamTemplateSourceDropdownOpen;
+  isTeamTemplateSourceDropdownOpen = nextOpen;
+  trigger.classList.toggle("open", nextOpen);
+  dropdown.classList.toggle("hidden", !nextOpen);
+}
+
 function formatTeamDateTime(value, fallback = "Chưa cập nhật") {
   if (!value) return fallback;
   const date = new Date(value);
@@ -4643,10 +4756,6 @@ function normalizeTeamTemplateSectionCopy() {
   const fieldLabels = card.querySelectorAll(".fg .fl");
   if (fieldLabels[0]) fieldLabels[0].textContent = "Chọn link nguồn của bạn";
   if (fieldLabels[1]) fieldLabels[1].textContent = "Tên mẫu chung";
-  const sourceSelect = document.getElementById("teamTemplateSourceLink");
-  if (sourceSelect?.options?.[0]) {
-    sourceSelect.options[0].textContent = "Chọn link để chụp snapshot nội dung";
-  }
   const nameInput = document.getElementById("teamTemplateName");
   if (nameInput) {
     nameInput.placeholder = "Ví dụ: Template TikTok campaign A";
@@ -4658,9 +4767,26 @@ function normalizeTeamTemplateSectionCopy() {
   const noteEl = card.querySelector(".user-note");
   if (noteEl) {
     noteEl.innerHTML =
-      "Mẫu chung chỉ lưu nội dung share, kiểu link, video overlay và domain. Khi bấm <strong>Lấy link cho tôi</strong>, user sẽ qua tab Tạo link với nội dung đã khóa sẵn, còn URL đích là do user tự dán.";
+      "Mẫu chung chỉ khóa nội dung share, kiểu link, video overlay và domain. Khi bấm <strong>Lấy link cho tôi</strong>, editor sẽ mở popup để dán link gốc của riêng mình rồi tạo link ngay, không cần qua tab khác.";
   }
   const headers = card.querySelectorAll("thead th");
+  const sourceLabel = document.getElementById("teamTemplateSourceLabel");
+  const mediaLabel = document.getElementById("teamTemplateMediaLabel");
+  const nameLabel = document.getElementById("teamTemplateNameLabel");
+  const uploadBtn = document.getElementById("teamTemplateUploadBtn");
+  const personalBtn = document.getElementById("teamTemplateCreatePersonalBtn");
+  const formNote = document.getElementById("teamTemplateFormNote");
+  if (sourceLabel) sourceLabel.textContent = "Chọn link nguồn của bạn";
+  if (mediaLabel) mediaLabel.textContent = "Chọn video hoặc ảnh đại diện";
+  if (nameLabel) nameLabel.textContent = "Tên mẫu chung";
+  if (nameInput) nameInput.placeholder = "Ví dụ: Template TikTok campaign A";
+  if (createBtn) createBtn.textContent = "Tạo mẫu chung";
+  if (uploadBtn) uploadBtn.textContent = "Tải video/ảnh từ máy";
+  if (personalBtn) personalBtn.textContent = "Tạo link cá nhân";
+  if (formNote) {
+    formNote.innerHTML =
+      "Mẫu chung chỉ khóa nội dung share, kiểu link, video overlay và domain. Khi bấm <strong>Lấy link cho tôi</strong>, editor sẽ mở popup để dán link gốc của riêng mình rồi tạo link ngay, không cần qua tab khác.";
+  }
   const headerLabels = [
     "Mẫu",
     "Người tạo",
@@ -4774,37 +4900,96 @@ function renderTeamTemplates(templates) {
   if (!body) return;
 
   if (!user) {
-    body.innerHTML = `<tr><td colspan="6" class="tbl-empty">Đăng nhập để dùng mẫu link chung. <a href="${buildAuthUrl("login")}" style="color:var(--brand);font-weight:700">Đăng nhập</a></td></tr>`;
+    body.innerHTML = `<tr><td colspan="1" class="tbl-empty">Dang nhap de dung mau lien ket chung. <a href="${buildAuthUrl("login")}" style="color:var(--brand);font-weight:700">Dang nhap</a></td></tr>`;
     return;
   }
 
   if (!Array.isArray(templates) || !templates.length) {
     body.innerHTML =
-      '<tr><td colspan="6" class="tbl-empty">Chưa có mẫu link chung nào. Hãy chọn một link của bạn và bấm Tạo mẫu chung.</td></tr>';
+      '<tr><td colspan="1" class="tbl-empty">Chua co mau chung nao. Hay chon mot lien ket cua ban roi bam tao mau chung.</td></tr>';
     return;
   }
 
   body.innerHTML = templates
     .map((template) => {
-      const title = template.og_title || template.name || "Template";
-      const subtitle =
-        template.og_desc ||
-        template.source_link_short_url ||
-        "Snapshot nội dung dùng chung";
+      const title = template.name || template.og_title || "Template";
+      const playableVideoUrl = buildCloudinaryPlayableVideoUrl(template.video_url || "");
+      const mediaMarkup = playableVideoUrl
+        ? `<div class="team-template-media"><video src="${esc(playableVideoUrl)}" controls preload="metadata" playsinline muted></video></div>`
+        : template.og_image
+          ? `<div class="team-template-media"><img src="${esc(template.og_image)}" alt="${esc(title)}" /></div>`
+          : `<div class="team-template-media"></div>`;
+      const downloadVideoButton = playableVideoUrl
+        ? `<a class="btn-cp" href="${esc(playableVideoUrl)}" target="_blank" rel="noopener noreferrer" download>Tai video</a>`
+        : "";
+      const hasVideoBadge = playableVideoUrl
+        ? `<span class="team-template-flag">Video</span>`
+        : "";
+      const groupedLinks = Array.isArray(template.source_links) && template.source_links.length
+        ? template.source_links
+        : [
+            {
+              title: template.og_title || template.name || "Link",
+              short_url: template.source_link_short_url || "",
+              original_url: template.source_link_original_url || "",
+            },
+          ];
+      const sourcePlatform = groupedLinks[0]?.original_url ? pt(groupedLinks[0].original_url) : "generic";
+      const platformLabel = sourcePlatform === "shopee" ? "Shopee" : sourcePlatform === "tiktok" ? "TikTok" : "Generic";
+      const canEditTemplate = Number(template.created_by_user_id || 0) === Number(user?.id || 0);
+      const templateActionButtons = canEditTemplate
+        ? `<button class="btn-cp" onclick="openTeamTemplateModal('edit', ${Number(template.id)})" title="Sua mau">Sua</button>
+           <button class="btn-cp" onclick="deleteTeamTemplate(${Number(template.id)})" title="Xoa mau" style="color:var(--red);border-color:rgba(239,68,68,.2)">Xoa</button>`
+        : "";
+      const groupedLinkMarkup = groupedLinks
+        .map(
+          (link, index) => `<div class="team-template-link-row">
+                <span class="team-template-link-label">Link ${index + 1}</span>
+                <span class="team-template-meta">${esc(link.title || `Link ${index + 1}`)}</span>
+                <span class="team-template-link-value" title="${esc(link.short_url || link.original_url || "Chua co link rut gon")}">${esc(link.short_url || link.original_url || "Chua co link rut gon")}</span>
+              </div>`,
+        )
+        .join("");
       return `<tr>
-      <td>
-        <div style="display:flex;flex-direction:column;gap:4px">
-          <strong>${esc(template.name || "Template")}</strong>
-          <span style="color:var(--text2);font-size:12px">${esc(title)}</span>
-          <span style="color:var(--text3);font-size:12px">${esc(subtitle)}</span>
+      <td colspan="1">
+        <div class="team-template-card-shell">
+          <div class="team-template-card">
+            ${mediaMarkup}
+            <div class="team-template-card-copy">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <strong>${esc(title)}</strong>
+                ${hasVideoBadge}
+                <span class="team-template-flag">${platformLabel}</span>
+              </div>
+              <div class="team-template-link-list">${groupedLinkMarkup}</div>
+            </div>
+          </div>
+          <div class="team-template-card-right">
+            <div class="team-template-meta-grid">
+              <div class="team-template-meta-box">
+                <span class="team-template-link-label">Nguoi tao</span>
+                <span class="team-template-meta">${esc(template.creator_name || "Member")}</span>
+              </div>
+              <div class="team-template-meta-box">
+                <span class="team-template-link-label">Kieu</span>
+                <span class="team-template-meta">${esc(formatTeamTemplateType(template.link_type))}</span>
+              </div>
+              <div class="team-template-meta-box">
+                <span class="team-template-link-label">Domain</span>
+                <span class="team-template-meta">${esc(template.domain_hostname || template.preview_domain || location.host)}</span>
+              </div>
+              <div class="team-template-meta-box">
+                <span class="team-template-link-label">Cap nhat</span>
+                <span class="team-template-meta muted">${esc(formatTeamDateTime(template.updated_at || template.created_at))}</span>
+              </div>
+            </div>
+            <div class="team-template-actions">
+              <button class="btn-cp" onclick="openTeamTemplateModal('use', ${Number(template.id)})">Lay link cho toi</button>
+              ${downloadVideoButton ? `<div class="team-template-actions-row">${downloadVideoButton}</div>` : ""}
+              ${templateActionButtons ? `<div class="team-template-actions-row">${templateActionButtons}</div>` : ""}
+            </div>
+          </div>
         </div>
-      </td>
-      <td>${esc(template.creator_name || "Member")}</td>
-      <td>${esc(formatTeamTemplateType(template.link_type))}</td>
-      <td>${esc(template.domain_hostname || template.preview_domain || location.host)}</td>
-      <td style="color:var(--text3);font-size:12px">${esc(formatTeamDateTime(template.updated_at || template.created_at))}</td>
-      <td style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn-cp" onclick="useTeamTemplate(${Number(template.id)})">Lấy link cho tôi</button>
       </td>
     </tr>`;
     })
@@ -4849,7 +5034,12 @@ function renderTeamWorkspaceSummary() {
   const domainLabel = document.getElementById("teamDomainLabel");
   const templateCount = document.getElementById("teamTemplateCount");
   const templateHint = document.getElementById("teamTemplateHint");
-  const templateSource = document.getElementById("teamTemplateSourceLink");
+  const templateSourcePicker = document.getElementById("teamTemplateSourcePicker");
+  const templateSourceStatus = document.getElementById("teamTemplateSourceStatus");
+  const templateSource = null;
+  const templateMediaLink = document.getElementById("teamTemplateMediaLink");
+  const templateMediaHint = document.getElementById("teamTemplateMediaHint");
+  const templateUploadStatus = document.getElementById("teamTemplateUploadStatus");
   const templateName = document.getElementById("teamTemplateName");
   const templateCreateBtn = document.getElementById("teamTemplateCreateBtn");
   const invitationBanner = document.getElementById("teamInvitationBanner");
@@ -4917,12 +5107,18 @@ function renderTeamWorkspaceSummary() {
   }
   if (templateSource) {
     const currentValue = String(templateSource.value || "");
+    const currentValues = new Set(
+      [...templateSource.selectedOptions]
+        .map((option) => String(option.value || "").trim())
+        .filter(Boolean),
+    );
     const options = sourceLinks
       .map((link) => {
         const primary =
           link.og_title || link.alias || link.short_code || `Link #${link.id}`;
         const secondary = link.original_url || "";
-        return `<option value="${Number(link.id)}">${esc(primary)}${secondary ? ` · ${esc(secondary.slice(0, 72))}` : ""}</option>`;
+        const videoBadge = link.video_url ? "[Video] " : "";
+        return `<option value="${Number(link.id)}">${videoBadge}${esc(primary)}${secondary ? ` · ${esc(secondary.slice(0, 72))}` : ""}</option>`;
       })
       .join("");
     templateSource.innerHTML = `<option value="">Chọn link của bạn để chụp snapshot nội dung</option>${options}`;
@@ -4935,11 +5131,96 @@ function renderTeamWorkspaceSummary() {
       templateSource.value = currentValue;
     }
     templateSource.disabled = !canCreateTemplates || !sourceLinks.length;
+    templateSource.multiple = true;
+    templateSource.size = Math.min(Math.max(sourceLinks.length, 3), 5);
+    [...templateSource.options].forEach((option) => {
+      if (!option.value) {
+        option.disabled = true;
+        option.selected = false;
+        return;
+      }
+      option.selected = currentValues.has(String(option.value));
+    });
   }
   if (templateName) templateName.disabled = !canCreateTemplates;
+  selectedTeamTemplateSourceIds = selectedTeamTemplateSourceIds.filter((id) =>
+    sourceLinks.some((link) => Number(link.id) === Number(id)),
+  );
+  const selectedSourceLinks = sourceLinks.filter((link) =>
+    selectedTeamTemplateSourceIds.includes(Number(link.id)),
+  );
+  const mediaEligibleLinks = selectedSourceLinks.filter(
+    (link) => !!(link.video_url || link.og_image),
+  );
+  if (
+    selectedTeamTemplateMediaLinkId &&
+    !mediaEligibleLinks.some(
+      (link) => Number(link.id) === Number(selectedTeamTemplateMediaLinkId),
+    )
+  ) {
+    selectedTeamTemplateMediaLinkId = null;
+  }
+  if (!selectedTeamTemplateMediaLinkId && mediaEligibleLinks.length) {
+    selectedTeamTemplateMediaLinkId = Number(mediaEligibleLinks[0].id);
+  }
+  if (templateSourcePicker) {
+    if (!sourceLinks.length) {
+      templateSourcePicker.innerHTML =
+        '<div class="tbl-empty" style="padding:12px 4px">Chua co link nguon nao de tao mau chung.</div>';
+    } else {
+      templateSourcePicker.innerHTML = sourceLinks
+        .map((link) => {
+          const primary =
+            link.og_title || link.alias || link.short_code || `Link #${link.id}`;
+          const secondary = link.original_url || "";
+          const selected = selectedTeamTemplateSourceIds.includes(Number(link.id));
+          const disabled = !selected && selectedTeamTemplateSourceIds.length >= 5;
+          return `<label class="team-template-source-item ${selected ? "active" : ""} ${disabled || !canCreateTemplates ? "disabled" : ""}">
+            <input type="checkbox" ${selected ? "checked" : ""} ${disabled || !canCreateTemplates ? "disabled" : ""} onchange="toggleTeamTemplateSourceSelection(${Number(link.id)})" />
+            <span class="team-template-source-copy">
+              <span class="team-template-source-primary">${link.video_url ? "[Video] " : ""}${esc(primary)}</span>
+              <span class="team-template-source-secondary" title="${esc(secondary || "Khong co link goc")}">${esc(secondary || "Khong co link goc")}</span>
+            </span>
+          </label>`;
+        })
+        .join("");
+    }
+  }
+  if (templateSourceStatus) {
+    templateSourceStatus.textContent = sourceLinks.length
+      ? `Da chon ${selectedTeamTemplateSourceIds.length}/5 link. 1 media co the di kem nhieu link da tick.`
+      : "Chon toi da 5 link de gom vao cung 1 mau chia se.";
+  }
+  if (templateMediaLink) {
+    const mediaOptions = mediaEligibleLinks
+      .map((link) => {
+        const primary =
+          link.og_title || link.alias || link.short_code || `Link #${link.id}`;
+        const mediaType = link.video_url ? "Video" : "Anh";
+        return `<option value="${Number(link.id)}" ${
+          Number(selectedTeamTemplateMediaLinkId || 0) === Number(link.id)
+            ? "selected"
+            : ""
+        }>${mediaType} · ${esc(primary)}</option>`;
+      })
+      .join("");
+    templateMediaLink.innerHTML = `<option value="">Chon media bat buoc cho mau nay</option>${mediaOptions}`;
+    templateMediaLink.disabled = !canCreateTemplates || !mediaEligibleLinks.length;
+  }
+  if (templateMediaHint) {
+    templateMediaHint.textContent = mediaEligibleLinks.length
+      ? `Dang co ${mediaEligibleLinks.length} link co media hop le. Ban phai chon 1 media dai dien truoc khi tao mau.`
+      : "Hay tick it nhat 1 link co video hoac anh preview de lam media dai dien bat buoc.";
+  }
+  if (templateUploadStatus) {
+    templateUploadStatus.textContent = uploadedTeamTemplateMedia?.url
+      ? `Dang dung media tai tu may: ${uploadedTeamTemplateMedia.name || "media moi"}`
+      : "Ban co the chon media tu link da tick hoac tai media rieng tu may.";
+  }
   if (templateCreateBtn) {
     templateCreateBtn.disabled = !canCreateTemplates || !sourceLinks.length;
   }
+  syncTeamTemplateComposer();
   if (membersCard) {
     membersCard.style.display = pendingInvitation ? "none" : "";
   }
@@ -5154,6 +5435,86 @@ function removeTeamMember(memberId) {
   });
 }
 
+function toggleTeamTemplateSourceSelection(linkId) {
+  const normalizedId = Number(linkId);
+  if (!Number.isInteger(normalizedId) || normalizedId < 1) return;
+  const selected = new Set(selectedTeamTemplateSourceIds.map((id) => Number(id)));
+  if (selected.has(normalizedId)) {
+    selected.delete(normalizedId);
+  } else {
+    if (selected.size >= 5) {
+      toast("Chi duoc chon toi da 5 link cho moi lan tao mau.", "warn");
+      return;
+    }
+    selected.add(normalizedId);
+  }
+  selectedTeamTemplateSourceIds = [...selected];
+  renderTeamWorkspaceSummary();
+}
+
+function setTeamTemplateMediaLink(linkId) {
+  const normalizedId = Number(linkId);
+  selectedTeamTemplateMediaLinkId =
+    Number.isInteger(normalizedId) && normalizedId > 0 ? normalizedId : null;
+  renderTeamWorkspaceSummary();
+}
+
+function triggerTeamTemplateMediaUpload() {
+  document.getElementById("teamTemplateMediaFile")?.click();
+}
+
+async function handleTeamTemplateMediaUpload(event) {
+  const input = event?.target;
+  const file = input?.files?.[0];
+  if (!file) return;
+  const statusEl = document.getElementById("teamTemplateUploadStatus");
+  try {
+    if (statusEl) statusEl.textContent = `Đang tải media: ${file.name}`;
+    let uploadData = null;
+    if (String(file.type || "").startsWith("video/")) {
+      uploadData = await uploadVideoDirectToCloudinary(file);
+      uploadedTeamTemplateMedia = {
+        kind: "video",
+        url: uploadData?.url || "",
+        image: uploadData?.thumb || "",
+        name: file.name,
+      };
+    } else if (String(file.type || "").startsWith("image/")) {
+      const fd = new FormData();
+      fd.append("image", file);
+      const response = await fetch("/api/upload-image", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "Upload anh that bai");
+      }
+      uploadedTeamTemplateMedia = {
+        kind: "image",
+        url: String(data.url || ""),
+        image: String(data.url || ""),
+        name: file.name,
+      };
+    } else {
+      throw new Error("Chi ho tro anh hoac video");
+    }
+    selectedTeamTemplateMediaLinkId = null;
+    if (statusEl) {
+      statusEl.textContent = `Đã tải media từ máy: ${file.name}`;
+    }
+    renderTeamWorkspaceSummary();
+  } catch (error) {
+    uploadedTeamTemplateMedia = null;
+    if (statusEl) {
+      statusEl.textContent = error.message || "Không thể tải media";
+    }
+    toast(error.message || "Không thể tải media", "warn");
+  } finally {
+    if (input) input.value = "";
+  }
+}
+
 async function createTeamTemplate() {
   if (!user) {
     redirectToAuth("register", "Đăng nhập để tạo mẫu chung.");
@@ -5163,13 +5524,25 @@ async function createTeamTemplate() {
     toast("Vai trò hiện tại chưa thể tạo mẫu chung.", "warn");
     return;
   }
-  const sourceInput = document.getElementById("teamTemplateSourceLink");
+  const sourceInput = document.getElementById("teamTemplateSourcePicker");
   const nameInput = document.getElementById("teamTemplateName");
-  const sourceLinkId = Number(sourceInput?.value || 0);
+  const mediaInput = document.getElementById("teamTemplateMediaLink");
+  const selectedSourceLinkIds = [...selectedTeamTemplateSourceIds];
+  const mediaLinkId = Number(selectedTeamTemplateMediaLinkId || mediaInput?.value || 0);
   const name = String(nameInput?.value || "").trim();
-  if (!Number.isInteger(sourceLinkId) || sourceLinkId < 1) {
+  if (!selectedSourceLinkIds.length) {
     toast("Chọn một link nguồn của bạn trước khi tạo mẫu.", "warn");
     sourceInput?.focus();
+    return;
+  }
+  if (selectedSourceLinkIds.length > 5) {
+    toast("Chi duoc chon toi da 5 link cho moi lan tao mau.", "warn");
+    sourceInput?.focus();
+    return;
+  }
+  if ((!Number.isInteger(mediaLinkId) || mediaLinkId < 1) && !uploadedTeamTemplateMedia?.url) {
+    toast("Ban phai chon video hoac anh dai dien cho mau chung.", "warn");
+    mediaInput?.focus();
     return;
   }
   try {
@@ -5177,7 +5550,11 @@ async function createTeamTemplate() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        source_link_id: sourceLinkId,
+        source_link_ids: selectedSourceLinkIds,
+        media_link_id: Number.isInteger(mediaLinkId) && mediaLinkId > 0 ? mediaLinkId : null,
+        uploaded_media_kind: uploadedTeamTemplateMedia?.kind || null,
+        uploaded_media_url: uploadedTeamTemplateMedia?.url || null,
+        uploaded_media_thumb: uploadedTeamTemplateMedia?.image || null,
         name,
       }),
     });
@@ -5190,15 +5567,346 @@ async function createTeamTemplate() {
     renderTeamMembers(teamWorkspaceData?.members || []);
     renderTeamTemplates(teamWorkspaceData?.templates || []);
     if (nameInput) nameInput.value = "";
-    if (sourceInput) sourceInput.value = "";
-    toast("✅ Đã tạo mẫu chung cho workspace.", "ok");
+    selectedTeamTemplateSourceIds = [];
+    selectedTeamTemplateMediaLinkId = null;
+    uploadedTeamTemplateMedia = null;
+    editingTeamTemplateId = null;
+    renderTeamWorkspaceSummary();
+    syncTeamTemplateComposer();
+    toast("Da tao mau chung cho workspace.", "ok");
   } catch (error) {
     toast(error.message || "Không thể tạo mẫu chung", "warn");
   }
 }
 
+function syncTeamTemplateComposer() {
+  const sourceInput = document.getElementById("teamTemplateSourceLink");
+  const nameInput = document.getElementById("teamTemplateName");
+  const createBtn = document.getElementById("teamTemplateCreateBtn");
+  const linkBtn = document.querySelector(
+    "#teamTemplatesCard .user-actions .user-btn.secondary",
+  );
+  const isEditing = Number(editingTeamTemplateId || 0) > 0;
+  if (createBtn) {
+    createBtn.textContent = isEditing ? "Lưu mẫu" : "Tạo mẫu chung";
+  }
+  if (linkBtn) {
+    linkBtn.textContent = isEditing ? "Hủy sửa" : "Tạo link cá nhân";
+    linkBtn.onclick = () => {
+      if (isEditing) {
+        cancelEditTeamTemplate();
+        return;
+      }
+      clearTeamTemplateDraft(true);
+      navigate("create");
+    };
+  }
+  const uploadBtn = document.getElementById("teamTemplateUploadBtn");
+  const personalBtn = document.getElementById("teamTemplateCreatePersonalBtn");
+  if (createBtn) {
+    createBtn.textContent = isEditing ? "Lưu mẫu" : "Tạo mẫu chung";
+  }
+  if (uploadBtn) {
+    uploadBtn.textContent = "Tải video/ảnh từ máy";
+  }
+  if (personalBtn) {
+    personalBtn.textContent = isEditing ? "Hủy sửa" : "Tạo link cá nhân";
+    personalBtn.onclick = () => {
+      if (isEditing) {
+        cancelEditTeamTemplate();
+        return;
+      }
+      clearTeamTemplateDraft(true);
+      navigate("create");
+    };
+  }
+  if (isEditing && sourceInput && !sourceInput.value) sourceInput.focus();
+  if (isEditing && nameInput && !nameInput.value) nameInput.focus();
+}
+
+function cancelEditTeamTemplate(silent = false) {
+  editingTeamTemplateId = null;
+  const nameInput = document.getElementById("teamTemplateName");
+  selectedTeamTemplateSourceIds = [];
+  selectedTeamTemplateMediaLinkId = null;
+  uploadedTeamTemplateMedia = null;
+  if (nameInput) nameInput.value = "";
+  renderTeamWorkspaceSummary();
+  syncTeamTemplateComposer();
+  if (!silent) {
+    toast("Đã hủy chế độ sửa mẫu chung.", "ok");
+  }
+}
+
+function editTeamTemplate(templateId) {
+  const template = findTeamTemplateById(templateId);
+  if (!template) {
+    toast("Không tìm thấy mẫu chung cần sửa.", "warn");
+    return;
+  }
+  editingTeamTemplateId = Number(template.id || 0);
+  const sourceInput = document.getElementById("teamTemplateSourceLink");
+  const nameInput = document.getElementById("teamTemplateName");
+  selectedTeamTemplateSourceIds = Array.isArray(template.source_link_ids)
+    ? template.source_link_ids
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    : Number(template.source_link_id || 0) > 0
+      ? [Number(template.source_link_id)]
+      : [];
+  selectedTeamTemplateMediaLinkId =
+    Number(template.media_link_id || 0) > 0 ? Number(template.media_link_id) : null;
+  uploadedTeamTemplateMedia =
+    !selectedTeamTemplateMediaLinkId && (template.video_url || template.og_image)
+      ? {
+          kind: template.video_url ? "video" : "image",
+          url: String(template.video_url || template.og_image || ""),
+          image: String(template.og_image || ""),
+          name: "Media hiện tại",
+        }
+      : null;
+  if (sourceInput) sourceInput.value = String(template.source_link_id || "");
+  if (nameInput) nameInput.value = String(template.name || "");
+  renderTeamWorkspaceSummary();
+  syncTeamTemplateComposer();
+  toast(
+    "Đã nạp mẫu chung lên form. Bạn có thể nhập liên kết nguồn hoặc sửa alidas để tạo link mới.",
+    "ok",
+  );
+}
+
+async function deleteTeamTemplate(templateId) {
+  const template = findTeamTemplateById(templateId);
+  if (!template) {
+    toast("Không tìm thấy mẫu chung cần xóa.", "warn");
+    return;
+  }
+  const confirmed = await showConfirmDialog({
+    title: "Xóa mẫu chung",
+    message: `Xóa mẫu chung "${template.name || "Template"}"?`,
+    confirmLabel: "Xóa mẫu",
+    tone: "danger",
+  });
+  if (!confirmed) return;
+  try {
+    const response = await fetch(`/api/team/templates/${Number(templateId)}`, {
+      method: "DELETE",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể xóa mẫu chung");
+    }
+    setTeamWorkspaceData(data);
+    renderTeamWorkspaceSummary();
+    renderTeamMembers(teamWorkspaceData?.members || []);
+    renderTeamTemplates(teamWorkspaceData?.templates || []);
+    if (Number(editingTeamTemplateId || 0) === Number(templateId)) {
+      cancelEditTeamTemplate(true);
+    }
+    toast("Đã xóa mẫu chung.", "ok");
+  } catch (error) {
+    toast(error.message || "Không thể xóa mẫu chung", "warn");
+  }
+}
+
+function openTeamTemplateModal(mode, templateId, sourceLinkId = null) {
+  const template = findTeamTemplateById(templateId);
+  if (!template) {
+    toast("Không tìm thấy mẫu chung.", "warn");
+    return;
+  }
+  if (mode === "edit" && Number(template.created_by_user_id || 0) !== Number(user?.id || 0)) {
+    toast("Chi nguoi tao mau moi duoc sua mau chung nay.", "warn");
+    return;
+  }
+  const modal = document.getElementById("teamTemplateModal");
+  const titleEl = document.getElementById("teamTemplateModalTitle");
+  const actionBtn = document.getElementById("teamTemplateModalActionBtn");
+  const noteEl = document.getElementById("teamTemplateModalNote");
+  const editFields = document.getElementById("teamTemplateEditFields");
+  const useFields = document.getElementById("teamTemplateUseFields");
+  const sourceSummaryEl = document.getElementById("teamTemplateModalSourceSummary");
+  const sourceSelect = document.getElementById("teamTemplateModalSourceLink");
+  const nameInput = document.getElementById("teamTemplateModalName");
+  const originalUrlInput = document.getElementById("teamTemplateModalOriginalUrl");
+  if (!modal || !titleEl || !actionBtn) return;
+  const groupedLinks = Array.isArray(template.source_links) ? template.source_links : [];
+  const selectedSource =
+    groupedLinks.find((link) => Number(link.id) === Number(sourceLinkId)) ||
+    groupedLinks[0] || {
+      id: template.source_link_id,
+      title: template.og_title || template.name || "Link",
+      short_url: template.source_link_short_url || "",
+      original_url: template.source_link_original_url || "",
+    };
+
+  const sourceOptions = (teamWorkspaceData?.source_links || [])
+    .map((link) => {
+      const primary =
+        link.og_title || link.alias || link.short_code || `Link #${link.id}`;
+      const secondary = link.original_url || "";
+      const videoBadge = link.video_url ? "[Video] " : "";
+      return `<option value="${Number(link.id)}">${videoBadge}${esc(primary)}${secondary ? ` · ${esc(secondary.slice(0, 72))}` : ""}</option>`;
+    })
+    .join("");
+
+  if (sourceSelect) {
+    sourceSelect.innerHTML = `<option value="">Chọn link nguồn</option>${sourceOptions}`;
+    sourceSelect.value = String(template.source_link_id || "");
+  }
+  if (nameInput) nameInput.value = String(template.name || "");
+  if (originalUrlInput) {
+    originalUrlInput.value = "";
+    originalUrlInput.placeholder = selectedSource?.title
+      ? `Dán link gốc của bạn cho: ${selectedSource.title}`
+      : "Dán link gốc Shopee hoặc TikTok của bạn";
+  }
+
+  const isEdit = mode === "edit";
+  teamTemplateModalState = {
+    mode,
+    templateId: Number(template.id || 0),
+    sourceLinkId: Number(selectedSource?.id || 0) || null,
+    alias: buildTeamTemplateAlias(template, selectedSource),
+  };
+  if (editFields) editFields.classList.toggle("hidden", !isEdit);
+  if (useFields) useFields.classList.toggle("hidden", isEdit);
+  if (sourceSummaryEl) {
+    if (isEdit) {
+      sourceSummaryEl.classList.add("hidden");
+      sourceSummaryEl.innerHTML = "";
+    } else {
+      sourceSummaryEl.classList.remove("hidden");
+      sourceSummaryEl.innerHTML = `
+        <strong>${esc(template.name || "Mẫu chung")}</strong>
+        <span>Link bạn đang lấy: ${esc(selectedSource?.title || "Link nguồn")}</span>
+        <span>Alias dự kiến: ${esc(teamTemplateModalState.alias || "link-moi")}</span>
+        <span>Tiêu đề share, kiểu link, video overlay và domain sẽ lấy theo mẫu chung. Bạn chỉ cần dán link gốc của riêng mình.</span>`;
+    }
+  }
+  titleEl.textContent = isEdit ? "Sửa mẫu chung" : "Lấy link cho tôi";
+  actionBtn.textContent = isEdit ? "Lưu mẫu" : "Tạo link";
+  if (noteEl) {
+    noteEl.textContent = isEdit
+      ? "Bạn có thể đổi link nguồn và tên mẫu. Nội dung share, video và domain sẽ lấy theo link nguồn mới."
+      : "Popup này sẽ tạo link ngay trong tab team. Sau khi tạo xong, hệ thống sẽ làm mới dữ liệu và tự sao chép link rút gọn cho bạn.";
+  }
+  modal.classList.remove("hidden");
+  if (!isEdit && originalUrlInput) {
+    setTimeout(() => originalUrlInput.focus(), 0);
+  }
+}
+
+async function closeTeamTemplateModal(confirmed) {
+  const modal = document.getElementById("teamTemplateModal");
+  const state = teamTemplateModalState;
+  const actionBtn = document.getElementById("teamTemplateModalActionBtn");
+  if (!confirmed || !state) {
+    if (modal) modal.classList.add("hidden");
+    teamTemplateModalState = null;
+    return;
+  }
+
+  if (state.mode === "edit") {
+    if (modal) modal.classList.add("hidden");
+    teamTemplateModalState = null;
+    const sourceLinkId = Number(
+      document.getElementById("teamTemplateModalSourceLink")?.value || 0,
+    );
+    const name = String(
+      document.getElementById("teamTemplateModalName")?.value || "",
+    ).trim();
+    if (!Number.isInteger(sourceLinkId) || sourceLinkId < 1) {
+      toast("Chọn link nguồn trước khi lưu mẫu.", "warn");
+      return;
+    }
+    try {
+      const response = await fetch(`/api/team/templates/${state.templateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_link_id: sourceLinkId,
+          name,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "Không thể cập nhật mẫu chung");
+      }
+      setTeamWorkspaceData(data);
+      renderTeamWorkspaceSummary();
+      renderTeamMembers(teamWorkspaceData?.members || []);
+      renderTeamTemplates(teamWorkspaceData?.templates || []);
+      toast("Đã cập nhật mẫu chung.", "ok");
+    } catch (error) {
+      toast(error.message || "Không thể cập nhật mẫu chung", "warn");
+    }
+    return;
+  }
+
+  const originalUrl = String(
+    document.getElementById("teamTemplateModalOriginalUrl")?.value || "",
+  ).trim();
+  if (!originalUrl) {
+    toast("Dán link gốc của bạn trước khi tạo link.", "warn");
+    document.getElementById("teamTemplateModalOriginalUrl")?.focus();
+    return;
+  }
+  const defaultActionLabel = "Tạo link";
+  if (actionBtn) {
+    actionBtn.disabled = true;
+    actionBtn.textContent = "Đang tạo...";
+  }
+  try {
+    const response = await fetch("/api/shorten", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: originalUrl,
+        alias: state.alias || "",
+        team_template_id: state.templateId,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể tạo link từ mẫu chung");
+    }
+    if (modal) modal.classList.add("hidden");
+    teamTemplateModalState = null;
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(data.short_url);
+      copied = true;
+    } catch {}
+    await loadData();
+    if (document.getElementById("page-team")?.classList.contains("active")) {
+      await loadTeamWorkspace({ silent: true });
+      renderTeamWorkspaceSummary();
+      renderTeamMembers(teamWorkspaceData?.members || []);
+      renderTeamTemplates(teamWorkspaceData?.templates || []);
+    }
+    toast(
+      copied
+        ? "Đã tạo link từ mẫu chung và sao chép link rút gọn."
+        : "Đã tạo link từ mẫu chung thành công.",
+      "ok",
+    );
+  } catch (error) {
+    toast(error.message || "Không thể tạo link từ mẫu chung", "warn");
+  } finally {
+    if (actionBtn) {
+      actionBtn.disabled = false;
+      actionBtn.textContent = defaultActionLabel;
+    }
+  }
+}
+
 function clearTeamTemplateDraft(silent = false) {
   pendingTeamTemplateDraft = null;
+  selectedTeamTemplateSourceIds = [];
+  selectedTeamTemplateMediaLinkId = null;
+  uploadedTeamTemplateMedia = null;
+  renderTeamWorkspaceSummary();
   if (document.getElementById("page-create")?.classList.contains("active")) {
     renderForms();
   }
@@ -5284,11 +5992,11 @@ function applyPendingTeamTemplateDraft(containerId) {
   const videoUrlInput = document.getElementById(`${containerId}_videourl`);
   const videoTextInput = document.getElementById(`${containerId}_videotext`);
   const metaBody = document.getElementById(`${containerId}_metabody`);
-  const metaArrow = document.getElementById(`${containerId}_arrow`);
-
   if (urlInput) {
-    urlInput.value = "";
-    urlInput.placeholder = "Dán link affiliate/đích của riêng bạn vào đây...";
+    urlInput.value = draft.original_url || "";
+    urlInput.placeholder = draft.original_url
+      ? "Link goc da duoc ap dung tu popup mau chung"
+      : "Dan link affiliate/dich cua rieng ban vao day...";
   }
   if (aliasInput) {
     aliasInput.value = "";
@@ -6100,7 +6808,9 @@ async function copyResult(cid) {
 //  DATA
 // ══════════════════════════════════════════════════
 function getDashboardPlatformMetrics() {
-  const uniqueRows = Array.isArray(statsAnalytics?.platforms?.unique_distribution)
+  const uniqueRows = Array.isArray(
+    statsAnalytics?.platforms?.unique_distribution,
+  )
     ? statsAnalytics.platforms.unique_distribution
     : [];
   const rawRows = Array.isArray(statsAnalytics?.platforms?.distribution)
@@ -6193,8 +6903,6 @@ async function loadData(prefetched = null) {
       renderQrPage();
     if (document.getElementById("page-bio")?.classList.contains("active"))
       renderBioPage();
-    if (document.getElementById("page-team")?.classList.contains("active"))
-      renderTeamPage();
     if (document.getElementById("page-links")?.classList.contains("active"))
       applyLinkFilters();
     enqueueStatsAlerts(d);
@@ -6214,11 +6922,13 @@ function renderActivity(arr, id) {
     .slice(0, 8)
     .map((l) => {
       const p = pt(l.original_url);
+      const shortUrl = (l.short_url || "").replace(/^https?:\/\//, "");
+      const originalUrl = l.original_url || "";
       return `<div class="ai">
       <div class="ai-ic ${p}">${icons[p]}</div>
       <div class="ai-info">
-        <div class="ai-short">${(l.short_url || "").replace(/^https?:\/\//, "")}</div>
-        <div class="ai-orig">${l.original_url || ""}</div>
+        <div class="ai-short" title="${esc(shortUrl)}">${esc(shortUrl)}</div>
+        <div class="ai-orig" title="${esc(originalUrl)}">${esc(originalUrl)}</div>
       </div>
       <div class="ai-clicks">👁 ${l.clicks || 0}</div>
     </div>`;
@@ -8300,6 +9010,568 @@ async function saveEditLink() {
 // ══════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════
+// Team workspace overrides
+function normalizeTeamTemplateSectionCopy() {
+  const card = document.getElementById("teamTemplatesCard");
+  const count = document.getElementById("teamTemplateCount");
+  if (!card || !count) return;
+  const titleEl = card.querySelector(".tbl-head h3");
+  if (titleEl) {
+    titleEl.innerHTML = `Mau link chung (<span id="teamTemplateCount">${count.textContent || "0"}</span>)`;
+  }
+  const sourceLabel = document.getElementById("teamTemplateSourceLabel");
+  const nameLabel = document.getElementById("teamTemplateNameLabel");
+  const uploadBtn = document.getElementById("teamTemplateUploadBtn");
+  const createBtn = document.getElementById("teamTemplateCreateBtn");
+  const personalBtn = document.getElementById("teamTemplateCreatePersonalBtn");
+  const formNote = document.getElementById("teamTemplateFormNote");
+  const nameInput = document.getElementById("teamTemplateName");
+  if (sourceLabel) sourceLabel.textContent = "Chọn link nguồn của bạn";
+  if (nameLabel) nameLabel.textContent = "Tên mẫu chung";
+  if (uploadBtn) uploadBtn.textContent = "Tải video/ảnh từ máy";
+  if (createBtn) createBtn.textContent = "Tạo mẫu chung";
+  if (personalBtn) personalBtn.textContent = "Tạo link cá nhân";
+  if (nameInput) nameInput.placeholder = "Ví dụ: Template TikTok campaign A";
+  if (formNote) {
+    formNote.innerHTML =
+      "Mẫu chung chỉ khóa nội dung share, kiểu link, video overlay và domain. Editor lấy theo từng link để sửa URL gốc của riêng mình, không ảnh hưởng tới mẫu chung.";
+  }
+}
+
+function renderTeamMembers(members) {
+  const body = document.getElementById("teamMemberBody");
+  if (!body) return;
+
+  if (!user) {
+    body.innerHTML = `<tr><td colspan="6" class="tbl-empty">Đăng nhập để mời cộng tác viên. <a href="${buildAuthUrl("login")}" style="color:var(--brand);font-weight:700">Đăng nhập</a></td></tr>`;
+    return;
+  }
+
+  if (!Array.isArray(members) || !members.length) {
+    body.innerHTML =
+      '<tr><td colspan="6" class="tbl-empty">Chưa có thành viên nào trong workspace.</td></tr>';
+    return;
+  }
+
+  const canManageMembers = canInviteTeamMembers();
+  body.innerHTML = members
+    .map((member) => {
+      const isOwner = member.role === "owner";
+      const isPending = member.status === "pending";
+      const nextStatus =
+        member.status === "pending"
+          ? "active"
+          : member.status === "active"
+            ? "paused"
+            : "active";
+      const nextLabel =
+        member.status === "pending"
+          ? "Kích hoạt"
+          : member.status === "active"
+            ? "Tạm dừng"
+            : "Mở lại";
+      const actionMarkup = isOwner
+        ? '<button class="btn-cp" disabled>Owner</button>'
+        : canManageMembers
+          ? `<button class="btn-cp" ${isPending ? "disabled" : ""} onclick="cycleTeamMemberStatus(${Number(member.id)}, '${nextStatus}')">${isPending ? "Chờ user xác nhận" : nextLabel}</button>
+             <button class="btn-del" onclick="removeTeamMember(${Number(member.id)})">Xóa</button>`
+          : '<span style="color:var(--text3);font-size:12px">Chỉ owner quản lý</span>';
+      return `<tr>
+      <td>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <strong>${esc(member.display_name || member.email || "Member")}</strong>
+          <span style="color:var(--text3);font-size:12px">${esc(member.email || "Chưa có email")}</span>
+        </div>
+      </td>
+      <td><span class="badge-role ${isOwner ? "admin" : "user"}">${getRoleLabel(member.role)}</span></td>
+      <td>${esc(getStatusLabel(member.status))}</td>
+      <td style="max-width:240px;color:var(--text2)">${esc(getRoleFocus(member.role))}</td>
+      <td style="color:var(--text3);font-size:12px">${esc(formatTeamDateTime(member.joined_at || member.updated_at || member.created_at, "Chưa tham gia"))}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap">${actionMarkup}</td>
+    </tr>`;
+    })
+    .join("");
+}
+
+function renderTeamTemplates(templates) {
+  const body = document.getElementById("teamTemplateBody");
+  if (!body) return;
+
+  if (!user) {
+    body.innerHTML = `<tr><td colspan="1" class="tbl-empty">Đăng nhập để dùng mẫu liên kết chung. <a href="${buildAuthUrl("login")}" style="color:var(--brand);font-weight:700">Đăng nhập</a></td></tr>`;
+    return;
+  }
+
+  if (!Array.isArray(templates) || !templates.length) {
+    body.innerHTML =
+      '<tr><td colspan="1" class="tbl-empty">Chưa có mẫu chung nào. Hãy chọn một liên kết của bạn rồi bấm Tạo mẫu chung.</td></tr>';
+    return;
+  }
+
+  const canUseTemplates = canUseSharedTemplates();
+  body.innerHTML = templates
+    .map((template) => {
+      const title = template.name || template.og_title || "Template";
+      const playableVideoUrl = buildCloudinaryPlayableVideoUrl(template.video_url || "");
+      const mediaMarkup = playableVideoUrl
+        ? `<div class="team-template-media"><video src="${esc(playableVideoUrl)}" controls preload="metadata" playsinline muted></video></div>`
+        : template.og_image
+          ? `<div class="team-template-media"><img src="${esc(template.og_image)}" alt="${esc(title)}" /></div>`
+          : `<div class="team-template-media"></div>`;
+      const downloadVideoButton = playableVideoUrl
+        ? `<a class="btn-cp" href="${esc(playableVideoUrl)}" target="_blank" rel="noopener noreferrer" download>Tải video</a>`
+        : "";
+      const groupedLinks = Array.isArray(template.source_links) && template.source_links.length
+        ? template.source_links
+        : [
+            {
+              id: Number(template.source_link_id || 0) || null,
+              title: template.og_title || template.name || "Link",
+              short_url: template.source_link_short_url || "",
+              original_url: template.source_link_original_url || "",
+            },
+          ];
+      const sourcePlatform = groupedLinks[0]?.original_url ? pt(groupedLinks[0].original_url) : "generic";
+      const platformLabel = sourcePlatform === "shopee" ? "Shopee" : sourcePlatform === "tiktok" ? "TikTok" : "Generic";
+      const canEditTemplate = Number(template.created_by_user_id || 0) === Number(user?.id || 0);
+      const templateActionButtons = canEditTemplate
+        ? `<button class="btn-cp" onclick="openTeamTemplateModal('edit', ${Number(template.id)})" title="Sửa mẫu">Sửa</button>
+           <button class="btn-cp" onclick="deleteTeamTemplate(${Number(template.id)})" title="Xóa mẫu" style="color:var(--red);border-color:rgba(239,68,68,.2)">Xóa</button>`
+        : "";
+      const groupedLinkMarkup = groupedLinks
+        .map((link, index) => {
+          const linkId = Number(link.id || 0) || Number(template.source_link_id || 0);
+          const useButton = canUseTemplates && linkId > 0
+            ? `<button class="btn-cp" onclick="useTeamTemplateSource(${Number(template.id)}, ${linkId})">Lấy link cho tôi</button>`
+            : '<span style="color:var(--text3);font-size:12px">Chỉ editor được lấy</span>';
+          return `<div class="team-template-link-row">
+                <div class="team-template-link-main">
+                  <span class="team-template-link-label">Link ${index + 1}</span>
+                  <span class="team-template-meta">${esc(link.title || `Link ${index + 1}`)}</span>
+                  <span class="team-template-link-value" title="${esc(link.short_url || link.original_url || "Chưa có link rút gọn")}">${esc(link.short_url || link.original_url || "Chưa có link rút gọn")}</span>
+                </div>
+                <div class="team-template-link-action">${useButton}</div>
+              </div>`;
+        })
+        .join("");
+      return `<tr>
+      <td colspan="1">
+        <div class="team-template-card-shell">
+          <div class="team-template-card">
+            ${mediaMarkup}
+            <div class="team-template-card-copy">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <strong>${esc(title)}</strong>
+                ${playableVideoUrl ? '<span class="team-template-flag">Video</span>' : ""}
+                <span class="team-template-flag">${platformLabel}</span>
+              </div>
+              <div class="team-template-link-list">${groupedLinkMarkup}</div>
+            </div>
+          </div>
+          <div class="team-template-card-right">
+            <div class="team-template-meta-grid">
+              <div class="team-template-meta-box">
+                <span class="team-template-link-label">Người tạo</span>
+                <span class="team-template-meta">${esc(template.creator_name || "Member")}</span>
+              </div>
+              <div class="team-template-meta-box">
+                <span class="team-template-link-label">Kiểu</span>
+                <span class="team-template-meta">${esc(formatTeamTemplateType(template.link_type))}</span>
+              </div>
+              <div class="team-template-meta-box">
+                <span class="team-template-link-label">Domain</span>
+                <span class="team-template-meta">${esc(template.domain_hostname || template.preview_domain || location.host)}</span>
+              </div>
+              <div class="team-template-meta-box">
+                <span class="team-template-link-label">Cập nhật</span>
+                <span class="team-template-meta muted">${esc(formatTeamDateTime(template.updated_at || template.created_at))}</span>
+              </div>
+            </div>
+            <div class="team-template-actions">
+              ${downloadVideoButton ? `<div class="team-template-actions-row">${downloadVideoButton}</div>` : ""}
+              ${templateActionButtons ? `<div class="team-template-actions-row">${templateActionButtons}</div>` : ""}
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+    })
+    .join("");
+}
+
+function renderTeamWorkspaceSummary() {
+  const workspace = teamWorkspaceData?.workspace || null;
+  const membership = teamWorkspaceData?.membership || null;
+  const members = Array.isArray(teamWorkspaceData?.members) ? teamWorkspaceData.members : [];
+  const sourceLinks = Array.isArray(teamWorkspaceData?.source_links) ? teamWorkspaceData.source_links : [];
+  const templates = Array.isArray(teamWorkspaceData?.templates) ? teamWorkspaceData.templates : [];
+  const seatLimit = getTeamSeatLimit();
+  const activeCount = members.filter((member) => member.status === "active").length;
+  const pendingCount = members.filter((member) => member.status === "pending").length;
+  const ownerMember = members.find((member) => member.role === "owner");
+  const canManageMembers = canInviteTeamMembers();
+  const canCreateTemplates = canCreateSharedTemplates();
+  const canUseTemplates = canUseSharedTemplates();
+  const pendingInvitation = hasPendingTeamInvitation();
+
+  const seatCount = document.getElementById("teamSeatCount");
+  const seatHint = document.getElementById("teamSeatHint");
+  const activeEl = document.getElementById("teamActiveCount");
+  const pendingEl = document.getElementById("teamPendingCount");
+  const workspaceName = document.getElementById("teamWorkspaceName");
+  const workspaceStatus = document.getElementById("teamWorkspaceStatus");
+  const ownerLabel = document.getElementById("teamOwnerLabel");
+  const inviteControls = document.getElementById("teamInviteControls");
+  const inviteHint = document.getElementById("teamInviteHint");
+  const inviteBtn = document.getElementById("teamInviteBtn");
+  const inviteEmail = document.getElementById("teamInviteEmail");
+  const inviteRole = document.getElementById("teamInviteRole");
+  const domainLabel = document.getElementById("teamDomainLabel");
+  const templateCount = document.getElementById("teamTemplateCount");
+  const templateHint = document.getElementById("teamTemplateHint");
+  const templateSourceTrigger = document.getElementById("teamTemplateSourceTrigger");
+  const templateSourceDropdown = document.getElementById("teamTemplateSourceDropdown");
+  const templateSourcePicker = document.getElementById("teamTemplateSourcePicker");
+  const templateSourceStatus = document.getElementById("teamTemplateSourceStatus");
+  const templateUploadStatus = document.getElementById("teamTemplateUploadStatus");
+  const templateName = document.getElementById("teamTemplateName");
+  const templateCreateBtn = document.getElementById("teamTemplateCreateBtn");
+  const invitationBanner = document.getElementById("teamInvitationBanner");
+  const membersCard = document.getElementById("teamMembersCard");
+  const templatesCard = document.getElementById("teamTemplatesCard");
+
+  if (seatCount) {
+    seatCount.textContent = pendingInvitation ? "Chờ" : `${members.length}/${seatLimit}`;
+  }
+  if (seatHint) {
+    seatHint.textContent = pendingInvitation
+      ? "Lời mời workspace"
+      : workspace
+        ? `${membership?.role === "owner" ? "Owner" : getRoleLabel(membership?.role)} · ${user?.plan || "free"} workspace`
+        : "Workspace cá nhân";
+  }
+  if (activeEl) activeEl.textContent = pendingInvitation ? 0 : activeCount;
+  if (pendingEl) pendingEl.textContent = pendingInvitation ? 1 : pendingCount;
+  if (workspaceName) {
+    workspaceName.textContent = workspace?.name || (user ? `${getUserDisplayName(user)} Workspace` : "Workspace");
+  }
+  if (workspaceStatus) {
+    workspaceStatus.textContent = pendingInvitation
+      ? `Bạn đang có lời mời với quyền ${getRoleLabel(membership?.role)}`
+      : workspace
+        ? `Seat đang dùng ${members.length}/${seatLimit} · Quyền của bạn ${getRoleLabel(membership?.role)}`
+        : "Đăng nhập để mở workspace và cộng tác theo team.";
+  }
+  if (ownerLabel) {
+    ownerLabel.textContent = ownerMember
+      ? `Owner: ${ownerMember.display_name || ownerMember.email}`
+      : "Owner: chưa xác định";
+  }
+  if (inviteControls) {
+    inviteControls.style.display = !pendingInvitation && canManageMembers ? "" : "none";
+  }
+  if (inviteHint) {
+    inviteHint.textContent = !user
+      ? "Đăng nhập để mời cộng tác viên và tạo workspace thật trên server."
+      : canManageMembers
+        ? "Chỉ owner đang hoạt động mới được mời thành viên."
+        : "Bạn không được mời thành viên ở workspace này.";
+  }
+  if (inviteBtn) inviteBtn.disabled = !canManageMembers;
+  if (inviteEmail) inviteEmail.disabled = !canManageMembers;
+  if (inviteRole) inviteRole.disabled = !canManageMembers;
+  if (domainLabel) {
+    domainLabel.textContent =
+      templates[0]?.domain_hostname || sourceLinks[0]?.domain_hostname || location.host || "boclink.click";
+  }
+  if (templateCount) templateCount.textContent = String(templates.length);
+  if (templateHint) {
+    templateHint.textContent = canCreateTemplates
+      ? "Chọn link của riêng bạn để chụp snapshot metadata chung cho team"
+      : canUseTemplates
+        ? "Editor lấy theo từng link để sửa URL gốc của riêng mình"
+        : "Chỉ editor đang hoạt động mới được lấy link từ mẫu chung";
+  }
+
+  selectedTeamTemplateSourceIds = selectedTeamTemplateSourceIds.filter((id) =>
+    sourceLinks.some((link) => Number(link.id) === Number(id)),
+  );
+  const selectedSourceLinks = getSelectedTeamTemplateSourceLinks(sourceLinks);
+  const mediaEligibleLinks = selectedSourceLinks.filter((link) => !!(link.video_url || link.og_image));
+  if (selectedTeamTemplateMediaLinkId && !mediaEligibleLinks.some((link) => Number(link.id) === Number(selectedTeamTemplateMediaLinkId))) {
+    selectedTeamTemplateMediaLinkId = null;
+  }
+  if (!selectedTeamTemplateMediaLinkId && mediaEligibleLinks.length) {
+    selectedTeamTemplateMediaLinkId = Number(mediaEligibleLinks[0].id);
+  }
+
+  if (templateSourceTrigger) {
+    const triggerLabel = selectedSourceLinks.length
+      ? selectedSourceLinks
+          .slice(0, 2)
+          .map((link) => link.og_title || link.alias || link.short_code || `Link #${link.id}`)
+          .join(" · ")
+      : "Chọn tối đa 5 link nguồn";
+    const suffix = selectedSourceLinks.length > 2 ? ` +${selectedSourceLinks.length - 2}` : "";
+    templateSourceTrigger.textContent = `${triggerLabel}${suffix}`;
+    templateSourceTrigger.disabled = !canCreateTemplates || !sourceLinks.length;
+    templateSourceTrigger.classList.toggle("open", isTeamTemplateSourceDropdownOpen);
+  }
+  if (templateSourceDropdown) {
+    templateSourceDropdown.classList.toggle("hidden", !isTeamTemplateSourceDropdownOpen);
+  }
+  if (templateSourcePicker) {
+    if (!sourceLinks.length) {
+      templateSourcePicker.innerHTML =
+        '<div class="tbl-empty" style="padding:12px 4px">Chưa có link nguồn nào để tạo mẫu chung.</div>';
+      closeTeamTemplateSourceDropdown();
+    } else {
+      templateSourcePicker.innerHTML = sourceLinks
+        .map((link) => {
+          const primary = link.og_title || link.alias || link.short_code || `Link #${link.id}`;
+          const secondary = link.original_url || "";
+          const selected = selectedTeamTemplateSourceIds.includes(Number(link.id));
+          const disabled = !selected && selectedTeamTemplateSourceIds.length >= 5;
+          return `<label class="team-template-source-item ${selected ? "active" : ""} ${disabled || !canCreateTemplates ? "disabled" : ""}">
+            <input type="checkbox" ${selected ? "checked" : ""} ${disabled || !canCreateTemplates ? "disabled" : ""} onchange="toggleTeamTemplateSourceSelection(${Number(link.id)})" />
+            <span class="team-template-source-copy">
+              <span class="team-template-source-primary">${link.video_url ? "[Video] " : ""}${esc(primary)}</span>
+              <span class="team-template-source-secondary" title="${esc(secondary || "Không có link gốc")}">${esc(secondary || "Không có link gốc")}</span>
+            </span>
+          </label>`;
+        })
+        .join("");
+    }
+  }
+  if (templateSourceStatus) {
+    templateSourceStatus.textContent = sourceLinks.length
+      ? `Đã chọn ${selectedTeamTemplateSourceIds.length}/5 link. Media sẽ tự lấy từ link đầu tiên có preview, hoặc file upload.`
+      : "Chọn tối đa 5 link để gom vào cùng 1 mẫu chia sẻ.";
+  }
+  if (templateUploadStatus) {
+    if (uploadedTeamTemplateMedia?.url) {
+      templateUploadStatus.textContent = `Đang dùng media tải từ máy: ${uploadedTeamTemplateMedia.name || "media mới"}`;
+    } else if (selectedTeamTemplateMediaLinkId) {
+      const mediaSource = mediaEligibleLinks.find((link) => Number(link.id) === Number(selectedTeamTemplateMediaLinkId));
+      const mediaName = mediaSource?.og_title || mediaSource?.alias || mediaSource?.short_code || `Link #${selectedTeamTemplateMediaLinkId}`;
+      templateUploadStatus.textContent = `Media sẽ lấy từ link đã chọn: ${mediaName}`;
+    } else {
+      templateUploadStatus.textContent = "Media sẽ tự lấy từ link đã tick nếu có preview, hoặc bạn có thể tải file riêng từ máy.";
+    }
+  }
+  if (templateName) templateName.disabled = !canCreateTemplates;
+  if (templateCreateBtn) templateCreateBtn.disabled = !canCreateTemplates || !sourceLinks.length;
+
+  syncTeamTemplateComposer();
+  if (membersCard) {
+    membersCard.style.display = pendingInvitation ? "none" : "";
+  }
+  if (templatesCard) {
+    templatesCard.style.display = pendingInvitation ? "none" : "";
+  }
+  if (invitationBanner) {
+    if (!pendingInvitation || !workspace || !membership) {
+      invitationBanner.style.display = "none";
+      invitationBanner.innerHTML = "";
+    } else {
+      invitationBanner.style.display = "block";
+      invitationBanner.innerHTML = `
+              <div class="tbl-card">
+                <div class="card-p" style="display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap">
+                  <div style="display:flex;flex-direction:column;gap:6px;min-width:260px">
+                    <div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--brand)">Lời mời workspace</div>
+                    <div style="font-size:22px;font-weight:800;color:var(--text)">${esc(workspace.name || "Workspace")}</div>
+                    <div style="font-size:13px;color:var(--text2)">Owner: ${esc(ownerMember?.display_name || ownerMember?.email || "Workspace owner")}</div>
+                    <div style="font-size:13px;color:var(--text2)">Vai trò được mời: ${esc(getRoleLabel(membership.role))}</div>
+                    <div style="font-size:13px;color:var(--text3)">Bạn chưa vào workspace này. Hãy đồng ý hoặc từ chối lời mời trước khi xem dữ liệu chung.</div>
+                  </div>
+                  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                    <button class="user-btn secondary" type="button" onclick="declineTeamInvitation()">Từ chối</button>
+                    <button class="user-btn primary" type="button" onclick="acceptTeamInvitation()">Đồng ý tham gia</button>
+                  </div>
+                </div>
+              </div>`;
+    }
+  }
+}
+
+async function renderTeamPage() {
+  normalizeTeamTemplateSectionCopy();
+  renderTeamMembers([]);
+  renderTeamTemplates([]);
+  renderTeamWorkspaceSummary();
+  const body = document.getElementById("teamMemberBody");
+  const templateBody = document.getElementById("teamTemplateBody");
+  if (user && body) {
+    body.innerHTML = '<tr><td colspan="6" class="tbl-empty">Đang tải team workspace...</td></tr>';
+  }
+  if (user && templateBody) {
+    templateBody.innerHTML = '<tr><td colspan="1" class="tbl-empty">Đang tải mẫu link chung...</td></tr>';
+  }
+  await loadTeamWorkspace({ silent: true });
+  renderTeamWorkspaceSummary();
+  renderTeamMembers(teamWorkspaceData?.members || []);
+  renderTeamTemplates(teamWorkspaceData?.templates || []);
+}
+
+function toggleTeamTemplateSourceSelection(linkId) {
+  const normalizedId = Number(linkId);
+  if (!Number.isInteger(normalizedId) || normalizedId < 1) return;
+  const selected = new Set(selectedTeamTemplateSourceIds.map((id) => Number(id)));
+  if (selected.has(normalizedId)) {
+    selected.delete(normalizedId);
+  } else {
+    if (selected.size >= 5) {
+      toast("Chỉ được chọn tối đa 5 link cho mỗi lần tạo mẫu.", "warn");
+      return;
+    }
+    selected.add(normalizedId);
+  }
+  selectedTeamTemplateSourceIds = [...selected];
+  renderTeamWorkspaceSummary();
+}
+
+async function createTeamTemplate() {
+  if (!user) {
+    redirectToAuth("register", "Đăng nhập để tạo mẫu chung.");
+    return;
+  }
+  if (!canCreateSharedTemplates()) {
+    toast("Vai trò hiện tại chưa thể tạo mẫu chung.", "warn");
+    return;
+  }
+  const sourceInput = document.getElementById("teamTemplateSourceTrigger");
+  const nameInput = document.getElementById("teamTemplateName");
+  const selectedSourceLinkIds = [...selectedTeamTemplateSourceIds];
+  const name = String(nameInput?.value || "").trim();
+  if (!selectedSourceLinkIds.length) {
+    toast("Chọn ít nhất một link nguồn trước khi tạo mẫu.", "warn");
+    sourceInput?.focus();
+    return;
+  }
+  if (selectedSourceLinkIds.length > 5) {
+    toast("Chỉ được chọn tối đa 5 link cho mỗi lần tạo mẫu.", "warn");
+    sourceInput?.focus();
+    return;
+  }
+  try {
+    const response = await fetch("/api/team/templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source_link_ids: selectedSourceLinkIds,
+        uploaded_media_kind: uploadedTeamTemplateMedia?.kind || null,
+        uploaded_media_url: uploadedTeamTemplateMedia?.url || null,
+        uploaded_media_thumb: uploadedTeamTemplateMedia?.image || null,
+        name,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể tạo mẫu chung");
+    }
+    setTeamWorkspaceData(data);
+    if (nameInput) nameInput.value = "";
+    selectedTeamTemplateSourceIds = [];
+    selectedTeamTemplateMediaLinkId = null;
+    uploadedTeamTemplateMedia = null;
+    editingTeamTemplateId = null;
+    closeTeamTemplateSourceDropdown();
+    renderTeamWorkspaceSummary();
+    renderTeamMembers(teamWorkspaceData?.members || []);
+    renderTeamTemplates(teamWorkspaceData?.templates || []);
+    syncTeamTemplateComposer();
+    toast("Đã tạo mẫu chung cho workspace.", "ok");
+  } catch (error) {
+    toast(error.message || "Không thể tạo mẫu chung", "warn");
+  }
+}
+
+function syncTeamTemplateComposer() {
+  const nameInput = document.getElementById("teamTemplateName");
+  const createBtn = document.getElementById("teamTemplateCreateBtn");
+  const uploadBtn = document.getElementById("teamTemplateUploadBtn");
+  const personalBtn = document.getElementById("teamTemplateCreatePersonalBtn");
+  const isEditing = Number(editingTeamTemplateId || 0) > 0;
+  if (createBtn) {
+    createBtn.textContent = isEditing ? "Lưu mẫu" : "Tạo mẫu chung";
+  }
+  if (uploadBtn) {
+    uploadBtn.textContent = "Tải video/ảnh từ máy";
+  }
+  if (personalBtn) {
+    personalBtn.textContent = isEditing ? "Hủy sửa" : "Tạo link cá nhân";
+    personalBtn.onclick = () => {
+      if (isEditing) {
+        cancelEditTeamTemplate();
+        return;
+      }
+      clearTeamTemplateDraft(true);
+      navigate("create");
+    };
+  }
+  if (isEditing && nameInput && !nameInput.value) nameInput.focus();
+}
+
+function buildPersonalTeamTemplateDraft(template, sourceLink) {
+  return {
+    id: template.id,
+    name: template.name,
+    creator_name: template.creator_name,
+    source_link_id: Number(sourceLink?.id || template.source_link_id || 0) || null,
+    source_link_label: sourceLink?.title || template.name || "Link",
+    original_url: sourceLink?.original_url || "",
+    og_title: template.og_title || "",
+    og_desc: template.og_desc || "",
+    og_image: template.og_image || "",
+    link_type: template.link_type || "direct",
+    video_url: template.video_url || "",
+    video_overlay_text: template.video_overlay_text || "",
+    domain_hostname: template.domain_hostname || "",
+  };
+}
+
+function useTeamTemplateSource(templateId, sourceLinkId) {
+  if (!user) {
+    redirectToAuth("register", "Đăng nhập để lấy link từ mẫu chung.");
+    return;
+  }
+  if (!canUseSharedTemplates()) {
+    toast("Chỉ editor đang hoạt động mới được lấy link từ mẫu chung.", "warn");
+    return;
+  }
+  const template = findTeamTemplateById(templateId);
+  if (!template) {
+    toast("Không tìm thấy mẫu link chung.", "warn");
+    return;
+  }
+  const groupedLinks = Array.isArray(template.source_links) ? template.source_links : [];
+  const selectedSource = groupedLinks.find((link) => Number(link.id) === Number(sourceLinkId)) || groupedLinks[0] || {
+    id: template.source_link_id,
+    title: template.og_title || template.name || "Link",
+    original_url: template.source_link_original_url || "",
+  };
+  openTeamTemplateModal("use", template.id, selectedSource.id);
+}
+
+function useTeamTemplate(templateId) {
+  const template = findTeamTemplateById(templateId);
+  const firstSourceId = Number(template?.source_links?.[0]?.id || template?.source_link_id || 0);
+  if (!template || !firstSourceId) {
+    toast("Không tìm thấy link nguồn trong mẫu chung.", "warn");
+    return;
+  }
+  useTeamTemplateSource(templateId, firstSourceId);
+}
+
+document.addEventListener("click", (event) => {
+  const trigger = document.getElementById("teamTemplateSourceTrigger");
+  const dropdown = document.getElementById("teamTemplateSourceDropdown");
+  if (!trigger || !dropdown || !isTeamTemplateSourceDropdownOpen) return;
+  if (trigger.contains(event.target) || dropdown.contains(event.target)) return;
+  closeTeamTemplateSourceDropdown();
+});
+
 window.addEventListener("popstate", () => {
   if (!document.getElementById("appScreen").classList.contains("show")) {
     return;
@@ -8345,3 +9617,5 @@ window.addEventListener("hashchange", () => {
     showAuthScreen(getAuthRouteMode());
   }
 })();
+
+

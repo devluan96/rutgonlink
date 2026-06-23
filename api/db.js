@@ -431,6 +431,10 @@ async function init() {
         workspace_id: payload.workspace_id,
         created_by_user_id: payload.created_by_user_id || null,
         source_link_id: payload.source_link_id || null,
+        media_link_id: payload.media_link_id || null,
+        source_link_ids_json: Array.isArray(payload.source_link_ids_json)
+          ? payload.source_link_ids_json
+          : [],
         name: payload.name || 'Template',
         og_title: payload.og_title || null,
         og_desc: payload.og_desc || null,
@@ -447,6 +451,64 @@ async function init() {
         .single();
       check(error, 'workspace_template_create');
       return data;
+    },
+
+    async updateWorkspaceTemplate(templateId, payload = {}) {
+      if (!templateId) return null;
+      const updatePayload = {};
+      if (Object.prototype.hasOwnProperty.call(payload, 'source_link_id')) {
+        updatePayload.source_link_id = payload.source_link_id || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'media_link_id')) {
+        updatePayload.media_link_id = payload.media_link_id || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'source_link_ids_json')) {
+        updatePayload.source_link_ids_json = Array.isArray(payload.source_link_ids_json)
+          ? payload.source_link_ids_json
+          : [];
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'name')) {
+        updatePayload.name = payload.name || 'Template';
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'og_title')) {
+        updatePayload.og_title = payload.og_title || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'og_desc')) {
+        updatePayload.og_desc = payload.og_desc || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'og_image')) {
+        updatePayload.og_image = payload.og_image || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'link_type')) {
+        updatePayload.link_type = payload.link_type || 'direct';
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'video_url')) {
+        updatePayload.video_url = payload.video_url || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'video_overlay_text')) {
+        updatePayload.video_overlay_text = payload.video_overlay_text || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'domain_hostname')) {
+        updatePayload.domain_hostname = payload.domain_hostname || null;
+      }
+      const { data, error } = await sb
+        .from('workspace_link_templates')
+        .update(updatePayload)
+        .eq('id', templateId)
+        .select('*')
+        .single();
+      check(error, 'workspace_template_update');
+      return data;
+    },
+
+    async deleteWorkspaceTemplate(templateId) {
+      if (!templateId) return false;
+      const { error } = await sb
+        .from('workspace_link_templates')
+        .delete()
+        .eq('id', templateId);
+      check(error, 'workspace_template_delete');
+      return true;
     },
 
     async countUsers() {
