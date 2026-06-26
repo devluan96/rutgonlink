@@ -5789,7 +5789,6 @@ body{overflow-x:hidden}
   var DIRECT_IOS_URL = ${JSON.stringify(directIosUrl)};
   var DIRECT_ANDROID_URL = ${JSON.stringify(directAndroidUrl)};
   var DIRECT_ANDROID_PACKAGE = ${JSON.stringify(directAndroidPackage)};
-  var OVERLAY_DISMISSED_KEY = ${JSON.stringify(`${unlockKey}:dismissed-stages`)};
   var OVERLAY_STAGES = [
     { id: 'overlay-3s', label: 'Mốc 3s', delayMs: 3000, enabled: true },
     { id: 'overlay-5s', label: 'Mốc 5s', delayMs: 5000, enabled: true },
@@ -5812,17 +5811,6 @@ body{overflow-x:hidden}
   var dismissedStageIds = [];
   var timerOriginMs = Date.now();
 
-  try {
-    var savedDismissed = JSON.parse(
-      window.sessionStorage.getItem(OVERLAY_DISMISSED_KEY) || '[]'
-    );
-    if (Array.isArray(savedDismissed)) {
-      dismissedStageIds = savedDismissed.filter(function(value){
-        return typeof value === 'string' && value;
-      });
-    }
-  } catch (_) {}
-
   function flashPauseIndicator() {
     if (!pf) return;
     pf.classList.add('show');
@@ -5843,12 +5831,6 @@ body{overflow-x:hidden}
     var stage = OVERLAY_STAGES[index];
     if (!stage || isStageDismissed(index)) return;
     dismissedStageIds.push(stage.id);
-    try {
-      window.sessionStorage.setItem(
-        OVERLAY_DISMISSED_KEY,
-        JSON.stringify(dismissedStageIds)
-      );
-    } catch (_) {}
   }
 
   function hasRemainingStages() {
