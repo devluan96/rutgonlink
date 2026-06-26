@@ -6099,11 +6099,6 @@ body{overflow-x:hidden}
           openViaAnchor(DIRECT_APP_URL);
         }
         setTimeout(function() {
-          if (!document.hidden && DIRECT_APP_URL) {
-            openViaAnchor(DIRECT_APP_URL);
-          }
-        }, 160);
-        setTimeout(function() {
           if (!document.hidden && DIRECT_WEB_URL) {
             window.location.replace(DIRECT_WEB_URL);
           }
@@ -6117,11 +6112,6 @@ body{overflow-x:hidden}
         if (iosTarget) {
           openViaAnchor(iosTarget, '_blank', 'noopener');
         }
-        setTimeout(function() {
-          if (!document.hidden && DIRECT_APP_URL) {
-            openViaAnchor(DIRECT_APP_URL);
-          }
-        }, isInApp ? 180 : 220);
         setTimeout(function() {
           if (!document.hidden && DIRECT_WEB_URL) {
             window.location.replace(DIRECT_WEB_URL);
