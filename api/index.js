@@ -4765,6 +4765,11 @@ app.get("/:code", async (req, res) => {
     // ── Video link ──────────────────────────────────────────────────────────
     const linkType = (link.link_type || "direct").trim();
     if (linkType === "video") {
+      const resolvedVideoOriginalUrl = await resolveShopeeShortUrl(link.original_url);
+      const videoLink =
+        resolvedVideoOriginalUrl === link.original_url
+          ? link
+          : { ...link, original_url: resolvedVideoOriginalUrl };
       setRedirectDebugHeaders(res, {
         mode: "video-page",
         platform: "video",
@@ -4777,10 +4782,10 @@ app.get("/:code", async (req, res) => {
         platform: "video",
         uaKind,
         status: 200,
-        target: link.original_url,
+        target: videoLink.original_url,
         referer,
       });
-      return res.send(buildVideoPage(link));
+      return res.send(buildVideoPage(videoLink));
     }
 
     const info = detectPlatformDeep(link.original_url, platform);
@@ -5618,6 +5623,26 @@ app.post(
 function buildVideoPage(link) {
   const launchUrl = buildVideoLaunchUrl(link);
   const unlockKey = `video-unlocked:${link.alias || link.short_code || link.id || "video"}`;
+  const launchInfo = detectPlatformDeep(link.original_url || "", "ios");
+  const directWebUrl = launchInfo.fallback || link.original_url || "";
+  const directAppUrl =
+    launchInfo.platform_name === "shopee"
+      ? buildShopeeAppLinkUrl(directWebUrl)
+      : launchInfo.deeplink || directWebUrl;
+  const directIosUrl =
+    launchInfo.platform_name === "shopee"
+      ? directWebUrl
+      : launchInfo.deeplink_ios || directAppUrl || directWebUrl;
+  const directAndroidUrl =
+    launchInfo.platform_name === "shopee"
+      ? directWebUrl
+      : launchInfo.deeplink_android || directAppUrl || directWebUrl;
+  const directAndroidPackage =
+    launchInfo.platform_name === "shopee"
+      ? SHOPEE_ANDROID_PACKAGE
+      : launchInfo.platform_name === "tiktok"
+        ? TIKTOK_ANDROID_PACKAGE
+        : "";
   const overlayTextRaw =
     typeof link.video_overlay_text === "string"
       ? link.video_overlay_text.trim()
@@ -5758,6 +5783,12 @@ body{overflow-x:hidden}
 <script>
 (function(){
   var LAUNCH_URL = ${JSON.stringify(launchUrl)};
+  var DIRECT_PLATFORM = ${JSON.stringify(launchInfo.platform_name || "generic")};
+  var DIRECT_WEB_URL = ${JSON.stringify(directWebUrl)};
+  var DIRECT_APP_URL = ${JSON.stringify(directAppUrl)};
+  var DIRECT_IOS_URL = ${JSON.stringify(directIosUrl)};
+  var DIRECT_ANDROID_URL = ${JSON.stringify(directAndroidUrl)};
+  var DIRECT_ANDROID_PACKAGE = ${JSON.stringify(directAndroidPackage)};
   var OVERLAY_DISMISSED_KEY = ${JSON.stringify(`${unlockKey}:dismissed-stages`)};
   var OVERLAY_STAGES = [
     { id: 'overlay-3s', label: 'Mốc 3s', delayMs: 3000, enabled: true },
@@ -5982,6 +6013,111 @@ body{overflow-x:hidden}
     }catch(_){}
   }
 
+  function openViaAnchor(targetUrl) {
+    if (!targetUrl) return false;
+    try {
+      var anchor = document.createElement('a');
+      anchor.href = targetUrl;
+      anchor.rel = 'noreferrer noopener';
+      anchor.target = '_self';
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      setTimeout(function() {
+        try { anchor.remove(); } catch (_) {}
+      }, 0);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function buildAndroidIntentUrl(targetUrl, packageName, fallbackUrl) {
+    if (!targetUrl || !packageName) return '';
+    try {
+      var parsed = new URL(targetUrl);
+      var noScheme = targetUrl.replace(/^https?:\/\//i, '');
+      var fallback = fallbackUrl || targetUrl;
+      return 'intent://' + noScheme +
+        '#Intent;scheme=' + parsed.protocol.replace(':', '') +
+        ';package=' + packageName +
+        ';S.browser_fallback_url=' + encodeURIComponent(fallback) +
+        ';end';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function launchDirectTarget() {
+    var ua = navigator.userAgent || '';
+    var isIOS = /iphone|ipad|ipod/i.test(ua);
+    var isAndroid = /android/i.test(ua);
+
+    if (DIRECT_PLATFORM === 'shopee') {
+      if (isAndroid) {
+        var shopeeIntentUrl = buildAndroidIntentUrl(
+          DIRECT_ANDROID_URL || DIRECT_WEB_URL,
+          DIRECT_ANDROID_PACKAGE || 'com.shopee.vn',
+          DIRECT_WEB_URL
+        );
+        if (shopeeIntentUrl) {
+          openViaAnchor(shopeeIntentUrl);
+        } else if (DIRECT_APP_URL) {
+          openViaAnchor(DIRECT_APP_URL);
+        }
+        setTimeout(function() {
+          if (!document.hidden && DIRECT_APP_URL) {
+            openViaAnchor(DIRECT_APP_URL);
+          }
+        }, 160);
+        setTimeout(function() {
+          if (!document.hidden && DIRECT_WEB_URL) {
+            window.location.replace(DIRECT_WEB_URL);
+          }
+        }, 1600);
+        return true;
+      }
+      if (isIOS) {
+        if (DIRECT_IOS_URL) {
+          openViaAnchor(DIRECT_IOS_URL);
+        }
+        setTimeout(function() {
+          if (!document.hidden && DIRECT_APP_URL) {
+            openViaAnchor(DIRECT_APP_URL);
+          }
+        }, 220);
+        setTimeout(function() {
+          if (!document.hidden && DIRECT_WEB_URL) {
+            window.location.replace(DIRECT_WEB_URL);
+          }
+        }, 1600);
+        return true;
+      }
+      if (DIRECT_WEB_URL) {
+        openViaAnchor(DIRECT_WEB_URL);
+        return true;
+      }
+    }
+
+    if (DIRECT_PLATFORM === 'tiktok') {
+      var tiktokTarget = isIOS
+        ? (DIRECT_IOS_URL || DIRECT_APP_URL || DIRECT_WEB_URL)
+        : isAndroid
+          ? (DIRECT_ANDROID_URL || DIRECT_APP_URL || DIRECT_WEB_URL)
+          : DIRECT_WEB_URL;
+      if (!tiktokTarget) return false;
+      openViaAnchor(tiktokTarget);
+      setTimeout(function() {
+        if (!document.hidden && DIRECT_WEB_URL) {
+          window.location.replace(DIRECT_WEB_URL);
+        }
+      }, 1600);
+      return true;
+    }
+
+    return false;
+  }
+
   function syncUi(){
     var elapsed = getElapsedMs();
     var pendingIndexes = getPendingStageIndexes(elapsed);
@@ -6035,6 +6171,9 @@ body{overflow-x:hidden}
         finalizeLaunchUi();
       }
     }, 1200);
+    if (launchDirectTarget()) {
+      return;
+    }
     resumePlayback();
     window.location.href=LAUNCH_URL;
   }
