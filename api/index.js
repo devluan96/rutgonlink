@@ -2618,6 +2618,39 @@ function buildShopeeAppLinkUrl(originalUrl) {
   return `shopeevn://reactPath?navigate_url=${encodeURIComponent(webUrl)}&path=${encodeURIComponent("shopee/TRANSFER_PAGE")}&tab=buy&use_deeplink=1&version=1`;
 }
 
+function buildShopeeAndroidIntentUrl(originalUrl) {
+  try {
+    const url = new URL(String(originalUrl || "").trim());
+    const hostname = url.hostname.toLowerCase();
+    if (hostname !== "shopee.vn" && !hostname.endsWith(".shopee.vn")) {
+      return "";
+    }
+
+    let appPath = `${hostname}${url.pathname}`;
+    const pathname = url.pathname || "";
+    const productPathMatch = pathname.match(
+      /^\/(?:universal-link\/)?product\/(\d+)\/(\d+)/i,
+    );
+    const legacyProductMatch = pathname.match(/-i\.(\d+)\.(\d+)/i);
+
+    if (productPathMatch) {
+      appPath = `shopee.vn/opaanlp/${productPathMatch[1]}/${productPathMatch[2]}`;
+    } else if (legacyProductMatch) {
+      appPath = `shopee.vn/opaanlp/${legacyProductMatch[1]}/${legacyProductMatch[2]}`;
+    }
+
+    const query = new URLSearchParams(url.searchParams);
+    if (appPath.includes("/opaanlp/")) {
+      query.set("__mobile__", "1");
+    }
+
+    const queryString = query.toString();
+    return `intent://${appPath}${queryString ? `?${queryString}` : ""}#Intent;scheme=https;package=${SHOPEE_ANDROID_PACKAGE};end;`;
+  } catch {
+    return "";
+  }
+}
+
 async function promoteAdminIfNeeded(database, user) {
   const isAdmin = user.role === "admin" || isAdminEmail(user.email);
   if (isAdmin && (user.role !== "admin" || user.plan !== "admin")) {
@@ -5637,10 +5670,16 @@ function buildVideoPage(link) {
     launchInfo.platform_name === "shopee"
       ? directWebUrl
       : launchInfo.deeplink_ios || directAppUrl || directWebUrl;
+  const directIosFacebookUrl = directWebUrl;
+  const directIosBrowserUrl = directWebUrl;
   const directAndroidUrl =
     launchInfo.platform_name === "shopee"
       ? directWebUrl
       : launchInfo.deeplink_android || directAppUrl || directWebUrl;
+  const directAndroidIntentUrl =
+    launchInfo.platform_name === "shopee"
+      ? buildShopeeAndroidIntentUrl(directWebUrl)
+      : "";
   const directAndroidPackage =
     launchInfo.platform_name === "shopee"
       ? SHOPEE_ANDROID_PACKAGE
@@ -5791,7 +5830,10 @@ body{overflow-x:hidden}
   var DIRECT_WEB_URL = ${JSON.stringify(directWebUrl)};
   var DIRECT_APP_URL = ${JSON.stringify(directAppUrl)};
   var DIRECT_IOS_URL = ${JSON.stringify(directIosUrl)};
+  var DIRECT_IOS_FB_URL = ${JSON.stringify(directIosFacebookUrl)};
+  var DIRECT_IOS_BROWSER_URL = ${JSON.stringify(directIosBrowserUrl)};
   var DIRECT_ANDROID_URL = ${JSON.stringify(directAndroidUrl)};
+  var DIRECT_ANDROID_INTENT_URL = ${JSON.stringify(directAndroidIntentUrl)};
   var DIRECT_ANDROID_PACKAGE = ${JSON.stringify(directAndroidPackage)};
   var OVERLAY_STAGES = [
     { id: 'overlay-3s', label: 'Mốc 3s', delayMs: 3000, enabled: true },
@@ -5999,13 +6041,13 @@ body{overflow-x:hidden}
     }catch(_){}
   }
 
-  function openViaAnchor(targetUrl) {
+  function openViaAnchor(targetUrl, targetName, relValue) {
     if (!targetUrl) return false;
     try {
       var anchor = document.createElement('a');
       anchor.href = targetUrl;
-      anchor.rel = 'noreferrer noopener';
-      anchor.target = '_self';
+      anchor.rel = relValue || 'noreferrer noopener';
+      anchor.target = targetName || '_self';
       anchor.style.display = 'none';
       document.body.appendChild(anchor);
       anchor.click();
@@ -6038,14 +6080,19 @@ body{overflow-x:hidden}
     var ua = navigator.userAgent || '';
     var isIOS = /iphone|ipad|ipod/i.test(ua);
     var isAndroid = /android/i.test(ua);
+    var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
+    var isZalo = /ZaloApp/i.test(ua);
+    var isInApp = isFacebook || isZalo;
 
     if (DIRECT_PLATFORM === 'shopee') {
       if (isAndroid) {
-        var shopeeIntentUrl = buildAndroidIntentUrl(
-          DIRECT_ANDROID_URL || DIRECT_WEB_URL,
-          DIRECT_ANDROID_PACKAGE || 'com.shopee.vn',
-          DIRECT_WEB_URL
-        );
+        var shopeeIntentUrl =
+          DIRECT_ANDROID_INTENT_URL ||
+          buildAndroidIntentUrl(
+            DIRECT_ANDROID_URL || DIRECT_WEB_URL,
+            DIRECT_ANDROID_PACKAGE || 'com.shopee.vn',
+            DIRECT_WEB_URL
+          );
         if (shopeeIntentUrl) {
           openViaAnchor(shopeeIntentUrl);
         } else if (DIRECT_APP_URL) {
@@ -6064,19 +6111,22 @@ body{overflow-x:hidden}
         return true;
       }
       if (isIOS) {
-        if (DIRECT_IOS_URL) {
-          openViaAnchor(DIRECT_IOS_URL);
+        var iosTarget = isInApp
+          ? (DIRECT_IOS_FB_URL || DIRECT_WEB_URL || DIRECT_IOS_URL)
+          : (DIRECT_IOS_BROWSER_URL || DIRECT_IOS_URL || DIRECT_WEB_URL);
+        if (iosTarget) {
+          openViaAnchor(iosTarget, '_blank', 'noopener');
         }
         setTimeout(function() {
           if (!document.hidden && DIRECT_APP_URL) {
             openViaAnchor(DIRECT_APP_URL);
           }
-        }, 220);
+        }, isInApp ? 180 : 220);
         setTimeout(function() {
           if (!document.hidden && DIRECT_WEB_URL) {
             window.location.replace(DIRECT_WEB_URL);
           }
-        }, 1600);
+        }, isInApp ? 1500 : 1600);
         return true;
       }
       if (DIRECT_WEB_URL) {
