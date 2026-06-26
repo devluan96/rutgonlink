@@ -20,6 +20,7 @@ const getUserInitials =
     (currentUser?.name || currentUser?.email || "U").charAt(0).toUpperCase());
 const getUserAvatarUrl = (currentUser) =>
   String(currentUser?.avatar_url || "").trim() || "";
+const AUTO_ALIAS_MAX_LENGTH = 90;
 
 function stripVietnameseMarks(value) {
   return String(value || "")
@@ -29,7 +30,7 @@ function stripVietnameseMarks(value) {
     .replace(/Đ/g, "D");
 }
 
-function slugifyAliasValue(value, maxLength = 40) {
+function slugifyAliasValue(value, maxLength = AUTO_ALIAS_MAX_LENGTH) {
   const compact = stripVietnameseMarks(value)
     .toLowerCase()
     .replace(/['"`’]/g, "")
@@ -140,6 +141,11 @@ let accountLoginEventsLoading = false;
 let accountTwoFactorSetup = null;
 let accountTwoFactorMode = "";
 let accountTwoFactorQr = null;
+let activeAccountSection = "profile";
+let accountAffiliateHealth = {
+  shopee: null,
+  tiktok: null,
+};
 const notificationSeenStorageKey = "rutgonlink-notification-seen";
 let seenNotificationKeys = {};
 const landingIntroCopy = {
@@ -677,6 +683,7 @@ const KNOWN_APP_PAGES = new Set([
   "pricing",
   "stats",
   "account",
+  "payment",
   "admin",
 ]);
 
@@ -2529,6 +2536,9 @@ function updateTopbar() {
   if (document.getElementById("page-account")?.classList.contains("active")) {
     renderAccountPage();
   }
+  if (document.getElementById("page-payment")?.classList.contains("active")) {
+    renderPaymentPage();
+  }
 }
 
 function clearUserMenuSection() {
@@ -2578,11 +2588,7 @@ function switchUserTab(tab, el) {
 }
 
 function openAccountPage() {
-  closeUserPopup();
-  const accountNav = document.querySelector(
-    ".sitem[onclick*=\"navigate('account'\"]",
-  );
-  navigate("account", accountNav);
+  openAccountSection("profile");
 }
 
 function openHelpCenter() {
@@ -2800,6 +2806,56 @@ function renderAccountDevices() {
     .join("");
 }
 
+function renderAccountBillingHistory() {
+  const body = document.getElementById("accountBillingHistoryBody");
+  if (!body) return;
+  if (!Array.isArray(billingRequests) || !billingRequests.length) {
+    body.innerHTML =
+      '<tr><td colspan="5" class="tbl-empty">Chưa có lịch sử thanh toán.</td></tr>';
+    return;
+  }
+  body.innerHTML = billingRequests
+    .map(
+      (request) => `
+        <tr>
+          <td>${esc(request.reference_code || `REQ-${request.id || "0"}`)}</td>
+          <td>${esc(String(request.plan || "").toUpperCase() || "—")}</td>
+          <td><span class="payment-status ${esc(request.status || "awaiting_payment")}">${esc(request.status || "awaiting_payment")}</span></td>
+          <td>${esc(formatCurrencyVnd(request.amount || 0))}</td>
+          <td>${esc(formatAdminDateTime(request.submitted_at || request.created_at))}</td>
+        </tr>`,
+    )
+    .join("");
+}
+
+function renderAccountAffiliateSettings(options = {}) {
+  const preserveInputValues = !!options.preserveInputValues;
+  const shopeeInput = document.getElementById("accountAffiliateShopeeInput");
+  const tiktokInput = document.getElementById("accountAffiliateTikTokInput");
+  const currentShopeeValue = shopeeInput?.value || "";
+  const currentTikTokValue = tiktokInput?.value || "";
+  if (shopeeInput) {
+    shopeeInput.value = preserveInputValues
+      ? currentShopeeValue
+      : getUserAffiliatePresetUrl("shopee");
+  }
+  if (tiktokInput) {
+    tiktokInput.value = preserveInputValues
+      ? currentTikTokValue
+      : getUserAffiliatePresetUrl("tiktok");
+  }
+  [
+    ["shopee", "accountAffiliateShopeeStatus"],
+    ["tiktok", "accountAffiliateTikTokStatus"],
+  ].forEach(([platform, targetId]) => {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    const health = getAffiliatePresetHealthLabel(platform);
+    target.textContent = health.label;
+    target.className = `account-inline-status${health.tone ? ` ${health.tone}` : ""}`;
+  });
+}
+
 async function loadAccountLoginEvents(force = false) {
   if (!user?.id) return;
   if (accountLoginEventsLoading) return;
@@ -2837,11 +2893,37 @@ function renderAccountPage() {
     user.plan || "free"
   ).toUpperCase();
   resetAccountProfileForm();
+  renderAccountBillingHistory();
+  renderAccountAffiliateSettings();
   renderAccountTwoFactorState();
   if (!accountLoginEvents.length) {
     void loadAccountLoginEvents();
   } else {
     renderAccountDevices();
+  }
+}
+
+function renderPaymentPage() {
+  if (!user) {
+    redirectToAuth("login", "Can dang nhap de xem thanh toan.");
+    return;
+  }
+  setAvatarNode("paymentPageAvatar", user, "₫");
+  const paymentPageEmail = document.getElementById("paymentPageEmail");
+  const paymentPagePlanChip = document.getElementById("paymentPagePlanChip");
+  const paymentPageRole = document.getElementById("paymentPageRole");
+  if (paymentPageEmail) {
+    paymentPageEmail.textContent = user.email || "Chua co email";
+  }
+  if (paymentPagePlanChip) {
+    paymentPagePlanChip.textContent = String(user.plan || "free").toUpperCase();
+  }
+  if (paymentPageRole) {
+    paymentPageRole.textContent = String(user.role || "user").toUpperCase();
+  }
+  renderAccountBillingHistory();
+  if (!billingRequests.length) {
+    void loadBillingData();
   }
 }
 
@@ -2911,6 +2993,216 @@ async function saveAccountProfile() {
   } finally {
     btn.disabled = false;
     btn.textContent = "Lưu hồ sơ";
+  }
+}
+
+async function saveAccountAffiliateSettings() {
+  if (!user) return;
+  const btn = document.getElementById("accountSaveSettingsBtn");
+  const hint = document.getElementById("accountAffiliateHint");
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = "Đang lưu...";
+    if (hint) {
+      hint.className = "account-note warn";
+      hint.textContent = "\u0110ang l\u01b0u preset affiliate...";
+  }
+  try {
+    const response = await fetch("/api/auth/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        affiliate_shopee_url:
+          document.getElementById("accountAffiliateShopeeInput")?.value.trim() ||
+          "",
+        affiliate_tiktok_url:
+          document.getElementById("accountAffiliateTikTokInput")?.value.trim() ||
+          "",
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể lưu preset affiliate");
+    }
+    user = data.user;
+    accountAffiliateHealth.shopee = null;
+    accountAffiliateHealth.tiktok = null;
+    updateTopbar();
+    renderForms();
+    renderAccountAffiliateSettings({ preserveInputValues: true });
+    toast("✅ Đã lưu preset affiliate", "ok");
+    if (hint) {
+      hint.className = "account-note ok";
+      hint.textContent =
+        "\u0110\u00e3 l\u01b0u preset affiliate th\u00e0nh c\u00f4ng. Tab T\u1ea1o li\u00ean k\u1ebft s\u1ebd d\u00f9ng gi\u00e1 tr\u1ecb m\u1edbi.";
+    }
+  } catch (error) {
+    if (hint) {
+      hint.className = "account-note err";
+      hint.textContent =
+        (error && error.message) || "Kh\u00f4ng th\u1ec3 l\u01b0u preset affiliate l\u00fac n\u00e0y.";
+    }
+    toast(error.message || "Không thể lưu preset affiliate", "err");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Lưu preset affiliate";
+  }
+}
+
+async function checkAffiliatePreset(platform, containerId = "") {
+  if (!user?.id) {
+    redirectToAuth("login", "Cần đăng nhập để kiểm tra link affiliate.");
+    return;
+  }
+  const normalized = String(platform || "").trim().toLowerCase();
+  const inputId =
+    normalized === "shopee"
+      ? "accountAffiliateShopeeInput"
+      : "accountAffiliateTikTokInput";
+  const url =
+    document.getElementById(inputId)?.value.trim() ||
+    getUserAffiliatePresetUrl(normalized);
+  if (!url) {
+    toast("Nhập hoặc lưu link affiliate trước", "warn");
+    return;
+  }
+  accountAffiliateHealth[normalized] = {
+    alive: false,
+    pending: true,
+    note: "\u0110ang ki\u1ec3m tra",
+  };
+  renderAccountAffiliateSettings({ preserveInputValues: true });
+  try {
+    const response = await fetch("/api/affiliate/health", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ url, platform: normalized }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể kiểm tra link affiliate");
+    }
+    accountAffiliateHealth[normalized] = data;
+    renderAccountAffiliateSettings({ preserveInputValues: true });
+    if (containerId) {
+      const target = document.getElementById(
+        `${containerId}_presetStatus_${normalized}`,
+      );
+      if (target) {
+        const health = getAffiliatePresetHealthLabel(normalized);
+        target.textContent = health.label;
+        target.className = `affiliate-preset-status${health.tone ? ` ${health.tone}` : ""}`;
+      }
+    }
+    toast(
+      data.alive
+        ? "✅ Link affiliate vẫn hoạt động"
+        : data.note || "Link affiliate đang có lỗi",
+      data.alive ? "ok" : "warn",
+    );
+  } catch (error) {
+    if (error && typeof error === "object") {
+      error.message = normalizeAffiliateHealthErrorMessage(error);
+    }
+    accountAffiliateHealth[normalized] = {
+      alive: false,
+      note: error.message || "Không thể kiểm tra",
+    };
+    renderAccountAffiliateSettings({ preserveInputValues: true });
+    toast(error.message || "Không thể kiểm tra link affiliate", "err");
+  }
+}
+
+function useAffiliatePreset(cid, platform) {
+  const presetUrl = getUserAffiliatePresetUrl(platform);
+  if (!presetUrl) {
+    toast("Chưa có preset affiliate cho nền tảng này", "warn");
+    return;
+  }
+  const input = document.getElementById(`${cid}_url`);
+  if (!input) return;
+  input.value = presetUrl;
+  onUrlInput(cid);
+  syncAutoAliasPreview(cid);
+  toast(
+    `✅ Đã nạp link ${platform === "shopee" ? "Shopee" : "TikTok"} vào form`,
+    "ok",
+  );
+}
+
+async function logoutAllDevices() {
+  const confirmed = await showConfirmDialog({
+    title: "Đăng xuất tất cả thiết bị",
+    message:
+      "Tất cả phiên đăng nhập đang còn hiệu lực sẽ bị thu hồi. Bạn sẽ cần đăng nhập lại ngay sau thao tác này.",
+    actionLabel: "Đăng xuất tất cả",
+    tone: "danger",
+  });
+  if (!confirmed) return;
+  const btn = document.getElementById("accountLogoutAllBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Đang xử lý...";
+  }
+  try {
+    const response = await fetch("/api/auth/logout-all", { method: "POST" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể đăng xuất tất cả thiết bị");
+    }
+    user = null;
+    billingConfig = null;
+    billingRequests = [];
+    paymentRequestDraft = null;
+    closeUserPopup();
+    showAuth();
+    toast("✅ Đã thu hồi toàn bộ phiên đăng nhập", "ok");
+  } catch (error) {
+    toast(error.message || "Không thể đăng xuất tất cả thiết bị", "err");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Đăng xuất tất cả";
+    }
+  }
+}
+
+async function deleteAccount() {
+  const confirmed = await showConfirmDialog({
+    title: "Xóa tài khoản",
+    message:
+      "Hành động này sẽ xóa tài khoản hiện tại và không thể hoàn tác. Bạn có chắc chắn muốn tiếp tục?",
+    actionLabel: "Xóa tài khoản",
+    tone: "danger",
+  });
+  if (!confirmed) return;
+  const btn = document.getElementById("accountDeleteBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Đang xóa...";
+  }
+  try {
+    const response = await fetch("/api/auth/me", { method: "DELETE" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể xóa tài khoản");
+    }
+    user = null;
+    billingConfig = null;
+    billingRequests = [];
+    paymentRequestDraft = null;
+    accountLoginEvents = [];
+    closeUserPopup();
+    showAuth();
+    toast("✅ Tài khoản đã được xóa", "ok");
+  } catch (error) {
+    toast(error.message || "Không thể xóa tài khoản", "err");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Xóa tài khoản";
+    }
   }
 }
 
@@ -3015,12 +3307,7 @@ function openNotificationCenterFromPopup() {
 }
 
 function openAccountSecurityFromPopup() {
-  closeUserPopup();
-  const accountNav = document.querySelector(
-    ".sitem[onclick*=\"navigate('account'\"]",
-  );
-  navigate("account", accountNav);
-  setTimeout(() => scrollAccountToSecurity(), 50);
+  openAccountSection("security");
 }
 
 async function doLogin() {
@@ -3117,6 +3404,9 @@ async function loadBillingData() {
     if (!response.ok) return;
     billingConfig = data.config || null;
     billingRequests = Array.isArray(data.requests) ? data.requests : [];
+    renderPaymentPlanPills();
+    renderAccountBillingHistory();
+    updateTopbar();
   } catch {}
 }
 
@@ -3964,6 +4254,7 @@ function navigate(page, el) {
   if (page === "bio") renderBioPage();
   if (page === "team") renderTeamPage();
   if (page === "account") renderAccountPage();
+  if (page === "payment") renderPaymentPage();
   if (page === "admin") {
     syncAdminSectionUI();
     loadAdminData();
@@ -3994,6 +4285,152 @@ function toggleSidebar() {
 // ══════════════════════════════════════════════════
 //  SHORTEN FORM
 // ══════════════════════════════════════════════════
+function resolveAccountSectionId(section = "profile") {
+  const normalized = String(section || "profile").trim().toLowerCase();
+  if (normalized === "billing") return "accountBillingSection";
+  if (normalized === "security") return "accountSecuritySection";
+  if (normalized === "settings") return "accountSettingsSection";
+  if (normalized === "danger") return "accountDangerSection";
+  if (normalized === "devices") return "accountDevicesSection";
+  return "accountProfileSection";
+}
+
+function scrollToAccountSection(section = "profile") {
+  activeAccountSection = String(section || "profile").trim().toLowerCase();
+  const target = document.getElementById(
+    resolveAccountSectionId(activeAccountSection),
+  );
+  if (!target) return;
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function openPaymentPage() {
+  closeUserPopup();
+  navigate("payment");
+}
+
+function openAccountSection(section = "profile") {
+  activeAccountSection = String(section || "profile").trim().toLowerCase();
+  if (activeAccountSection === "billing") {
+    openPaymentPage();
+    return;
+  }
+  closeUserPopup();
+  navigate("account");
+  setTimeout(() => scrollToAccountSection(activeAccountSection), 60);
+}
+
+function getUserAffiliatePresetUrl(platform = "") {
+  const normalized = String(platform || "").trim().toLowerCase();
+  if (normalized === "shopee") {
+    return String(user?.affiliate_shopee_url || "").trim();
+  }
+  if (normalized === "tiktok") {
+    return String(user?.affiliate_tiktok_url || "").trim();
+  }
+  return "";
+}
+
+function getAffiliatePresetHealthLabel(platform = "") {
+  const key = String(platform || "").trim().toLowerCase();
+  const health = accountAffiliateHealth[key];
+  if (health?.pending) return { label: "\u0110ang ki\u1ec3m tra", tone: "warn" };
+  if (!health) return { label: "Chưa kiểm tra", tone: "" };
+  if (health.alive) return { label: "Đang hoạt động", tone: "ok" };
+  return { label: health.note || "Có lỗi", tone: "err" };
+}
+
+function normalizeAffiliateHealthErrorMessage(error) {
+  const rawMessage = String(error?.message || "").trim();
+  if (!rawMessage) return "Kh\u00f4ng th\u1ec3 ki\u1ec3m tra link affiliate l\u00fac n\u00e0y.";
+  if (/failed to fetch/i.test(rawMessage)) {
+    return "Kh\u00f4ng k\u1ebft n\u1ed1i \u0111\u01b0\u1ee3c t\u1edbi API ki\u1ec3m tra affiliate.";
+  }
+  return rawMessage;
+}
+
+function buildAffiliatePresetMarkup(containerId) {
+  const presets = [
+    {
+      key: "shopee",
+      label: "Shopee",
+      url: getUserAffiliatePresetUrl("shopee"),
+    },
+    {
+      key: "tiktok",
+      label: "TikTok",
+      url: getUserAffiliatePresetUrl("tiktok"),
+    },
+  ];
+  const availablePresets = presets.filter((preset) => !!preset.url);
+  if (!availablePresets.length) {
+    return `
+      <div class="affiliate-preset-shell empty">
+        <div class="affiliate-preset-empty">
+          Chưa có link affiliate mặc định. Vào <span class="upgrade-link" onclick="openAccountSection('settings')">Tài khoản → Cài đặt</span> để lưu sẵn Shopee hoặc TikTok.
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="affiliate-preset-shell">
+      <div class="affiliate-preset-head">
+        <div>
+          <strong>Link affiliate đã lưu</strong>
+          <span>Chọn nhanh để đổ vào form, không cần dán lại mỗi lần.</span>
+        </div>
+        <button class="btn-cp" type="button" onclick="openAccountSection('settings')">Chỉnh preset</button>
+      </div>
+      <div class="affiliate-preset-grid">
+        ${availablePresets
+          .map((preset) => {
+            const health = getAffiliatePresetHealthLabel(preset.key);
+            return `
+              <div class="affiliate-preset-card">
+                <div class="affiliate-preset-copy">
+                  <b>${esc(preset.label)}</b>
+                  <span title="${esc(preset.url)}">${esc(preset.url)}</span>
+                </div>
+                <div class="affiliate-preset-actions">
+                  <span class="affiliate-preset-status ${health.tone}" id="${containerId}_presetStatus_${preset.key}">${esc(health.label)}</span>
+                  <button class="btn-cp" type="button" onclick="useAffiliatePreset('${containerId}','${preset.key}')">Dùng link</button>
+                  <button class="btn-cp" type="button" onclick="checkAffiliatePreset('${preset.key}','${containerId}')">Check</button>
+                </div>
+              </div>`;
+          })
+          .join("")}
+      </div>
+    </div>`;
+}
+
+function buildAutoAliasFromInputs(title, url) {
+  const titleAlias = slugifyAliasValue(
+    String(title || "").trim(),
+    AUTO_ALIAS_MAX_LENGTH,
+  );
+  if (titleAlias) return titleAlias;
+  const fallbackAlias = extractAliasFromShortUrl(url);
+  return slugifyAliasValue(fallbackAlias || "link-moi", AUTO_ALIAS_MAX_LENGTH);
+}
+
+function syncAutoAliasPreview(cid) {
+  const alias = buildAutoAliasFromInputs(
+    document.getElementById(`${cid}_ogtitle`)?.value.trim() || "",
+    document.getElementById(`${cid}_url`)?.value.trim() || "",
+  );
+  const preview = document.getElementById(`${cid}_aliaspreview`);
+  if (preview) {
+    preview.textContent = alias || "alias-tu-dong-tu-tieu-de";
+  }
+  return alias;
+}
+
+function setCreateAiHint(cid, message = "", tone = "") {
+  const hint = document.getElementById(`${cid}_aihint`);
+  if (!hint) return;
+  hint.textContent = message || "";
+  hint.className = `create-ai-hint${message ? " show" : ""}${tone ? ` ${tone}` : ""}`;
+}
+
 function renderForms() {
   renderForm("createFormArea");
   applyPendingTeamTemplateDraft("createFormArea");
@@ -4072,6 +4509,7 @@ function renderForm(containerId) {
       <span class="create-form-badge">${isAdmin ? "Admin" : plan === "business" ? "Business" : plan === "pro" ? "Pro" : "Free"}</span>
     </div>
     <div id="${containerId}_templateNotice" style="display:none"></div>
+    ${buildAffiliatePresetMarkup(containerId)}
 
         <!-- ① URL + nút rút gọn -->
         <div class="url-bar" style="margin-bottom:12px">
@@ -4087,14 +4525,15 @@ function renderForm(containerId) {
         <!-- Detect badge -->
         <div class="det" id="${containerId}_det" style="margin-bottom:10px"></div>
 
-        <!-- ② Alias + Domain -->
+        <!-- ② Alias tự động + Domain -->
         <div class="create-form-grid create-form-grid--alias-domain">
           <div>
-            <label class="fl" style="margin-bottom:4px">Alias tùy chỉnh</label>
-            <div class="pfx">
+            <label class="fl" style="margin-bottom:4px">Alias tự động từ tiêu đề</label>
+            <div class="auto-alias-box">
               <span id="${containerId}_domainprefix" style="font-size:12px;color:var(--text3);white-space:nowrap">${getCreateDomainPreviewHost()}/</span>
-              <input type="text" id="${containerId}_alias" placeholder="ten-link" maxlength="40" autocomplete="off" spellcheck="false" oninput="onAliasInput('${containerId}')"/>
+              <span class="auto-alias-preview" id="${containerId}_aliaspreview">alias-tu-dong-tu-tieu-de</span>
             </div>
+            <div class="auto-alias-note">Không cần nhập alias. Hệ thống sẽ tự tạo từ tiêu đề và nâng giới hạn lên 90 ký tự.</div>
           </div>
           ${buildCreateDomainFieldMarkup(containerId)}
         </div>
@@ -4151,6 +4590,10 @@ function renderForm(containerId) {
                 <input type="text" class="fi" id="${containerId}_videotext"
                   placeholder="🛒 Bấm để xem sản phẩm →" maxlength="80" style="font-size:12px"/>
               </div>
+              <div class="create-ai-actions">
+                <button type="button" class="btn-cp" onclick="triggerVideoMetadataAi('${containerId}', true)">AI gợi ý title & desc</button>
+                <span class="create-ai-note">Khi có video hoặc thumbnail, AI sẽ gợi ý tiêu đề và mô tả theo nội dung.</span>
+              </div>
             </div>
           </div>
 
@@ -4159,6 +4602,7 @@ function renderForm(containerId) {
             💡 Video autoplay → 5s → lớp phủ toàn màn hình → user bấm bất kỳ đâu → mở App Shopee/TikTok.<br/>
             ✏️ Tiêu đề, mô tả và ảnh preview nhập ở phần <strong>Preview khi share</strong> bên dưới.
           </div>
+          <div class="create-ai-hint" id="${containerId}_aihint"></div>
         </div>
 
         <!-- ⑤ META SECTION (collapsible) -->
@@ -4270,6 +4714,7 @@ function renderForm(containerId) {
   }
   syncVideoOptionAvailability(containerId);
   updateCreateDomainDisplay(containerId);
+  syncAutoAliasPreview(containerId);
 }
 
 function setCreateUrlHint(cid, message) {
@@ -4316,6 +4761,7 @@ function onUrlInput(cid) {
 
   syncVideoOptionAvailability(cid);
   updateCreateDomainDisplay(cid);
+  syncAutoAliasPreview(cid);
   document.getElementById(`${cid}_res`)?.classList.remove("show");
   document.getElementById(`${cid}_err`)?.classList.remove("show");
 }
@@ -5979,11 +6425,11 @@ function applyPendingTeamTemplateDraft(containerId) {
     onLinkTypeChange(containerId);
     updateCreateDomainDisplay(containerId);
     updateOgPreview(containerId);
+    syncAutoAliasPreview(containerId);
     return;
   }
 
   const urlInput = document.getElementById(`${containerId}_url`);
-  const aliasInput = document.getElementById(`${containerId}_alias`);
   const typeInput = document.getElementById(`${containerId}_ltype`);
   const domainInput = document.getElementById(`${containerId}_domain`);
   const ogTitleInput = document.getElementById(`${containerId}_ogtitle`);
@@ -5997,10 +6443,6 @@ function applyPendingTeamTemplateDraft(containerId) {
     urlInput.placeholder = draft.original_url
       ? "Link goc da duoc ap dung tu popup mau chung"
       : "Dan link affiliate/dich cua rieng ban vao day...";
-  }
-  if (aliasInput) {
-    aliasInput.value = "";
-    aliasInput.placeholder = "alias-rieng-cua-ban";
   }
   if (typeInput) typeInput.value = draft.link_type || "direct";
   const normalizedHost = normalizeDomainChoice(draft.domain_hostname);
@@ -6048,6 +6490,7 @@ function applyPendingTeamTemplateDraft(containerId) {
   onLinkTypeChange(containerId);
   updateCreateDomainDisplay(containerId);
   updateOgPreview(containerId);
+  syncAutoAliasPreview(containerId);
 }
 
 function toggleMeta(cid) {
@@ -6059,17 +6502,9 @@ function toggleMeta(cid) {
   if (arrow) arrow.style.transform = isOpen ? "" : "rotate(180deg)";
 }
 
-function onAliasInput(cid) {
-  const input = document.getElementById(`${cid}_alias`);
-  if (!input) return;
-  const nextValue = slugifyAliasValue(input.value, 40);
-  if (input.value !== nextValue) {
-    input.value = nextValue;
-  }
-}
-
 function onOgTitleInput(cid) {
   updateOgPreview(cid);
+  syncAutoAliasPreview(cid);
 }
 
 function normalizeOgTitleInput(cid) {
@@ -6079,12 +6514,14 @@ function normalizeOgTitleInput(cid) {
   if (!rawValue) {
     input.value = "";
     updateOgPreview(cid);
+    syncAutoAliasPreview(cid);
     return;
   }
   if (looksLikeSlugTitle(rawValue)) {
     input.value = humanizeSlugTitle(rawValue).slice(0, 120);
   }
   updateOgPreview(cid);
+  syncAutoAliasPreview(cid);
 }
 
 function updateOgPreview(cid) {
@@ -6213,6 +6650,7 @@ async function handleVideoUploadLegacy(event, cid) {
       toast("✅ Upload video thành công!", "ok");
     }
     if (area) area.style.borderColor = "var(--green)";
+    void triggerVideoMetadataAi(cid, true);
   } catch {
     toast("Lỗi upload video", "err");
     if (area) area.style.borderColor = "var(--border2)";
@@ -6406,6 +6844,72 @@ function extractThumbFromVideoElement(videoEl, cid) {
   } catch (_) {}
 }
 
+async function triggerVideoMetadataAi(cid, force = false) {
+  if (!user?.id) return;
+  const originalUrl =
+    document.getElementById(`${cid}_url`)?.value.trim() || "";
+  const videoUrl =
+    document.getElementById(`${cid}_videourl`)?.value.trim() || "";
+  const imageUrl = document.getElementById(`${cid}_ogimg`)?.value.trim() || "";
+  const titleInput = document.getElementById(`${cid}_ogtitle`);
+  const descInput = document.getElementById(`${cid}_ogdesc`);
+  if (!videoUrl && !imageUrl) {
+    if (force) {
+      setCreateAiHint(
+        cid,
+        "Cần có URL video hoặc thumbnail để AI phân tích.",
+        "warn",
+      );
+    }
+    return;
+  }
+  if (!force && titleInput?.value.trim() && descInput?.value.trim()) {
+    return;
+  }
+  setCreateAiHint(cid, "Đang nhờ AI gợi ý tiêu đề và mô tả...", "warn");
+  try {
+    const response = await fetch("/api/ai/video-metadata", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        original_url: originalUrl,
+        video_url: videoUrl,
+        image_url: imageUrl,
+        video_overlay_text:
+          document.getElementById(`${cid}_videotext`)?.value.trim() || "",
+        language: appLanguage || "vi",
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "AI chưa thể gợi ý metadata lúc này");
+    }
+    if (titleInput && data?.suggestion?.title) {
+      titleInput.value = String(data.suggestion.title || "")
+        .trim()
+        .slice(0, 120);
+    }
+    if (descInput && data?.suggestion?.description) {
+      descInput.value = String(data.suggestion.description || "")
+        .trim()
+        .slice(0, 200);
+    }
+    updateOgPreview(cid);
+    syncAutoAliasPreview(cid);
+    setCreateAiHint(
+      cid,
+      `AI đã gợi ý xong metadata${data?.suggestion?.model ? ` bằng ${data.suggestion.model}` : ""}. Bạn vẫn có thể sửa tay trước khi tạo link.`,
+      "ok",
+    );
+  } catch (error) {
+    setCreateAiHint(
+      cid,
+      error.message || "AI chưa thể gợi ý metadata lúc này.",
+      "err",
+    );
+  }
+}
+
 // Called when user types YouTube/video URL manually
 function onVideoUrlInput(cid) {
   const url = document.getElementById(cid + "_videourl")?.value.trim() || "";
@@ -6420,6 +6924,9 @@ function onVideoUrlInput(cid) {
       imgInput.value = thumb;
       updateVideoThumbPreview(cid);
     }
+  }
+  if (/^https?:\/\//i.test(url)) {
+    void triggerVideoMetadataAi(cid, false);
   }
 }
 
@@ -6442,6 +6949,7 @@ async function extractThumbFromUrl(cid) {
       updateVideoThumbPreview(cid);
     }
     toast("✅ Đã lấy thumbnail YouTube!", "ok");
+    void triggerVideoMetadataAi(cid, true);
     return;
   }
   // Direct video – canvas extract
@@ -6467,6 +6975,7 @@ async function extractThumbFromUrl(cid) {
       updateVideoThumbPreview(cid),
     );
     toast("✅ Đã cắt thumbnail từ video!", "ok");
+    void triggerVideoMetadataAi(cid, true);
   } catch (e) {
     toast("Không lấy được thumbnail: " + (e?.message || "lỗi"), "err");
   }
@@ -6486,6 +6995,7 @@ function updateVideoThumbPreview(cid) {
   }
   // Sync to OG preview card
   updateOgPreview(cid);
+  syncAutoAliasPreview(cid);
 }
 async function handleFileUpload(event, cid) {
   const file = event.target.files[0];
@@ -6599,9 +7109,6 @@ function showAffiliateShortenPrompt(cid, message, mode = "guest") {
 
 async function doShorten(cid, confirmAffiliate = false) {
   const url = document.getElementById(`${cid}_url`)?.value.trim();
-  const aliasInput = document.getElementById(`${cid}_alias`);
-  const alias = slugifyAliasValue(aliasInput?.value || "", 40);
-  if (aliasInput && aliasInput.value !== alias) aliasInput.value = alias;
   const titleInput = document.getElementById(`${cid}_ogtitle`);
   const normalizedOgTitle = looksLikeSlugTitle(titleInput?.value || "")
     ? humanizeSlugTitle(titleInput?.value || "").slice(0, 120)
@@ -6609,6 +7116,8 @@ async function doShorten(cid, confirmAffiliate = false) {
   if (titleInput && titleInput.value.trim() !== normalizedOgTitle) {
     titleInput.value = normalizedOgTitle;
   }
+  const alias = buildAutoAliasFromInputs(normalizedOgTitle, url);
+  syncAutoAliasPreview(cid);
   const og_title = normalizedOgTitle || "";
   const og_desc = document.getElementById(`${cid}_ogdesc`)?.value.trim() || "";
   const og_image = document.getElementById(`${cid}_ogimg`)?.value.trim() || "";

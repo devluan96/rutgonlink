@@ -134,6 +134,10 @@ const PAYMENT_ACCOUNT_HOLDER = readEnvValue(
 );
 const PAYMENT_QR_IMAGE_URL = readEnvValue("PAYMENT_QR_IMAGE_URL", "VITE_PAYMENT_QR_IMAGE_URL");
 const PAYMENT_CONTACT = (process.env.PAYMENT_CONTACT || "Zalo 0969.361.607").trim();
+const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
+const OPENAI_VIDEO_METADATA_MODEL =
+  (process.env.OPENAI_VIDEO_METADATA_MODEL || "gpt-5.5").trim() || "gpt-5.5";
+const AFFILIATE_PRESET_MAX_LENGTH = 6000;
 
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
@@ -379,6 +383,293 @@ function normalizeDomainHost(input) {
   return normalized.hostname.toLowerCase();
 }
 
+function normalizeAffiliatePresetUrl(input, platform = "") {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+  try {
+    const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const url = new URL(normalized);
+    if (!/^https?:$/i.test(url.protocol)) return null;
+    const hostname = url.hostname.toLowerCase();
+    const targetPlatform = String(platform || "").trim().toLowerCase();
+    if (targetPlatform === "shopee") {
+      if (
+        hostname !== "shopee.vn" &&
+        !hostname.endsWith(".shopee.vn") &&
+        hostname !== "s.shopee.vn" &&
+        hostname !== "shp.ee"
+      ) {
+        return null;
+      }
+    } else if (targetPlatform === "tiktok") {
+      if (
+        hostname !== "tiktok.com" &&
+        !hostname.endsWith(".tiktok.com") &&
+        hostname !== "vm.tiktok.com" &&
+        hostname !== "vt.tiktok.com"
+      ) {
+        return null;
+      }
+    } else if (!isAffiliateShortenUrl(url.toString())) {
+      return null;
+    }
+    return url.toString().slice(0, AFFILIATE_PRESET_MAX_LENGTH);
+  } catch {
+    return null;
+  }
+}
+
+function inferAffiliatePlatformFromUrl(input = "") {
+  try {
+    const normalized = /^https?:\/\//i.test(String(input || "").trim())
+      ? String(input || "").trim()
+      : `https://${String(input || "").trim()}`;
+    const url = new URL(normalized);
+    const hostname = url.hostname.toLowerCase();
+    if (
+      hostname === "shopee.vn" ||
+      hostname.endsWith(".shopee.vn") ||
+      hostname === "s.shopee.vn" ||
+      hostname === "shp.ee"
+    ) {
+      return "shopee";
+    }
+    if (
+      hostname === "tiktok.com" ||
+      hostname.endsWith(".tiktok.com") ||
+      hostname === "vm.tiktok.com" ||
+      hostname === "vt.tiktok.com"
+    ) {
+      return "tiktok";
+    }
+  } catch {}
+  return "generic";
+}
+
+function isSessionRevokedForUser(user, tokenPayload) {
+  const revokedAt = user?.session_revoked_after
+    ? new Date(user.session_revoked_after).getTime()
+    : 0;
+  const issuedAt = Number(tokenPayload?.iat || 0) * 1000;
+  if (!revokedAt || !issuedAt) return false;
+  return issuedAt <= revokedAt;
+}
+
+async function resolveUserFromTokenPayload(tokenPayload) {
+  if (!tokenPayload?.id) return null;
+  const database = await getDb();
+  const user = await database.getUserById(tokenPayload.id);
+  if (!user) return null;
+  if (isSessionRevokedForUser(user, tokenPayload)) {
+    return null;
+  }
+  if (user.role === "admin" || isAdminEmail(user.email)) {
+    user.plan = "admin";
+    user.role = "admin";
+  }
+  return user;
+}
+
+async function fetchAffiliateHealth(url) {
+  const checkedAt = new Date().toISOString();
+  const input = String(url || "").trim();
+  if (!input) {
+    return {
+      alive: false,
+      checked_at: checkedAt,
+      note: "Thiếu URL affiliate để kiểm tra",
+      final_url: "",
+      status: 0,
+    };
+  }
+  const platform = inferAffiliatePlatformFromUrl(input);
+  const requestHeaders = {
+    "user-agent":
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+    accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "accept-language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+    "cache-control": "no-cache",
+  };
+  const attempts = [
+    { method: "HEAD", redirect: "manual" },
+    { method: "GET", redirect: "manual" },
+    { method: "GET", redirect: "follow" },
+  ];
+  let lastErrorMessage = "";
+
+  for (const attempt of attempts) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    try {
+      const response = await fetch(input, {
+        method: attempt.method,
+        redirect: attempt.redirect,
+        signal: controller.signal,
+        headers: requestHeaders,
+      });
+      const status = response.status || 0;
+      const locationHeader = response.headers.get("location");
+      const redirectedUrl = locationHeader
+        ? new URL(locationHeader, input).toString()
+        : "";
+      const finalUrl =
+        attempt.redirect === "follow"
+          ? response.url || redirectedUrl || input
+          : redirectedUrl || input;
+      const detectedPlatform = inferAffiliatePlatformFromUrl(finalUrl) || platform;
+      const hasRedirect = status >= 300 && status < 400;
+      const botProtected = status === 401 || status === 403 || status === 405;
+      const definitelyDead = status === 404 || status === 410;
+      const likelyAlive =
+        response.ok || hasRedirect || (botProtected && platform !== "generic");
+
+      if (!likelyAlive && !definitelyDead) {
+        lastErrorMessage = `Link trả về HTTP ${status}.`;
+        continue;
+      }
+
+      return {
+        alive: likelyAlive,
+        checked_at: checkedAt,
+        status,
+        final_url: finalUrl,
+        platform: detectedPlatform,
+        note: response.ok
+          ? "Link affiliate phản hồi bình thường."
+          : hasRedirect
+            ? "Link affiliate vẫn chuyển hướng bình thường."
+            : botProtected
+              ? "Link có phản hồi nhưng nền tảng đang chặn bot kiểm tra tự động."
+              : `Link trả về HTTP ${status}.`,
+      };
+    } catch (error) {
+      lastErrorMessage =
+        error?.name === "AbortError"
+          ? "Kiểm tra bị timeout."
+          : "Không thể kết nối tới link affiliate.";
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  return {
+    alive: false,
+    checked_at: checkedAt,
+    final_url: input,
+    status: 0,
+    platform,
+    note: lastErrorMessage || "Không thể kiểm tra link affiliate.",
+  };
+}
+
+function buildVideoMetadataResponseSchema() {
+  return {
+    name: "video_metadata",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        title: {
+          type: "string",
+          description:
+            "Tiêu đề ngắn gọn, đúng nội dung video, tối đa 120 ký tự.",
+        },
+        description: {
+          type: "string",
+          description:
+            "Mô tả ngắn để hiển thị khi share, tối đa 200 ký tự.",
+        },
+      },
+      required: ["title", "description"],
+    },
+  };
+}
+
+async function generateVideoMetadataSuggestion({
+  originalUrl,
+  videoUrl,
+  imageUrl,
+  overlayText,
+  language = "vi",
+  userId,
+}) {
+  if (!OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY_NOT_CONFIGURED");
+  }
+  const targetLanguage = language === "en" ? "English" : "Vietnamese";
+  const content = [
+    {
+      type: "input_text",
+      text:
+        "Bạn là trợ lý viết metadata cho link chia sẻ video affiliate. " +
+        `Hãy tạo 1 tiêu đề và 1 mô tả bằng ${targetLanguage}. ` +
+        "Không bịa thông tin nếu không thấy rõ. Ưu tiên nội dung nhìn thấy trong thumbnail/video và ngữ cảnh URL. " +
+        "Tiêu đề phải tự nhiên, rõ nghĩa, bán hàng vừa phải và phù hợp để tạo alias slug. " +
+        "Mô tả ngắn, súc tích, không spam hashtag, không dùng emoji quá mức. " +
+        "Nếu thông tin chưa chắc chắn, hãy viết an toàn nhưng vẫn hữu ích.",
+    },
+    {
+      type: "input_text",
+      text:
+        `URL gốc: ${String(originalUrl || "").trim() || "Không có"}\n` +
+        `URL video: ${String(videoUrl || "").trim() || "Không có"}\n` +
+        `Overlay text hiện tại: ${String(overlayText || "").trim() || "Không có"}`,
+    },
+  ];
+  if (imageUrl) {
+    content.push({
+      type: "input_image",
+      image_url: imageUrl,
+      detail: "high",
+    });
+  }
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_VIDEO_METADATA_MODEL,
+      input: [
+        {
+          role: "user",
+          content,
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: buildVideoMetadataResponseSchema().name,
+          strict: true,
+          schema: buildVideoMetadataResponseSchema().schema,
+        },
+        verbosity: "low",
+      },
+      max_output_tokens: 220,
+      safety_identifier: userId ? `rutgonlink-user-${userId}` : undefined,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message =
+      data?.error?.message ||
+      data?.error ||
+      "OpenAI không trả về metadata hợp lệ.";
+    throw new Error(message);
+  }
+  const parsed = JSON.parse(String(data.output_text || "{}"));
+  return {
+    title: normalizeShareTitleInput(parsed?.title, 120) || "",
+    description: String(parsed?.description || "").trim().slice(0, 200),
+    model: data.model || OPENAI_VIDEO_METADATA_MODEL,
+  };
+}
+
 function normalizeBioSlug(input, fallback = "") {
   const raw = String(input || fallback || "")
     .trim()
@@ -485,36 +776,42 @@ async function resolveUser(req) {
   if (!token) return null;
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const database = await getDb();
-    const user = await database.getUserById(payload.id);
-    if (!user) return null;
-    if (user.role === "admin" || isAdminEmail(user.email)) {
-      user.plan = "admin";
-      user.role = "admin";
-    }
-    return user;
+    return await resolveUserFromTokenPayload(payload);
   } catch {
     return null;
   }
 }
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const token = parseToken(req);
   if (!token) return res.status(401).json({ error: "Chưa đăng nhập" });
   try {
-    req._tokenPayload = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = await resolveUserFromTokenPayload(payload);
+    if (!user) {
+      res.clearCookie("token");
+      return res.status(401).json({ error: "Phiên đăng nhập không còn hợp lệ" });
+    }
+    req._tokenPayload = payload;
+    req.currentUser = user;
     next();
   } catch {
     return res.status(401).json({ error: "Token không hợp lệ" });
   }
 }
 
-function requireAdmin(req, res, next) {
+async function requireAdmin(req, res, next) {
   const token = parseToken(req);
   if (!token) return res.status(401).json({ error: "Chưa đăng nhập" });
   try {
-    const p = jwt.verify(token, JWT_SECRET);
-    req._tokenPayload = p;
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = await resolveUserFromTokenPayload(payload);
+    const isAdmin = user?.role === "admin" || isAdminEmail(user?.email);
+    if (!user || !isAdmin) {
+      return res.status(403).json({ error: "Không có quyền quản trị" });
+    }
+    req._tokenPayload = payload;
+    req.currentUser = user;
     next();
   } catch {
     return res.status(401).json({ error: "Token không hợp lệ" });
@@ -1778,6 +2075,8 @@ function buildAuthUserPayload(user, isAdmin = false) {
     name: user.name,
     phone: user.phone || null,
     avatar_url: user.avatar_url || null,
+    affiliate_shopee_url: user.affiliate_shopee_url || null,
+    affiliate_tiktok_url: user.affiliate_tiktok_url || null,
     plan: isAdmin ? "admin" : user.plan,
     role: isAdmin ? "admin" : user.role || "user",
     two_factor_enabled: !!user.two_factor_enabled,
@@ -2567,6 +2866,19 @@ app.post("/api/auth/logout", (_, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/auth/logout-all", requireAuth, async (req, res) => {
+  try {
+    const currentUser = req.currentUser || (await resolveUser(req));
+    if (!currentUser) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    await database.revokeUserSessions(currentUser.id, new Date().toISOString());
+    res.clearCookie("token");
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "Không thể đăng xuất tất cả thiết bị: " + e.message });
+  }
+});
+
 app.get("/api/auth/me", async (req, res) => {
   const user = await resolveUser(req);
   if (!user) return res.json({ user: null });
@@ -2578,22 +2890,51 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
     const user = await resolveUser(req);
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
-    const name = String(req.body?.name || "").trim().slice(0, 80);
-    const phoneInput = String(req.body?.phone || "").trim();
-    const avatarInput = String(req.body?.avatar_url || "").trim();
-    const phone = phoneInput ? normalizePhoneInput(phoneInput) : null;
-    const avatarUrl = avatarInput ? normalizeAvatarUrlInput(avatarInput) : null;
-    if (phoneInput && !phone) {
-      return res.status(400).json({ error: "Số điện thoại chưa đúng định dạng" });
+    const body = req.body || {};
+    const updates = {};
+    if (Object.prototype.hasOwnProperty.call(body, "name")) {
+      updates.name = String(body.name || "").trim().slice(0, 80) || null;
     }
-    if (avatarInput && !avatarUrl) {
-      return res.status(400).json({ error: "Avatar phải là URL hợp lệ hoặc ảnh đã upload" });
+    if (Object.prototype.hasOwnProperty.call(body, "phone")) {
+      const phoneInput = String(body.phone || "").trim();
+      const phone = phoneInput ? normalizePhoneInput(phoneInput) : null;
+      if (phoneInput && !phone) {
+        return res.status(400).json({ error: "Số điện thoại chưa đúng định dạng" });
+      }
+      updates.phone = phone;
     }
-    await database.updateUserProfile(user.id, {
-      name: name || null,
-      phone,
-      avatar_url: avatarUrl,
-    });
+    if (Object.prototype.hasOwnProperty.call(body, "avatar_url")) {
+      const avatarInput = String(body.avatar_url || "").trim();
+      const avatarUrl = avatarInput ? normalizeAvatarUrlInput(avatarInput) : null;
+      if (avatarInput && !avatarUrl) {
+        return res.status(400).json({ error: "Avatar phải là URL hợp lệ hoặc ảnh đã upload" });
+      }
+      updates.avatar_url = avatarUrl;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "affiliate_shopee_url")) {
+      const shopeeAffiliateInput = String(body.affiliate_shopee_url || "").trim();
+      const shopeeAffiliateUrl = shopeeAffiliateInput
+        ? normalizeAffiliatePresetUrl(shopeeAffiliateInput, "shopee")
+        : null;
+      if (shopeeAffiliateInput && !shopeeAffiliateUrl) {
+        return res.status(400).json({ error: "Link affiliate Shopee chưa hợp lệ" });
+      }
+      updates.affiliate_shopee_url = shopeeAffiliateUrl;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "affiliate_tiktok_url")) {
+      const tiktokAffiliateInput = String(body.affiliate_tiktok_url || "").trim();
+      const tiktokAffiliateUrl = tiktokAffiliateInput
+        ? normalizeAffiliatePresetUrl(tiktokAffiliateInput, "tiktok")
+        : null;
+      if (tiktokAffiliateInput && !tiktokAffiliateUrl) {
+        return res.status(400).json({ error: "Link affiliate TikTok chưa hợp lệ" });
+      }
+      updates.affiliate_tiktok_url = tiktokAffiliateUrl;
+    }
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ error: "Không có thông tin nào để cập nhật" });
+    }
+    await database.updateUserProfile(user.id, updates);
     const updated = await database.getUserById(user.id);
     if (updated.email.toLowerCase() === ADMIN_EMAIL || updated.role === "admin") {
       updated.plan = "admin";
@@ -2602,6 +2943,66 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
     res.json({ user: buildAuthUserPayload(updated, updated.role === "admin" || isAdminEmail(updated.email)) });
   } catch (e) {
     res.status(500).json({ error: "Lỗi server: " + e.message });
+  }
+});
+
+app.delete("/api/auth/me", requireAuth, async (req, res) => {
+  try {
+    const currentUser = req.currentUser || (await resolveUser(req));
+    if (!currentUser) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const database = await getDb();
+    await database.deleteUser(currentUser.id);
+    res.clearCookie("token");
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "Không thể xóa tài khoản: " + e.message });
+  }
+});
+
+app.post("/api/affiliate/health", requireAuth, async (req, res) => {
+  try {
+    const url = String(req.body?.url || "").trim();
+    const platform = String(req.body?.platform || "").trim().toLowerCase();
+    if (!url) return res.status(400).json({ error: "Thiếu URL để kiểm tra" });
+    const normalizedUrl =
+      normalizeAffiliatePresetUrl(url, platform) ||
+      normalizeAffiliatePresetUrl(url);
+    if (!normalizedUrl) {
+      return res.status(400).json({ error: "Link affiliate không đúng định dạng nền tảng" });
+    }
+    const result = await fetchAffiliateHealth(normalizedUrl);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: "Không thể kiểm tra link affiliate: " + e.message });
+  }
+});
+
+app.post("/api/ai/video-metadata", requireAuth, async (req, res) => {
+  try {
+    const currentUser = req.currentUser || (await resolveUser(req));
+    if (!currentUser) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const originalUrl = String(req.body?.original_url || "").trim();
+    const videoUrl = String(req.body?.video_url || "").trim();
+    const imageUrl = String(req.body?.image_url || "").trim();
+    const overlayText = String(req.body?.video_overlay_text || "").trim();
+    const language = String(req.body?.language || "vi").trim().toLowerCase() === "en" ? "en" : "vi";
+    if (!originalUrl && !videoUrl && !imageUrl) {
+      return res.status(400).json({ error: "Cần ít nhất một nguồn nội dung để AI gợi ý" });
+    }
+    const suggestion = await generateVideoMetadataSuggestion({
+      originalUrl,
+      videoUrl,
+      imageUrl,
+      overlayText,
+      language,
+      userId: currentUser.id,
+    });
+    res.json({ ok: true, suggestion });
+  } catch (e) {
+    if (e.message === "OPENAI_API_KEY_NOT_CONFIGURED") {
+      return res.status(503).json({ error: "OPENAI_API_KEY chưa được cấu hình trên server" });
+    }
+    res.status(500).json({ error: "Không thể tạo metadata bằng AI: " + e.message });
   }
 });
 

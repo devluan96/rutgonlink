@@ -762,54 +762,6 @@
           <span class="kbd2">Ctrl K</span>
         </div>
         <div class="tb-right">
-          <div
-            class="tb-lang-switch"
-            id="tbLangSwitch"
-            role="group"
-            aria-label="Chọn ngôn ngữ"
-          >
-            <button
-              class="tb-lang-btn active"
-              type="button"
-              data-lang-option="vi"
-              onclick="setAppLanguage('vi')"
-            >
-              VI
-            </button>
-            <button
-              class="tb-lang-btn"
-              type="button"
-              data-lang-option="en"
-              onclick="setAppLanguage('en')"
-            >
-              EN
-            </button>
-          </div>
-          <button
-            class="theme-toggle tb-theme"
-            type="button"
-            id="themeToggleBtn"
-            onclick="toggleTheme()"
-            aria-label="Đổi giao diện"
-          >
-            <svg
-              id="themeToggleIcon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <circle cx="12" cy="12" r="4"></circle>
-              <path d="M12 2v2"></path>
-              <path d="M12 20v2"></path>
-              <path d="M4.93 4.93l1.41 1.41"></path>
-              <path d="M17.66 17.66l1.41 1.41"></path>
-              <path d="M2 12h2"></path>
-              <path d="M20 12h2"></path>
-              <path d="M4.93 19.07l1.41-1.41"></path>
-              <path d="M17.66 6.34l1.41-1.41"></path>
-            </svg>
-          </button>
           <button
             class="tb-bell"
             type="button"
@@ -877,12 +829,81 @@
           </div>
           <span class="user-menu-plan" id="popupPlan">FREE</span>
         </div>
+        <div class="user-popup-tools">
+          <div class="user-popup-tool-row">
+            <div>
+              <strong>Giao diện</strong>
+              <span>Đổi nhanh sáng/tối ngay trong menu avatar.</span>
+            </div>
+            <button
+              class="theme-toggle tb-theme user-popup-theme"
+              type="button"
+              id="themeToggleBtn"
+              onclick="toggleTheme()"
+              aria-label="Đổi giao diện"
+            >
+              <svg
+                id="themeToggleIcon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="12" r="4"></circle>
+                <path d="M12 2v2"></path>
+                <path d="M12 20v2"></path>
+                <path d="M4.93 4.93l1.41 1.41"></path>
+                <path d="M17.66 17.66l1.41 1.41"></path>
+                <path d="M2 12h2"></path>
+                <path d="M20 12h2"></path>
+                <path d="M4.93 19.07l1.41-1.41"></path>
+                <path d="M17.66 6.34l1.41-1.41"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="user-popup-tool-row">
+            <div>
+              <strong>Ngôn ngữ</strong>
+              <span>Chọn nhanh ngôn ngữ hiển thị cho dashboard.</span>
+            </div>
+            <div
+              class="tb-lang-switch user-popup-lang"
+              id="tbLangSwitch"
+              role="group"
+              aria-label="Chọn ngôn ngữ"
+            >
+              <button
+                class="tb-lang-btn active"
+                type="button"
+                data-lang-option="vi"
+                onclick="setAppLanguage('vi')"
+              >
+                VI
+              </button>
+              <button
+                class="tb-lang-btn"
+                type="button"
+                data-lang-option="en"
+                onclick="setAppLanguage('en')"
+              >
+                EN
+              </button>
+            </div>
+          </div>
+        </div>
+        <div hidden aria-hidden="true">
+          <span id="popupFullName">Khách</span>
+          <span id="popupUserId">—</span>
+          <span id="popupCreatedAt">—</span>
+          <span id="popupRole">user</span>
+          <span id="popupSessionStatus">Đang hoạt động</span>
+        </div>
         <div class="user-menu-links">
           <button
             class="user-tab"
             type="button"
             id="userTabAccount"
-            onclick="openAccountPage()"
+            onclick="openAccountSection('profile')"
           >
             <span class="user-menu-icon">
               <svg
@@ -895,13 +916,13 @@
                 <circle cx="12" cy="9" r="4"></circle>
               </svg>
             </span>
-            <span>Hồ sơ công khai</span>
+            <span>Hồ sơ cá nhân</span>
           </button>
           <button
             class="user-tab"
             type="button"
             id="userTabBilling"
-            onclick="switchUserTab('billing', this)"
+            onclick="openPaymentPage()"
           >
             <span class="user-menu-icon">
               <svg
@@ -920,7 +941,7 @@
             class="user-tab"
             type="button"
             id="userTabSecurity"
-            onclick="switchUserTab('security', this)"
+            onclick="openAccountSection('security')"
           >
             <span class="user-menu-icon">
               <svg
@@ -940,7 +961,7 @@
             class="user-tab"
             type="button"
             id="userTabProfile"
-            onclick="switchUserTab('profile', this)"
+            onclick="openAccountSection('settings')"
           >
             <span class="user-menu-icon">
               <svg
@@ -957,164 +978,6 @@
             </span>
             <span>Cài đặt</span>
           </button>
-        </div>
-        <div class="user-panels">
-          <div class="user-panel" id="userPanelBilling">
-            <div class="billing-card">
-              <div class="user-title" style="margin-bottom: 6px">
-                Thanh toán
-              </div>
-              <div class="user-note" style="margin-top: 0">
-                Chọn gói, mở mã QR chuyển khoản và gửi xác nhận để admin duyệt.
-              </div>
-              <div class="billing-plan" style="margin-top: 10px">
-                <div class="billing-plan-label">Gói hiện tại</div>
-                <div class="billing-plan-value" id="billingCurrentPlan">
-                  FREE
-                </div>
-              </div>
-              <div class="billing-plan">
-                <div class="billing-plan-label">Vai trò</div>
-                <div class="billing-plan-value" id="billingCurrentRole">
-                  user
-                </div>
-              </div>
-              <div class="billing-plan">
-                <div class="billing-plan-label">Trạng thái</div>
-                <div class="billing-plan-value" id="billingStatus">
-                  Dùng thử
-                </div>
-              </div>
-              <div class="billing-actions">
-                <button
-                  class="user-btn primary"
-                  type="button"
-                  id="billingUpgradeBtn"
-                  onclick="openPaymentCenter()"
-                >
-                  Thanh toán / nâng cấp
-                </button>
-                <button
-                  class="user-btn secondary"
-                  type="button"
-                  onclick="navigate('pricing')"
-                >
-                  Xem bảng giá
-                </button>
-              </div>
-              <div class="billing-actions" style="margin-top: 8px">
-                <button
-                  class="user-btn secondary"
-                  type="button"
-                  onclick="openPaymentCenter('pro')"
-                >
-                  Gói Pro
-                </button>
-                <button
-                  class="user-btn secondary"
-                  type="button"
-                  onclick="openPaymentCenter('business')"
-                >
-                  Gói Business
-                </button>
-              </div>
-              <div class="billing-promo" id="billingPromo">
-                Gói Pro mở khóa deeplink, custom OG preview và upload ảnh.
-              </div>
-              <div class="billing-note" id="billingNote">
-                Billing nằm trong popup tài khoản để sidebar gọn hơn.
-              </div>
-              <div class="billing-note" id="billingRequestStatus">
-                Chưa có yêu cầu thanh toán nào gần đây.
-              </div>
-            </div>
-          </div>
-          <div class="user-panel" id="userPanelSecurity">
-            <div class="user-card">
-              <div class="user-title" style="margin-bottom: 6px">Bảo mật</div>
-              <div class="user-note" style="margin-top: 0">
-                Kiểm tra nhanh trạng thái tài khoản và phiên đang dùng.
-              </div>
-              <div class="user-row" style="margin-top: 12px">
-                <div class="user-label">Họ và tên</div>
-                <div class="user-value" id="popupFullName">Khách</div>
-              </div>
-              <div class="user-row">
-                <div class="user-label">ID người dùng</div>
-                <div class="user-value" id="popupUserId">—</div>
-              </div>
-              <div class="user-row">
-                <div class="user-label">Ngày tham gia</div>
-                <div class="user-value" id="popupCreatedAt">—</div>
-              </div>
-              <div class="user-row">
-                <div class="user-label">Vai trò</div>
-                <div class="user-value" id="popupRole">user</div>
-              </div>
-              <div class="user-row">
-                <div class="user-label">Phiên hiện tại</div>
-                <div class="user-value" id="popupSessionStatus">
-                  Đang hoạt động
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="user-panel" id="userPanelProfile">
-            <div class="user-card">
-              <div class="user-title" style="margin-bottom: 6px">Cài đặt</div>
-              <div class="user-note" style="margin-top: 0">
-                Nên gom cài đặt thành các nhóm thao tác nhanh, còn chỉnh dữ liệu
-                cá nhân để ở trang Tài khoản.
-              </div>
-              <div class="settings-quick-list">
-                <button
-                  class="settings-quick-item"
-                  type="button"
-                  onclick="openAccountPage()"
-                >
-                  <strong>Hồ sơ & tài khoản</strong>
-                  <span
-                    >Sửa tên, số điện thoại, avatar và xem thiết bị đăng
-                    nhập.</span
-                  >
-                </button>
-                <button
-                  class="settings-quick-item"
-                  type="button"
-                  onclick="toggleTheme()"
-                >
-                  <strong>Giao diện</strong>
-                  <span id="settingsThemeHint"
-                    >Đổi nhanh giữa chế độ sáng và tối.</span
-                  >
-                </button>
-                <button
-                  class="settings-quick-item"
-                  type="button"
-                  onclick="openAccountSecurityFromPopup()"
-                >
-                  <strong>Bảo mật nâng cao</strong>
-                  <span
-                    >Bật 2FA và xem phiên đăng nhập trong trang Tài khoản.</span
-                  >
-                </button>
-                <button
-                  class="settings-quick-item"
-                  type="button"
-                  onclick="openNotificationCenterFromPopup()"
-                >
-                  <strong>Thông báo realtime</strong>
-                  <span
-                    >Kiểm tra nhanh các cảnh báo mới từ chuông thông báo.</span
-                  >
-                </button>
-              </div>
-              <div class="user-note" id="profileHint">
-                Đề xuất nhóm cài đặt đầy đủ: Hồ sơ, Giao diện, Thông báo, Bảo
-                mật, Thanh toán, Tích hợp.
-              </div>
-            </div>
-          </div>
         </div>
         <div class="user-popup-divider"></div>
         <div class="user-menu-links user-menu-links--secondary">
@@ -1295,21 +1158,6 @@
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
               <span class="slabel">Làm việc nhóm</span>
-            </div>
-            <div class="sgroup" style="margin-top: 6px">Tài khoản</div>
-            <div class="sitem" onclick="navigate('account', this)">
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <circle cx="12" cy="8" r="4" />
-                <path d="M4 21c1.8-4 5-6 8-6s6.2 2 8 6" />
-              </svg>
-              <span class="slabel">Tài khoản</span>
             </div>
             <div
               class="sitem"
@@ -2223,7 +2071,7 @@
           <div class="page" id="page-account">
             <div class="ph">
               <h1>Tài khoản</h1>
-              <p>Quản lý hồ sơ cá nhân, lịch sử đăng nhập và xác thực 2 lớp</p>
+              <p>Quản lý hồ sơ, bảo mật, preset affiliate và AI cho video</p>
             </div>
             <div class="account-shell">
               <section class="account-hero">
@@ -2261,9 +2109,16 @@
                   </button>
                 </div>
               </section>
+              <div class="account-section-nav">
+                <button class="account-section-chip" type="button" onclick="scrollToAccountSection('profile')">Hồ sơ</button>
+                <button class="account-section-chip" type="button" onclick="scrollToAccountSection('security')">Bảo mật</button>
+                <button class="account-section-chip" type="button" onclick="scrollToAccountSection('settings')">Cài đặt</button>
+                <button class="account-section-chip danger" type="button" onclick="scrollToAccountSection('danger')">Vùng nguy hiểm</button>
+              </div>
 
-              <div class="account-grid">
-                <section class="account-card">
+              <div class="account-stack">
+                <div class="account-grid">
+                <section class="account-card" id="accountProfileSection">
                   <div class="account-card-head">
                     <div>
                       <h3>Hồ sơ cá nhân</h3>
@@ -2365,7 +2220,7 @@
                   </div>
                 </section>
 
-                <section class="account-card" id="accountSecuritySection">
+                  <section class="account-card" id="accountSecuritySection">
                   <div class="account-card-head">
                     <div>
                       <h3>Bảo mật & 2FA</h3>
@@ -2436,19 +2291,20 @@
                     id="account2faVerifyRow"
                     hidden
                   >
-                    <div class="fg">
-                      <label class="fl" id="account2faCodeLabel"
-                        >Mã xác minh 6 số</label
-                      >
-                      <input
-                        type="text"
-                        class="fi"
-                        id="account2faCodeInput"
-                        inputmode="numeric"
-                        maxlength="6"
-                        placeholder="123456"
-                      />
-                    </div>
+                    <label
+                      class="fl account-verify-label"
+                      id="account2faCodeLabel"
+                      for="account2faCodeInput"
+                      >Mã xác minh 6 số</label
+                    >
+                    <input
+                      type="text"
+                      class="fi"
+                      id="account2faCodeInput"
+                      inputmode="numeric"
+                      maxlength="6"
+                      placeholder="123456"
+                    />
                     <button
                       class="user-btn primary"
                       type="button"
@@ -2458,10 +2314,80 @@
                       Xác minh
                     </button>
                   </div>
-                </section>
-              </div>
+                  </section>
+                </div>
 
-              <section class="account-card">
+                  <section class="account-card" id="accountSettingsSection">
+                    <div class="account-card-head">
+                      <div>
+                        <h3>Cài đặt liên kết & AI</h3>
+                        <p>
+                          Lưu sẵn link affiliate Shopee/TikTok để chọn nhanh khi tạo link và chuẩn bị dữ liệu cho AI.
+                        </p>
+                      </div>
+                    </div>
+                    <div class="account-profile-fields">
+                      <div class="fg full">
+                        <label class="fl">Link affiliate Shopee mặc định</label>
+                        <div class="account-inline-actions account-inline-actions--triple">
+                          <input
+                            type="url"
+                            class="fi"
+                            id="accountAffiliateShopeeInput"
+                            placeholder="https://shopee.vn/..."
+                          />
+                          <button
+                            class="user-btn secondary"
+                            type="button"
+                            onclick="checkAffiliatePreset('shopee')"
+                          >
+                            Kiểm tra
+                          </button>
+                          <span class="account-inline-status" id="accountAffiliateShopeeStatus">Chưa kiểm tra</span>
+                        </div>
+                      </div>
+                      <div class="fg full">
+                        <label class="fl">Link affiliate TikTok mặc định</label>
+                        <div class="account-inline-actions account-inline-actions--triple">
+                          <input
+                            type="url"
+                            class="fi"
+                            id="accountAffiliateTikTokInput"
+                            placeholder="https://www.tiktok.com/..."
+                          />
+                          <button
+                            class="user-btn secondary"
+                            type="button"
+                            onclick="checkAffiliatePreset('tiktok')"
+                          >
+                            Kiểm tra
+                          </button>
+                          <span class="account-inline-status" id="accountAffiliateTikTokStatus">Chưa kiểm tra</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="account-actions">
+                      <button
+                        class="user-btn primary"
+                        type="button"
+                        id="accountSaveSettingsBtn"
+                        onclick="saveAccountAffiliateSettings()"
+                      >
+                        Lưu preset affiliate
+                      </button>
+                    </div>
+                    <div class="account-note" id="accountAffiliateHint">
+                      Lưu preset để dùng nhanh ở tab Tạo liên kết.
+                    </div>
+                    <div class="account-note" id="profileHint">
+                      Sau khi lưu, tab Tạo liên kết sẽ hiện nút chọn nhanh Shopee/TikTok. Khi thêm video, app cũng có thể dùng thumbnail để AI gợi ý tiêu đề và mô tả.
+                    </div>
+                  <div class="account-note" id="settingsThemeHint">
+                      Chế độ sáng/tối và ngôn ngữ đã được chuyển vào menu avatar ở góc trên.
+                    </div>
+                  </section>
+
+                <section class="account-card" id="accountDevicesSection">
                 <div class="account-card-head">
                   <div>
                     <h3>Thiết bị đã đăng nhập</h3>
@@ -2485,6 +2411,177 @@
                   <div class="account-device-empty">
                     Chưa có lịch sử đăng nhập nào để hiển thị.
                   </div>
+                </div>
+                </section>
+
+                <div class="account-grid account-grid--equal">
+                  <section class="account-card" id="accountSessionSection">
+                    <div class="account-card-head">
+                      <div>
+                        <h3>Đăng xuất trên tất cả thiết bị</h3>
+                        <p>
+                          Dùng khi bạn nghi ngờ tài khoản bị lộ hoặc muốn buộc toàn bộ trình duyệt đăng nhập lại.
+                        </p>
+                      </div>
+                    </div>
+                    <div class="account-security-block">
+                      Sau khi xác nhận, mọi phiên đăng nhập đang còn hiệu lực sẽ bị thu hồi và bạn sẽ cần đăng nhập lại từ đầu.
+                    </div>
+                    <div class="account-actions">
+                      <button
+                        class="user-btn danger"
+                        type="button"
+                        id="accountLogoutAllBtn"
+                        onclick="logoutAllDevices()"
+                      >
+                        Đăng xuất tất cả
+                      </button>
+                    </div>
+                  </section>
+
+                  <section class="account-card" id="accountDangerSection">
+                    <div class="account-card-head">
+                      <div>
+                        <h3>Xóa tài khoản</h3>
+                        <p>
+                          Hành động này sẽ xóa tài khoản và dữ liệu liên quan của bạn khỏi hệ thống.
+                        </p>
+                      </div>
+                    </div>
+                    <div class="account-security-block account-security-block--danger">
+                      Đây là hành động không thể hoàn tác. Chỉ tiếp tục khi bạn chắc chắn không cần giữ lại tài khoản này nữa.
+                    </div>
+                    <div class="account-actions">
+                      <button
+                        class="user-btn danger"
+                        type="button"
+                        id="accountDeleteBtn"
+                        onclick="deleteAccount()"
+                      >
+                        Xóa tài khoản
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="page" id="page-payment">
+            <div class="ph">
+              <h1>Thanh toán</h1>
+              <p>Theo dõi gói hiện tại, tạo yêu cầu nâng cấp và xem lịch sử thanh toán gần đây</p>
+            </div>
+            <div class="account-shell">
+              <section class="account-hero">
+                <div class="account-hero-main">
+                  <div
+                    class="account-avatar account-avatar--xl"
+                    id="paymentPageAvatar"
+                  >
+                    ₫
+                  </div>
+                  <div class="account-hero-copy">
+                    <div class="account-kicker">Billing Center</div>
+                    <h2>Gói dịch vụ & lịch sử thanh toán</h2>
+                    <div class="account-hero-meta">
+                      <span id="paymentPageEmail">user@example.com</span>
+                      <span id="paymentPagePlanChip">FREE</span>
+                      <span id="paymentPageRole">USER</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="account-hero-actions">
+                  <button
+                    class="user-btn secondary"
+                    type="button"
+                    onclick="openAccountSection('profile')"
+                  >
+                    Về tài khoản
+                  </button>
+                  <button
+                    class="user-btn primary"
+                    type="button"
+                    id="billingUpgradeBtn"
+                    onclick="openPaymentCenter()"
+                  >
+                    Thanh toán / nâng cấp
+                  </button>
+                </div>
+              </section>
+
+              <section class="account-card" id="accountBillingSection">
+                <div class="account-card-head">
+                  <div>
+                    <h3>Tổng quan thanh toán</h3>
+                    <p>
+                      Xem trạng thái gói hiện tại, tạo yêu cầu mới và rà lại lịch sử giao dịch đã gửi.
+                    </p>
+                  </div>
+                  <button
+                    class="user-btn secondary"
+                    type="button"
+                    onclick="navigate('pricing')"
+                  >
+                    Xem bảng giá
+                  </button>
+                </div>
+                <div class="account-billing-grid">
+                  <div class="account-billing-stat">
+                    <span>Gói hiện tại</span>
+                    <strong id="billingCurrentPlan">FREE</strong>
+                  </div>
+                  <div class="account-billing-stat">
+                    <span>Vai trò</span>
+                    <strong id="billingCurrentRole">user</strong>
+                  </div>
+                  <div class="account-billing-stat">
+                    <span>Trạng thái</span>
+                    <strong id="billingStatus">Dùng thử</strong>
+                  </div>
+                </div>
+                <div class="billing-actions">
+                  <button
+                    class="user-btn primary"
+                    type="button"
+                    onclick="openPaymentCenter('pro')"
+                  >
+                    Mở gói Pro
+                  </button>
+                  <button
+                    class="user-btn secondary"
+                    type="button"
+                    onclick="openPaymentCenter('business')"
+                  >
+                    Mở gói Business
+                  </button>
+                </div>
+                <div class="billing-promo" id="billingPromo">
+                  Gói Pro mở khóa deeplink, custom OG preview và upload ảnh.
+                </div>
+                <div class="billing-note" id="billingNote">
+                  Mở modal thanh toán để quét QR, chuyển khoản và gửi xác nhận cho admin duyệt.
+                </div>
+                <div class="billing-note" id="billingRequestStatus">
+                  Chưa có yêu cầu thanh toán nào gần đây.
+                </div>
+                <div class="account-table-wrap">
+                  <table class="account-table">
+                    <thead>
+                      <tr>
+                        <th>ID giao dịch</th>
+                        <th>Gói</th>
+                        <th>Trạng thái</th>
+                        <th>Số tiền</th>
+                        <th>Ngày</th>
+                      </tr>
+                    </thead>
+                    <tbody id="accountBillingHistoryBody">
+                      <tr>
+                        <td colspan="5" class="tbl-empty">Chưa có lịch sử thanh toán.</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </section>
             </div>

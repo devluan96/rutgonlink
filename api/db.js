@@ -88,12 +88,32 @@ async function init() {
     },
 
     async updateUserProfile(userId, profile = {}) {
-      const payload = {
-        name: profile.name || null,
-        phone: profile.phone || null,
-        avatar_url: profile.avatar_url || null,
-      };
+      const payload = {};
+      if (Object.prototype.hasOwnProperty.call(profile, 'name')) {
+        payload.name = profile.name || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(profile, 'phone')) {
+        payload.phone = profile.phone || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(profile, 'avatar_url')) {
+        payload.avatar_url = profile.avatar_url || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(profile, 'affiliate_shopee_url')) {
+        payload.affiliate_shopee_url = profile.affiliate_shopee_url || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(profile, 'affiliate_tiktok_url')) {
+        payload.affiliate_tiktok_url = profile.affiliate_tiktok_url || null;
+      }
+      if (!Object.keys(payload).length) return;
       const { error } = await sb.from('users').update(payload).eq('id', userId);
+      check(error);
+    },
+
+    async revokeUserSessions(userId, revokedAt = new Date().toISOString()) {
+      const { error } = await sb
+        .from('users')
+        .update({ session_revoked_after: revokedAt })
+        .eq('id', userId);
       check(error);
     },
 

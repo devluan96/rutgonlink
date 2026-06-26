@@ -11,21 +11,27 @@ CREATE TABLE IF NOT EXISTS users (
   name       TEXT,
   phone      TEXT,
   avatar_url TEXT,
+  affiliate_shopee_url TEXT,
+  affiliate_tiktok_url TEXT,
   plan       TEXT DEFAULT 'free',
   role       TEXT DEFAULT 'user',
   two_factor_enabled BOOLEAN DEFAULT FALSE,
   two_factor_secret TEXT,
   two_factor_pending_secret TEXT,
   two_factor_enabled_at TIMESTAMPTZ,
+  session_revoked_after TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS affiliate_shopee_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS affiliate_tiktok_url TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_pending_secret TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS session_revoked_after TIMESTAMPTZ;
 
 -- Workspaces
 CREATE TABLE IF NOT EXISTS workspaces (
