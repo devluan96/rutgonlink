@@ -137,6 +137,7 @@ const PAYMENT_CONTACT = (process.env.PAYMENT_CONTACT || "Zalo 0969.361.607").tri
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
 const OPENAI_VIDEO_METADATA_MODEL =
   (process.env.OPENAI_VIDEO_METADATA_MODEL || "gpt-5.5").trim() || "gpt-5.5";
+const VIDEO_LINK_DOMAIN = (process.env.VIDEO_LINK_DOMAIN || "goc8.click").trim();
 const AFFILIATE_PRESET_MAX_LENGTH = 6000;
 
 app.use(express.json({ limit: "5mb" }));
@@ -381,6 +382,23 @@ function normalizeDomainHost(input) {
     ? new URL(raw)
     : new URL(`https://${raw}`);
   return normalized.hostname.toLowerCase();
+}
+
+async function resolveActiveDomainHostname(database, input) {
+  const normalizedHostname = normalizeDomainHost(input);
+  if (!normalizedHostname) return null;
+  const activeDomains = await database.getActiveDomains();
+  const matchedDomain = activeDomains.find(
+    (domain) => domain.hostname === normalizedHostname,
+  );
+  if (!matchedDomain) return null;
+  return matchedDomain.hostname;
+}
+
+async function resolveVideoLinkDomainHostname(database) {
+  const preferredHostname = normalizeDomainHost(VIDEO_LINK_DOMAIN);
+  if (!preferredHostname) return null;
+  return resolveActiveDomainHostname(database, preferredHostname);
 }
 
 function normalizeAffiliatePresetUrl(input, platform = "") {
@@ -4261,18 +4279,21 @@ app.post("/api/shorten", async (req, res) => {
     }
 
     let selectedDomainHostname = null;
-    if (domain_hostname) {
-      selectedDomainHostname = normalizeDomainHost(domain_hostname);
-      if (!selectedDomainHostname)
-        return res.status(400).json({ error: "Domain tạo link không hợp lệ" });
-      const activeDomains = await database.getActiveDomains();
-      const matchedDomain = activeDomains.find(
-        (domain) => domain.hostname === selectedDomainHostname,
+    if (link_type === "video") {
+      selectedDomainHostname = await resolveVideoLinkDomainHostname(database);
+      if (!selectedDomainHostname) {
+        return res.status(400).json({
+          error: `Domain video ${VIDEO_LINK_DOMAIN} chưa được bật hoặc chưa có trong danh sách domain hoạt động`,
+        });
+      }
+    } else if (domain_hostname) {
+      selectedDomainHostname = await resolveActiveDomainHostname(
+        database,
+        domain_hostname,
       );
-      if (!matchedDomain) {
+      if (!selectedDomainHostname) {
         return res.status(400).json({ error: "Domain tạo link không còn hoạt động" });
       }
-      selectedDomainHostname = matchedDomain.hostname;
     }
 
     const shortCode = nanoid(7);
@@ -4398,20 +4419,24 @@ app.patch("/api/links/:id", async (req, res) => {
       video_url: nextVideoUrl,
       video_overlay_text,
     };
-    if (typeof domain_hostname !== "undefined") {
+    if (nextLinkType === "video") {
+      const nextVideoDomainHostname = await resolveVideoLinkDomainHostname(database);
+      if (!nextVideoDomainHostname) {
+        return res.status(400).json({
+          error: `Domain video ${VIDEO_LINK_DOMAIN} chưa được bật hoặc chưa có trong danh sách domain hoạt động`,
+        });
+      }
+      updateFields.domain_hostname = nextVideoDomainHostname;
+    } else if (typeof domain_hostname !== "undefined") {
       let nextDomainHostname = null;
       if (String(domain_hostname || "").trim()) {
-        nextDomainHostname = normalizeDomainHost(domain_hostname);
-        if (!nextDomainHostname)
-          return res.status(400).json({ error: "Domain tạo link không hợp lệ" });
-        const activeDomains = await database.getActiveDomains();
-        const matchedDomain = activeDomains.find(
-          (domain) => domain.hostname === nextDomainHostname,
+        nextDomainHostname = await resolveActiveDomainHostname(
+          database,
+          domain_hostname,
         );
-        if (!matchedDomain) {
+        if (!nextDomainHostname) {
           return res.status(400).json({ error: "Domain tạo link không còn hoạt động" });
         }
-        nextDomainHostname = matchedDomain.hostname;
       }
       updateFields.domain_hostname = nextDomainHostname;
     }
@@ -5608,6 +5633,12 @@ function buildVideoPage(link) {
     link.og_desc || "Nội dung đang sẵn sàng. Bấm vào màn hình để tiếp tục.",
   );
   const ogImage = esc(link.og_image || "");
+  const popupPreviewHtml = ogImage
+    ? `<img class="popup-preview-image" src="${ogImage}" alt="${ogTitle}" />`
+    : `<div class="popup-preview-fallback">
+        <div class="popup-preview-badge">MỞ APP</div>
+        <div class="popup-preview-copy">${overlayText}</div>
+      </div>`;
   const rawVideoUrl = String(link.video_url || "").trim();
   const videoUrl = buildCloudinaryPlayableVideoUrl(rawVideoUrl);
 
@@ -5636,57 +5667,61 @@ function buildVideoPage(link) {
 <html lang="vi">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
 <title>${ogTitle}</title>
 ${ogImage ? `<meta property="og:image" content="${ogImage}"/>` : ""}
 <meta property="og:title" content="${ogTitle}"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif;color:#f8fafc;background:#07111f}
-body{background:
-radial-gradient(circle at 14% 18%, rgba(34,211,238,.28), transparent 22%),
-radial-gradient(circle at 82% 20%, rgba(251,113,133,.22), transparent 24%),
-radial-gradient(circle at 76% 72%, rgba(245,158,11,.18), transparent 20%),
-linear-gradient(135deg,#030712 0%,#07111f 42%,#111827 100%)}
-.orb{position:fixed;border-radius:999px;filter:blur(12px);opacity:.9;pointer-events:none}
-.orb-1{inset:6% auto auto 8%;width:17rem;height:17rem;background:linear-gradient(135deg,rgba(34,211,238,.95),rgba(59,130,246,.25));box-shadow:1.6rem 1.8rem 0 rgba(8,47,73,.34)}
-.orb-2{inset:auto 12% 10% auto;width:15rem;height:15rem;background:linear-gradient(135deg,rgba(251,113,133,.96),rgba(168,85,247,.24));box-shadow:-1.4rem 1.3rem 0 rgba(76,29,149,.24)}
-.orb-3{inset:34% auto auto 68%;width:8rem;height:8rem;background:linear-gradient(135deg,rgba(245,158,11,.95),rgba(251,191,36,.26));box-shadow:.8rem 1rem 0 rgba(120,53,15,.25)}
-.shell{min-height:100vh;display:flex;justify-content:center;align-items:center;padding:1rem;position:relative}
-.card{position:relative;width:min(1040px,95vw);display:flex;flex-direction:column;background:rgba(9,18,32,.58);border:1px solid rgba(255,255,255,.14);border-radius:1rem;overflow:hidden;backdrop-filter:blur(24px) saturate(130%);box-shadow:0 1.5rem 4rem rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.08)}
-.media-panel{position:relative;width:100%;display:flex;justify-content:center;align-items:center;overflow:hidden;aspect-ratio:16/9;padding:1rem;background:linear-gradient(135deg,rgba(15,23,42,.95),rgba(17,24,39,.7))}
-.vbox{position:relative;width:min(100%,26rem);height:min(72vh,42rem);max-width:100%;max-height:100%;display:flex;align-items:center;justify-content:center}
-.content-panel{padding:1rem;border-top:1px solid rgba(255,255,255,.14)}
-.content-panel h1{margin:0 0 .5rem;font-size:1.25rem;line-height:1.4}
-.content-panel p{margin:0;font-size:.92rem;line-height:1.55;color:rgba(226,232,240,.78)}
-@media (min-width:768px){.content-panel{padding:1.1rem 1.2rem 1.2rem}.media-panel{padding:1.1rem}.vbox{width:min(100%,32rem);height:min(74vh,44rem)}}
-@media (max-width:900px){.media-panel{padding:.75rem}.vbox{width:min(100%,24rem);height:min(66vh,34rem)}.content-panel h1{font-size:clamp(.98rem,4.6vw,1.3rem)}}
-.cd-wrap{position:absolute;top:16px;right:16px;z-index:30;display:flex;align-items:center;justify-content:center}
-.countdown-chip{min-width:120px;padding:10px 12px;border-radius:16px;background:rgba(7,17,31,.72);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(14px);box-shadow:0 14px 30px rgba(0,0,0,.28)}
-.countdown-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.countdown-label{font-size:11px;font-weight:700;letter-spacing:.02em;color:rgba(226,232,240,.88)}
-.cd-num{font-size:18px;font-weight:900;color:#fff}
-.countdown-bar{position:relative;width:100%;height:5px;margin-top:8px;border-radius:999px;background:rgba(255,255,255,.12);overflow:hidden}
-.cd-prog{position:absolute;left:0;top:0;height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,#22d3ee 0%,#60a5fa 100%);transition:width .12s linear}
-.x-btn{position:absolute;top:14px;right:14px;z-index:40;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.6);border:1.5px solid rgba(255,255,255,.3);color:#fff;font-size:15px;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .25s}
-.x-btn.show{opacity:1;pointer-events:all}
-.overlay{position:fixed;inset:0;z-index:31;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(2,6,23,.86);backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .3s}
+html,body{width:100%;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#111827;background:#efefef}
+body{overflow-x:hidden}
+.shell{width:min(100%,860px);margin:0 auto;padding:0 0 40px}
+.site-bar{padding:18px 24px 10px;background:#fff;font-size:1.12rem;font-weight:700;letter-spacing:-.02em;color:#111827}
+.card{position:relative;background:#fff;min-height:100vh}
+.content-panel{padding:0 24px 24px}
+.content-panel h1{margin:0 0 28px;font-size:2.16rem;line-height:1.2;letter-spacing:-.045em;color:#000;font-weight:700}
+.content-panel .lead{margin:0 0 16px;font-size:1rem;line-height:1.6;color:#374151}
+.article-copy{font-size:1rem;line-height:1.7;color:#1f2937}
+.article-copy p + p{margin-top:12px}
+.media-panel{position:relative;width:100%;overflow:hidden;background:#fff;padding:0 24px 22px}
+.vbox{position:relative;width:100%;aspect-ratio:16/9;min-height:220px;display:flex;align-items:center;justify-content:center;background:#000}
+.video-shell{position:relative;width:100%;background:#000}
+@media (min-width:768px){.shell{max-width:760px}.site-bar{padding:18px 32px 12px}.content-panel{padding:0 32px 26px}.content-panel h1{font-size:2.45rem}.media-panel{padding:0 32px 26px}}
+.cd-wrap{position:fixed;top:14px;right:14px;z-index:30;display:none !important;align-items:center;justify-content:center}
+.countdown-chip{min-width:112px;padding:10px 12px;border-radius:14px;background:rgba(17,24,39,.88);border:1px solid rgba(255,255,255,.18);box-shadow:0 10px 30px rgba(0,0,0,.28)}
+.countdown-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.countdown-label{font-size:11px;font-weight:700;letter-spacing:.02em;color:rgba(243,244,246,.84)}
+.cd-num{font-size:17px;font-weight:900;color:#fff}
+.countdown-bar{position:relative;width:100%;height:5px;margin-top:7px;border-radius:999px;background:rgba(255,255,255,.15);overflow:hidden}
+.cd-prog{position:absolute;left:0;top:0;height:100%;width:0%;border-radius:999px;background:#1d9bf0;transition:width .12s linear}
+.overlay{position:fixed;inset:0;z-index:31;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.85);opacity:0;pointer-events:none;transition:opacity .24s}
 .overlay.show{opacity:1;pointer-events:all}
 .overlay.launching{opacity:0;pointer-events:none}
-.overlay-hint{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.95rem;width:min(92vw,34rem);padding:1.5rem;text-align:center}
-.overlay-hint-icon{font-size:clamp(2.5rem,5vw,3.5rem);line-height:1;filter:drop-shadow(0 .5rem 1rem rgba(0,0,0,.25))}
-.overlay-hint-title{color:rgba(255,255,255,.98);font-size:clamp(1.05rem,2.2vw,1.25rem);font-weight:900;line-height:1.4;text-shadow:0 .2rem 1rem rgba(0,0,0,.34)}
+.overlay-hint{position:relative;width:min(90vw,300px);border-radius:10px;overflow:visible;box-shadow:0 18px 42px rgba(0,0,0,.35)}
+.overlay-hint::before,.overlay-hint::after{content:"";position:absolute;inset:0;border-radius:10px;background:#111827;opacity:0;pointer-events:none;z-index:-1;transition:opacity .2s ease,transform .2s ease}
+.overlay[data-stack-depth="2"] .overlay-hint::before,.overlay[data-stack-depth="3"] .overlay-hint::before{opacity:1;transform:translateY(10px) scale(.97)}
+.overlay[data-stack-depth="3"] .overlay-hint::after{opacity:1;transform:translateY(20px) scale(.94)}
+.popup-close-btn{position:absolute;top:1px;right:1px;z-index:4;background:#1d9bf0;color:#fff;border:none;border-radius:50%;width:50px;height:50px;font-size:25px;cursor:pointer;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 24px rgba(29,155,240,.36);opacity:0;pointer-events:none}
+.x-btn.show{opacity:1;pointer-events:all}
+.popup-preview-image,.popup-preview-fallback{width:100%;display:block;border-radius:10px}
+.popup-preview-image{height:auto;background:#d1d5db}
+.popup-preview-fallback{aspect-ratio:3/4;background:linear-gradient(180deg,#111827 0%,#1f2937 100%);padding:22px 18px;display:flex;flex-direction:column;justify-content:flex-end;gap:12px}
+.popup-preview-badge,.overlay-stage-label,.overlay-stack-badge{display:none !important}
+.popup-preview-copy{font-size:1.08rem;line-height:1.35;color:#fff;font-weight:800;text-shadow:0 2px 8px rgba(0,0,0,.28)}
 .pf{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:29;font-size:52px;opacity:0;pointer-events:none;transition:opacity .15s}
 .pf.show{opacity:1}
 </style>
 </head>
 <body>
-<div class="orb orb-1"></div>
-<div class="orb orb-2"></div>
-<div class="orb orb-3"></div>
 <main class="shell">
+  <div class="site-bar">HHĐP</div>
   <section class="card">
+    <div class="content-panel">
+      <h1>${ogTitle}</h1>
+      <p class="lead">${ogDesc}</p>
+    </div>
     <div class="media-panel">
+      <div class="video-shell">
       <div class="vbox" id="vbox">
         ${videoHtml}
         <div class="pf" id="pf">⏸</div>
@@ -5694,7 +5729,7 @@ linear-gradient(135deg,#030712 0%,#07111f 42%,#111827 100%)}
           <div class="countdown-chip">
             <div class="countdown-top">
               <span class="countdown-label">Mở tiếp sau</span>
-              <span class="cd-num" id="cdNum">5</span>
+              <span class="cd-num" id="cdNum">3</span>
             </div>
             <div class="countdown-bar">
               <span class="cd-prog" id="cdProg"></span>
@@ -5703,24 +5738,32 @@ linear-gradient(135deg,#030712 0%,#07111f 42%,#111827 100%)}
         </div>
         <div class="overlay" id="overlay" onclick="goApp()">
           <div class="overlay-hint">
-            <div class="overlay-hint-icon">&#128070;</div>
-            <div class="overlay-hint-title">${overlayText}</div>
+            <button class="popup-close-btn x-btn" id="xBtn" type="button" onclick="goApp()">X</button>
+            <div class="overlay-stage-label" id="overlayStageLabel">Mốc 3s</div>
+            ${popupPreviewHtml}
+            <div class="overlay-stack-badge" id="overlayStackBadge" hidden>+1 popup đang chờ</div>
           </div>
         </div>
-        <div class="x-btn" id="xBtn" onclick="goApp()">✕</div>
+      </div>
       </div>
     </div>
     <div class="content-panel">
-      <h1>${ogTitle}</h1>
-      <p>${ogDesc}</p>
+      <div class="article-copy">
+        <p>${ogDesc}</p>
+        <p>Nội dung đang được phát trong bài viết. Nếu đang xem từ trình duyệt trong ứng dụng, chạm vào popup khi xuất hiện để mở trực tiếp trong app.</p>
+      </div>
     </div>
   </section>
 </main>
 <script>
 (function(){
   var LAUNCH_URL = ${JSON.stringify(launchUrl)};
-  var UNLOCK_KEY = ${JSON.stringify(unlockKey)};
-  var DELAY = 5000;
+  var OVERLAY_DISMISSED_KEY = ${JSON.stringify(`${unlockKey}:dismissed-stages`)};
+  var OVERLAY_STAGES = [
+    { id: 'overlay-3s', label: 'Mốc 3s', delayMs: 3000, enabled: true },
+    { id: 'overlay-5s', label: 'Mốc 5s', delayMs: 5000, enabled: true },
+    { id: 'overlay-300s', label: 'Mốc 300s', delayMs: 300000, enabled: true }
+  ].filter(function(stage){ return !!stage.enabled; });
 
   var videoEl = document.getElementById('videoEl');
   var overlay = document.getElementById('overlay');
@@ -5728,22 +5771,75 @@ linear-gradient(135deg,#030712 0%,#07111f 42%,#111827 100%)}
   var cdWrap  = document.getElementById('cdWrap');
   var cdProg  = document.getElementById('cdProg');
   var cdNum   = document.getElementById('cdNum');
+  var overlayStageLabel = document.getElementById('overlayStageLabel');
+  var overlayStackBadge = document.getElementById('overlayStackBadge');
   var pf      = document.getElementById('pf');
   var shown   = false;
   var launching = false;
-  var unlocked = false;
-  var timerStarted = false;
-  var hasSavedUnlock = false;
-  var previewPlaybackMs = 0;
-  var previewPlaybackStartedAt = 0;
   var countdownRaf = 0;
+  var activeStageIndex = -1;
+  var dismissedStageIds = [];
+  var timerOriginMs = Date.now();
 
   try {
-    hasSavedUnlock = window.sessionStorage.getItem(UNLOCK_KEY) === '1';
+    var savedDismissed = JSON.parse(
+      window.sessionStorage.getItem(OVERLAY_DISMISSED_KEY) || '[]'
+    );
+    if (Array.isArray(savedDismissed)) {
+      dismissedStageIds = savedDismissed.filter(function(value){
+        return typeof value === 'string' && value;
+      });
+    }
   } catch (_) {}
 
-  function getElapsedPlaybackMs() {
-    return previewPlaybackMs + (previewPlaybackStartedAt ? Date.now() - previewPlaybackStartedAt : 0);
+  function flashPauseIndicator() {
+    if (!pf) return;
+    pf.classList.add('show');
+    setTimeout(function(){pf.classList.remove('show');},600);
+  }
+
+  function getElapsedMs() {
+    return Date.now() - timerOriginMs;
+  }
+
+  function isStageDismissed(index) {
+    var stage = OVERLAY_STAGES[index];
+    if (!stage) return true;
+    return dismissedStageIds.indexOf(stage.id) >= 0;
+  }
+
+  function saveDismissedStage(index) {
+    var stage = OVERLAY_STAGES[index];
+    if (!stage || isStageDismissed(index)) return;
+    dismissedStageIds.push(stage.id);
+    try {
+      window.sessionStorage.setItem(
+        OVERLAY_DISMISSED_KEY,
+        JSON.stringify(dismissedStageIds)
+      );
+    } catch (_) {}
+  }
+
+  function hasRemainingStages() {
+    return dismissedStageIds.length < OVERLAY_STAGES.length;
+  }
+
+  function getPendingStageIndexes(elapsedMs) {
+    return OVERLAY_STAGES.reduce(function(result, stage, index){
+      if (!isStageDismissed(index) && elapsedMs >= Number(stage.delayMs || 0)) {
+        result.push(index);
+      }
+      return result;
+    }, []);
+  }
+
+  function getNextStageIndex(elapsedMs) {
+    for (var index = 0; index < OVERLAY_STAGES.length; index += 1) {
+      if (!isStageDismissed(index) && elapsedMs < Number(OVERLAY_STAGES[index].delayMs || 0)) {
+        return index;
+      }
+    }
+    return -1;
   }
 
   function stopCountdownLoop() {
@@ -5752,9 +5848,21 @@ linear-gradient(135deg,#030712 0%,#07111f 42%,#111827 100%)}
     countdownRaf = 0;
   }
 
-  function resetCountdownUi() {
-    cdProg.style.width = '0%';
-    cdNum.textContent = '5';
+  function hideOverlayUi() {
+    overlay.classList.remove('show');
+    overlay.classList.remove('launching');
+    overlay.dataset.stackDepth = '0';
+    xBtn.classList.remove('show');
+    if (overlayStageLabel) {
+      overlayStageLabel.textContent =
+        (OVERLAY_STAGES[0] && OVERLAY_STAGES[0].label) || '';
+    }
+    if (overlayStackBadge) {
+      overlayStackBadge.hidden = true;
+      overlayStackBadge.textContent = '';
+    }
+    shown = false;
+    activeStageIndex = -1;
   }
 
   function primeVideoPlayback() {
@@ -5803,14 +5911,6 @@ linear-gradient(135deg,#030712 0%,#07111f 42%,#111827 100%)}
       primeVideoPlayback();
     });
     videoEl.addEventListener('canplay', primeVideoPlayback);
-    videoEl.addEventListener('playing', startPlaybackTracking);
-    videoEl.addEventListener('play', startPlaybackTracking);
-    videoEl.addEventListener('timeupdate', startPlaybackTracking);
-    videoEl.addEventListener('pause', stopPlaybackTracking);
-    videoEl.addEventListener('waiting', stopPlaybackTracking);
-    videoEl.addEventListener('seeking', stopPlaybackTracking);
-    videoEl.addEventListener('stalled', stopPlaybackTracking);
-    videoEl.addEventListener('ended', stopPlaybackTracking);
     setTimeout(primeVideoPlayback, 0);
     setTimeout(primeVideoPlayback, 240);
     document.addEventListener('touchstart', function onFirstTouch(){
@@ -5819,52 +5919,51 @@ linear-gradient(135deg,#030712 0%,#07111f 42%,#111827 100%)}
     }, true);
   }
 
-  var t0=Date.now();
-  function tick(){
-    if(unlocked) return;
-    var elapsed = videoEl && videoEl.tagName === 'VIDEO'
-      ? getElapsedPlaybackMs()
-      : Date.now()-t0;
-    var left=Math.max(0,DELAY-elapsed);
-    cdProg.style.width=(100*(1-left/DELAY))+'%';
-    cdNum.textContent=Math.ceil(left/1000);
-    if(left>0) countdownRaf = requestAnimationFrame(tick); else showOverlay();
-  }
-  function startCountdown(){
-    if(timerStarted || unlocked) return;
-    timerStarted = true;
-    t0 = Date.now();
-    stopCountdownLoop();
-    countdownRaf = requestAnimationFrame(tick);
-  }
-
-  function startPlaybackTracking(){
-    if (!(videoEl && videoEl.tagName === 'VIDEO')) return;
-    if (unlocked || shown) return;
-    if (videoEl.paused || videoEl.ended || videoEl.seeking || videoEl.readyState < 2) return;
-    if (!timerStarted) timerStarted = true;
-    if (!previewPlaybackStartedAt) previewPlaybackStartedAt = Date.now();
-    if (!countdownRaf) countdownRaf = requestAnimationFrame(tick);
-  }
-
-  function stopPlaybackTracking(){
-    if (!(videoEl && videoEl.tagName === 'VIDEO')) return;
-    if (previewPlaybackStartedAt) {
-      previewPlaybackMs += Date.now() - previewPlaybackStartedAt;
-      previewPlaybackStartedAt = 0;
+  function renderCountdown(elapsedMs) {
+    var nextStageIndex = getNextStageIndex(elapsedMs);
+    if (nextStageIndex < 0) {
+      cdWrap.style.display = 'none';
+      return;
     }
-    stopCountdownLoop();
+    var nextStage = OVERLAY_STAGES[nextStageIndex];
+    var nextDelay = Number(nextStage.delayMs || 0);
+    var left = Math.max(0, nextDelay - elapsedMs);
+    if (!shown) {
+      resumePlayback();
+    }
+    cdWrap.style.display = 'flex';
+    cdProg.style.width = (100 * (1 - left / nextDelay)) + '%';
+    cdNum.textContent = String(Math.max(1, Math.ceil(left / 1000)));
   }
 
-  function showOverlay(){
-    if(shown || unlocked)return; shown=true;
-    stopPlaybackTracking();
-    pausePlayback();
-    pf.classList.add('show');
-    setTimeout(function(){pf.classList.remove('show');},600);
-    cdWrap.style.display='none';
-    xBtn.classList.add('show');
+  function renderOverlay(pendingIndexes){
+    if (!pendingIndexes.length) return;
+    var topIndex = pendingIndexes[pendingIndexes.length - 1];
+    var stackDepth = Math.min(3, pendingIndexes.length);
+    var shouldFlash = !shown || activeStageIndex !== topIndex;
+    shown = true;
+    activeStageIndex = topIndex;
+    overlay.dataset.stackDepth = String(stackDepth);
     overlay.classList.add('show');
+    overlay.classList.remove('launching');
+    xBtn.classList.add('show');
+    cdWrap.style.display='none';
+    if (overlayStageLabel) {
+      overlayStageLabel.textContent = OVERLAY_STAGES[topIndex].label || 'Mở app';
+    }
+    if (overlayStackBadge) {
+      if (pendingIndexes.length > 1) {
+        overlayStackBadge.hidden = false;
+        overlayStackBadge.textContent = '+' + String(pendingIndexes.length - 1) + ' popup đang chờ';
+      } else {
+        overlayStackBadge.hidden = true;
+        overlayStackBadge.textContent = '';
+      }
+    }
+    if (shouldFlash) {
+      flashPauseIndicator();
+    }
+    pausePlayback();
   }
 
   function pausePlayback(){
@@ -5883,67 +5982,85 @@ linear-gradient(135deg,#030712 0%,#07111f 42%,#111827 100%)}
     }catch(_){}
   }
 
+  function syncUi(){
+    var elapsed = getElapsedMs();
+    var pendingIndexes = getPendingStageIndexes(elapsed);
+    if (pendingIndexes.length) {
+      renderOverlay(pendingIndexes);
+      return;
+    }
+    if (shown && !launching) {
+      hideOverlayUi();
+    }
+    renderCountdown(elapsed);
+  }
+
+  function tick(){
+    syncUi();
+    if (!hasRemainingStages()) {
+      if (!shown) {
+        stopCountdownLoop();
+        cdWrap.style.display = 'none';
+      }
+      return;
+    }
+    countdownRaf = requestAnimationFrame(tick);
+  }
+
+  function startTimerLoop(){
+    stopCountdownLoop();
+    countdownRaf = requestAnimationFrame(tick);
+  }
+
   function finalizeLaunchUi(){
     launching = false;
     overlay.classList.remove('launching');
-  }
-
-  function markUnlocked(){
-    unlocked = true;
-    shown = true;
-    stopPlaybackTracking();
-    cdWrap.style.display = 'none';
-    overlay.classList.remove('show');
-    overlay.classList.remove('launching');
-    xBtn.classList.remove('show');
-    try {
-      window.sessionStorage.setItem(UNLOCK_KEY, '1');
-    } catch (_) {}
+    syncUi();
+    if (!countdownRaf && hasRemainingStages()) {
+      startTimerLoop();
+    }
   }
 
   function goApp(){
-    if(launching) return;
-    markUnlocked();
+    if(launching || activeStageIndex < 0) return;
+    saveDismissedStage(activeStageIndex);
     launching = true;
     overlay.classList.remove('show');
     overlay.classList.add('launching');
     xBtn.classList.remove('show');
+    shown = false;
+    activeStageIndex = -1;
+    setTimeout(function(){
+      if (launching && !document.hidden) {
+        finalizeLaunchUi();
+      }
+    }, 1200);
     resumePlayback();
     window.location.href=LAUNCH_URL;
   }
   window.goApp=goApp;
 
   document.getElementById('vbox').addEventListener('click', function(e){
-    if(!unlocked || launching) return;
+    if(hasRemainingStages() || launching) return;
     if(e.target === overlay || e.target === xBtn) return;
     if(overlay.contains(e.target) || xBtn.contains(e.target)) return;
     if(videoEl && videoEl.tagName === 'VIDEO') return;
   });
 
   window.addEventListener('focus', function(){
-    if(!document.hidden&&shown&&launching){
+    if(!document.hidden&&launching){
       finalizeLaunchUi();
     }
   });
 
   document.addEventListener('visibilitychange',function(){
-    if(!document.hidden&&shown){
-      if(launching){
-        finalizeLaunchUi();
-      }
+    if(!document.hidden&&launching){
+      finalizeLaunchUi();
     }
   });
 
-  if (hasSavedUnlock) {
-    markUnlocked();
-  } else {
-    resetCountdownUi();
-    if (videoEl && videoEl.tagName === 'VIDEO') {
-      startPlaybackTracking();
-    } else {
-      startCountdown();
-    }
-  }
+  syncUi();
+  if (hasRemainingStages()) startTimerLoop();
 })();
 </script>
 </body>
