@@ -1004,6 +1004,10 @@ function buildTikTokAppScheme(destinationUrl) {
 }
 
 function detectPlatformDeep(originalUrl, platform) {
+  let hostname = "";
+  try {
+    hostname = new URL(String(originalUrl || "").trim()).hostname.toLowerCase();
+  } catch {}
   // ── Shopee product: -i.<shopId>.<itemId>
   const sp = originalUrl.match(/shopee\.vn\/.*?-i\.(\d+)\.(\d+)/i);
   if (sp) {
@@ -1029,7 +1033,7 @@ function detectPlatformDeep(originalUrl, platform) {
   }
 
   // ── Shopee generic (shop page, search, v.v.)
-  if (/(?:^|\.)shopee\./i.test(originalUrl)) {
+  if (hostname === "shopee.vn" || hostname.endsWith(".shopee.vn")) {
     // Redirect thẳng về original – Shopee đã cấu hình App Links
     // Browser/OS sẽ tự mở app nếu đã cài
     return {
@@ -1042,7 +1046,7 @@ function detectPlatformDeep(originalUrl, platform) {
       play_store: `https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
     };
   }
-  if (/tiktok\.com/i.test(originalUrl)) {
+  if (hostname === "tiktok.com" || hostname.endsWith(".tiktok.com")) {
     const scheme = buildTikTokAppScheme(originalUrl);
     return {
       deeplink: scheme,
@@ -6018,7 +6022,7 @@ body{overflow-x:hidden}
     if (!targetUrl || !packageName) return '';
     try {
       var parsed = new URL(targetUrl);
-      var noScheme = targetUrl.replace(/^https?:\/\//i, '');
+      var noScheme = targetUrl.replace(/^https?:\\/\\//i, '');
       var fallback = fallbackUrl || targetUrl;
       return 'intent://' + noScheme +
         '#Intent;scheme=' + parsed.protocol.replace(':', '') +
