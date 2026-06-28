@@ -267,6 +267,73 @@ async function init() {
       return data || [];
     },
 
+    async createSupportMessage(payload = {}) {
+      const insertPayload = {
+        user_id: payload.user_id,
+        sender_user_id: payload.sender_user_id || null,
+        sender_role: payload.sender_role || 'user',
+        message: payload.message || '',
+        is_read_by_user:
+          Object.prototype.hasOwnProperty.call(payload, 'is_read_by_user')
+            ? !!payload.is_read_by_user
+            : payload.sender_role === 'admin',
+        is_read_by_admin:
+          Object.prototype.hasOwnProperty.call(payload, 'is_read_by_admin')
+            ? !!payload.is_read_by_admin
+            : payload.sender_role !== 'admin',
+      };
+      const { data, error } = await sb
+        .from('support_messages')
+        .insert(insertPayload)
+        .select('*')
+        .single();
+      check(error, 'support_message_create');
+      return data;
+    },
+
+    async listSupportMessagesByUser(userId, limit = 200) {
+      const safeLimit = Math.min(Math.max(Number(limit) || 200, 1), 500);
+      const { data, error } = await sb
+        .from('support_messages')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
+        .limit(safeLimit);
+      check(error, 'support_message_user_list');
+      return data || [];
+    },
+
+    async listSupportMessages(limit = 500) {
+      const safeLimit = Math.min(Math.max(Number(limit) || 500, 1), 1000);
+      const { data, error } = await sb
+        .from('support_messages')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(safeLimit);
+      check(error, 'support_message_list');
+      return data || [];
+    },
+
+    async markSupportMessagesReadByUser(userId) {
+      const { error } = await sb
+        .from('support_messages')
+        .update({ is_read_by_user: true })
+        .eq('user_id', userId)
+        .eq('sender_role', 'admin')
+        .eq('is_read_by_user', false);
+      check(error, 'support_message_mark_user_read');
+    },
+
+    async markSupportMessagesReadByAdmin(userId) {
+      const { error } = await sb
+        .from('support_messages')
+        .update({ is_read_by_admin: true })
+        .eq('user_id', userId)
+        .eq('sender_role', 'user')
+        .eq('is_read_by_admin', false);
+      check(error, 'support_message_mark_admin_read');
+    },
+
     async getWorkspaceByOwnerUserId(ownerUserId) {
       if (!ownerUserId) return null;
       const { data, error } = await sb

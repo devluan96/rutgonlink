@@ -30,7 +30,8 @@ const JWT_SECRET =
     : crypto.randomBytes(32).toString("hex"));
 const TWO_FACTOR_ENCRYPTION_SECRET =
   process.env.TWO_FACTOR_ENCRYPTION_SECRET || JWT_SECRET;
-const TWO_FACTOR_ISSUER = (process.env.TWO_FACTOR_ISSUER || "BocLink").trim() || "BocLink";
+const TWO_FACTOR_ISSUER =
+  (process.env.TWO_FACTOR_ISSUER || "BocLink").trim() || "BocLink";
 const TWO_FACTOR_PERIOD_SECONDS = 30;
 const TWO_FACTOR_DIGITS = 6;
 const TWO_FACTOR_WINDOW_STEPS = 1;
@@ -43,13 +44,17 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL
   : null;
 const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || "").trim();
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
-const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+const SUPABASE_SERVICE_ROLE_KEY = (
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+).trim();
 const SUPABASE_ANON_KEY = (process.env.SUPABASE_ANON_KEY || "").trim();
 const GUEST_SESSION_COOKIE = "guest_session";
 const GUEST_SESSION_MAX_AGE = 30 * 24 * 3600 * 1000;
 const REDIRECT_LOG_DIR = path.join(__dirname, "..", "logs");
 const REDIRECT_LOG_FILE = path.join(REDIRECT_LOG_DIR, "redirect.log");
-const ANALYTICS_TIME_ZONE = (process.env.APP_TIME_ZONE || "Asia/Ho_Chi_Minh").trim();
+const ANALYTICS_TIME_ZONE = (
+  process.env.APP_TIME_ZONE || "Asia/Ho_Chi_Minh"
+).trim();
 const regionNamesVi =
   typeof Intl.DisplayNames === "function"
     ? new Intl.DisplayNames(["vi"], { type: "region" })
@@ -121,7 +126,10 @@ function readEnvValue(...names) {
   return "";
 }
 const PAYMENT_BANK_ID = readEnvValue("PAYMENT_BANK_ID", "VITE_PAYMENT_BANK_ID");
-const PAYMENT_BANK_NAME = readEnvValue("PAYMENT_BANK_NAME", "VITE_PAYMENT_BANK_NAME");
+const PAYMENT_BANK_NAME = readEnvValue(
+  "PAYMENT_BANK_NAME",
+  "VITE_PAYMENT_BANK_NAME",
+);
 const PAYMENT_BANK_ACCOUNT = readEnvValue(
   "PAYMENT_BANK_ACCOUNT",
   "PAYMENT_ACCOUNT_NO",
@@ -132,12 +140,19 @@ const PAYMENT_ACCOUNT_HOLDER = readEnvValue(
   "PAYMENT_ACCOUNT_NAME",
   "VITE_PAYMENT_ACCOUNT_NAME",
 );
-const PAYMENT_QR_IMAGE_URL = readEnvValue("PAYMENT_QR_IMAGE_URL", "VITE_PAYMENT_QR_IMAGE_URL");
-const PAYMENT_CONTACT = (process.env.PAYMENT_CONTACT || "Zalo 0969.361.607").trim();
+const PAYMENT_QR_IMAGE_URL = readEnvValue(
+  "PAYMENT_QR_IMAGE_URL",
+  "VITE_PAYMENT_QR_IMAGE_URL",
+);
+const PAYMENT_CONTACT = (
+  process.env.PAYMENT_CONTACT || "Zalo 0969.361.607"
+).trim();
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
 const OPENAI_VIDEO_METADATA_MODEL =
   (process.env.OPENAI_VIDEO_METADATA_MODEL || "gpt-5.5").trim() || "gpt-5.5";
-const VIDEO_LINK_DOMAIN = (process.env.VIDEO_LINK_DOMAIN || "goc8.click").trim();
+const VIDEO_LINK_DOMAIN = (
+  process.env.VIDEO_LINK_DOMAIN || "goc8.click"
+).trim();
 const AFFILIATE_PRESET_MAX_LENGTH = 6000;
 
 app.use(express.json({ limit: "5mb" }));
@@ -247,14 +262,73 @@ const serveAuthHtml = (templatePath) => (_req, res) => {
     .replaceAll("__SUPABASE_ANON_KEY__", SUPABASE_ANON_KEY);
   res.type("html").send(html);
 };
-app.get(["/login", "/login/"], serveAuthHtml(
-  path.join(__dirname, "..", "public", "user", "login", "index.html"),
-));
-app.get(["/register", "/register/"], serveAuthHtml(
-  path.join(__dirname, "..", "public", "user", "register", "index.html"),
-));
+app.get(
+  ["/login", "/login/"],
+  serveAuthHtml(
+    path.join(__dirname, "..", "public", "user", "login", "index.html"),
+  ),
+);
+app.get(
+  ["/register", "/register/"],
+  serveAuthHtml(
+    path.join(__dirname, "..", "public", "user", "register", "index.html"),
+  ),
+);
 app.get(["/user/login", "/user/login/"], redirectToCanonical("/login"));
-app.get(["/user/register", "/user/register/"], redirectToCanonical("/register"));
+app.get(
+  ["/user/register", "/user/register/"],
+  redirectToCanonical("/register"),
+);
+app.get(
+  ["/admin/article-funnel-lab", "/admin/article-funnel-lab/"],
+  requireAdmin,
+  (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.sendFile(
+      path.join(
+        __dirname,
+        "templates",
+        "admin-article-funnel-lab.html",
+      ),
+    );
+  },
+);
+app.post("/api/admin/article-funnel-lab/resolve-target", requireAdmin, async (req, res) => {
+  try {
+    const inputUrl = String(req.body?.url || "").trim();
+    if (!inputUrl) {
+      return res.status(400).json({ error: "Thiếu URL cần resolve" });
+    }
+
+    const inferredPlatform = inferAffiliatePlatformFromUrl(inputUrl);
+    const normalizedUrl =
+      normalizeAffiliatePresetUrl(
+        inputUrl,
+        inferredPlatform === "generic" ? "" : inferredPlatform,
+      ) ||
+      normalizeAffiliatePresetUrl(inputUrl) ||
+      inputUrl;
+    const health = await fetchAffiliateHealth(normalizedUrl);
+    const finalUrl = String(health?.final_url || normalizedUrl || "").trim();
+    const launchConfig = buildDirectLaunchConfig(finalUrl);
+
+    return res.json({
+      ok: true,
+      input_url: inputUrl,
+      normalized_url: normalizedUrl,
+      final_url: finalUrl,
+      checked_at: health?.checked_at || new Date().toISOString(),
+      platform: launchConfig.direct_platform || inferredPlatform || "generic",
+      alive: Boolean(health?.alive),
+      note: health?.note || "",
+      status: Number(health?.status || 0),
+      ...launchConfig,
+    });
+  } catch (error) {
+    console.error("[article-funnel-lab/resolve-target]", error);
+    return res.status(500).json({ error: "Resolve target thất bại" });
+  }
+});
 app.get("/favicon.ico", (_req, res) => {
   res.type("image/svg+xml");
   res.sendFile(path.join(__dirname, "..", "public", "favicon.svg"));
@@ -364,7 +438,10 @@ function buildShortUrl(baseUrl, code) {
 function buildLinkShortUrl(link, fallbackBaseUrl) {
   const domainHostname = normalizeDomainHost(link?.domain_hostname);
   if (domainHostname) {
-    return buildShortUrl(`https://${domainHostname}`, link.alias || link.short_code);
+    return buildShortUrl(
+      `https://${domainHostname}`,
+      link.alias || link.short_code,
+    );
   }
   return buildShortUrl(fallbackBaseUrl, link.alias || link.short_code);
 }
@@ -409,7 +486,9 @@ function normalizeAffiliatePresetUrl(input, platform = "") {
     const url = new URL(normalized);
     if (!/^https?:$/i.test(url.protocol)) return null;
     const hostname = url.hostname.toLowerCase();
-    const targetPlatform = String(platform || "").trim().toLowerCase();
+    const targetPlatform = String(platform || "")
+      .trim()
+      .toLowerCase();
     if (targetPlatform === "shopee") {
       if (
         hostname !== "shopee.vn" &&
@@ -535,7 +614,8 @@ async function fetchAffiliateHealth(url) {
         attempt.redirect === "follow"
           ? response.url || redirectedUrl || input
           : redirectedUrl || input;
-      const detectedPlatform = inferAffiliatePlatformFromUrl(finalUrl) || platform;
+      const detectedPlatform =
+        inferAffiliatePlatformFromUrl(finalUrl) || platform;
       const hasRedirect = status >= 300 && status < 400;
       const botProtected = status === 401 || status === 403 || status === 405;
       const definitelyDead = status === 404 || status === 410;
@@ -596,8 +676,7 @@ function buildVideoMetadataResponseSchema() {
         },
         description: {
           type: "string",
-          description:
-            "Mô tả ngắn để hiển thị khi share, tối đa 200 ký tự.",
+          description: "Mô tả ngắn để hiển thị khi share, tối đa 200 ký tự.",
         },
       },
       required: ["title", "description"],
@@ -683,7 +762,9 @@ async function generateVideoMetadataSuggestion({
   const parsed = JSON.parse(String(data.output_text || "{}"));
   return {
     title: normalizeShareTitleInput(parsed?.title, 120) || "",
-    description: String(parsed?.description || "").trim().slice(0, 200),
+    description: String(parsed?.description || "")
+      .trim()
+      .slice(0, 200),
     model: data.model || OPENAI_VIDEO_METADATA_MODEL,
   };
 }
@@ -710,7 +791,9 @@ function normalizeBioLinkOrder(input) {
     }
   }
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.map((item) => String(item || "").trim()).filter(Boolean))];
+  return [
+    ...new Set(value.map((item) => String(item || "").trim()).filter(Boolean)),
+  ];
 }
 
 function parseBioLinkSource(input) {
@@ -760,12 +843,16 @@ async function resolvePublicBioLinks(database, profile) {
   }
 
   if (source.order.length) {
-    const ordered = source.order.map((code) => byCode.get(code)).filter(Boolean);
+    const ordered = source.order
+      .map((code) => byCode.get(code))
+      .filter(Boolean);
     if (ordered.length) return ordered;
   }
 
   const limit = Math.max(1, Number(profile.link_count || 8));
-  const base = (source.mode === "all" ? pool : pool.slice(0, limit)).filter(Boolean);
+  const base = (source.mode === "all" ? pool : pool.slice(0, limit)).filter(
+    Boolean,
+  );
   return source.mode === "all" ? base : base.slice(0, limit);
 }
 
@@ -808,7 +895,9 @@ async function requireAuth(req, res, next) {
     const user = await resolveUserFromTokenPayload(payload);
     if (!user) {
       res.clearCookie("token");
-      return res.status(401).json({ error: "Phiên đăng nhập không còn hợp lệ" });
+      return res
+        .status(401)
+        .json({ error: "Phiên đăng nhập không còn hợp lệ" });
     }
     req._tokenPayload = payload;
     req.currentUser = user;
@@ -1014,7 +1103,8 @@ function detectPlatformDeep(originalUrl, platform) {
     const [, shopId, itemId] = sp;
     let hasTrackingQuery = false;
     try {
-      hasTrackingQuery = new URL(originalUrl).searchParams.toString().length > 0;
+      hasTrackingQuery =
+        new URL(originalUrl).searchParams.toString().length > 0;
     } catch {}
     // Universal Link – OS tự mở app, không cần JS trick
     const universalLink = `https://shopee.vn/universal-link/product/${shopId}/${itemId}`;
@@ -1099,11 +1189,19 @@ function appendAliasSuffix(alias, suffix, maxLength = 40) {
   const suffixAlias = sanitizeAliasInput(suffix, Math.max(8, maxLength));
   if (!baseAlias) return suffixAlias.slice(0, maxLength);
   if (!suffixAlias) return baseAlias;
-  const trimmedBase = baseAlias.slice(0, Math.max(1, maxLength - suffixAlias.length - 1)).replace(/-+$/g, "");
-  return `${trimmedBase}-${suffixAlias}`.slice(0, maxLength).replace(/-+$/g, "");
+  const trimmedBase = baseAlias
+    .slice(0, Math.max(1, maxLength - suffixAlias.length - 1))
+    .replace(/-+$/g, "");
+  return `${trimmedBase}-${suffixAlias}`
+    .slice(0, maxLength)
+    .replace(/-+$/g, "");
 }
 
-async function ensureAvailableAlias(database, requestedAlias, { allowAutoSuffix = false } = {}) {
+async function ensureAvailableAlias(
+  database,
+  requestedAlias,
+  { allowAutoSuffix = false } = {},
+) {
   let normalizedAlias = sanitizeAliasInput(requestedAlias, 40);
   if (!normalizedAlias) return null;
   if (normalizedAlias.length < 2) return normalizedAlias;
@@ -1113,7 +1211,11 @@ async function ensureAvailableAlias(database, requestedAlias, { allowAutoSuffix 
   if (!existing) return normalizedAlias;
   if (!allowAutoSuffix) return null;
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    const candidate = appendAliasSuffix(normalizedAlias, nanoid(3).toLowerCase(), 40);
+    const candidate = appendAliasSuffix(
+      normalizedAlias,
+      nanoid(3).toLowerCase(),
+      40,
+    );
     if (!candidate || candidate.length < 2) continue;
     const duplicate =
       (await database.getLinkByAlias(candidate)) ||
@@ -1140,16 +1242,16 @@ function normalizeShareTitleInput(input, maxLength = 120) {
     .replace(/\s+/g, " ");
   if (!compact) return null;
   const looksLikeSlug =
-    !/\s/.test(compact) &&
-    /[-_]/.test(compact) &&
-    !compact.includes("://");
+    !/\s/.test(compact) && /[-_]/.test(compact) && !compact.includes("://");
   return looksLikeSlug
     ? humanizeSlugTitle(compact, maxLength)
     : compact.slice(0, maxLength);
 }
 
 function normalizeCountryCode(input) {
-  const value = String(input || "").trim().toUpperCase();
+  const value = String(input || "")
+    .trim()
+    .toUpperCase();
   if (!/^[A-Z]{2}$/.test(value)) return null;
   if (value === "XX" || value === "T1") return null;
   return value;
@@ -1157,11 +1259,7 @@ function normalizeCountryCode(input) {
 
 function getCountryNameFromCode(code) {
   if (!code) return null;
-  return (
-    regionNamesVi?.of(code) ||
-    regionNamesEn?.of(code) ||
-    code
-  );
+  return regionNamesVi?.of(code) || regionNamesEn?.of(code) || code;
 }
 
 function getCountryEnglishNameFromCode(code) {
@@ -1184,8 +1282,7 @@ function extractClickGeo(req) {
         req.headers["cf-country-name"] ||
         "",
       120,
-    ) ||
-    getCountryNameFromCode(countryCode);
+    ) || getCountryNameFromCode(countryCode);
   const city = normalizeAnalyticsText(
     req.headers["cf-ipcity"] ||
       req.headers["x-vercel-ip-city"] ||
@@ -1221,6 +1318,84 @@ function isShopeeUrl(input) {
   } catch {
     return false;
   }
+}
+
+const VIDEO_POPUP_STAGE_KEYS = ["3s", "5s", "300s"];
+
+function normalizeVideoPopupUrlInput(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(normalized);
+    if (!/^https?:$/i.test(url.protocol)) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function parseVideoOverlayConfig(input) {
+  const raw = String(input || "").trim();
+  const fallback = {
+    text: raw,
+    popup_urls: { "3s": "", "5s": "", "300s": "" },
+    is_structured: false,
+  };
+  if (!raw || !raw.startsWith("{")) return fallback;
+
+  try {
+    const parsed = JSON.parse(raw);
+    const stageSource =
+      parsed?.stage_urls ||
+      parsed?.popup_urls ||
+      parsed?.popup_links ||
+      parsed?.popup_stage_urls ||
+      {};
+    return {
+      text: String(parsed?.text || parsed?.overlay_text || "").trim(),
+      popup_urls: {
+        "3s": normalizeVideoPopupUrlInput(stageSource["3s"]),
+        "5s": normalizeVideoPopupUrlInput(stageSource["5s"]),
+        "300s": normalizeVideoPopupUrlInput(stageSource["300s"]),
+      },
+      is_structured: true,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function buildVideoOverlayConfigStorage(inputText, popupUrls = {}) {
+  const text = String(inputText || "").trim();
+  const normalizedPopupUrls = {
+    "3s": normalizeVideoPopupUrlInput(popupUrls["3s"]),
+    "5s": normalizeVideoPopupUrlInput(popupUrls["5s"]),
+    "300s": normalizeVideoPopupUrlInput(popupUrls["300s"]),
+  };
+  const hasPopupUrls = VIDEO_POPUP_STAGE_KEYS.some(
+    (stageKey) => !!normalizedPopupUrls[stageKey],
+  );
+  if (!hasPopupUrls) {
+    return text || null;
+  }
+  return JSON.stringify({
+    version: 1,
+    text,
+    stage_urls: normalizedPopupUrls,
+  });
+}
+
+function attachVideoOverlayPublicFields(entity) {
+  if (!entity || typeof entity !== "object") return entity;
+  const overlayConfig = parseVideoOverlayConfig(entity.video_overlay_text);
+  return {
+    ...entity,
+    video_overlay_text: overlayConfig.text || "",
+    video_popup_url_3s: overlayConfig.popup_urls["3s"] || "",
+    video_popup_url_5s: overlayConfig.popup_urls["5s"] || "",
+    video_popup_url_300s: overlayConfig.popup_urls["300s"] || "",
+  };
 }
 
 async function resolveShopeeShortUrl(input) {
@@ -1314,7 +1489,10 @@ function accumulateAnalyticsMaps(target, row, { unique = false } = {}) {
     }
     const countryEntry = target.countryMap.get(countryCode);
     countryEntry.clicks += 1;
-    countryEntry.cities.set(cityName, (countryEntry.cities.get(cityName) || 0) + 1);
+    countryEntry.cities.set(
+      cityName,
+      (countryEntry.cities.get(cityName) || 0) + 1,
+    );
   }
 
   const platform = getLinkAnalyticsPlatform(row?.links || row?.link || row);
@@ -1353,7 +1531,10 @@ function finalizeAnalyticsTimeline(timelineMap = new Map()) {
     .map(([date, clicks]) => ({ date, clicks }));
 }
 
-function finalizePlatformDistribution(platformMap = new Map(), totalClicks = 0) {
+function finalizePlatformDistribution(
+  platformMap = new Map(),
+  totalClicks = 0,
+) {
   return [...platformMap.values()]
     .sort((a, b) => b.clicks - a.clicks)
     .map((platform) => ({
@@ -1365,16 +1546,19 @@ function finalizePlatformDistribution(platformMap = new Map(), totalClicks = 0) 
 }
 
 function buildStatsAnalytics(clickRows = []) {
+  const todayKey = getAnalyticsDayKey(new Date());
   const rawState = {
     timelineMap: new Map(),
     countryMap: new Map(),
     platformMap: new Map(),
+    platformTodayMap: new Map(),
     trackedGeoClicks: 0,
   };
   const uniqueState = {
     timelineMap: new Map(),
     countryMap: new Map(),
     platformMap: new Map(),
+    platformTodayMap: new Map(),
     trackedGeoClicks: 0,
   };
   const sortedRows = [...clickRows].sort((a, b) => {
@@ -1386,6 +1570,13 @@ function buildStatsAnalytics(clickRows = []) {
 
   for (const row of sortedRows) {
     accumulateAnalyticsMaps(rawState, row, { unique: false });
+    if (getAnalyticsDayKey(row?.clicked_at) === todayKey) {
+      const platform = getLinkAnalyticsPlatform(row?.links || row?.link || row);
+      rawState.platformTodayMap.set(
+        platform.key,
+        (rawState.platformTodayMap.get(platform.key) || 0) + 1,
+      );
+    }
 
     const clickedAtMs = new Date(row?.clicked_at || 0).getTime();
     if (!Number.isFinite(clickedAtMs)) continue;
@@ -1396,6 +1587,13 @@ function buildStatsAnalytics(clickRows = []) {
     if (!isUnique) continue;
     lastSeenByVisitor.set(visitorKey, clickedAtMs);
     accumulateAnalyticsMaps(uniqueState, row, { unique: true });
+    if (getAnalyticsDayKey(row?.clicked_at) === todayKey) {
+      const platform = getLinkAnalyticsPlatform(row?.links || row?.link || row);
+      uniqueState.platformTodayMap.set(
+        platform.key,
+        (uniqueState.platformTodayMap.get(platform.key) || 0) + 1,
+      );
+    }
   }
 
   const rawClicks = sortedRows.length;
@@ -1406,7 +1604,9 @@ function buildStatsAnalytics(clickRows = []) {
   const timeline = finalizeAnalyticsTimeline(rawState.timelineMap);
   const uniqueTimeline = finalizeAnalyticsTimeline(uniqueState.timelineMap);
   const topCountries = finalizeAnalyticsCountryList(rawState.countryMap);
-  const uniqueTopCountries = finalizeAnalyticsCountryList(uniqueState.countryMap);
+  const uniqueTopCountries = finalizeAnalyticsCountryList(
+    uniqueState.countryMap,
+  );
   const platformDistribution = finalizePlatformDistribution(
     rawState.platformMap,
     rawClicks,
@@ -1414,6 +1614,16 @@ function buildStatsAnalytics(clickRows = []) {
   const uniquePlatformDistribution = finalizePlatformDistribution(
     uniqueState.platformMap,
     uniqueClicks,
+  );
+  const platformTodayDistribution = platformDistribution.map((platform) => ({
+    ...platform,
+    clicks_today: Number(rawState.platformTodayMap.get(platform.key) || 0),
+  }));
+  const uniquePlatformTodayDistribution = uniquePlatformDistribution.map(
+    (platform) => ({
+      ...platform,
+      clicks_today: Number(uniqueState.platformTodayMap.get(platform.key) || 0),
+    }),
   );
 
   return {
@@ -1432,7 +1642,10 @@ function buildStatsAnalytics(clickRows = []) {
       })),
       top_countries: topCountries.slice(0, 8),
       unique_tracked_clicks: uniqueState.trackedGeoClicks,
-      unique_unknown_clicks: Math.max(uniqueClicks - uniqueState.trackedGeoClicks, 0),
+      unique_unknown_clicks: Math.max(
+        uniqueClicks - uniqueState.trackedGeoClicks,
+        0,
+      ),
       unique_countries: uniqueTopCountries.map((country) => ({
         country_code: country.country_code,
         country_name: country.country_name,
@@ -1444,14 +1657,20 @@ function buildStatsAnalytics(clickRows = []) {
     platforms: {
       distribution: platformDistribution,
       top_platforms: platformDistribution.slice(0, 8),
+      today_distribution: platformTodayDistribution,
+      today_top_platforms: platformTodayDistribution.slice(0, 8),
       unique_distribution: uniquePlatformDistribution,
       unique_top_platforms: uniquePlatformDistribution.slice(0, 8),
+      unique_today_distribution: uniquePlatformTodayDistribution,
+      unique_today_top_platforms: uniquePlatformTodayDistribution.slice(0, 8),
     },
   };
 }
 
 function normalizeDomainVerificationStatus(input) {
-  const value = String(input || "").trim().toLowerCase();
+  const value = String(input || "")
+    .trim()
+    .toLowerCase();
   if (value === "verified" || value === "pending" || value === "failed") {
     return value;
   }
@@ -1491,7 +1710,8 @@ function detectBrowserFromUa(ua = "") {
   if (/opr\//i.test(ua) || /opera/i.test(ua)) return "Opera";
   if (/samsungbrowser\//i.test(ua)) return "Samsung Internet";
   if (/firefox\//i.test(ua)) return "Firefox";
-  if (/chrome\//i.test(ua) && !/edg\//i.test(ua) && !/opr\//i.test(ua)) return "Chrome";
+  if (/chrome\//i.test(ua) && !/edg\//i.test(ua) && !/opr\//i.test(ua))
+    return "Chrome";
   if (/safari\//i.test(ua) && !/chrome\//i.test(ua)) return "Safari";
   if (/FBAN|FBAV|FB_IAB|FBIOS/i.test(ua)) return "Facebook In-App";
   if (/instagram/i.test(ua)) return "Instagram In-App";
@@ -1526,7 +1746,9 @@ function buildLoginDeviceContext(req) {
     .join(" • ");
   const deviceFingerprint = crypto
     .createHash("sha1")
-    .update([browserName.toLowerCase(), osName.toLowerCase(), deviceType].join("|"))
+    .update(
+      [browserName.toLowerCase(), osName.toLowerCase(), deviceType].join("|"),
+    )
     .digest("hex");
   return {
     deviceFingerprint,
@@ -1565,13 +1787,20 @@ function buildQuotaAlert(planName, linksToday, hasAccount = true) {
   const ratio = dailyLimit ? used / dailyLimit : 0;
   let level = "normal";
   if (used >= dailyLimit) level = "critical";
-  else if (ratio >= 0.8 || remaining <= Math.min(5, Math.ceil(dailyLimit * 0.2))) level = "warn";
+  else if (
+    ratio >= 0.8 ||
+    remaining <= Math.min(5, Math.ceil(dailyLimit * 0.2))
+  )
+    level = "warn";
   const todayKey = getAnalyticsDayKey(new Date());
 
   return {
     active: hasAccount && level !== "normal",
     level,
-    key: !hasAccount || level === "normal" ? "" : `quota:${effectivePlan}:${level}:${todayKey}`,
+    key:
+      !hasAccount || level === "normal"
+        ? ""
+        : `quota:${effectivePlan}:${level}:${todayKey}`,
     daily_limit: dailyLimit,
     used,
     remaining,
@@ -1590,7 +1819,8 @@ function buildClickSpikeAlert(clickRows = [], currentTime = Date.now()) {
 
   for (const row of clickRows) {
     const clickedAtMs = new Date(row?.clicked_at || 0).getTime();
-    if (!Number.isFinite(clickedAtMs) || clickedAtMs < oldestBucketStart) continue;
+    if (!Number.isFinite(clickedAtMs) || clickedAtMs < oldestBucketStart)
+      continue;
     const bucketStart = Math.floor(clickedAtMs / bucketMs) * bucketMs;
     countsByBucket.set(bucketStart, (countsByBucket.get(bucketStart) || 0) + 1);
   }
@@ -1600,16 +1830,21 @@ function buildClickSpikeAlert(clickRows = [], currentTime = Date.now()) {
     (index) => countsByBucket.get(currentBucketStart - index * bucketMs) || 0,
   );
   const baselineClicks =
-    previousBuckets.reduce((total, value) => total + value, 0) / previousBuckets.length;
-  const ratio = baselineClicks > 0 ? currentClicks / baselineClicks : currentClicks;
+    previousBuckets.reduce((total, value) => total + value, 0) /
+    previousBuckets.length;
+  const ratio =
+    baselineClicks > 0 ? currentClicks / baselineClicks : currentClicks;
   const active =
     currentClicks >= 12 &&
-    ((baselineClicks >= 3 && ratio >= 3) || (baselineClicks < 3 && currentClicks >= 18));
+    ((baselineClicks >= 3 && ratio >= 3) ||
+      (baselineClicks < 3 && currentClicks >= 18));
 
   return {
     active,
     level: active ? "warn" : "normal",
-    key: active ? `click-spike:${new Date(currentBucketStart).toISOString()}` : "",
+    key: active
+      ? `click-spike:${new Date(currentBucketStart).toISOString()}`
+      : "",
     bucket_minutes: bucketMinutes,
     bucket_started_at: new Date(currentBucketStart).toISOString(),
     current_clicks: currentClicks,
@@ -1627,7 +1862,10 @@ function buildSecurityAlert(loginEvent) {
     };
   }
   const occurredAtMs = new Date(loginEvent.occurred_at || 0).getTime();
-  if (!Number.isFinite(occurredAtMs) || Date.now() - occurredAtMs > 7 * 24 * 3600 * 1000) {
+  if (
+    !Number.isFinite(occurredAtMs) ||
+    Date.now() - occurredAtMs > 7 * 24 * 3600 * 1000
+  ) {
     return {
       active: false,
       level: "normal",
@@ -1639,7 +1877,8 @@ function buildSecurityAlert(loginEvent) {
     level: "warn",
     key: `security:new-device:${loginEvent.id}`,
     occurred_at: loginEvent.occurred_at,
-    device_label: normalizeAnalyticsText(loginEvent.device_label, 120) || "Thiết bị mới",
+    device_label:
+      normalizeAnalyticsText(loginEvent.device_label, 120) || "Thiết bị mới",
     browser_name: normalizeAnalyticsText(loginEvent.browser_name, 80),
     os_name: normalizeAnalyticsText(loginEvent.os_name, 80),
     device_type: normalizeAnalyticsText(loginEvent.device_type, 40),
@@ -1670,7 +1909,9 @@ function buildDomainAlerts(domains = [], currentTime = Date.now()) {
   for (const domain of domains) {
     if (!domain || domain.is_active === false) continue;
     const hostname = normalizeAnalyticsText(domain.hostname, 120) || "domain";
-    const verificationStatus = normalizeDomainVerificationStatus(domain.verification_status) || "verified";
+    const verificationStatus =
+      normalizeDomainVerificationStatus(domain.verification_status) ||
+      "verified";
     if (verificationStatus === "failed") {
       alerts.push({
         key: `domain:verify:${domain.id}:failed:${dayKey}`,
@@ -1710,9 +1951,12 @@ function buildDomainAlerts(domains = [], currentTime = Date.now()) {
 
   return alerts.sort((left, right) => {
     const severity = { err: 0, warn: 1, info: 2 };
-    const severityDiff = (severity[left.level] ?? 9) - (severity[right.level] ?? 9);
+    const severityDiff =
+      (severity[left.level] ?? 9) - (severity[right.level] ?? 9);
     if (severityDiff !== 0) return severityDiff;
-    return String(left.hostname || "").localeCompare(String(right.hostname || ""));
+    return String(left.hostname || "").localeCompare(
+      String(right.hostname || ""),
+    );
   });
 }
 
@@ -1800,7 +2044,13 @@ function alertLevelToNotificationKind(level = "info") {
   return "info";
 }
 
-function buildStatsAlertPayload({ planName, linksToday, hasAccount, clickRows, latestLoginEvent }) {
+function buildStatsAlertPayload({
+  planName,
+  linksToday,
+  hasAccount,
+  clickRows,
+  latestLoginEvent,
+}) {
   const quota = buildQuotaAlert(planName, linksToday, hasAccount);
   const clickSpike = buildClickSpikeAlert(clickRows);
   const sessionItems = buildSessionAlertsFromLoginEvent(latestLoginEvent);
@@ -1809,7 +2059,10 @@ function buildStatsAlertPayload({ planName, linksToday, hasAccount, clickRows, l
   if (quota.active) {
     active.push({
       key: quota.key,
-      title: quota.level === "critical" ? "Đã chạm giới hạn gói" : "Sắp chạm ngưỡng quota",
+      title:
+        quota.level === "critical"
+          ? "Đã chạm giới hạn gói"
+          : "Sắp chạm ngưỡng quota",
       message:
         quota.level === "critical"
           ? `Bạn đã dùng ${quota.used}/${quota.daily_limit} link hôm nay.`
@@ -1868,7 +2121,10 @@ function buildWorkspaceInvitationAlert(context) {
     message: `Bạn được mời vào ${workspace.name || "workspace"} với quyền ${roleLabel}.`,
     kind: "info",
     page: "team",
-    createdAt: membership.updated_at || membership.created_at || new Date().toISOString(),
+    createdAt:
+      membership.updated_at ||
+      membership.created_at ||
+      new Date().toISOString(),
   };
 }
 
@@ -1899,11 +2155,17 @@ function buildAdminOverviewPayload({
   const dayKey = getAnalyticsDayKey(currentTime);
   const monthKey = dayKey.slice(0, 7);
   const uniqueClicksToday =
-    (analytics.unique_timeline || []).find((item) => item.date === dayKey)?.clicks || 0;
+    (analytics.unique_timeline || []).find((item) => item.date === dayKey)
+      ?.clicks || 0;
   const rawClicksToday =
-    (analytics.timeline || []).find((item) => item.date === dayKey)?.clicks || 0;
-  const pendingPayments = payments.filter((item) => item?.status === "submitted");
-  const awaitingPayments = payments.filter((item) => item?.status === "awaiting_payment");
+    (analytics.timeline || []).find((item) => item.date === dayKey)?.clicks ||
+    0;
+  const pendingPayments = payments.filter(
+    (item) => item?.status === "submitted",
+  );
+  const awaitingPayments = payments.filter(
+    (item) => item?.status === "awaiting_payment",
+  );
   const approvedToday = payments.filter(
     (item) =>
       item?.status === "approved" &&
@@ -1925,16 +2187,24 @@ function buildAdminOverviewPayload({
   const domainAlerts = buildDomainAlerts(domains, currentTime.getTime());
   const activeDomains = domains.filter((item) => item?.is_active !== false);
   const failedDomains = activeDomains.filter(
-    (item) => normalizeDomainVerificationStatus(item?.verification_status) === "failed",
+    (item) =>
+      normalizeDomainVerificationStatus(item?.verification_status) === "failed",
   );
   const pendingDomains = activeDomains.filter(
-    (item) => normalizeDomainVerificationStatus(item?.verification_status) === "pending",
+    (item) =>
+      normalizeDomainVerificationStatus(item?.verification_status) ===
+      "pending",
   );
-  const expiringDomains = domainAlerts.filter((item) => item?.type === "expiring");
+  const expiringDomains = domainAlerts.filter(
+    (item) => item?.type === "expiring",
+  );
 
   const planCounts = new Map();
   for (const userItem of users) {
-    const planKey = String(userItem?.plan || "free").trim().toLowerCase() || "free";
+    const planKey =
+      String(userItem?.plan || "free")
+        .trim()
+        .toLowerCase() || "free";
     planCounts.set(planKey, (planCounts.get(planKey) || 0) + 1);
   }
   const plans = [...planCounts.entries()]
@@ -1957,7 +2227,8 @@ function buildAdminOverviewPayload({
     actions.push({
       tone: "err",
       title: `${failedDomains.length} domain verify lỗi`,
-      message: "Kiểm tra cấu hình DNS hoặc trạng thái verify trong tab Hệ thống.",
+      message:
+        "Kiểm tra cấu hình DNS hoặc trạng thái verify trong tab Hệ thống.",
     });
   }
   if (pendingDomains.length) {
@@ -1971,14 +2242,16 @@ function buildAdminOverviewPayload({
     actions.push({
       tone: "ok",
       title: `${Number(today.usersToday || 0).toLocaleString("vi-VN")} user mới hôm nay`,
-      message: "Tab Người dùng vừa có thêm thành viên mới cần theo dõi onboarding.",
+      message:
+        "Tab Người dùng vừa có thêm thành viên mới cần theo dõi onboarding.",
     });
   }
   if (uniqueClicksToday > 0) {
     actions.push({
       tone: "ok",
       title: `${Number(uniqueClicksToday || 0).toLocaleString("vi-VN")} click unique hôm nay`,
-      message: "Traffic hôm nay đang có tín hiệu, có thể rà tiếp ở tab Thống kê.",
+      message:
+        "Traffic hôm nay đang có tín hiệu, có thể rà tiếp ở tab Thống kê.",
     });
   }
 
@@ -1988,8 +2261,7 @@ function buildAdminOverviewPayload({
     pointDate.setDate(pointDate.getDate() - i);
     trendDayKeys.push(getAnalyticsDayKey(pointDate));
   }
-  const createSeriesMap = () =>
-    new Map(trendDayKeys.map((key) => [key, 0]));
+  const createSeriesMap = () => new Map(trendDayKeys.map((key) => [key, 0]));
   const userTrendMap = createSeriesMap();
   const clickTrendMap = createSeriesMap();
   const paymentTrendMap = createSeriesMap();
@@ -2061,7 +2333,9 @@ function buildAdminOverviewPayload({
       }),
       users: trendDayKeys.map((key) => Number(userTrendMap.get(key) || 0)),
       clicks: trendDayKeys.map((key) => Number(clickTrendMap.get(key) || 0)),
-      payments: trendDayKeys.map((key) => Number(paymentTrendMap.get(key) || 0)),
+      payments: trendDayKeys.map((key) =>
+        Number(paymentTrendMap.get(key) || 0),
+      ),
     },
   };
 }
@@ -2117,7 +2391,11 @@ function encryptSensitiveValue(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", getTwoFactorEncryptionKey(), iv);
+  const cipher = crypto.createCipheriv(
+    "aes-256-gcm",
+    getTwoFactorEncryptionKey(),
+    iv,
+  );
   const encrypted = Buffer.concat([cipher.update(raw, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return `v1.${iv.toString("hex")}.${tag.toString("hex")}.${encrypted.toString("hex")}`;
@@ -2202,7 +2480,10 @@ function generateTotpCode(secret, counter) {
   const counterBuffer = Buffer.alloc(8);
   const normalizedCounter = BigInt(counter);
   counterBuffer.writeBigUInt64BE(normalizedCounter);
-  const hmac = crypto.createHmac("sha1", secretBuffer).update(counterBuffer).digest();
+  const hmac = crypto
+    .createHmac("sha1", secretBuffer)
+    .update(counterBuffer)
+    .digest();
   const offset = hmac[hmac.length - 1] & 0x0f;
   const binary =
     ((hmac[offset] & 0x7f) << 24) |
@@ -2216,7 +2497,9 @@ function generateTotpCode(secret, counter) {
 function verifyTotpCode(secret, code, windowSteps = TWO_FACTOR_WINDOW_STEPS) {
   const normalizedCode = sanitizeTwoFactorCode(code);
   if (normalizedCode.length !== TWO_FACTOR_DIGITS) return false;
-  const currentCounter = Math.floor(Date.now() / 1000 / TWO_FACTOR_PERIOD_SECONDS);
+  const currentCounter = Math.floor(
+    Date.now() / 1000 / TWO_FACTOR_PERIOD_SECONDS,
+  );
   for (let delta = -windowSteps; delta <= windowSteps; delta += 1) {
     if (generateTotpCode(secret, currentCounter + delta) === normalizedCode) {
       return true;
@@ -2272,7 +2555,10 @@ function buildTwoFactorChallengeResponse(user) {
 function normalizePhoneInput(input) {
   const raw = String(input || "").trim();
   if (!raw) return null;
-  const normalized = raw.replace(/[^\d+\s().-]/g, "").replace(/\s+/g, " ").slice(0, 32);
+  const normalized = raw
+    .replace(/[^\d+\s().-]/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, 32);
   const digits = normalized.replace(/\D/g, "");
   if (digits.length < 8) return null;
   return normalized;
@@ -2294,7 +2580,13 @@ function normalizeAvatarUrlInput(input) {
 }
 
 function getBillingPlanMeta(plan) {
-  return BILLING_PLANS[String(plan || "").trim().toLowerCase()] || null;
+  return (
+    BILLING_PLANS[
+      String(plan || "")
+        .trim()
+        .toLowerCase()
+    ] || null
+  );
 }
 
 function resolvePublicAssetUrl(url) {
@@ -2308,7 +2600,10 @@ function resolvePublicAssetUrl(url) {
 function buildPaymentTransferNote(user, planCode, referenceCode) {
   const planMeta = getBillingPlanMeta(planCode);
   const code = String(referenceCode || "").trim();
-  return `BOCLINK ${planMeta?.label?.toUpperCase() || String(planCode || "").toUpperCase()} U${user?.id || "0"} ${code}`.slice(0, 80);
+  return `BOCLINK ${planMeta?.label?.toUpperCase() || String(planCode || "").toUpperCase()} U${user?.id || "0"} ${code}`.slice(
+    0,
+    80,
+  );
 }
 
 function getPaymentConfig() {
@@ -2323,26 +2618,260 @@ function getPaymentConfig() {
   };
 }
 
+function normalizeSupportMessageBody(input) {
+  return String(input || "")
+    .replace(/\r\n/g, "\n")
+    .trim()
+    .slice(0, 2000);
+}
+
+function buildSupportUserSummary(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name || null,
+    plan: user.plan || "free",
+    role: user.role || "user",
+    created_at: user.created_at || null,
+  };
+}
+
+function buildSupportThreadSummaryEntry(userId, user, messages = []) {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  const lastMessage = safeMessages.length
+    ? safeMessages.reduce((latest, entry) => {
+        if (!latest) return entry;
+        return new Date(entry.created_at || 0).getTime() >
+          new Date(latest.created_at || 0).getTime()
+          ? entry
+          : latest;
+      }, null)
+    : null;
+  return {
+    user_id: userId,
+    user: buildSupportUserSummary(user) || {
+      id: userId,
+      email: "",
+      name: null,
+      plan: "free",
+      role: "user",
+      created_at: null,
+    },
+    total_messages: safeMessages.length,
+    unread_for_admin: safeMessages.filter(
+      (entry) => entry.sender_role === "user" && !entry.is_read_by_admin,
+    ).length,
+    unread_for_user: safeMessages.filter(
+      (entry) => entry.sender_role === "admin" && !entry.is_read_by_user,
+    ).length,
+    last_message: lastMessage?.message || "",
+    last_message_at: lastMessage?.created_at || null,
+    last_sender_role: lastMessage?.sender_role || "",
+  };
+}
+
+function buildSupportThreadSummaries(messages = [], users = []) {
+  const grouped = new Map();
+  for (const message of Array.isArray(messages) ? messages : []) {
+    const userId = Number(message?.user_id || 0);
+    if (!Number.isInteger(userId) || userId < 1) continue;
+    if (!grouped.has(userId)) grouped.set(userId, []);
+    grouped.get(userId).push(message);
+  }
+  const userMap = new Map(
+    (Array.isArray(users) ? users : [])
+      .filter((user) => Number.isInteger(Number(user?.id || 0)))
+      .map((user) => [Number(user.id), user]),
+  );
+  return [...grouped.entries()]
+    .map(([userId, threadMessages]) =>
+      buildSupportThreadSummaryEntry(userId, userMap.get(userId), threadMessages),
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.last_message_at || 0).getTime() -
+        new Date(a.last_message_at || 0).getTime(),
+    );
+}
+
+const supportUserStreamClients = new Map();
+const supportAdminStreamClients = new Set();
+
+function initSupportStream(res) {
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+  res.socket?.setTimeout?.(0);
+  res.socket?.setNoDelay?.(true);
+  res.socket?.setKeepAlive?.(true);
+  res.write("retry: 3000\n\n");
+}
+
+function writeSupportStreamEvent(res, eventName, payload = {}) {
+  try {
+    res.write(`event: ${eventName}\n`);
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function removeSupportStreamClient(collection, res, key = null) {
+  if (collection instanceof Map) {
+    const clients = collection.get(key);
+    if (!clients) return;
+    clients.delete(res);
+    if (!clients.size) {
+      collection.delete(key);
+    }
+    return;
+  }
+  collection.delete(res);
+}
+
+function registerSupportUserStreamClient(userId, res) {
+  const normalizedUserId = Number(userId);
+  if (!Number.isInteger(normalizedUserId) || normalizedUserId < 1) {
+    return () => {};
+  }
+  if (!supportUserStreamClients.has(normalizedUserId)) {
+    supportUserStreamClients.set(normalizedUserId, new Set());
+  }
+  const clients = supportUserStreamClients.get(normalizedUserId);
+  clients.add(res);
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`: ping ${Date.now()}\n\n`);
+    } catch {}
+  }, 25000);
+  const cleanup = () => {
+    clearInterval(heartbeat);
+    removeSupportStreamClient(
+      supportUserStreamClients,
+      res,
+      normalizedUserId,
+    );
+  };
+  res.on("close", cleanup);
+  res.on("finish", cleanup);
+  return cleanup;
+}
+
+function registerSupportAdminStreamClient(res) {
+  supportAdminStreamClients.add(res);
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`: ping ${Date.now()}\n\n`);
+    } catch {}
+  }, 25000);
+  const cleanup = () => {
+    clearInterval(heartbeat);
+    removeSupportStreamClient(supportAdminStreamClients, res);
+  };
+  res.on("close", cleanup);
+  res.on("finish", cleanup);
+  return cleanup;
+}
+
+function broadcastSupportUserStreamEvent(userId, eventName, payload = {}) {
+  const normalizedUserId = Number(userId);
+  if (!Number.isInteger(normalizedUserId) || normalizedUserId < 1) return;
+  const clients = supportUserStreamClients.get(normalizedUserId);
+  if (!clients?.size) return;
+  for (const client of [...clients]) {
+    if (!writeSupportStreamEvent(client, eventName, payload)) {
+      removeSupportStreamClient(
+        supportUserStreamClients,
+        client,
+        normalizedUserId,
+      );
+    }
+  }
+}
+
+function broadcastSupportAdminStreamEvent(eventName, payload = {}) {
+  if (!supportAdminStreamClients.size) return;
+  for (const client of [...supportAdminStreamClients]) {
+    if (!writeSupportStreamEvent(client, eventName, payload)) {
+      removeSupportStreamClient(supportAdminStreamClients, client);
+    }
+  }
+}
+
+async function broadcastSupportRealtimeUpdate(
+  userId,
+  {
+    reason = "updated",
+    thread = null,
+    notifyUser = false,
+    notifyAdmins = true,
+  } = {},
+) {
+  const normalizedUserId = Number(userId);
+  if (!Number.isInteger(normalizedUserId) || normalizedUserId < 1) return;
+  let nextThread = thread || null;
+  if (!nextThread) {
+    const database = await getDb();
+    const [targetUser, messages] = await Promise.all([
+      database.getUserById(normalizedUserId),
+      database.listSupportMessagesByUser(normalizedUserId, 200),
+    ]);
+    nextThread = buildSupportThreadSummaryEntry(
+      normalizedUserId,
+      targetUser,
+      messages,
+    );
+  }
+  const payload = {
+    reason,
+    user_id: normalizedUserId,
+    thread: nextThread,
+    emitted_at: new Date().toISOString(),
+  };
+  if (notifyUser) {
+    broadcastSupportUserStreamEvent(normalizedUserId, "support:update", payload);
+  }
+  if (notifyAdmins) {
+    broadcastSupportAdminStreamEvent("support:update", payload);
+  }
+}
+
 function normalizeWorkspaceRole(input) {
-  const value = String(input || "").trim().toLowerCase();
+  const value = String(input || "")
+    .trim()
+    .toLowerCase();
   if (value === "owner" || value === "analyst") return value;
   return "editor";
 }
 
 function normalizeInvitableWorkspaceRole(input) {
-  const value = String(input || "").trim().toLowerCase();
+  const value = String(input || "")
+    .trim()
+    .toLowerCase();
   return value === "analyst" ? "analyst" : "editor";
 }
 
 function normalizeWorkspaceStatus(input) {
-  const value = String(input || "").trim().toLowerCase();
+  const value = String(input || "")
+    .trim()
+    .toLowerCase();
   if (value === "pending" || value === "paused") return value;
   return "active";
 }
 
 function getWorkspaceSeatLimitForUser(user) {
   if (!user) return 1;
-  if (user.role === "admin" || user.plan === "admin" || user.plan === "business") return 10;
+  if (
+    user.role === "admin" ||
+    user.plan === "admin" ||
+    user.plan === "business"
+  )
+    return 10;
   if (user.plan === "pro") return 5;
   return 3;
 }
@@ -2357,11 +2886,19 @@ function canManageWorkspaceMembers(membership, workspace, user) {
 }
 
 function canManageWorkspaceTemplates(membership) {
-  return !!membership && membership.status === "active" && ["owner", "editor"].includes(membership.role);
+  return (
+    !!membership &&
+    membership.status === "active" &&
+    ["owner", "editor"].includes(membership.role)
+  );
 }
 
 function canUseWorkspaceTemplates(membership) {
-  return !!membership && membership.status === "active" && membership.role === "editor";
+  return (
+    !!membership &&
+    membership.status === "active" &&
+    membership.role === "editor"
+  );
 }
 
 function canEditWorkspaceTemplate(membership, template, user) {
@@ -2374,16 +2911,24 @@ function canEditWorkspaceTemplate(membership, template, user) {
 }
 
 function formatWorkspaceDisplayName(value, fallback = "Workspace") {
-  return String(value || fallback).trim().slice(0, 120) || fallback;
+  return (
+    String(value || fallback)
+      .trim()
+      .slice(0, 120) || fallback
+  );
 }
 
 function buildDefaultWorkspaceName(user) {
-  const label = String(user?.name || user?.email?.split("@")[0] || "Workspace").trim();
+  const label = String(
+    user?.name || user?.email?.split("@")[0] || "Workspace",
+  ).trim();
   return formatWorkspaceDisplayName(`${label} Workspace`);
 }
 
 function buildWorkspaceMemberResponse(member) {
-  const email = String(member?.email || "").trim().toLowerCase();
+  const email = String(member?.email || "")
+    .trim()
+    .toLowerCase();
   return {
     id: member?.id,
     workspace_id: member?.workspace_id,
@@ -2402,10 +2947,18 @@ function buildWorkspaceMemberResponse(member) {
   };
 }
 
-function buildWorkspaceTemplateResponse(template, memberMap = new Map(), publicBaseUrl = BASE_URL) {
+function buildWorkspaceTemplateResponse(
+  template,
+  memberMap = new Map(),
+  publicBaseUrl = BASE_URL,
+) {
   const creator = memberMap.get(Number(template?.created_by_user_id || 0));
-  const sourceLink = template?.source_link_id ? memberMap.get(`link:${template.source_link_id}`) : null;
-  const mediaLink = template?.media_link_id ? memberMap.get(`link:${template.media_link_id}`) : sourceLink;
+  const sourceLink = template?.source_link_id
+    ? memberMap.get(`link:${template.source_link_id}`)
+    : null;
+  const mediaLink = template?.media_link_id
+    ? memberMap.get(`link:${template.media_link_id}`)
+    : sourceLink;
   const sourceLinkIds = Array.isArray(template?.source_link_ids_json)
     ? template.source_link_ids_json
         .map((value) => Number(value))
@@ -2417,13 +2970,14 @@ function buildWorkspaceTemplateResponse(template, memberMap = new Map(), publicB
       if (!link) return null;
       return {
         id: linkId,
-        title: link.og_title || link.alias || link.short_code || `Link #${linkId}`,
+        title:
+          link.og_title || link.alias || link.short_code || `Link #${linkId}`,
         short_url: link.short_url || "",
         original_url: link.original_url || "",
       };
     })
     .filter(Boolean);
-  return {
+  return attachVideoOverlayPublicFields({
     id: template?.id,
     workspace_id: template?.workspace_id,
     created_by_user_id: template?.created_by_user_id || null,
@@ -2444,14 +2998,24 @@ function buildWorkspaceTemplateResponse(template, memberMap = new Map(), publicB
     domain_hostname: template?.domain_hostname || null,
     created_at: template?.created_at || null,
     updated_at: template?.updated_at || null,
-    preview_domain: template?.domain_hostname || new URL(publicBaseUrl).hostname,
-  };
+    preview_domain:
+      template?.domain_hostname || new URL(publicBaseUrl).hostname,
+  });
 }
 
-async function resolveWorkspaceContext(database, user, { ensureOwnerWorkspace = true } = {}) {
+async function resolveWorkspaceContext(
+  database,
+  user,
+  { ensureOwnerWorkspace = true } = {},
+) {
   if (!database || !user?.id) return null;
-  const rawMemberships = await database.listWorkspaceMembershipsForIdentity(user.id, user.email);
-  const normalizedEmail = String(user.email || "").trim().toLowerCase();
+  const rawMemberships = await database.listWorkspaceMembershipsForIdentity(
+    user.id,
+    user.email,
+  );
+  const normalizedEmail = String(user.email || "")
+    .trim()
+    .toLowerCase();
   const normalizedMemberships = [];
 
   for (const rawMembership of rawMemberships) {
@@ -2459,10 +3023,11 @@ async function resolveWorkspaceContext(database, user, { ensureOwnerWorkspace = 
     if (!workspace) continue;
     let member = buildWorkspaceMemberResponse(rawMembership);
     const shouldBindUser =
-      !member.user_id &&
-      normalizedEmail &&
-      member.email === normalizedEmail;
-    if (shouldBindUser || member.display_name !== (user.name || member.display_name)) {
+      !member.user_id && normalizedEmail && member.email === normalizedEmail;
+    if (
+      shouldBindUser ||
+      member.display_name !== (user.name || member.display_name)
+    ) {
       member = buildWorkspaceMemberResponse(
         (await database.updateWorkspaceMember(member.id, {
           user_id: shouldBindUser ? user.id : member.user_id,
@@ -2495,9 +3060,15 @@ async function resolveWorkspaceContext(database, user, { ensureOwnerWorkspace = 
   if (!selected && ensureOwnerWorkspace) {
     let workspace = await database.getWorkspaceByOwnerUserId(user.id);
     if (!workspace) {
-      workspace = await database.createWorkspace(user.id, buildDefaultWorkspaceName(user));
+      workspace = await database.createWorkspace(
+        user.id,
+        buildDefaultWorkspaceName(user),
+      );
     } else if (!workspace.name) {
-      workspace = (await database.updateWorkspace(workspace.id, { name: buildDefaultWorkspaceName(user) })) || workspace;
+      workspace =
+        (await database.updateWorkspace(workspace.id, {
+          name: buildDefaultWorkspaceName(user),
+        })) || workspace;
     }
     const ownerMember = await database.upsertWorkspaceMember(workspace.id, {
       user_id: user.id,
@@ -2516,7 +3087,9 @@ async function resolveWorkspaceContext(database, user, { ensureOwnerWorkspace = 
   if (!selected) return null;
 
   const workspace = await database.getWorkspaceById(selected.workspace.id);
-  const members = (await database.listWorkspaceMembers(workspace.id)).map(buildWorkspaceMemberResponse);
+  const members = (await database.listWorkspaceMembers(workspace.id)).map(
+    buildWorkspaceMemberResponse,
+  );
   const links = await database.getRecentLinks(user.id, null);
   const templatesRaw = await database.listWorkspaceTemplates(workspace.id);
   const buildLinkEntry = (link) => ({
@@ -2529,26 +3102,27 @@ async function resolveWorkspaceContext(database, user, { ensureOwnerWorkspace = 
     short_code: link.alias || link.short_code || "",
   });
   const linkMap = new Map(
-    links.map((link) => [
-      `link:${link.id}`,
-      buildLinkEntry(link),
-    ]),
+    links.map((link) => [`link:${link.id}`, buildLinkEntry(link)]),
   );
-  const templateLinkIds = [...new Set(
-    templatesRaw.flatMap((template) => {
-      const ids = [
-        Number(template?.source_link_id),
-        Number(template?.media_link_id),
-      ];
-      if (Array.isArray(template?.source_link_ids_json)) {
-        ids.push(
-          ...template.source_link_ids_json.map((value) => Number(value)),
-        );
-      }
-      return ids.filter((value) => Number.isInteger(value) && value > 0);
-    }),
-  )];
-  const missingTemplateLinkIds = templateLinkIds.filter((linkId) => !linkMap.has(`link:${linkId}`));
+  const templateLinkIds = [
+    ...new Set(
+      templatesRaw.flatMap((template) => {
+        const ids = [
+          Number(template?.source_link_id),
+          Number(template?.media_link_id),
+        ];
+        if (Array.isArray(template?.source_link_ids_json)) {
+          ids.push(
+            ...template.source_link_ids_json.map((value) => Number(value)),
+          );
+        }
+        return ids.filter((value) => Number.isInteger(value) && value > 0);
+      }),
+    ),
+  ];
+  const missingTemplateLinkIds = templateLinkIds.filter(
+    (linkId) => !linkMap.has(`link:${linkId}`),
+  );
   if (missingTemplateLinkIds.length) {
     const templateLinks = await Promise.all(
       missingTemplateLinkIds.map((linkId) => database.getLinkById(linkId)),
@@ -2558,7 +3132,9 @@ async function resolveWorkspaceContext(database, user, { ensureOwnerWorkspace = 
       linkMap.set(`link:${link.id}`, buildLinkEntry(link));
     }
   }
-  const memberMap = new Map(members.map((member) => [Number(member.user_id || 0), member]));
+  const memberMap = new Map(
+    members.map((member) => [Number(member.user_id || 0), member]),
+  );
   for (const [key, value] of linkMap.entries()) {
     memberMap.set(key, value);
   }
@@ -2571,7 +3147,7 @@ async function resolveWorkspaceContext(database, user, { ensureOwnerWorkspace = 
     membership: selected.member,
     members,
     templates,
-    sourceLinks: links.map((link) => ({
+    sourceLinks: links.map((link) => attachVideoOverlayPublicFields({
       id: link.id,
       short_url: buildLinkShortUrl(link, BASE_URL),
       short_code: link.alias || link.short_code || "",
@@ -2649,6 +3225,45 @@ function buildShopeeAndroidIntentUrl(originalUrl) {
   } catch {
     return "";
   }
+}
+
+function buildDirectLaunchConfig(targetUrl) {
+  const normalizedTargetUrl = String(targetUrl || "").trim();
+  const launchInfo = detectPlatformDeep(normalizedTargetUrl, "ios");
+  const directWebUrl = launchInfo.fallback || normalizedTargetUrl || "";
+  const directAppUrl =
+    launchInfo.platform_name === "shopee"
+      ? buildShopeeAppLinkUrl(directWebUrl)
+      : launchInfo.deeplink || directWebUrl;
+  const directIosUrl =
+    launchInfo.platform_name === "shopee"
+      ? directWebUrl
+      : launchInfo.deeplink_ios || directAppUrl || directWebUrl;
+  const directAndroidUrl =
+    launchInfo.platform_name === "shopee"
+      ? directWebUrl
+      : launchInfo.deeplink_android || directAppUrl || directWebUrl;
+
+  return {
+    target_url: normalizedTargetUrl,
+    direct_platform: launchInfo.platform_name || "generic",
+    direct_web_url: directWebUrl,
+    direct_app_url: directAppUrl,
+    direct_ios_url: directIosUrl,
+    direct_ios_fb_url: directWebUrl,
+    direct_ios_browser_url: directWebUrl,
+    direct_android_url: directAndroidUrl,
+    direct_android_intent_url:
+      launchInfo.platform_name === "shopee"
+        ? buildShopeeAndroidIntentUrl(directWebUrl)
+        : "",
+    direct_android_package:
+      launchInfo.platform_name === "shopee"
+        ? SHOPEE_ANDROID_PACKAGE
+        : launchInfo.platform_name === "tiktok"
+          ? TIKTOK_ANDROID_PACKAGE
+          : "",
+  };
 }
 
 async function promoteAdminIfNeeded(database, user) {
@@ -2805,8 +3420,12 @@ app.post("/api/auth/google", async (req, res) => {
     const database = await getDb();
     let user = await database.getUserByEmail(email);
     const name =
-      (payload.name || payload.given_name || email.split("@")[0] || "").trim() ||
-      null;
+      (
+        payload.name ||
+        payload.given_name ||
+        email.split("@")[0] ||
+        ""
+      ).trim() || null;
     const isAdmin = isAdminEmail(email);
 
     if (!user) {
@@ -2852,20 +3471,21 @@ app.post("/api/auth/supabase", async (req, res) => {
   try {
     const { access_token: accessToken } = req.body || {};
     if (!accessToken) {
-      return res
-        .status(400)
-        .json({ error: "Thiếu access token từ Supabase" });
+      return res.status(400).json({ error: "Thiếu access token từ Supabase" });
     }
 
     const supabaseUser = await verifySupabaseAccessToken(accessToken);
-    const email = String(supabaseUser.email || "").toLowerCase().trim();
+    const email = String(supabaseUser.email || "")
+      .toLowerCase()
+      .trim();
     if (!email) {
       return res.status(400).json({ error: "Supabase không trả về email" });
     }
 
     const database = await getDb();
     let user = await database.getUserByEmail(email);
-    const metadata = supabaseUser.user_metadata || supabaseUser.userMetadata || {};
+    const metadata =
+      supabaseUser.user_metadata || supabaseUser.userMetadata || {};
     const name =
       String(
         metadata.full_name ||
@@ -2930,14 +3550,21 @@ app.post("/api/auth/logout-all", requireAuth, async (req, res) => {
     res.clearCookie("token");
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ error: "Không thể đăng xuất tất cả thiết bị: " + e.message });
+    res
+      .status(500)
+      .json({ error: "Không thể đăng xuất tất cả thiết bị: " + e.message });
   }
 });
 
 app.get("/api/auth/me", async (req, res) => {
   const user = await resolveUser(req);
   if (!user) return res.json({ user: null });
-  res.json({ user: buildAuthUserPayload(user, user.role === "admin" || isAdminEmail(user.email)) });
+  res.json({
+    user: buildAuthUserPayload(
+      user,
+      user.role === "admin" || isAdminEmail(user.email),
+    ),
+  });
 });
 
 app.patch("/api/auth/me", requireAuth, async (req, res) => {
@@ -2948,54 +3575,81 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
     const body = req.body || {};
     const updates = {};
     if (Object.prototype.hasOwnProperty.call(body, "name")) {
-      updates.name = String(body.name || "").trim().slice(0, 80) || null;
+      updates.name =
+        String(body.name || "")
+          .trim()
+          .slice(0, 80) || null;
     }
     if (Object.prototype.hasOwnProperty.call(body, "phone")) {
       const phoneInput = String(body.phone || "").trim();
       const phone = phoneInput ? normalizePhoneInput(phoneInput) : null;
       if (phoneInput && !phone) {
-        return res.status(400).json({ error: "Số điện thoại chưa đúng định dạng" });
+        return res
+          .status(400)
+          .json({ error: "Số điện thoại chưa đúng định dạng" });
       }
       updates.phone = phone;
     }
     if (Object.prototype.hasOwnProperty.call(body, "avatar_url")) {
       const avatarInput = String(body.avatar_url || "").trim();
-      const avatarUrl = avatarInput ? normalizeAvatarUrlInput(avatarInput) : null;
+      const avatarUrl = avatarInput
+        ? normalizeAvatarUrlInput(avatarInput)
+        : null;
       if (avatarInput && !avatarUrl) {
-        return res.status(400).json({ error: "Avatar phải là URL hợp lệ hoặc ảnh đã upload" });
+        return res
+          .status(400)
+          .json({ error: "Avatar phải là URL hợp lệ hoặc ảnh đã upload" });
       }
       updates.avatar_url = avatarUrl;
     }
     if (Object.prototype.hasOwnProperty.call(body, "affiliate_shopee_url")) {
-      const shopeeAffiliateInput = String(body.affiliate_shopee_url || "").trim();
+      const shopeeAffiliateInput = String(
+        body.affiliate_shopee_url || "",
+      ).trim();
       const shopeeAffiliateUrl = shopeeAffiliateInput
         ? normalizeAffiliatePresetUrl(shopeeAffiliateInput, "shopee")
         : null;
       if (shopeeAffiliateInput && !shopeeAffiliateUrl) {
-        return res.status(400).json({ error: "Link affiliate Shopee chưa hợp lệ" });
+        return res
+          .status(400)
+          .json({ error: "Link affiliate Shopee chưa hợp lệ" });
       }
       updates.affiliate_shopee_url = shopeeAffiliateUrl;
     }
     if (Object.prototype.hasOwnProperty.call(body, "affiliate_tiktok_url")) {
-      const tiktokAffiliateInput = String(body.affiliate_tiktok_url || "").trim();
+      const tiktokAffiliateInput = String(
+        body.affiliate_tiktok_url || "",
+      ).trim();
       const tiktokAffiliateUrl = tiktokAffiliateInput
         ? normalizeAffiliatePresetUrl(tiktokAffiliateInput, "tiktok")
         : null;
       if (tiktokAffiliateInput && !tiktokAffiliateUrl) {
-        return res.status(400).json({ error: "Link affiliate TikTok chưa hợp lệ" });
+        return res
+          .status(400)
+          .json({ error: "Link affiliate TikTok chưa hợp lệ" });
       }
       updates.affiliate_tiktok_url = tiktokAffiliateUrl;
     }
     if (!Object.keys(updates).length) {
-      return res.status(400).json({ error: "Không có thông tin nào để cập nhật" });
+      return res
+        .status(400)
+        .json({ error: "Không có thông tin nào để cập nhật" });
     }
     await database.updateUserProfile(user.id, updates);
     const updated = await database.getUserById(user.id);
-    if (updated.email.toLowerCase() === ADMIN_EMAIL || updated.role === "admin") {
+    if (
+      updated.email.toLowerCase() === ADMIN_EMAIL ||
+      updated.role === "admin"
+    ) {
       updated.plan = "admin";
       updated.role = "admin";
     }
-    res.json({ user: buildAuthUserPayload(updated, updated.role === "admin" || isAdminEmail(updated.email)) });
+    res.json({
+      user: buildAuthUserPayload(
+        updated,
+        updated.role === "admin" || isAdminEmail(updated.email),
+      ),
+    });
   } catch (e) {
     res.status(500).json({ error: "Lỗi server: " + e.message });
   }
@@ -3017,18 +3671,24 @@ app.delete("/api/auth/me", requireAuth, async (req, res) => {
 app.post("/api/affiliate/health", requireAuth, async (req, res) => {
   try {
     const url = String(req.body?.url || "").trim();
-    const platform = String(req.body?.platform || "").trim().toLowerCase();
+    const platform = String(req.body?.platform || "")
+      .trim()
+      .toLowerCase();
     if (!url) return res.status(400).json({ error: "Thiếu URL để kiểm tra" });
     const normalizedUrl =
       normalizeAffiliatePresetUrl(url, platform) ||
       normalizeAffiliatePresetUrl(url);
     if (!normalizedUrl) {
-      return res.status(400).json({ error: "Link affiliate không đúng định dạng nền tảng" });
+      return res
+        .status(400)
+        .json({ error: "Link affiliate không đúng định dạng nền tảng" });
     }
     const result = await fetchAffiliateHealth(normalizedUrl);
     res.json(result);
   } catch (e) {
-    res.status(500).json({ error: "Không thể kiểm tra link affiliate: " + e.message });
+    res
+      .status(500)
+      .json({ error: "Không thể kiểm tra link affiliate: " + e.message });
   }
 });
 
@@ -3040,9 +3700,16 @@ app.post("/api/ai/video-metadata", requireAuth, async (req, res) => {
     const videoUrl = String(req.body?.video_url || "").trim();
     const imageUrl = String(req.body?.image_url || "").trim();
     const overlayText = String(req.body?.video_overlay_text || "").trim();
-    const language = String(req.body?.language || "vi").trim().toLowerCase() === "en" ? "en" : "vi";
+    const language =
+      String(req.body?.language || "vi")
+        .trim()
+        .toLowerCase() === "en"
+        ? "en"
+        : "vi";
     if (!originalUrl && !videoUrl && !imageUrl) {
-      return res.status(400).json({ error: "Cần ít nhất một nguồn nội dung để AI gợi ý" });
+      return res
+        .status(400)
+        .json({ error: "Cần ít nhất một nguồn nội dung để AI gợi ý" });
     }
     const suggestion = await generateVideoMetadataSuggestion({
       originalUrl,
@@ -3055,9 +3722,13 @@ app.post("/api/ai/video-metadata", requireAuth, async (req, res) => {
     res.json({ ok: true, suggestion });
   } catch (e) {
     if (e.message === "OPENAI_API_KEY_NOT_CONFIGURED") {
-      return res.status(503).json({ error: "OPENAI_API_KEY chưa được cấu hình trên server" });
+      return res
+        .status(503)
+        .json({ error: "OPENAI_API_KEY chưa được cấu hình trên server" });
     }
-    res.status(500).json({ error: "Không thể tạo metadata bằng AI: " + e.message });
+    res
+      .status(500)
+      .json({ error: "Không thể tạo metadata bằng AI: " + e.message });
   }
 });
 
@@ -3066,7 +3737,10 @@ app.get("/api/auth/login-events", requireAuth, async (req, res) => {
     const user = await resolveUser(req);
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
-    const events = await database.listLoginEvents(user.id, Number(req.query?.limit || 20));
+    const events = await database.listLoginEvents(
+      user.id,
+      Number(req.query?.limit || 20),
+    );
     res.json({ events });
   } catch (e) {
     res.status(500).json({ error: "Lỗi server: " + e.message });
@@ -3100,10 +3774,14 @@ app.post("/api/auth/2fa/enable", requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const pendingSecret = readPendingTwoFactorSecret(user);
     if (!pendingSecret) {
-      return res.status(400).json({ error: "Chưa có phiên thiết lập 2FA nào đang mở" });
+      return res
+        .status(400)
+        .json({ error: "Chưa có phiên thiết lập 2FA nào đang mở" });
     }
     if (!verifyTotpCode(pendingSecret, req.body?.code)) {
-      return res.status(400).json({ error: "Mã 2FA không đúng hoặc đã hết hạn" });
+      return res
+        .status(400)
+        .json({ error: "Mã 2FA không đúng hoặc đã hết hạn" });
     }
     const database = await getDb();
     await database.updateUserTwoFactor(user.id, {
@@ -3115,7 +3793,10 @@ app.post("/api/auth/2fa/enable", requireAuth, async (req, res) => {
     const updated = await database.getUserById(user.id);
     res.json({
       ok: true,
-      user: buildAuthUserPayload(updated, updated.role === "admin" || isAdminEmail(updated.email)),
+      user: buildAuthUserPayload(
+        updated,
+        updated.role === "admin" || isAdminEmail(updated.email),
+      ),
     });
   } catch (e) {
     res.status(500).json({ error: "Không thể bật 2FA: " + e.message });
@@ -3131,7 +3812,9 @@ app.post("/api/auth/2fa/disable", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Tài khoản chưa bật 2FA" });
     }
     if (!verifyTotpCode(secret, req.body?.code)) {
-      return res.status(400).json({ error: "Mã 2FA không đúng hoặc đã hết hạn" });
+      return res
+        .status(400)
+        .json({ error: "Mã 2FA không đúng hoặc đã hết hạn" });
     }
     const database = await getDb();
     await database.updateUserTwoFactor(user.id, {
@@ -3143,7 +3826,10 @@ app.post("/api/auth/2fa/disable", requireAuth, async (req, res) => {
     const updated = await database.getUserById(user.id);
     res.json({
       ok: true,
-      user: buildAuthUserPayload(updated, updated.role === "admin" || isAdminEmail(updated.email)),
+      user: buildAuthUserPayload(
+        updated,
+        updated.role === "admin" || isAdminEmail(updated.email),
+      ),
     });
   } catch (e) {
     res.status(500).json({ error: "Không thể tắt 2FA: " + e.message });
@@ -3167,15 +3853,24 @@ app.post("/api/auth/2fa/login", async (req, res) => {
       return res.status(400).json({ error: "Tài khoản chưa bật 2FA" });
     }
     if (!verifyTotpCode(secret, req.body?.code)) {
-      return res.status(400).json({ error: "Mã 2FA không đúng hoặc đã hết hạn" });
+      return res
+        .status(400)
+        .json({ error: "Mã 2FA không đúng hoặc đã hết hạn" });
     }
     const isAdmin = user.role === "admin" || isAdminEmail(user.email);
     return issueAuthSession(req, res, user, isAdmin);
   } catch (e) {
-    if (e.message === "INVALID_TWO_FACTOR_CHALLENGE" || /jwt/i.test(e.message || "")) {
-      return res.status(401).json({ error: "Phiên xác minh 2FA không còn hợp lệ" });
+    if (
+      e.message === "INVALID_TWO_FACTOR_CHALLENGE" ||
+      /jwt/i.test(e.message || "")
+    ) {
+      return res
+        .status(401)
+        .json({ error: "Phiên xác minh 2FA không còn hợp lệ" });
     }
-    res.status(500).json({ error: "Không thể hoàn tất đăng nhập 2FA: " + e.message });
+    res
+      .status(500)
+      .json({ error: "Không thể hoàn tất đăng nhập 2FA: " + e.message });
   }
 });
 
@@ -3199,7 +3894,9 @@ app.post("/api/billing/requests", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Gói thanh toán không hợp lệ" });
     }
     const database = await getDb();
-    const activeRequest = await database.getLatestActivePaymentRequestByUser(user.id);
+    const activeRequest = await database.getLatestActivePaymentRequestByUser(
+      user.id,
+    );
     if (activeRequest?.status === "submitted") {
       return res.status(409).json({
         error: "Bạn đã có yêu cầu thanh toán đang chờ admin duyệt",
@@ -3214,15 +3911,18 @@ app.post("/api/billing/requests", requireAuth, async (req, res) => {
         planMeta.code,
         activeRequest.reference_code,
       );
-      const reusedRequest = await database.updatePaymentRequest(activeRequest.id, {
-        plan: planMeta.code,
-        amount: planMeta.amount,
-        transfer_note: transferNote,
-        payer_note:
-          String(req.body?.payer_note || activeRequest.payer_note || "")
-            .trim()
-            .slice(0, 240) || null,
-      });
+      const reusedRequest = await database.updatePaymentRequest(
+        activeRequest.id,
+        {
+          plan: planMeta.code,
+          amount: planMeta.amount,
+          transfer_note: transferNote,
+          payer_note:
+            String(req.body?.payer_note || activeRequest.payer_note || "")
+              .trim()
+              .slice(0, 240) || null,
+        },
+      );
       return res.status(200).json({
         request: reusedRequest,
         config: getPaymentConfig(),
@@ -3230,7 +3930,11 @@ app.post("/api/billing/requests", requireAuth, async (req, res) => {
       });
     }
     const referenceCode = `PAY${Date.now().toString(36).toUpperCase()}${nanoid(4).toUpperCase()}`;
-    const transferNote = buildPaymentTransferNote(user, planMeta.code, referenceCode);
+    const transferNote = buildPaymentTransferNote(
+      user,
+      planMeta.code,
+      referenceCode,
+    );
     const request = await database.createPaymentRequest({
       user_id: user.id,
       user_email: user.email,
@@ -3240,14 +3944,19 @@ app.post("/api/billing/requests", requireAuth, async (req, res) => {
       status: "awaiting_payment",
       reference_code: referenceCode,
       transfer_note: transferNote,
-      payer_note: String(req.body?.payer_note || "").trim().slice(0, 240) || null,
+      payer_note:
+        String(req.body?.payer_note || "")
+          .trim()
+          .slice(0, 240) || null,
     });
     res.status(201).json({
       request,
       config: getPaymentConfig(),
     });
   } catch (e) {
-    res.status(500).json({ error: "Không thể tạo yêu cầu thanh toán: " + e.message });
+    res
+      .status(500)
+      .json({ error: "Không thể tạo yêu cầu thanh toán: " + e.message });
   }
 });
 
@@ -3259,10 +3968,14 @@ app.patch("/api/billing/requests/:id/submit", requireAuth, async (req, res) => {
     const database = await getDb();
     const request = await database.getPaymentRequestById(requestId);
     if (!request || Number(request.user_id) !== Number(user.id)) {
-      return res.status(404).json({ error: "Không tìm thấy yêu cầu thanh toán" });
+      return res
+        .status(404)
+        .json({ error: "Không tìm thấy yêu cầu thanh toán" });
     }
     if (request.status === "submitted") {
-      return res.status(409).json({ error: "Yêu cầu này đã được gửi chờ admin duyệt" });
+      return res
+        .status(409)
+        .json({ error: "Yêu cầu này đã được gửi chờ admin duyệt" });
     }
     if (request.status !== "awaiting_payment") {
       return res.status(400).json({
@@ -3271,12 +3984,97 @@ app.patch("/api/billing/requests/:id/submit", requireAuth, async (req, res) => {
     }
     const updated = await database.updatePaymentRequest(requestId, {
       status: "submitted",
-      payer_note: String(req.body?.payer_note || request.payer_note || "").trim().slice(0, 240) || null,
+      payer_note:
+        String(req.body?.payer_note || request.payer_note || "")
+          .trim()
+          .slice(0, 240) || null,
       submitted_at: new Date().toISOString(),
     });
     res.json({ request: updated });
   } catch (e) {
-    res.status(500).json({ error: "Không thể gửi xác nhận thanh toán: " + e.message });
+    res
+      .status(500)
+      .json({ error: "Không thể gửi xác nhận thanh toán: " + e.message });
+  }
+});
+
+app.get("/api/support/messages", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const peekOnly =
+      String(req.query?.peek || "")
+        .trim()
+        .toLowerCase() === "1";
+    const database = await getDb();
+    if (!peekOnly) {
+      await database.markSupportMessagesReadByUser(user.id);
+    }
+    const messages = await database.listSupportMessagesByUser(user.id, 200);
+    const thread = buildSupportThreadSummaryEntry(user.id, user, messages);
+    if (!peekOnly) {
+      void broadcastSupportRealtimeUpdate(user.id, {
+        reason: "user_read",
+        thread,
+        notifyAdmins: true,
+      });
+    }
+    res.json({
+      messages,
+      thread,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/support/stream", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    initSupportStream(res);
+    const cleanup = registerSupportUserStreamClient(user.id, res);
+    req.on("close", cleanup);
+    writeSupportStreamEvent(res, "ready", {
+      role: "user",
+      user_id: user.id,
+      connected_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: e.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
+app.post("/api/support/messages", requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
+    const message = normalizeSupportMessageBody(req.body?.message);
+    if (!message) {
+      return res
+        .status(400)
+        .json({ error: "Nội dung tin nhắn không được để trống" });
+    }
+    const database = await getDb();
+    const created = await database.createSupportMessage({
+      user_id: user.id,
+      sender_user_id: user.id,
+      sender_role: "user",
+      message,
+      is_read_by_user: true,
+      is_read_by_admin: false,
+    });
+    void broadcastSupportRealtimeUpdate(user.id, {
+      reason: "user_message",
+      notifyAdmins: true,
+    });
+    res.status(201).json({ message: created });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -3286,7 +4084,8 @@ app.get("/api/team/workspace", requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
     const context = await resolveWorkspaceContext(database, user);
-    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (!context)
+      return res.status(404).json({ error: "Không tìm thấy workspace" });
     res.json(buildTeamWorkspacePayload(context, user));
   } catch (e) {
     res.status(500).json({ error: "Không thể tải workspace: " + e.message });
@@ -3299,11 +4098,18 @@ app.post("/api/team/members", requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
     const context = await resolveWorkspaceContext(database, user);
-    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
-    if (!canManageWorkspaceMembers(context.membership, context.workspace, user)) {
-      return res.status(403).json({ error: "Chỉ owner mới có thể mời thành viên" });
+    if (!context)
+      return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (
+      !canManageWorkspaceMembers(context.membership, context.workspace, user)
+    ) {
+      return res
+        .status(403)
+        .json({ error: "Chỉ owner mới có thể mời thành viên" });
     }
-    const email = String(req.body?.email || "").trim().toLowerCase();
+    const email = String(req.body?.email || "")
+      .trim()
+      .toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: "Email mời không hợp lệ" });
     }
@@ -3315,7 +4121,10 @@ app.post("/api/team/members", requireAuth, async (req, res) => {
         upgrade: true,
       });
     }
-    const existing = await database.getWorkspaceMemberByWorkspaceAndEmail(context.workspace.id, email);
+    const existing = await database.getWorkspaceMemberByWorkspaceAndEmail(
+      context.workspace.id,
+      email,
+    );
     if (existing) {
       return res.status(400).json({ error: "Email này đã có trong workspace" });
     }
@@ -3342,34 +4151,48 @@ app.patch("/api/team/members/:id", requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
     const context = await resolveWorkspaceContext(database, user);
-    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
-    if (!canManageWorkspaceMembers(context.membership, context.workspace, user)) {
-      return res.status(403).json({ error: "Chỉ owner mới có thể cập nhật thành viên" });
+    if (!context)
+      return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (
+      !canManageWorkspaceMembers(context.membership, context.workspace, user)
+    ) {
+      return res
+        .status(403)
+        .json({ error: "Chỉ owner mới có thể cập nhật thành viên" });
     }
     const memberId = Number(req.params.id);
     const member = await database.getWorkspaceMemberById(memberId);
-    if (!member || Number(member.workspace_id) !== Number(context.workspace.id)) {
+    if (
+      !member ||
+      Number(member.workspace_id) !== Number(context.workspace.id)
+    ) {
       return res.status(404).json({ error: "Không tìm thấy thành viên" });
     }
     if (normalizeWorkspaceRole(member.role) === "owner") {
       return res.status(400).json({ error: "Không thể đổi trạng thái owner" });
     }
     const requestedStatus = normalizeWorkspaceStatus(req.body?.status);
-    if (normalizeWorkspaceStatus(member.status) === "pending" && requestedStatus !== "pending") {
+    if (
+      normalizeWorkspaceStatus(member.status) === "pending" &&
+      requestedStatus !== "pending"
+    ) {
       return res.status(400).json({
         error: "Lời mời đang chờ user xác nhận, owner không thể tự kích hoạt",
       });
     }
     await database.updateWorkspaceMember(memberId, {
       status: requestedStatus,
-      joined_at: requestedStatus === "active"
-        ? member.joined_at || new Date().toISOString()
-        : member.joined_at,
+      joined_at:
+        requestedStatus === "active"
+          ? member.joined_at || new Date().toISOString()
+          : member.joined_at,
     });
     const nextContext = await resolveWorkspaceContext(database, user);
     res.json(buildTeamWorkspacePayload(nextContext, user));
   } catch (e) {
-    res.status(500).json({ error: "Không thể cập nhật thành viên: " + e.message });
+    res
+      .status(500)
+      .json({ error: "Không thể cập nhật thành viên: " + e.message });
   }
 });
 
@@ -3379,17 +4202,27 @@ app.delete("/api/team/members/:id", requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
     const context = await resolveWorkspaceContext(database, user);
-    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
-    if (!canManageWorkspaceMembers(context.membership, context.workspace, user)) {
-      return res.status(403).json({ error: "Chỉ owner mới có thể gỡ thành viên" });
+    if (!context)
+      return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (
+      !canManageWorkspaceMembers(context.membership, context.workspace, user)
+    ) {
+      return res
+        .status(403)
+        .json({ error: "Chỉ owner mới có thể gỡ thành viên" });
     }
     const memberId = Number(req.params.id);
     const member = await database.getWorkspaceMemberById(memberId);
-    if (!member || Number(member.workspace_id) !== Number(context.workspace.id)) {
+    if (
+      !member ||
+      Number(member.workspace_id) !== Number(context.workspace.id)
+    ) {
       return res.status(404).json({ error: "Không tìm thấy thành viên" });
     }
     if (normalizeWorkspaceRole(member.role) === "owner") {
-      return res.status(400).json({ error: "Không thể gỡ owner khỏi workspace" });
+      return res
+        .status(400)
+        .json({ error: "Không thể gỡ owner khỏi workspace" });
     }
     await database.deleteWorkspaceMember(memberId);
     const nextContext = await resolveWorkspaceContext(database, user);
@@ -3405,33 +4238,51 @@ app.post("/api/team/templates", requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
     const context = await resolveWorkspaceContext(database, user);
-    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (!context)
+      return res.status(404).json({ error: "Không tìm thấy workspace" });
     if (!canManageWorkspaceTemplates(context.membership)) {
-      return res.status(403).json({ error: "Vai trò hiện tại không thể tạo mẫu chung" });
+      return res
+        .status(403)
+        .json({ error: "Vai trò hiện tại không thể tạo mẫu chung" });
     }
     const sourceLinkIds = Array.isArray(req.body?.source_link_ids)
       ? req.body.source_link_ids
       : [req.body?.source_link_id];
-    const normalizedSourceLinkIds = [...new Set(
-      sourceLinkIds
-        .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value > 0),
-    )];
+    const normalizedSourceLinkIds = [
+      ...new Set(
+        sourceLinkIds
+          .map((value) => Number(value))
+          .filter((value) => Number.isInteger(value) && value > 0),
+      ),
+    ];
     if (!normalizedSourceLinkIds.length) {
       return res.status(400).json({ error: "Thiếu link nguồn để tạo mẫu" });
     }
     if (normalizedSourceLinkIds.length > 5) {
-      return res.status(400).json({ error: "Chỉ được chọn tối đa 5 link nguồn mỗi lần" });
+      return res
+        .status(400)
+        .json({ error: "Chỉ được chọn tối đa 5 link nguồn mỗi lần" });
     }
     const requestedMediaLinkId = Number(req.body?.media_link_id);
-    const uploadedMediaKind = String(req.body?.uploaded_media_kind || "").trim().toLowerCase();
+    const uploadedMediaKind = String(req.body?.uploaded_media_kind || "")
+      .trim()
+      .toLowerCase();
     const uploadedMediaUrl = String(req.body?.uploaded_media_url || "").trim();
-    const uploadedMediaThumb = String(req.body?.uploaded_media_thumb || "").trim();
+    const uploadedMediaThumb = String(
+      req.body?.uploaded_media_thumb || "",
+    ).trim();
     const hasUploadedMedia =
       (uploadedMediaKind === "video" || uploadedMediaKind === "image") &&
       !!uploadedMediaUrl;
-    if (!hasUploadedMedia && Number.isInteger(requestedMediaLinkId) && requestedMediaLinkId > 0 && !normalizedSourceLinkIds.includes(requestedMediaLinkId)) {
-      return res.status(400).json({ error: "Media đại diện phải nằm trong nhóm link đã chọn" });
+    if (
+      !hasUploadedMedia &&
+      Number.isInteger(requestedMediaLinkId) &&
+      requestedMediaLinkId > 0 &&
+      !normalizedSourceLinkIds.includes(requestedMediaLinkId)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Media đại diện phải nằm trong nhóm link đã chọn" });
     }
     const requestedName = String(req.body?.name || "").trim();
     const sourceLinks = [];
@@ -3442,9 +4293,12 @@ app.post("/api/team/templates", requireAuth, async (req, res) => {
       }
       const canUseSourceLink =
         Number(sourceLink.user_id || 0) === Number(user.id) ||
-        (sourceLink.workspace_id && Number(sourceLink.workspace_id) === Number(context.workspace.id));
+        (sourceLink.workspace_id &&
+          Number(sourceLink.workspace_id) === Number(context.workspace.id));
       if (!canUseSourceLink) {
-        return res.status(403).json({ error: "Bạn không có quyền dùng link này làm mẫu" });
+        return res
+          .status(403)
+          .json({ error: "Bạn không có quyền dùng link này làm mẫu" });
       }
       sourceLinks.push(sourceLink);
     }
@@ -3454,9 +4308,13 @@ app.post("/api/team/templates", requireAuth, async (req, res) => {
       : sourceLinks.find((link) => Number(link.id) === requestedMediaLinkId) ||
         sourceLinks.find((link) => link.video_url || link.og_image) ||
         null;
-    if (!hasUploadedMedia && (!mediaLink || (!mediaLink.video_url && !mediaLink.og_image))) {
+    if (
+      !hasUploadedMedia &&
+      (!mediaLink || (!mediaLink.video_url && !mediaLink.og_image))
+    ) {
       return res.status(400).json({
-        error: "Can it nhat 1 link da chon co video hoac anh preview, hoac ban tai media tu may",
+        error:
+          "Can it nhat 1 link da chon co video hoac anh preview, hoac ban tai media tu may",
       });
     }
     const baseTemplateName =
@@ -3466,7 +4324,10 @@ app.post("/api/team/templates", requireAuth, async (req, res) => {
       mediaLink?.short_code ||
       primarySourceLink?.og_title ||
       "Template";
-    const templateName = formatWorkspaceDisplayName(baseTemplateName, "Template");
+    const templateName = formatWorkspaceDisplayName(
+      baseTemplateName,
+      "Template",
+    );
     await database.createWorkspaceTemplate({
       workspace_id: context.workspace.id,
       created_by_user_id: user.id,
@@ -3482,13 +4343,17 @@ app.post("/api/team/templates", requireAuth, async (req, res) => {
           : uploadedMediaKind === "video"
             ? uploadedMediaThumb || mediaLink?.og_image || null
             : mediaLink?.og_image || null,
-      link_type: mediaLink?.link_type || primarySourceLink?.link_type || "direct",
+      link_type:
+        mediaLink?.link_type || primarySourceLink?.link_type || "direct",
       video_url:
         uploadedMediaKind === "video"
           ? uploadedMediaUrl
           : mediaLink?.video_url || null,
       video_overlay_text: mediaLink?.video_overlay_text || null,
-      domain_hostname: mediaLink?.domain_hostname || primarySourceLink?.domain_hostname || null,
+      domain_hostname:
+        mediaLink?.domain_hostname ||
+        primarySourceLink?.domain_hostname ||
+        null,
     });
     const nextContext = await resolveWorkspaceContext(database, user);
     res.json(buildTeamWorkspacePayload(nextContext, user));
@@ -3503,32 +4368,48 @@ app.patch("/api/team/templates/:id", requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
     const context = await resolveWorkspaceContext(database, user);
-    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (!context)
+      return res.status(404).json({ error: "Không tìm thấy workspace" });
     const templateId = Number(req.params.id);
     if (!Number.isInteger(templateId) || templateId < 1) {
       return res.status(400).json({ error: "Thiếu mẫu chung cần sửa" });
     }
     const template = await database.getWorkspaceTemplateById(templateId);
-    if (!template || Number(template.workspace_id || 0) !== Number(context.workspace.id)) {
+    if (
+      !template ||
+      Number(template.workspace_id || 0) !== Number(context.workspace.id)
+    ) {
       return res.status(404).json({ error: "Không tìm thấy mẫu chung" });
     }
     if (!canEditWorkspaceTemplate(context.membership, template, user)) {
-      return res.status(403).json({ error: "Chi nguoi tao mau moi duoc sua mau chung" });
+      return res
+        .status(403)
+        .json({ error: "Chi nguoi tao mau moi duoc sua mau chung" });
     }
     const sourceLinkId = Number(req.body?.source_link_id);
     if (!Number.isInteger(sourceLinkId) || sourceLinkId < 1) {
-      return res.status(400).json({ error: "Thiếu link nguồn để cập nhật mẫu" });
+      return res
+        .status(400)
+        .json({ error: "Thiếu link nguồn để cập nhật mẫu" });
     }
     const sourceLink = await database.getLinkById(sourceLinkId);
-    if (!sourceLink) return res.status(404).json({ error: "Không tìm thấy link nguồn" });
+    if (!sourceLink)
+      return res.status(404).json({ error: "Không tìm thấy link nguồn" });
     const canUseSourceLink =
       Number(sourceLink.user_id || 0) === Number(user.id) ||
-      (sourceLink.workspace_id && Number(sourceLink.workspace_id) === Number(context.workspace.id));
+      (sourceLink.workspace_id &&
+        Number(sourceLink.workspace_id) === Number(context.workspace.id));
     if (!canUseSourceLink) {
-      return res.status(403).json({ error: "Bạn không có quyền dùng link này làm mẫu" });
+      return res
+        .status(403)
+        .json({ error: "Bạn không có quyền dùng link này làm mẫu" });
     }
     const templateName = formatWorkspaceDisplayName(
-      req.body?.name || sourceLink.og_title || sourceLink.alias || sourceLink.short_code || "Template",
+      req.body?.name ||
+        sourceLink.og_title ||
+        sourceLink.alias ||
+        sourceLink.short_code ||
+        "Template",
       "Template",
     );
     await database.updateWorkspaceTemplate(template.id, {
@@ -3555,17 +4436,23 @@ app.delete("/api/team/templates/:id", requireAuth, async (req, res) => {
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
     const context = await resolveWorkspaceContext(database, user);
-    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (!context)
+      return res.status(404).json({ error: "Không tìm thấy workspace" });
     const templateId = Number(req.params.id);
     if (!Number.isInteger(templateId) || templateId < 1) {
       return res.status(400).json({ error: "Thiếu mẫu chung cần xóa" });
     }
     const template = await database.getWorkspaceTemplateById(templateId);
-    if (!template || Number(template.workspace_id || 0) !== Number(context.workspace.id)) {
+    if (
+      !template ||
+      Number(template.workspace_id || 0) !== Number(context.workspace.id)
+    ) {
       return res.status(404).json({ error: "Không tìm thấy mẫu chung" });
     }
     if (!canEditWorkspaceTemplate(context.membership, template, user)) {
-      return res.status(403).json({ error: "Chi nguoi tao mau moi duoc xoa mau chung" });
+      return res
+        .status(403)
+        .json({ error: "Chi nguoi tao mau moi duoc xoa mau chung" });
     }
     await database.deleteWorkspaceTemplate(template.id);
     const nextContext = await resolveWorkspaceContext(database, user);
@@ -3582,28 +4469,45 @@ app.post("/api/team/invitations/:id/accept", requireAuth, async (req, res) => {
     const database = await getDb();
     const memberId = Number(req.params.id);
     const member = await database.getWorkspaceMemberById(memberId);
-    if (!member) return res.status(404).json({ error: "Không tìm thấy lời mời" });
-    const normalizedEmail = String(user.email || "").trim().toLowerCase();
+    if (!member)
+      return res.status(404).json({ error: "Không tìm thấy lời mời" });
+    const normalizedEmail = String(user.email || "")
+      .trim()
+      .toLowerCase();
     const canAccept =
       (member.user_id && Number(member.user_id) === Number(user.id)) ||
-      (normalizedEmail && String(member.email || "").trim().toLowerCase() === normalizedEmail);
+      (normalizedEmail &&
+        String(member.email || "")
+          .trim()
+          .toLowerCase() === normalizedEmail);
     if (!canAccept) {
-      return res.status(403).json({ error: "Bạn không thể xác nhận lời mời này" });
+      return res
+        .status(403)
+        .json({ error: "Bạn không thể xác nhận lời mời này" });
     }
     if (normalizeWorkspaceStatus(member.status) !== "pending") {
-      return res.status(400).json({ error: "Lời mời này không còn ở trạng thái chờ" });
+      return res
+        .status(400)
+        .json({ error: "Lời mời này không còn ở trạng thái chờ" });
     }
     await database.updateWorkspaceMember(memberId, {
       user_id: user.id,
-      display_name: user.name || member.display_name || normalizedEmail.split("@")[0] || "Member",
+      display_name:
+        user.name ||
+        member.display_name ||
+        normalizedEmail.split("@")[0] ||
+        "Member",
       status: "active",
       joined_at: member.joined_at || new Date().toISOString(),
     });
     const context = await resolveWorkspaceContext(database, user);
-    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (!context)
+      return res.status(404).json({ error: "Không tìm thấy workspace" });
     res.json(buildTeamWorkspacePayload(context, user));
   } catch (e) {
-    res.status(500).json({ error: "Không thể chấp nhận lời mời: " + e.message });
+    res
+      .status(500)
+      .json({ error: "Không thể chấp nhận lời mời: " + e.message });
   }
 });
 
@@ -3614,20 +4518,31 @@ app.post("/api/team/invitations/:id/decline", requireAuth, async (req, res) => {
     const database = await getDb();
     const memberId = Number(req.params.id);
     const member = await database.getWorkspaceMemberById(memberId);
-    if (!member) return res.status(404).json({ error: "Không tìm thấy lời mời" });
-    const normalizedEmail = String(user.email || "").trim().toLowerCase();
+    if (!member)
+      return res.status(404).json({ error: "Không tìm thấy lời mời" });
+    const normalizedEmail = String(user.email || "")
+      .trim()
+      .toLowerCase();
     const canDecline =
       (member.user_id && Number(member.user_id) === Number(user.id)) ||
-      (normalizedEmail && String(member.email || "").trim().toLowerCase() === normalizedEmail);
+      (normalizedEmail &&
+        String(member.email || "")
+          .trim()
+          .toLowerCase() === normalizedEmail);
     if (!canDecline) {
-      return res.status(403).json({ error: "Bạn không thể từ chối lời mời này" });
+      return res
+        .status(403)
+        .json({ error: "Bạn không thể từ chối lời mời này" });
     }
     if (normalizeWorkspaceStatus(member.status) !== "pending") {
-      return res.status(400).json({ error: "Lời mời này không còn ở trạng thái chờ" });
+      return res
+        .status(400)
+        .json({ error: "Lời mời này không còn ở trạng thái chờ" });
     }
     await database.deleteWorkspaceMember(memberId);
     const context = await resolveWorkspaceContext(database, user);
-    if (!context) return res.status(404).json({ error: "Không tìm thấy workspace" });
+    if (!context)
+      return res.status(404).json({ error: "Không tìm thấy workspace" });
     res.json(buildTeamWorkspacePayload(context, user));
   } catch (e) {
     res.status(500).json({ error: "Không thể từ chối lời mời: " + e.message });
@@ -3677,18 +4592,26 @@ app.patch("/api/bio/me", requireAuth, async (req, res) => {
     const user = await resolveUser(req);
     if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
-    const rawSlug = normalizeBioSlug(req.body?.slug, user.email?.split("@")[0] || `user-${user.id}`);
-    if (!rawSlug)
-      return res.status(400).json({ error: "Slug không hợp lệ" });
+    const rawSlug = normalizeBioSlug(
+      req.body?.slug,
+      user.email?.split("@")[0] || `user-${user.id}`,
+    );
+    if (!rawSlug) return res.status(400).json({ error: "Slug không hợp lệ" });
     const taken = await database.getBioProfileBySlug(rawSlug);
     if (taken && taken.user_id !== user.id)
       return res.status(400).json({ error: "Slug này đã được dùng" });
     const linkOrder = normalizeBioLinkOrder(req.body?.link_order);
     const profile = await database.upsertBioProfile(user.id, {
       slug: rawSlug,
-      title: String(req.body?.title || "").trim().slice(0, 120),
-      subtitle: String(req.body?.subtitle || "").trim().slice(0, 220),
-      avatar: String(req.body?.avatar || "").trim().slice(0, 220),
+      title: String(req.body?.title || "")
+        .trim()
+        .slice(0, 120),
+      subtitle: String(req.body?.subtitle || "")
+        .trim()
+        .slice(0, 220),
+      avatar: String(req.body?.avatar || "")
+        .trim()
+        .slice(0, 220),
       accent: String(req.body?.accent || "#3b82f6").trim(),
       link_count: Number(req.body?.link_count || 5),
       link_source: serializeBioLinkSource(
@@ -3718,7 +4641,9 @@ app.post(
   async (req, res) => {
     const user = await resolveUser(req);
     const plan = user?.plan || "free";
-    const uploadScope = String(req.query?.scope || "").trim().toLowerCase();
+    const uploadScope = String(req.query?.scope || "")
+      .trim()
+      .toLowerCase();
     const isAvatarUpload = uploadScope === "avatar";
     if (!isAvatarUpload && !PLANS[plan]?.upload)
       return res
@@ -3858,16 +4783,136 @@ app.get("/api/admin/payments", requireAdmin, async (req, res) => {
   }
 });
 
+app.get("/api/admin/support", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
+  try {
+    const database = await getDb();
+    const [messages, users] = await Promise.all([
+      database.listSupportMessages(800),
+      database.getAllUsers(),
+    ]);
+    res.json({
+      threads: buildSupportThreadSummaries(messages, users),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/admin/support/stream", requireAdmin, async (req, res) => {
+  const adminUser = await checkAdmin(req, res);
+  if (!adminUser) return;
+  try {
+    initSupportStream(res);
+    const cleanup = registerSupportAdminStreamClient(res);
+    req.on("close", cleanup);
+    writeSupportStreamEvent(res, "ready", {
+      role: "admin",
+      user_id: adminUser.id,
+      connected_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: e.message });
+    } else {
+      res.end();
+    }
+  }
+});
+
+app.get("/api/admin/support/:userId/messages", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
+  try {
+    const targetUserId = Number(req.params.userId);
+    if (!Number.isInteger(targetUserId) || targetUserId < 1) {
+      return res.status(400).json({ error: "User không hợp lệ" });
+    }
+    const database = await getDb();
+    const targetUser = await database.getUserById(targetUserId);
+    if (!targetUser) {
+      return res.status(404).json({ error: "Không tìm thấy người dùng" });
+    }
+    const peekOnly =
+      String(req.query?.peek || "")
+        .trim()
+        .toLowerCase() === "1";
+    if (!peekOnly) {
+      await database.markSupportMessagesReadByAdmin(targetUserId);
+    }
+    const messages = await database.listSupportMessagesByUser(targetUserId, 200);
+    const thread = buildSupportThreadSummaryEntry(targetUserId, targetUser, messages);
+    if (!peekOnly) {
+      void broadcastSupportRealtimeUpdate(targetUserId, {
+        reason: "admin_read",
+        thread,
+        notifyAdmins: true,
+      });
+    }
+    res.json({
+      user: buildSupportUserSummary(targetUser),
+      messages,
+      thread,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/admin/support/:userId/messages", requireAdmin, async (req, res) => {
+  const adminUser = await checkAdmin(req, res);
+  if (!adminUser) return;
+  try {
+    const targetUserId = Number(req.params.userId);
+    if (!Number.isInteger(targetUserId) || targetUserId < 1) {
+      return res.status(400).json({ error: "User không hợp lệ" });
+    }
+    const message = normalizeSupportMessageBody(req.body?.message);
+    if (!message) {
+      return res
+        .status(400)
+        .json({ error: "Nội dung tin nhắn không được để trống" });
+    }
+    const database = await getDb();
+    const targetUser = await database.getUserById(targetUserId);
+    if (!targetUser) {
+      return res.status(404).json({ error: "Không tìm thấy người dùng" });
+    }
+    const created = await database.createSupportMessage({
+      user_id: targetUserId,
+      sender_user_id: adminUser.id,
+      sender_role: "admin",
+      message,
+      is_read_by_user: false,
+      is_read_by_admin: true,
+    });
+    void broadcastSupportRealtimeUpdate(targetUserId, {
+      reason: "admin_message",
+      notifyUser: true,
+      notifyAdmins: true,
+    });
+    res.status(201).json({
+      message: created,
+      user: buildSupportUserSummary(targetUser),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.patch("/api/admin/payments/:id", requireAdmin, async (req, res) => {
   const adminUser = await checkAdmin(req, res);
   if (!adminUser) return;
   try {
     const database = await getDb();
     const requestId = Number(req.params.id);
-    const action = String(req.body?.status || "").trim().toLowerCase();
+    const action = String(req.body?.status || "")
+      .trim()
+      .toLowerCase();
     const paymentRequest = await database.getPaymentRequestById(requestId);
     if (!paymentRequest) {
-      return res.status(404).json({ error: "Không tìm thấy yêu cầu thanh toán" });
+      return res
+        .status(404)
+        .json({ error: "Không tìm thấy yêu cầu thanh toán" });
     }
     if (!["approved", "rejected"].includes(action)) {
       return res.status(400).json({ error: "Trạng thái duyệt không hợp lệ" });
@@ -3879,7 +4924,10 @@ app.patch("/api/admin/payments/:id", requireAdmin, async (req, res) => {
     }
     const patch = {
       status: action,
-      admin_note: String(req.body?.admin_note || "").trim().slice(0, 240) || null,
+      admin_note:
+        String(req.body?.admin_note || "")
+          .trim()
+          .slice(0, 240) || null,
       reviewed_by: adminUser.id,
       reviewed_at: new Date().toISOString(),
     };
@@ -3925,7 +4973,13 @@ app.post("/api/admin/users/bulk-delete", requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     const userIds = Array.isArray(req.body?.ids)
-      ? [...new Set(req.body.ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
+      ? [
+          ...new Set(
+            req.body.ids
+              .map((id) => Number(id))
+              .filter((id) => Number.isInteger(id) && id > 0),
+          ),
+        ]
       : [];
     if (!userIds.length) {
       return res.status(400).json({ error: "Chưa chọn người dùng nào để xóa" });
@@ -3955,7 +5009,7 @@ app.get("/api/admin/links", requireAdmin, async (req, res) => {
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
     const links = (await database.getAllLinks()).map((l) => ({
-      ...l,
+      ...attachVideoOverlayPublicFields(l),
       short_url: buildLinkShortUrl(l, publicBaseUrl),
     }));
     res.json({ links });
@@ -3979,23 +5033,16 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
-    const [
-      totals,
-      today,
-      domains,
-      users,
-      links,
-      payments,
-      clickRows,
-    ] = await Promise.all([
-      database.getAdminTotals(),
-      database.getAdminTodayStats(),
-      database.getDomains(),
-      database.getAllUsers(),
-      database.getAllLinks(),
-      database.listPaymentRequests(300),
-      database.getAdminClickAnalytics(5000),
-    ]);
+    const [totals, today, domains, users, links, payments, clickRows] =
+      await Promise.all([
+        database.getAdminTotals(),
+        database.getAdminTodayStats(),
+        database.getDomains(),
+        database.getAllUsers(),
+        database.getAllLinks(),
+        database.listPaymentRequests(300),
+        database.getAdminClickAnalytics(5000),
+      ]);
     const analytics = buildStatsAnalytics(clickRows);
     res.json({
       ...totals,
@@ -4025,9 +5072,7 @@ app.get("/api/domains", async (_req, res) => {
     res.json({
       domains,
       primary:
-        domains.find((domain) => domain.is_primary) ||
-        domains[0] ||
-        null,
+        domains.find((domain) => domain.is_primary) || domains[0] || null,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -4066,14 +5111,20 @@ app.post("/api/admin/domains", requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
     const hostname = normalizeDomainHost(req.body?.hostname);
-    const label = String(req.body?.label || "").trim().slice(0, 80);
-    const isPrimary = req.body?.is_primary === true || req.body?.is_primary === "true";
+    const label = String(req.body?.label || "")
+      .trim()
+      .slice(0, 80);
+    const isPrimary =
+      req.body?.is_primary === true || req.body?.is_primary === "true";
     const verificationStatus =
-      normalizeDomainVerificationStatus(req.body?.verification_status) || "verified";
+      normalizeDomainVerificationStatus(req.body?.verification_status) ||
+      "verified";
     const expiresAt = normalizeExpiryDateInput(req.body?.expires_at);
     if (!hostname)
       return res.status(400).json({ error: "Domain không hợp lệ" });
-    const existing = (await database.getDomains()).find((d) => d.hostname === hostname);
+    const existing = (await database.getDomains()).find(
+      (d) => d.hostname === hostname,
+    );
     if (existing)
       return res.status(400).json({ error: "Domain này đã tồn tại" });
     const domain = await database.addDomain({
@@ -4110,13 +5161,18 @@ app.patch("/api/admin/domains/:id", requireAdmin, async (req, res) => {
     }
     if (req.body?.hostname) {
       const hostname = normalizeDomainHost(req.body.hostname);
-      if (!hostname) return res.status(400).json({ error: "Domain không hợp lệ" });
+      if (!hostname)
+        return res.status(400).json({ error: "Domain không hợp lệ" });
       updates.hostname = hostname;
     }
     if (typeof req.body?.verification_status !== "undefined") {
-      const verificationStatus = normalizeDomainVerificationStatus(req.body.verification_status);
+      const verificationStatus = normalizeDomainVerificationStatus(
+        req.body.verification_status,
+      );
       if (!verificationStatus) {
-        return res.status(400).json({ error: "Trang thai verify khong hop le" });
+        return res
+          .status(400)
+          .json({ error: "Trang thai verify khong hop le" });
       }
       updates.verification_status = verificationStatus;
     }
@@ -4127,16 +5183,23 @@ app.patch("/api/admin/domains/:id", requireAdmin, async (req, res) => {
       }
       updates.expires_at = expiresAt;
     }
-    const makePrimary = req.body?.is_primary === true || req.body?.is_primary === "true";
+    const makePrimary =
+      req.body?.is_primary === true || req.body?.is_primary === "true";
     if (makePrimary) {
       const domain = await database.setPrimaryDomain(domainId);
-      if (!domain) return res.status(404).json({ error: "Không tìm thấy domain" });
-      if (updates.label || updates.hostname || typeof updates.is_active === "boolean") {
+      if (!domain)
+        return res.status(404).json({ error: "Không tìm thấy domain" });
+      if (
+        updates.label ||
+        updates.hostname ||
+        typeof updates.is_active === "boolean"
+      ) {
         await database.updateDomain(domainId, updates);
       }
     } else if (Object.keys(updates).length) {
       const domain = await database.updateDomain(domainId, updates);
-      if (!domain) return res.status(404).json({ error: "Không tìm thấy domain" });
+      if (!domain)
+        return res.status(404).json({ error: "Không tìm thấy domain" });
     }
     const domains = await database.getDomains();
     res.json({ domains });
@@ -4173,6 +5236,9 @@ app.post("/api/shorten", async (req, res) => {
       link_type,
       video_url,
       video_overlay_text,
+      video_popup_url_3s,
+      video_popup_url_5s,
+      video_popup_url_300s,
       team_template_id,
     } = req.body;
 
@@ -4219,21 +5285,21 @@ app.post("/api/shorten", async (req, res) => {
     if (planCfg.dailyLimit > 0) {
       const todayCount = await database.countTodayLinks(userId, guestSessionId);
       if (todayCount >= planCfg.dailyLimit)
-        return res
-          .status(403)
-          .json({
-            error: `Đã đạt giới hạn ${planCfg.dailyLimit} link/ngày. Vui lòng nâng cấp.`,
-            upgrade: true,
-          });
-    }
-
-    if (!isAffiliateUrl && !planCfg.deeplink && /shopee\.vn|tiktok\.com/i.test(url))
-      return res
-        .status(403)
-        .json({
-          error: "Deeplink Shopee & TikTok yêu cầu gói Pro trở lên",
+        return res.status(403).json({
+          error: `Đã đạt giới hạn ${planCfg.dailyLimit} link/ngày. Vui lòng nâng cấp.`,
           upgrade: true,
         });
+    }
+
+    if (
+      !isAffiliateUrl &&
+      !planCfg.deeplink &&
+      /shopee\.vn|tiktok\.com/i.test(url)
+    )
+      return res.status(403).json({
+        error: "Deeplink Shopee & TikTok yêu cầu gói Pro trở lên",
+        upgrade: true,
+      });
 
     link_type = link_type || "direct";
     if (link_type === "video" && !planCfg.videoLink)
@@ -4253,31 +5319,53 @@ app.post("/api/shorten", async (req, res) => {
     }
 
     const normalizedTemplateId = Number(team_template_id);
-    if (user && Number.isInteger(normalizedTemplateId) && normalizedTemplateId > 0) {
+    if (
+      user &&
+      Number.isInteger(normalizedTemplateId) &&
+      normalizedTemplateId > 0
+    ) {
       const workspaceContext = await resolveWorkspaceContext(database, user, {
         ensureOwnerWorkspace: false,
       });
       if (!workspaceContext) {
-        return res.status(403).json({ error: "Bạn chưa thuộc workspace nào để dùng mẫu chung" });
+        return res
+          .status(403)
+          .json({ error: "Bạn chưa thuộc workspace nào để dùng mẫu chung" });
       }
-      const template = await database.getWorkspaceTemplateById(normalizedTemplateId);
-      if (!template || Number(template.workspace_id) !== Number(workspaceContext.workspace.id)) {
-        return res.status(404).json({ error: "Không tìm thấy mẫu chung hoặc bạn không có quyền dùng mẫu này" });
+      const template =
+        await database.getWorkspaceTemplateById(normalizedTemplateId);
+      if (
+        !template ||
+        Number(template.workspace_id) !== Number(workspaceContext.workspace.id)
+      ) {
+        return res.status(404).json({
+          error:
+            "Không tìm thấy mẫu chung hoặc bạn không có quyền dùng mẫu này",
+        });
       }
       if (workspaceContext.membership.status !== "active") {
-        return res.status(403).json({ error: "Chỉ thành viên đang hoạt động mới có thể lấy link từ mẫu chung" });
+        return res.status(403).json({
+          error:
+            "Chỉ thành viên đang hoạt động mới có thể lấy link từ mẫu chung",
+        });
       }
       if (!canUseWorkspaceTemplates(workspaceContext.membership)) {
-        return res.status(403).json({ error: "Chi editor dang hoat dong moi duoc lay link tu mau chung" });
+        return res.status(403).json({
+          error: "Chi editor dang hoat dong moi duoc lay link tu mau chung",
+        });
       }
       selectedWorkspaceId = template.workspace_id;
       selectedTemplateId = template.id;
+      const templateOverlay = attachVideoOverlayPublicFields(template);
       og_title = normalizeShareTitleInput(template.og_title, 120);
       og_desc = template.og_desc || null;
       og_image = template.og_image || null;
       link_type = template.link_type || "direct";
       video_url = template.video_url || null;
-      video_overlay_text = template.video_overlay_text || null;
+      video_overlay_text = templateOverlay.video_overlay_text || null;
+      video_popup_url_3s = templateOverlay.video_popup_url_3s || "";
+      video_popup_url_5s = templateOverlay.video_popup_url_5s || "";
+      video_popup_url_300s = templateOverlay.video_popup_url_300s || "";
       domain_hostname = template.domain_hostname || null;
     }
 
@@ -4285,7 +5373,8 @@ app.post("/api/shorten", async (req, res) => {
       if (alias.length < 2)
         return res.status(400).json({ error: "Alias phải có ít nhất 2 ký tự" });
       const resolvedAlias = await ensureAvailableAlias(database, alias, {
-        allowAutoSuffix: Number.isInteger(normalizedTemplateId) && normalizedTemplateId > 0,
+        allowAutoSuffix:
+          Number.isInteger(normalizedTemplateId) && normalizedTemplateId > 0,
       });
       if (!resolvedAlias) {
         return res.status(400).json({ error: "Alias đã được dùng" });
@@ -4309,6 +5398,14 @@ app.post("/api/shorten", async (req, res) => {
         video_url = null;
       }
     }
+    const storedVideoOverlayText = buildVideoOverlayConfigStorage(
+      video_overlay_text,
+      {
+        "3s": video_popup_url_3s,
+        "5s": video_popup_url_5s,
+        "300s": video_popup_url_300s,
+      },
+    );
     if (link_type === "video" && !video_url) {
       return res.status(400).json({
         error: "Link video cần URL video hoặc upload video trước khi tạo",
@@ -4329,7 +5426,9 @@ app.post("/api/shorten", async (req, res) => {
         domain_hostname,
       );
       if (!selectedDomainHostname) {
-        return res.status(400).json({ error: "Domain tạo link không còn hoạt động" });
+        return res
+          .status(400)
+          .json({ error: "Domain tạo link không còn hoạt động" });
       }
     }
 
@@ -4344,7 +5443,7 @@ app.post("/api/shorten", async (req, res) => {
       userId,
       link_type,
       video_url || null,
-      video_overlay_text || null,
+      storedVideoOverlayText,
       guestSessionId,
       selectedDomainHostname,
       {
@@ -4357,6 +5456,7 @@ app.post("/api/shorten", async (req, res) => {
     const shortBaseUrl = selectedDomainHostname
       ? `https://${selectedDomainHostname}`
       : publicBaseUrl;
+    const publicOverlayFields = parseVideoOverlayConfig(storedVideoOverlayText);
     return res.json({
       short_url: buildShortUrl(shortBaseUrl, code),
       short_code: code,
@@ -4364,6 +5464,10 @@ app.post("/api/shorten", async (req, res) => {
       clicks: 0,
       link_type,
       domain_hostname: selectedDomainHostname,
+      video_overlay_text: publicOverlayFields.text || "",
+      video_popup_url_3s: publicOverlayFields.popup_urls["3s"] || "",
+      video_popup_url_5s: publicOverlayFields.popup_urls["5s"] || "",
+      video_popup_url_300s: publicOverlayFields.popup_urls["300s"] || "",
       template_id: selectedTemplateId,
       workspace_id: selectedWorkspaceId,
     });
@@ -4390,7 +5494,7 @@ app.get("/api/links/:id", async (req, res) => {
       return res.status(403).json({ error: "Không có quyền" });
     res.json({
       link: {
-        ...link,
+        ...attachVideoOverlayPublicFields(link),
         short_url: buildLinkShortUrl(link, publicBaseUrl),
       },
     });
@@ -4426,9 +5530,14 @@ app.patch("/api/links/:id", async (req, res) => {
       link_type,
       video_url,
       video_overlay_text,
+      video_popup_url_3s,
+      video_popup_url_5s,
+      video_popup_url_300s,
     } = req.body;
-    const nextLinkType = String(link_type || link.link_type || "direct").trim() || "direct";
-    let nextVideoUrl = typeof video_url === "string" ? video_url.trim() : video_url;
+    const nextLinkType =
+      String(link_type || link.link_type || "direct").trim() || "direct";
+    let nextVideoUrl =
+      typeof video_url === "string" ? video_url.trim() : video_url;
     if (nextVideoUrl) {
       try {
         new URL(nextVideoUrl);
@@ -4448,16 +5557,36 @@ app.patch("/api/links/:id", async (req, res) => {
         error: "Link video hiện chỉ hỗ trợ URL Shopee",
       });
     }
+    const existingOverlayConfig = parseVideoOverlayConfig(link.video_overlay_text);
     const updateFields = {
       og_title: normalizeShareTitleInput(og_title, 120),
       og_desc,
       og_image,
       link_type: nextLinkType,
       video_url: nextVideoUrl,
-      video_overlay_text,
+      video_overlay_text: buildVideoOverlayConfigStorage(
+        typeof video_overlay_text === "undefined"
+          ? existingOverlayConfig.text
+          : video_overlay_text,
+        {
+          "3s":
+            typeof video_popup_url_3s === "undefined"
+              ? existingOverlayConfig.popup_urls["3s"]
+              : video_popup_url_3s,
+          "5s":
+            typeof video_popup_url_5s === "undefined"
+              ? existingOverlayConfig.popup_urls["5s"]
+              : video_popup_url_5s,
+          "300s":
+            typeof video_popup_url_300s === "undefined"
+              ? existingOverlayConfig.popup_urls["300s"]
+              : video_popup_url_300s,
+        },
+      ),
     };
     if (nextLinkType === "video") {
-      const nextVideoDomainHostname = await resolveVideoLinkDomainHostname(database);
+      const nextVideoDomainHostname =
+        await resolveVideoLinkDomainHostname(database);
       if (!nextVideoDomainHostname) {
         return res.status(400).json({
           error: `Domain video ${VIDEO_LINK_DOMAIN} chưa được bật hoặc chưa có trong danh sách domain hoạt động`,
@@ -4472,7 +5601,9 @@ app.patch("/api/links/:id", async (req, res) => {
           domain_hostname,
         );
         if (!nextDomainHostname) {
-          return res.status(400).json({ error: "Domain tạo link không còn hoạt động" });
+          return res
+            .status(400)
+            .json({ error: "Domain tạo link không còn hoạt động" });
         }
       }
       updateFields.domain_hostname = nextDomainHostname;
@@ -4481,7 +5612,7 @@ app.patch("/api/links/:id", async (req, res) => {
     const updated = await database.getLinkById(Number(req.params.id));
     res.json({
       link: {
-        ...updated,
+        ...attachVideoOverlayPublicFields(updated),
         short_url: buildLinkShortUrl(updated, publicBaseUrl),
       },
     });
@@ -4518,10 +5649,15 @@ app.get("/api/stats", async (req, res) => {
     const analytics = buildStatsAnalytics(clickRows);
     const todayKey = getAnalyticsDayKey(new Date());
     const uniqueClicksToday =
-      (analytics.unique_timeline || []).find((item) => item.date === todayKey)?.clicks || 0;
-    const latestLoginEvent = user ? await database.getLatestLoginEvent(user.id) : null;
+      (analytics.unique_timeline || []).find((item) => item.date === todayKey)
+        ?.clicks || 0;
+    const latestLoginEvent = user
+      ? await database.getLatestLoginEvent(user.id)
+      : null;
     const workspaceContext = user
-      ? await resolveWorkspaceContext(database, user, { ensureOwnerWorkspace: false })
+      ? await resolveWorkspaceContext(database, user, {
+          ensureOwnerWorkspace: false,
+        })
       : null;
     const alerts = buildStatsAlertPayload({
       planName: user?.plan || "guest",
@@ -4530,14 +5666,15 @@ app.get("/api/stats", async (req, res) => {
       clickRows,
       latestLoginEvent,
     });
-    const workspaceInviteAlert = buildWorkspaceInvitationAlert(workspaceContext);
+    const workspaceInviteAlert =
+      buildWorkspaceInvitationAlert(workspaceContext);
     if (workspaceInviteAlert) {
       alerts.active = Array.isArray(alerts.active) ? alerts.active : [];
       alerts.active.push(workspaceInviteAlert);
     }
     const recent = (await database.getRecentLinks(userId, guestSessionId)).map(
       (l) => ({
-        ...l,
+        ...attachVideoOverlayPublicFields(l),
         short_url: buildLinkShortUrl(l, publicBaseUrl),
       }),
     );
@@ -4648,7 +5785,9 @@ app.get("/go/:code", async (req, res) => {
         "Content-Type": "text/html;charset=utf-8",
         "X-Frame-Options": "SAMEORIGIN",
       });
-      return res.send(buildShopeeFacebookBridgePage(launchLink, publicBaseUrl, info));
+      return res.send(
+        buildShopeeFacebookBridgePage(launchLink, publicBaseUrl, info),
+      );
     }
 
     if (platform === "desktop") {
@@ -4802,7 +5941,9 @@ app.get("/:code", async (req, res) => {
     // ── Video link ──────────────────────────────────────────────────────────
     const linkType = (link.link_type || "direct").trim();
     if (linkType === "video") {
-      const resolvedVideoOriginalUrl = await resolveShopeeShortUrl(link.original_url);
+      const resolvedVideoOriginalUrl = await resolveShopeeShortUrl(
+        link.original_url,
+      );
       const videoLink =
         resolvedVideoOriginalUrl === link.original_url
           ? link
@@ -4974,7 +6115,13 @@ app.post("/api/links/bulk-delete", async (req, res) => {
   try {
     const database = await getDb();
     const requestedIds = Array.isArray(req.body?.ids)
-      ? [...new Set(req.body.ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
+      ? [
+          ...new Set(
+            req.body.ids
+              .map((id) => Number(id))
+              .filter((id) => Number.isInteger(id) && id > 0),
+          ),
+        ]
       : [];
     if (!requestedIds.length)
       return res.status(400).json({ error: "Chưa chọn link nào để xóa" });
@@ -5123,7 +6270,8 @@ function buildBioPage(profile, owner, links, canonicalUrl) {
     "BocLink";
   const subtitle =
     profile.subtitle?.trim() || "Link-in-bio page được tạo từ BocLink.click.";
-  const avatar = profile.avatar?.trim() || (owner?.name || "R").charAt(0).toUpperCase();
+  const avatar =
+    profile.avatar?.trim() || (owner?.name || "R").charAt(0).toUpperCase();
   const pageBase = canonicalUrl.replace(/\/u\/[^/]+$/, "");
   const shortLinks = (links || []).map((l) => {
     return {
@@ -5219,9 +6367,7 @@ function buildShopeeFacebookBridgePage(link, baseUrl, info) {
   const shortUrl = buildLinkShortUrl(link, baseUrl);
   const shortBaseUrl = shortUrl.replace(/\/[^/]+$/, "");
   const title = esc(link.og_title || "BocLink");
-  const desc = esc(
-    link.og_desc || "Đang mở Shopee để tiếp tục xem nội dung.",
-  );
+  const desc = esc(link.og_desc || "Đang mở Shopee để tiếp tục xem nội dung.");
   const image = link.og_image
     ? esc(link.og_image)
     : `${shortBaseUrl}/og-default.png`;
@@ -5621,11 +6767,9 @@ app.post(
         .status(403)
         .json({ error: "Tính năng này yêu cầu gói Pro", upgrade: true });
     if (!req.file)
-      return res
-        .status(400)
-        .json({
-          error: "Không có file hoặc định dạng không hợp lệ (mp4, webm, mov)",
-        });
+      return res.status(400).json({
+        error: "Không có file hoặc định dạng không hợp lệ (mp4, webm, mov)",
+      });
 
     try {
       if (CLOUDINARY_OK && req.file.buffer) {
@@ -5659,43 +6803,49 @@ app.post(
 
 function buildVideoPage(link) {
   const launchUrl = buildVideoLaunchUrl(link);
-  const unlockKey = `video-unlocked:${link.alias || link.short_code || link.id || "video"}`;
-  const launchInfo = detectPlatformDeep(link.original_url || "", "ios");
-  const directWebUrl = launchInfo.fallback || link.original_url || "";
-  const directAppUrl =
-    launchInfo.platform_name === "shopee"
-      ? buildShopeeAppLinkUrl(directWebUrl)
-      : launchInfo.deeplink || directWebUrl;
-  const directIosUrl =
-    launchInfo.platform_name === "shopee"
-      ? directWebUrl
-      : launchInfo.deeplink_ios || directAppUrl || directWebUrl;
-  const directIosFacebookUrl = directWebUrl;
-  const directIosBrowserUrl = directWebUrl;
-  const directAndroidUrl =
-    launchInfo.platform_name === "shopee"
-      ? directWebUrl
-      : launchInfo.deeplink_android || directAppUrl || directWebUrl;
-  const directAndroidIntentUrl =
-    launchInfo.platform_name === "shopee"
-      ? buildShopeeAndroidIntentUrl(directWebUrl)
-      : "";
-  const directAndroidPackage =
-    launchInfo.platform_name === "shopee"
-      ? SHOPEE_ANDROID_PACKAGE
-      : launchInfo.platform_name === "tiktok"
-        ? TIKTOK_ANDROID_PACKAGE
-        : "";
-  const overlayTextRaw =
-    typeof link.video_overlay_text === "string"
-      ? link.video_overlay_text.trim()
-      : "";
+  const overlayConfig = parseVideoOverlayConfig(link.video_overlay_text);
+  const overlayTextRaw = overlayConfig.text || "";
   const overlayText = esc(
     overlayTextRaw &&
       overlayTextRaw !== "Bấm vào đây để ủng hộ và xem sản phẩm →"
       ? overlayTextRaw
       : "Bấm vào đây để ủng hộ và quay lại để xem tiếp",
   );
+  const buildStageLaunchConfig = (targetUrl) => {
+    return buildDirectLaunchConfig(targetUrl || link.original_url || "");
+  };
+  const overlayStages = [
+    {
+      id: "overlay-3s",
+      stage_key: "3s",
+      label: "Mốc 3s",
+      delayMs: 3000,
+      enabled: true,
+      ...buildStageLaunchConfig(
+        overlayConfig.popup_urls["3s"] || link.original_url || "",
+      ),
+    },
+    {
+      id: "overlay-5s",
+      stage_key: "5s",
+      label: "Mốc 5s",
+      delayMs: 5000,
+      enabled: true,
+      ...buildStageLaunchConfig(
+        overlayConfig.popup_urls["5s"] || link.original_url || "",
+      ),
+    },
+    {
+      id: "overlay-300s",
+      stage_key: "300s",
+      label: "Mốc 300s",
+      delayMs: 300000,
+      enabled: true,
+      ...buildStageLaunchConfig(
+        overlayConfig.popup_urls["300s"] || link.original_url || "",
+      ),
+    },
+  ];
   const ogTitle = esc(link.og_title || "Xem video");
   const ogDesc = esc(
     link.og_desc || "Nội dung đang sẵn sàng. Bấm vào màn hình để tiếp tục.",
@@ -5782,7 +6932,7 @@ body{overflow-x:hidden}
 </head>
 <body>
 <main class="shell">
-  <div class="site-bar">HHĐP</div>
+  <div class="site-bar">DRAMA</div>
   <section class="card">
     <div class="content-panel">
       <h1>${ogTitle}</h1>
@@ -5818,7 +6968,6 @@ body{overflow-x:hidden}
     <div class="content-panel">
       <div class="article-copy">
         <p>${ogDesc}</p>
-        <p>Nội dung đang được phát trong bài viết. Nếu đang xem từ trình duyệt trong ứng dụng, chạm vào popup khi xuất hiện để mở trực tiếp trong app.</p>
       </div>
     </div>
   </section>
@@ -5826,20 +6975,7 @@ body{overflow-x:hidden}
 <script>
 (function(){
   var LAUNCH_URL = ${JSON.stringify(launchUrl)};
-  var DIRECT_PLATFORM = ${JSON.stringify(launchInfo.platform_name || "generic")};
-  var DIRECT_WEB_URL = ${JSON.stringify(directWebUrl)};
-  var DIRECT_APP_URL = ${JSON.stringify(directAppUrl)};
-  var DIRECT_IOS_URL = ${JSON.stringify(directIosUrl)};
-  var DIRECT_IOS_FB_URL = ${JSON.stringify(directIosFacebookUrl)};
-  var DIRECT_IOS_BROWSER_URL = ${JSON.stringify(directIosBrowserUrl)};
-  var DIRECT_ANDROID_URL = ${JSON.stringify(directAndroidUrl)};
-  var DIRECT_ANDROID_INTENT_URL = ${JSON.stringify(directAndroidIntentUrl)};
-  var DIRECT_ANDROID_PACKAGE = ${JSON.stringify(directAndroidPackage)};
-  var OVERLAY_STAGES = [
-    { id: 'overlay-3s', label: 'Mốc 3s', delayMs: 3000, enabled: true },
-    { id: 'overlay-5s', label: 'Mốc 5s', delayMs: 5000, enabled: true },
-    { id: 'overlay-300s', label: 'Mốc 300s', delayMs: 300000, enabled: true }
-  ].filter(function(stage){ return !!stage.enabled; });
+  var OVERLAY_STAGES = ${JSON.stringify(overlayStages)}.filter(function(stage){ return !!stage.enabled; });
 
   var videoEl = document.getElementById('videoEl');
   var overlay = document.getElementById('overlay');
@@ -6076,7 +7212,8 @@ body{overflow-x:hidden}
     }
   }
 
-  function launchDirectTarget() {
+  function launchDirectTarget(stage) {
+    if (!stage) return false;
     var ua = navigator.userAgent || '';
     var isIOS = /iphone|ipad|ipod/i.test(ua);
     var isAndroid = /android/i.test(ua);
@@ -6084,58 +7221,58 @@ body{overflow-x:hidden}
     var isZalo = /ZaloApp/i.test(ua);
     var isInApp = isFacebook || isZalo;
 
-    if (DIRECT_PLATFORM === 'shopee') {
+    if (stage.direct_platform === 'shopee') {
       if (isAndroid) {
         var shopeeIntentUrl =
-          DIRECT_ANDROID_INTENT_URL ||
+          stage.direct_android_intent_url ||
           buildAndroidIntentUrl(
-            DIRECT_ANDROID_URL || DIRECT_WEB_URL,
-            DIRECT_ANDROID_PACKAGE || 'com.shopee.vn',
-            DIRECT_WEB_URL
+            stage.direct_android_url || stage.direct_web_url,
+            stage.direct_android_package || 'com.shopee.vn',
+            stage.direct_web_url
           );
         if (shopeeIntentUrl) {
           openViaAnchor(shopeeIntentUrl);
-        } else if (DIRECT_APP_URL) {
-          openViaAnchor(DIRECT_APP_URL);
+        } else if (stage.direct_app_url) {
+          openViaAnchor(stage.direct_app_url);
         }
         setTimeout(function() {
-          if (!document.hidden && DIRECT_WEB_URL) {
-            window.location.replace(DIRECT_WEB_URL);
+          if (!document.hidden && stage.direct_web_url) {
+            window.location.replace(stage.direct_web_url);
           }
         }, 1600);
         return true;
       }
       if (isIOS) {
         var iosTarget = isInApp
-          ? (DIRECT_IOS_FB_URL || DIRECT_WEB_URL || DIRECT_IOS_URL)
-          : (DIRECT_IOS_BROWSER_URL || DIRECT_IOS_URL || DIRECT_WEB_URL);
+          ? (stage.direct_ios_fb_url || stage.direct_web_url || stage.direct_ios_url)
+          : (stage.direct_ios_browser_url || stage.direct_ios_url || stage.direct_web_url);
         if (iosTarget) {
           openViaAnchor(iosTarget, '_blank', 'noopener');
         }
         setTimeout(function() {
-          if (!document.hidden && DIRECT_WEB_URL) {
-            window.location.replace(DIRECT_WEB_URL);
+          if (!document.hidden && stage.direct_web_url) {
+            window.location.replace(stage.direct_web_url);
           }
         }, isInApp ? 1500 : 1600);
         return true;
       }
-      if (DIRECT_WEB_URL) {
-        openViaAnchor(DIRECT_WEB_URL);
+      if (stage.direct_web_url) {
+        openViaAnchor(stage.direct_web_url);
         return true;
       }
     }
 
-    if (DIRECT_PLATFORM === 'tiktok') {
+    if (stage.direct_platform === 'tiktok') {
       var tiktokTarget = isIOS
-        ? (DIRECT_IOS_URL || DIRECT_APP_URL || DIRECT_WEB_URL)
+        ? (stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
         : isAndroid
-          ? (DIRECT_ANDROID_URL || DIRECT_APP_URL || DIRECT_WEB_URL)
-          : DIRECT_WEB_URL;
+          ? (stage.direct_android_url || stage.direct_app_url || stage.direct_web_url)
+          : stage.direct_web_url;
       if (!tiktokTarget) return false;
       openViaAnchor(tiktokTarget);
       setTimeout(function() {
-        if (!document.hidden && DIRECT_WEB_URL) {
-          window.location.replace(DIRECT_WEB_URL);
+        if (!document.hidden && stage.direct_web_url) {
+          window.location.replace(stage.direct_web_url);
         }
       }, 1600);
       return true;
@@ -6185,6 +7322,7 @@ body{overflow-x:hidden}
 
   function goApp(){
     if(launching || activeStageIndex < 0) return;
+    var activeStage = OVERLAY_STAGES[activeStageIndex] || null;
     saveDismissedStage(activeStageIndex);
     launching = true;
     overlay.classList.remove('show');
@@ -6197,11 +7335,11 @@ body{overflow-x:hidden}
         finalizeLaunchUi();
       }
     }, 1200);
-    if (launchDirectTarget()) {
+    if (launchDirectTarget(activeStage)) {
       return;
     }
     resumePlayback();
-    window.location.href=LAUNCH_URL;
+    window.location.href = (activeStage && activeStage.direct_web_url) || LAUNCH_URL;
   }
   window.goApp=goApp;
 

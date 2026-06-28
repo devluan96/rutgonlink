@@ -1,4 +1,4 @@
-// ══════════════════════════════════════════════════
+﻿// ══════════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════════
 const sharedClient = window.RGLShared || {};
@@ -146,66 +146,67 @@ let accountAffiliateHealth = {
   shopee: null,
   tiktok: null,
 };
+let activeAffiliatePresetTargetFieldId = "";
 const notificationSeenStorageKey = "rutgonlink-notification-seen";
 let seenNotificationKeys = {};
 const landingIntroCopy = {
   vi: {
-    brandSubline: "Rút gọn link, QR, bio public và analytics",
-    heroKicker: "Bước tiếp theo",
-    heroTitle: "Tạo link ở một chỗ, xem dữ liệu ở một chỗ",
+    "brandSubline": "Rút gọn link, QR, bio public và analytics",
+    "heroKicker": "Bước tiếp theo",
+    "heroTitle": "Tạo link ở một chỗ, xem dữ liệu ở một chỗ",
     heroDesc:
       "Dùng cùng một luồng như trong app: tạo link, tinh chỉnh preview và theo dõi hiệu quả mà không phải đổi giữa quá nhiều màn hình khác nhau.",
-    heroPrimary: "Bắt đầu miễn phí",
-    heroSecondary: "Đăng nhập",
-    heroQuick: "Thử rút gọn nhanh",
-    stepsTitle: "Lộ trình ngắn",
-    stepsBadge: "3 bước",
-    step1Title: "Tạo link",
-    step1Desc: "Dán URL và chọn kiểu link phù hợp.",
-    step2Title: "Tối ưu preview",
-    step2Desc: "Chỉnh OG, alias hoặc video overlay nếu cần.",
-    step3Title: "Theo dõi hiệu quả",
-    step3Desc: "Kiểm tra click và hiệu suất ngay trong dashboard.",
-    quickPlaceholder: "Dán URL dài",
-    quickSubmit: "Rút gọn",
+    "heroPrimary": "Bắt đầu miễn phí",
+    "heroSecondary": "Đăng nhập",
+    "heroQuick": "Thử rút gọn nhanh",
+    "stepsTitle": "Lộ trình ngắn",
+    "stepsBadge": "3 bước",
+    "step1Title": "Tạo link",
+    "step1Desc": "Dán URL và chọn kiểu link phù hợp.",
+    "step2Title": "Tối ưu preview",
+    "step2Desc": "Chỉnh OG, alias hoặc video overlay nếu cần.",
+    "step3Title": "Theo dõi hiệu quả",
+    "step3Desc": "Kiểm tra click và hiệu suất ngay trong dashboard.",
+    "quickPlaceholder": "Dán URL dài",
+    "quickSubmit": "Rút gọn",
     resultMessage:
       "Liên kết đã được rút gọn thành công. Muốn thêm tùy chọn tùy chỉnh?",
-    resultCta: "Bắt đầu",
-    searchPlaceholder: "Tìm link... (Ctrl+K)",
+    "resultCta": "Bắt đầu",
+    "searchPlaceholder": "Tìm link... (Ctrl+K)",
   },
-  en: {
-    brandSubline: "Short links, QR, public bio and analytics",
-    heroKicker: "Next step",
-    heroTitle: "Create links in one place, track results in one place",
+  "en": {
+    "brandSubline": "Short links, QR, public bio and analytics",
+    "heroKicker": "Next step",
+    "heroTitle": "Create links in one place, track results in one place",
     heroDesc:
       "Use the same flow as the app: create links, tune previews, and review performance without jumping across too many separate screens.",
-    heroPrimary: "Start free",
-    heroSecondary: "Log in",
-    heroQuick: "Try quick shorten",
-    stepsTitle: "Quick path",
-    stepsBadge: "3 steps",
-    step1Title: "Create a link",
-    step1Desc: "Paste a URL and choose the right link type.",
-    step2Title: "Optimize preview",
-    step2Desc: "Adjust OG, alias, or video overlay when needed.",
-    step3Title: "Track performance",
-    step3Desc: "Review clicks and performance right in the dashboard.",
-    quickPlaceholder: "Paste a long URL",
-    quickSubmit: "Shorten",
+    "heroPrimary": "Start free",
+    "heroSecondary": "Log in",
+    "heroQuick": "Try quick shorten",
+    "stepsTitle": "Quick path",
+    "stepsBadge": "3 steps",
+    "step1Title": "Create a link",
+    "step1Desc": "Paste a URL and choose the right link type.",
+    "step2Title": "Optimize preview",
+    "step2Desc": "Adjust OG, alias, or video overlay when needed.",
+    "step3Title": "Track performance",
+    "step3Desc": "Review clicks and performance right in the dashboard.",
+    "quickPlaceholder": "Paste a long URL",
+    "quickSubmit": "Shorten",
     resultMessage:
       "Your link has been shortened. Want more control and customization?",
-    resultCta: "Get started",
-    searchPlaceholder: "Search links... (Ctrl+K)",
+    "resultCta": "Get started",
+    "searchPlaceholder": "Search links... (Ctrl+K)",
   },
 };
 const appUiTextTranslations = {
-  en: {
+  "en": {
     "Thông báo realtime": "Realtime notifications",
     "Chưa có thông báo mới": "No new notifications",
     "Đã xem hết": "Mark all read",
     "Chuông sẽ hiện các thay đổi mới về click, link, domain và quản trị.":
       "The bell shows new changes for clicks, links, domains, and admin activity.",
-    Khách: "Guest",
+    "Khách": "Guest",
     "Chưa đăng nhập": "Not signed in",
     "Hồ sơ công khai": "Public profile",
     "Thanh toán": "Billing",
@@ -313,8 +314,8 @@ const appUiTextTranslations = {
     "Kích thước": "Size",
     "Màu QR": "QR color",
     "Màu brand": "Brand color",
-    Đen: "Black",
-    Tím: "Purple",
+    "Đen": "Black",
+    "Tím": "Purple",
     "Xanh lá": "Green",
     "Tạo / cập nhật": "Create / update",
     "Sao chép URL": "Copy URL",
@@ -373,7 +374,7 @@ const appUiTextTranslations = {
     "Những người có thể thao tác ngay": "People who can act right away",
     "Lời mời": "Invitations",
     "Đang chờ xác nhận": "Awaiting confirmation",
-    Workspace: "Workspace",
+    "Workspace": "Workspace",
     "Owner + editor + analyst trong một luồng.":
       "Owner + editor + analyst in one shared flow.",
     "Thành viên workspace": "Workspace members",
@@ -421,9 +422,9 @@ const appUiTextTranslations = {
     "Tất cả link đã tạo": "All created links",
     "Danh sách liên kết": "Link list",
     "Tất cả": "All",
-    Khác: "Other",
+    "Khác": "Other",
     "OG Meta": "OG meta",
-    Clicks: "Clicks",
+    "Clicks": "Clicks",
     "Bỏ chọn": "Clear selection",
     "Xóa đã chọn": "Delete selected",
     "Link rút gọn": "Short link",
@@ -482,19 +483,19 @@ const appUiTextTranslations = {
     "Chưa chọn người dùng nào.": "No users selected.",
     "Chọn trang này": "Select this page",
     "Chọn theo bộ lọc": "Select by filter",
-    Tên: "Name",
+    "Tên": "Name",
     "Gói hiện tại": "Current plan",
     "Yêu cầu thanh toán": "Payment requests",
     "Điều hướng quản trị": "Admin navigation",
     "Tìm theo mã thanh toán...": "Search by payment code...",
     "Tải lại": "Reload",
-    Mã: "Code",
-    Gói: "Plan",
+    "Mã": "Code",
+    "Gói": "Plan",
     "Số tiền": "Amount",
     "Chuyển lúc": "Paid at",
     "Ghi chú": "Note",
     "Thao tác": "Actions",
-    Duyệt: "Approve",
+    "Duyệt": "Approve",
     "Từ chối": "Reject",
     "Đang tải...": "Loading...",
     "Đang tải yêu cầu thanh toán...": "Loading payment requests...",
@@ -506,8 +507,8 @@ const appUiTextTranslations = {
     "Hết hạn": "Expires",
     "Đặt làm domain chính": "Set as primary domain",
     "Thêm domain": "Add domain",
-    Nhãn: "Label",
-    Chính: "Primary",
+    "Nhãn": "Label",
+    "Chính": "Primary",
     "Nguồn log:": "Log source:",
     "Thời gian": "Time",
     "Tạo QR cho link ngắn, chiến dịch hoặc trang tiểu sử":
@@ -573,12 +574,12 @@ const appUiTextTranslations = {
       'After the transfer, click "Paid" to send the request to Admin > Payments.',
     "Có thể quét QR hoặc nhập tay thông tin chuyển khoản nếu QR chưa được cấu hình.":
       "You can scan the QR or manually enter the transfer details if the QR is not configured.",
-    Đóng: "Close",
+    "Đóng": "Close",
     "Đã thanh toán": "Paid",
     "Xác nhận hành động": "Confirm action",
     "Bạn có chắc muốn tiếp tục thao tác này không?":
       "Are you sure you want to continue?",
-    Hủy: "Cancel",
+    "Hủy": "Cancel",
     "Mở menu": "Open menu",
     "Đổi giao diện": "Toggle theme",
     "Mở thông báo": "Open notifications",
@@ -592,81 +593,81 @@ const appUiTextTranslations = {
   },
 };
 const appUiTextPatterns = {
-  en: [
+  "en": [
     {
-      regex: /^Danh sách liên kết \((\d+)\)$/,
-      replace: (_match, count) => `Link list (${count})`,
+      "regex": /^Danh sách liên kết \((\d+)\)$/,
+      "replace": (_match, count) => `Link list (${count})`,
     },
     {
-      regex: /^Mẫu link chung \((\d+)\)$/,
-      replace: (_match, count) => `Shared templates (${count})`,
+      "regex": /^Mẫu link chung \((\d+)\)$/,
+      "replace": (_match, count) => `Shared templates (${count})`,
     },
     {
-      regex: /^👥 Người dùng \((\d+)\)$/,
-      replace: (_match, count) => `👥 Users (${count})`,
+      "regex": /^👥 Người dùng \((\d+)\)$/,
+      "replace": (_match, count) => `👥 Users (${count})`,
     },
     {
-      regex: /^💳 Yêu cầu thanh toán \((\d+)\)$/,
-      replace: (_match, count) => `💳 Payment requests (${count})`,
+      "regex": /^💳 Yêu cầu thanh toán \((\d+)\)$/,
+      "replace": (_match, count) => `💳 Payment requests (${count})`,
     },
     {
-      regex: /^Đang hiển thị (\d+) link$/,
-      replace: (_match, count) => `Showing ${count} links`,
+      "regex": /^Đang hiển thị (\d+) link$/,
+      "replace": (_match, count) => `Showing ${count} links`,
     },
     {
-      regex: /^Bộ lọc hiện có (\d+) người dùng$/,
-      replace: (_match, count) => `The current filter contains ${count} users`,
+      "regex": /^Bộ lọc hiện có (\d+) người dùng$/,
+      "replace": (_match, count) => `The current filter contains ${count} users`,
     },
     {
-      regex: /^Hiển thị (\d+)-(\d+) \/ (\d+)$/,
-      replace: (_match, from, to, total) => `Showing ${from}-${to} / ${total}`,
+      "regex": /^Hiển thị (\d+)-(\d+) \/ (\d+)$/,
+      "replace": (_match, from, to, total) => `Showing ${from}-${to} / ${total}`,
     },
     {
-      regex: /^Tổng raw click: (.+)$/,
-      replace: (_match, value) => `Total raw clicks: ${value}`,
+      "regex": /^Tổng raw click: (.+)$/,
+      "replace": (_match, value) => `Total raw clicks: ${value}`,
     },
     {
-      regex: /^Đang chờ chuyển khoản: (.+)$/,
-      replace: (_match, value) => `Awaiting transfer: ${value}`,
+      "regex": /^Đang chờ chuyển khoản: (.+)$/,
+      "replace": (_match, value) => `Awaiting transfer: ${value}`,
     },
     {
-      regex: /^User mới: (.+)$/,
-      replace: (_match, value) => `New users: ${value}`,
+      "regex": /^User mới: (.+)$/,
+      "replace": (_match, value) => `New users: ${value}`,
     },
     {
-      regex: /^Click unique: (.+)$/,
-      replace: (_match, value) => `Unique clicks: ${value}`,
+      "regex": /^Click unique: (.+)$/,
+      "replace": (_match, value) => `Unique clicks: ${value}`,
     },
     {
-      regex: /^Thanh toán: (.+)$/,
-      replace: (_match, value) => `Payments: ${value}`,
+      "regex": /^Thanh toán: (.+)$/,
+      "replace": (_match, value) => `Payments: ${value}`,
     },
     {
-      regex: /^Đang tạo cho (.+)$/,
-      replace: (_match, value) => `Generating for ${value}`,
+      "regex": /^Đang tạo cho (.+)$/,
+      "replace": (_match, value) => `Generating for ${value}`,
     },
     {
-      regex: /^(\d+) thiết bị đã được ghi nhận trên tài khoản này\.$/,
-      replace: (_match, count) =>
+      "regex": /^(\d+) thiết bị đã được ghi nhận trên tài khoản này\.$/,
+      "replace": (_match, count) =>
         `${count} devices have been recorded for this account.`,
     },
     {
-      regex: /^Seat đang dùng (\d+)\/(\d+) · Quyền của bạn (.+)$/,
-      replace: (_match, used, total, role) =>
+      "regex": /^Seat đang dùng (\d+)\/(\d+) · Quyền của bạn (.+)$/,
+      "replace": (_match, used, total, role) =>
         `Seats in use ${used}/${total} · Your role ${role}`,
     },
     {
-      regex: /^Đã chọn (\d+)\/5 link\. Media sẽ tự lấy từ link đầu tiên có preview, hoặc file upload\.$/,
-      replace: (_match, count) =>
+      "regex": /^Đã chọn (\d+)\/5 link\. Media sẽ tự lấy từ link đầu tiên có preview, hoặc file upload\.$/,
+      "replace": (_match, count) =>
         `Selected ${count}/5 links. Media will be taken from the first link with a preview, or from an uploaded file.`,
     },
     {
-      regex: /^Đang dùng media tải từ máy: (.+)$/,
-      replace: (_match, label) => `Using uploaded media from device: ${label}`,
+      "regex": /^Đang dùng media tải từ máy: (.+)$/,
+      "replace": (_match, label) => `Using uploaded media from device: ${label}`,
     },
     {
-      regex: /^Media sẽ lấy từ link đã chọn: (.+)$/,
-      replace: (_match, label) => `Media will be taken from the selected link: ${label}`,
+      "regex": /^Media sẽ lấy từ link đã chọn: (.+)$/,
+      "replace": (_match, label) => `Media will be taken from the selected link: ${label}`,
     },
   ],
 };
@@ -697,6 +698,17 @@ function normalizeAppPage(page) {
 
 function buildAppPath(page = "dashboard") {
   return `/${normalizeAppPage(page)}`;
+}
+
+function getAppShellSearch(search = location.search) {
+  const params = new URLSearchParams(String(search || ""));
+  params.delete("next");
+  params.delete("code");
+  params.delete("error");
+  params.delete("error_description");
+  params.delete("state");
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : "";
 }
 
 function getAppPageFromLocation() {
@@ -767,7 +779,7 @@ function canonicalizeAppLocation() {
     return null;
   }
   const page = getAppPageFromLocation();
-  const cleanUrl = `${buildAppPath(page)}${location.search}`;
+  const cleanUrl = `${buildAppPath(page)}${getAppShellSearch(location.search)}`;
   if (`${location.pathname}${location.search}` !== cleanUrl || location.hash) {
     window.history.replaceState({}, document.title, cleanUrl);
   }
@@ -2050,6 +2062,7 @@ async function doLogout() {
   document.getElementById("userDropdown").classList.remove("show");
   document.getElementById("userDropdown").setAttribute("aria-hidden", "true");
   stopRealtimeNotificationLoop();
+  stopSupportSyncLoops();
   window.location.replace("/");
 }
 
@@ -2927,88 +2940,393 @@ function renderPaymentPage() {
   }
 }
 
-function triggerAccountAvatarUpload() {
-  document.getElementById("accountAvatarFileInput")?.click();
+function formatSupportTimelineTime(value) {
+  if (!value) return "—";
+  return formatAdminDateTime(value);
 }
 
-async function handleAccountAvatarUpload(event) {
-  const input = event?.target;
-  const file = input?.files?.[0];
-  if (!file) return;
-  const formData = new FormData();
-  formData.append("image", file);
-  const hint = document.getElementById("accountProfileHint");
-  if (hint) hint.textContent = "Đang upload avatar...";
+function renderSupportMessageText(value) {
+  return esc(String(value || "")).replace(/\n/g, "<br>");
+}
+
+function renderSupportTimeline(
+  targetId,
+  messages,
+  {
+    viewerRole = "user",
+    ownLabel = "Bạn",
+    otherLabel = "Admin",
+    emptyText = "Chưa có tin nhắn nào.",
+  } = {},
+) {
+  const wrap = document.getElementById(targetId);
+  if (!wrap) return;
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  if (!safeMessages.length) {
+    wrap.innerHTML = `<div class="support-empty">${esc(emptyText)}</div>`;
+    return;
+  }
+  wrap.innerHTML = safeMessages
+    .map((message) => {
+      const senderRole = String(message.sender_role || "user");
+      const isOwn = senderRole === viewerRole;
+      return `<div class="support-bubble ${isOwn ? "own" : ""}">
+        <div class="support-bubble-meta">
+          <strong>${esc(isOwn ? ownLabel : otherLabel)}</strong>
+          <span>${esc(formatSupportTimelineTime(message.created_at))}</span>
+        </div>
+        <div class="support-bubble-body">${renderSupportMessageText(message.message)}</div>
+      </div>`;
+    })
+    .join("");
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+function renderSupportConversation() {
+  const launcher = document.getElementById("supportWidgetLauncher");
+  const widget = document.getElementById("supportWidget");
+  const statusEl = document.getElementById("supportWidgetStatus");
+  const badgeEl = document.getElementById("supportFabBadge");
+  const noteEl = document.getElementById("supportComposerNote");
+  const btn = document.getElementById("supportSendBtn");
+  const canShowSupport = !!user;
+  const canOpenSupportPopup = canShowSupport && !isAdminUser();
+
+  if (launcher) launcher.hidden = !canShowSupport;
+  if (widget) {
+    widget.hidden = !canOpenSupportPopup;
+    widget.classList.toggle("show", canOpenSupportPopup && supportWidgetOpen);
+    widget.setAttribute(
+      "aria-hidden",
+      canOpenSupportPopup && supportWidgetOpen ? "false" : "true",
+    );
+  }
+  if (!canShowSupport) {
+    supportWidgetOpen = false;
+    return;
+  }
+  if (!canOpenSupportPopup) {
+    supportWidgetOpen = false;
+    if (statusEl) {
+      statusEl.textContent =
+        "Admin có thể bấm icon này để mở nhanh tab Tin nhắn trong trang quản trị.";
+    }
+    if (badgeEl) {
+      badgeEl.hidden = true;
+      badgeEl.textContent = "0";
+    }
+    return;
+  }
+
+  renderSupportTimeline("supportConversationList", supportMessages, {
+    viewerRole: "user",
+    ownLabel: "Bạn",
+    otherLabel: "Admin",
+    emptyText:
+      "Chưa có cuộc trò chuyện nào. Hãy gửi tin nhắn đầu tiên cho admin.",
+  });
+
+  if (statusEl) {
+    if (supportLoading) {
+      statusEl.textContent = "Đang tải hội thoại...";
+    } else if (!supportLoaded) {
+      statusEl.textContent = "Bấm để mở popup chat trực tiếp với admin.";
+    } else if (supportThread?.unread_for_user) {
+      statusEl.textContent = `${supportThread.unread_for_user} phản hồi mới từ admin.`;
+    } else if (supportThread?.total_messages) {
+      statusEl.textContent = "Hội thoại đã sẵn sàng, bạn có thể nhắn ngay.";
+    } else {
+      statusEl.textContent = "Chưa có hội thoại, hãy gửi tin nhắn đầu tiên.";
+    }
+  }
+
+  if (badgeEl) {
+    const unreadCount = supportWidgetOpen
+      ? 0
+      : Number(supportThread?.unread_for_user || 0);
+    badgeEl.hidden = unreadCount < 1;
+    badgeEl.textContent = String(unreadCount);
+  }
+
+  if (noteEl) {
+    noteEl.textContent =
+      supportNotice ||
+      (supportThread?.last_message_at
+        ? `Tin nhắn gần nhất: ${formatSupportTimelineTime(supportThread.last_message_at)}`
+        : "Admin sẽ thấy tin nhắn này trong tab Quản trị > Tin nhắn.");
+  }
+
+  if (btn) {
+    btn.disabled = !user || supportSending;
+    btn.textContent = supportSending ? "Đang gửi..." : "Gửi cho admin";
+  }
+}
+
+async function loadSupportMessages(options = {}) {
+  if (!user?.id || supportSyncInFlight) return;
+  const peekOnly = !!options.peek;
+  const silent = !!options.silent;
+  supportSyncInFlight = true;
+  if (!silent) {
+    supportLoading = true;
+    supportNotice = peekOnly
+      ? "Đang cập nhật tin nhắn mới..."
+      : "Đang đồng bộ hội thoại...";
+    renderSupportConversation();
+  }
   try {
-    const response = await fetch("/api/upload-image?scope=avatar", {
+    const response = await fetch(
+      peekOnly ? "/api/support/messages?peek=1" : "/api/support/messages",
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể tải hội thoại hỗ trợ");
+    }
+    supportMessages = Array.isArray(data.messages) ? data.messages : [];
+    supportThread = data.thread || null;
+    supportLoaded = true;
+    if (!silent) {
+      supportNotice = "";
+    }
+  } catch (error) {
+    if (!silent || !supportLoaded) {
+      supportNotice = error.message || "Không thể tải hội thoại hỗ trợ";
+    }
+  } finally {
+    supportSyncInFlight = false;
+    if (!silent) {
+      supportLoading = false;
+    }
+    renderSupportConversation();
+  }
+}
+
+async function sendSupportMessage() {
+  if (!user?.id || supportSending) return;
+  const input = document.getElementById("supportMessageInput");
+  const message = String(input?.value || "").trim();
+  if (!message) {
+    toast("Nhập nội dung trước khi gửi cho admin", "warn");
+    input?.focus();
+    return;
+  }
+  supportSending = true;
+  supportNotice = "Đang gửi tin nhắn tới admin...";
+  renderSupportConversation();
+  try {
+    const response = await fetch("/api/support/messages", {
       method: "POST",
-      body: formData,
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data.error || "Upload avatar thất bại");
-    }
-    document.getElementById("accountAvatarInput").value = data.url || "";
-    renderAccountProfilePreview();
-    if (hint)
-      hint.textContent = "Avatar đã upload xong. Nhớ bấm Lưu hồ sơ để áp dụng.";
-    toast("✅ Avatar đã sẵn sàng", "ok");
-  } catch (error) {
-    if (hint) hint.textContent = error.message || "Không thể upload avatar.";
-    toast(error.message || "Không thể upload avatar", "err");
-  } finally {
-    if (input) input.value = "";
-  }
-}
-
-async function saveAccountProfile() {
-  if (!user) return;
-  const btn = document.getElementById("accountSaveProfileBtn");
-  const hint = document.getElementById("accountProfileHint");
-  btn.disabled = true;
-  btn.textContent = "Đang lưu...";
-  try {
-    const response = await fetch("/api/auth/me", {
-      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: document.getElementById("accountNameInput").value.trim(),
-        phone: document.getElementById("accountPhoneInput").value.trim(),
-        avatar_url: document.getElementById("accountAvatarInput").value.trim(),
-      }),
+      body: JSON.stringify({ message }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || "Không thể lưu hồ sơ");
+      throw new Error(data.error || "Không thể gửi tin nhắn");
     }
-    user = data.user;
-    accountTwoFactorMode = "";
-    if (hint)
-      hint.textContent = "Thông tin cá nhân đã được cập nhật thành công.";
-    updateTopbar();
-    toast("✅ Đã cập nhật hồ sơ cá nhân", "ok");
+    const created = data.message || null;
+    if (created) {
+      supportMessages = [...supportMessages, created];
+      supportLoaded = true;
+      supportThread = {
+        ...(supportThread || { user_id: user.id, unread_for_user: 0 }),
+        total_messages: Number(supportThread?.total_messages || 0) + 1,
+        unread_for_admin: Number(supportThread?.unread_for_admin || 0) + 1,
+        unread_for_user: 0,
+        last_message: created.message || message,
+        last_message_at: created.created_at || new Date().toISOString(),
+        last_sender_role: "user",
+      };
+    }
+    if (input) input.value = "";
+    supportNotice = "Tin nhắn đã được chuyển tới admin.";
+    toast("Đã gửi tin nhắn cho admin", "ok");
+    void loadSupportMessages({ silent: true });
   } catch (error) {
-    if (hint) hint.textContent = error.message || "Không thể lưu hồ sơ.";
-    toast(error.message || "Không thể lưu hồ sơ", "err");
+    supportNotice = error.message || "Không thể gửi tin nhắn";
+    toast(supportNotice, "err");
   } finally {
-    btn.disabled = false;
-    btn.textContent = "Lưu hồ sơ";
+    supportSending = false;
+    renderSupportConversation();
   }
 }
 
-async function saveAccountAffiliateSettings() {
+function openSupportWidget() {
   if (!user) return;
+  if (isAdminUser()) {
+    navigate("admin", document.getElementById("adminNavItem"));
+    setAdminSection("support");
+    void refreshAdminSupport();
+    return;
+  }
+  supportWidgetOpen = true;
+  renderSupportConversation();
+  if (!supportLoaded && !supportLoading) {
+    void loadSupportMessages();
+  }
+}
+
+function closeSupportWidget() {
+  supportWidgetOpen = false;
+  renderSupportConversation();
+}
+
+function toggleSupportWidget() {
+  if (supportWidgetOpen) {
+    closeSupportWidget();
+    return;
+  }
+  openSupportWidget();
+}
+
+async function pollSupportMessages() {
+  if (!user?.id || isAdminUser() || supportSending) return;
+  await loadSupportMessages({
+    peek: !supportWidgetOpen,
+    silent: true,
+  });
+}
+
+async function pollAdminSupportMessages() {
+  if (!user?.id || !isAdminUser() || adminSupportSending) return;
+  const adminPageActive = !!document
+    .getElementById("page-admin")
+    ?.classList.contains("active");
+  await refreshAdminSupport({
+    silent: true,
+    includeConversation: adminPageActive && adminSection === "support",
+  });
+}
+
+function stopSupportSyncLoops() {
+  if (supportEventSource) {
+    supportEventSource.close();
+    supportEventSource = null;
+    supportEventSourceMode = "";
+  }
+  if (adminSupportEventSource) {
+    adminSupportEventSource.close();
+    adminSupportEventSource = null;
+  }
+  if (supportPollTimer) {
+    clearInterval(supportPollTimer);
+    supportPollTimer = null;
+  }
+  if (adminSupportPollTimer) {
+    clearInterval(adminSupportPollTimer);
+    adminSupportPollTimer = null;
+  }
+}
+
+function startSupportPollingFallback() {
+  if (supportPollTimer) return;
+  void pollSupportMessages();
+  supportPollTimer = setInterval(() => {
+    if (document.hidden || !user?.id || isAdminUser()) return;
+    void pollSupportMessages();
+  }, SUPPORT_POLL_INTERVAL_MS);
+}
+
+function startAdminSupportPollingFallback() {
+  if (adminSupportPollTimer) return;
+  void pollAdminSupportMessages();
+  adminSupportPollTimer = setInterval(() => {
+    if (document.hidden || !user?.id || !isAdminUser()) return;
+    void pollAdminSupportMessages();
+  }, SUPPORT_POLL_INTERVAL_MS);
+}
+
+function connectUserSupportStream() {
+  if (!window.EventSource) {
+    startSupportPollingFallback();
+    return;
+  }
+  if (supportEventSourceMode === "user" && supportEventSource) {
+    return;
+  }
+  supportEventSource?.close();
+  supportEventSource = new EventSource("/api/support/stream");
+  supportEventSourceMode = "user";
+  supportEventSource.onopen = () => {
+    if (supportPollTimer) {
+      clearInterval(supportPollTimer);
+      supportPollTimer = null;
+    }
+  };
+  supportEventSource.addEventListener("ready", () => {
+    if (!supportLoaded && !supportSyncInFlight) {
+      void loadSupportMessages({ peek: !supportWidgetOpen, silent: true });
+    }
+  });
+  supportEventSource.addEventListener("support:update", () => {
+    void loadSupportMessages({
+      peek: !supportWidgetOpen,
+      silent: true,
+    });
+  });
+  supportEventSource.onerror = () => {
+    if (!user?.id || isAdminUser()) return;
+    startSupportPollingFallback();
+  };
+}
+
+function connectAdminSupportStream() {
+  if (!window.EventSource) {
+    startAdminSupportPollingFallback();
+    return;
+  }
+  if (adminSupportEventSource) {
+    return;
+  }
+  adminSupportEventSource = new EventSource("/api/admin/support/stream");
+  adminSupportEventSource.onopen = () => {
+    if (adminSupportPollTimer) {
+      clearInterval(adminSupportPollTimer);
+      adminSupportPollTimer = null;
+    }
+  };
+  adminSupportEventSource.addEventListener("ready", () => {
+    void refreshAdminSupport({
+      silent: true,
+      includeConversation: false,
+    });
+  });
+  adminSupportEventSource.addEventListener("support:update", () => {
+    const adminPageActive = !!document
+      .getElementById("page-admin")
+      ?.classList.contains("active");
+    void refreshAdminSupport({
+      silent: true,
+      includeConversation: adminPageActive && adminSection === "support",
+    });
+  });
+  adminSupportEventSource.onerror = () => {
+    if (!user?.id || !isAdminUser()) return;
+    startAdminSupportPollingFallback();
+  };
+}
+
+function startSupportSyncLoops() {
+  stopSupportSyncLoops();
+  if (!user?.id) return;
+  if (isAdminUser()) {
+    connectAdminSupportStream();
+    return;
+  }
+  connectUserSupportStream();
+}
+async function saveAccountAffiliateSettings() {
+  if (!user?.id) {
+    redirectToAuth("login", "Cần đăng nhập để lưu preset affiliate.");
+    return;
+  }
   const btn = document.getElementById("accountSaveSettingsBtn");
   const hint = document.getElementById("accountAffiliateHint");
-  if (!btn) return;
-  btn.disabled = true;
-  btn.textContent = "Đang lưu...";
-    if (hint) {
-      hint.className = "account-note warn";
-      hint.textContent = "\u0110ang l\u01b0u preset affiliate...";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Đang lưu...";
   }
   try {
-    const response = await fetch("/api/auth/me", {
+    const response = await fetch("/api/account/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -3034,18 +3352,20 @@ async function saveAccountAffiliateSettings() {
     if (hint) {
       hint.className = "account-note ok";
       hint.textContent =
-        "\u0110\u00e3 l\u01b0u preset affiliate th\u00e0nh c\u00f4ng. Tab T\u1ea1o li\u00ean k\u1ebft s\u1ebd d\u00f9ng gi\u00e1 tr\u1ecb m\u1edbi.";
+        "Đã lưu preset affiliate thành công. Tab Tạo liên kết sẽ dùng giá trị mới.";
     }
   } catch (error) {
     if (hint) {
       hint.className = "account-note err";
       hint.textContent =
-        (error && error.message) || "Kh\u00f4ng th\u1ec3 l\u01b0u preset affiliate l\u00fac n\u00e0y.";
+        (error && error.message) || "Không thể lưu preset affiliate lúc này.";
     }
     toast(error.message || "Không thể lưu preset affiliate", "err");
   } finally {
-    btn.disabled = false;
-    btn.textContent = "Lưu preset affiliate";
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Lưu preset affiliate";
+    }
   }
 }
 
@@ -3072,6 +3392,7 @@ async function checkAffiliatePreset(platform, containerId = "") {
     note: "\u0110ang ki\u1ec3m tra",
   };
   renderAccountAffiliateSettings({ preserveInputValues: true });
+  syncAffiliatePresetActionState(containerId, normalized);
   try {
     const response = await fetch("/api/affiliate/health", {
       method: "POST",
@@ -3085,16 +3406,7 @@ async function checkAffiliatePreset(platform, containerId = "") {
     }
     accountAffiliateHealth[normalized] = data;
     renderAccountAffiliateSettings({ preserveInputValues: true });
-    if (containerId) {
-      const target = document.getElementById(
-        `${containerId}_presetStatus_${normalized}`,
-      );
-      if (target) {
-        const health = getAffiliatePresetHealthLabel(normalized);
-        target.textContent = health.label;
-        target.className = `affiliate-preset-status${health.tone ? ` ${health.tone}` : ""}`;
-      }
-    }
+    syncAffiliatePresetActionState(containerId, normalized);
     toast(
       data.alive
         ? "✅ Link affiliate vẫn hoạt động"
@@ -3110,8 +3422,55 @@ async function checkAffiliatePreset(platform, containerId = "") {
       note: error.message || "Không thể kiểm tra",
     };
     renderAccountAffiliateSettings({ preserveInputValues: true });
+    syncAffiliatePresetActionState(containerId, normalized);
     toast(error.message || "Không thể kiểm tra link affiliate", "err");
   }
+}
+
+function setActiveAffiliatePresetTarget(fieldId = "") {
+  activeAffiliatePresetTargetFieldId = String(fieldId || "").trim();
+}
+
+function buildAffiliatePresetTargetFieldIds(cid) {
+  return [
+    `${cid}_url`,
+    `${cid}_video_popup_url_5s`,
+    `${cid}_video_popup_url_300s`,
+  ];
+}
+
+function bindAffiliatePresetTargets(cid) {
+  buildAffiliatePresetTargetFieldIds(cid).forEach((fieldId) => {
+    const input = document.getElementById(fieldId);
+    if (!input) return;
+    const activate = () => setActiveAffiliatePresetTarget(fieldId);
+    input.addEventListener("focus", activate);
+    input.addEventListener("pointerdown", activate);
+  });
+}
+
+function resolveAffiliatePresetTargetField(cid) {
+  const preferredInput = activeAffiliatePresetTargetFieldId
+    ? document.getElementById(activeAffiliatePresetTargetFieldId)
+    : null;
+  if (preferredInput) return preferredInput;
+
+  const urlInput = document.getElementById(`${cid}_url`);
+  const linkType = document.getElementById(`${cid}_ltype`)?.value || "direct";
+  if (linkType !== "video" || !urlInput?.value.trim()) {
+    return urlInput;
+  }
+
+  const stageInputs = buildAffiliatePresetTargetFieldIds(cid)
+    .slice(1)
+    .map((fieldId) => document.getElementById(fieldId))
+    .filter(Boolean);
+
+  return (
+    stageInputs.find((input) => !input.value.trim()) ||
+    stageInputs[0] ||
+    urlInput
+  );
 }
 
 function useAffiliatePreset(cid, platform) {
@@ -3120,15 +3479,25 @@ function useAffiliatePreset(cid, platform) {
     toast("Chưa có preset affiliate cho nền tảng này", "warn");
     return;
   }
-  const input = document.getElementById(`${cid}_url`);
+  const input = resolveAffiliatePresetTargetField(cid);
   if (!input) return;
   input.value = presetUrl;
-  onUrlInput(cid);
-  syncAutoAliasPreview(cid);
-  toast(
-    `✅ Đã nạp link ${platform === "shopee" ? "Shopee" : "TikTok"} vào form`,
-    "ok",
-  );
+  setActiveAffiliatePresetTarget(input.id);
+  if (input.id === `${cid}_url`) {
+    onUrlInput(cid);
+    syncAutoAliasPreview(cid);
+  } else {
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.focus();
+  }
+  const platformLabel = platform === "shopee" ? "Shopee" : "TikTok";
+  const targetLabel =
+    input.id === `${cid}_url`
+      ? "link gốc / popup 3s"
+      : input.id.endsWith("_5s")
+        ? "popup 5s"
+        : "popup 300s";
+  toast(`✅ Đã nạp link ${platformLabel} vào ${targetLabel}`, "ok");
 }
 
 async function logoutAllDevices() {
@@ -3710,6 +4079,7 @@ function syncAdminSectionUI() {
     "overview",
     "users",
     "payments",
+    "support",
     "system",
     "logs",
   ]);
@@ -3981,6 +4351,7 @@ async function loadAdminData() {
   if (!isAdminUser()) {
     return;
   }
+  void refreshAdminSupport();
   try {
     const [sr, dr, ur, rr, pr] = await Promise.all([
       fetch("/api/admin/stats"),
@@ -4046,6 +4417,7 @@ async function showApp() {
   loadThemePreference();
   await loadBillingData();
   updateTopbar();
+  renderSupportConversation();
   loadBioConfig();
   renderForms();
   updateIntegrationUI();
@@ -4053,6 +4425,7 @@ async function showApp() {
   syncRouteFromLocation();
   loadData();
   startRealtimeNotificationLoop();
+  startSupportSyncLoops();
 }
 
 function updateTopbar() {
@@ -4146,6 +4519,7 @@ function updateTopbar() {
     sf.style.display =
       plan === "pro" || plan === "business" || isAdmin ? "none" : "";
   }
+  renderSupportConversation();
   renderNotificationCenter();
   updatePricingUI();
   if (document.getElementById("page-account")?.classList.contains("active")) {
@@ -4158,6 +4532,8 @@ document.addEventListener("click", (e) => {
   const userDropdown = document.getElementById("userDropdown");
   const notificationToggle = document.getElementById("notificationBellBtn");
   const notificationDropdown = document.getElementById("notificationDropdown");
+  const supportLauncher = document.getElementById("supportWidgetLauncher");
+  const supportWidget = document.getElementById("supportWidget");
   if (
     userToggle &&
     userDropdown &&
@@ -4173,6 +4549,15 @@ document.addEventListener("click", (e) => {
     !notificationDropdown.contains(e.target)
   ) {
     closeNotificationDropdown();
+  }
+  if (
+    supportWidgetOpen &&
+    supportLauncher &&
+    supportWidget &&
+    !supportLauncher.contains(e.target) &&
+    !supportWidget.contains(e.target)
+  ) {
+    closeSupportWidget();
   }
 });
 
@@ -4263,7 +4648,7 @@ function navigate(page, el) {
   const sidebar = document.getElementById("sidebar");
   sidebar?.classList.remove("mob-open");
   document.getElementById("sidebarBackdrop")?.classList.remove("show");
-  const nextUrl = `${buildAppPath(page)}${location.search}`;
+  const nextUrl = `${buildAppPath(page)}${getAppShellSearch(location.search)}`;
   if (`${location.pathname}${location.search}` !== nextUrl || location.hash) {
     history.replaceState(null, "", nextUrl);
   }
@@ -4340,6 +4725,39 @@ function getAffiliatePresetHealthLabel(platform = "") {
   return { label: health.note || "Có lỗi", tone: "err" };
 }
 
+function canUseAffiliatePreset(platform = "") {
+  const key = String(platform || "").trim().toLowerCase();
+  const health = accountAffiliateHealth[key];
+  return !!(health && !health.pending && health.alive);
+}
+
+function syncAffiliatePresetActionState(containerId = "", platform = "") {
+  const normalized = String(platform || "").trim().toLowerCase();
+  if (!containerId || !normalized) return;
+  const health = getAffiliatePresetHealthLabel(normalized);
+  const statusEl = document.getElementById(
+    `${containerId}_presetStatus_${normalized}`,
+  );
+  const useBtn = document.getElementById(
+    `${containerId}_presetUse_${normalized}`,
+  );
+  const checkBtn = document.getElementById(
+    `${containerId}_presetCheck_${normalized}`,
+  );
+  if (statusEl) {
+    statusEl.textContent = health.label;
+    statusEl.className = `affiliate-preset-status${health.tone ? ` ${health.tone}` : ""}`;
+  }
+  if (useBtn) {
+    useBtn.disabled = !canUseAffiliatePreset(normalized);
+  }
+  if (checkBtn) {
+    const pending = !!accountAffiliateHealth[normalized]?.pending;
+    checkBtn.disabled = pending;
+    checkBtn.textContent = pending ? "Đang check..." : "Check";
+  }
+}
+
 function normalizeAffiliateHealthErrorMessage(error) {
   const rawMessage = String(error?.message || "").trim();
   if (!rawMessage) return "Kh\u00f4ng th\u1ec3 ki\u1ec3m tra link affiliate l\u00fac n\u00e0y.";
@@ -4384,6 +4802,8 @@ function buildAffiliatePresetMarkup(containerId) {
         ${availablePresets
           .map((preset) => {
             const health = getAffiliatePresetHealthLabel(preset.key);
+            const pending = !!accountAffiliateHealth[preset.key]?.pending;
+            const usable = canUseAffiliatePreset(preset.key);
             return `
               <div class="affiliate-preset-card">
                 <div class="affiliate-preset-copy">
@@ -4392,8 +4812,8 @@ function buildAffiliatePresetMarkup(containerId) {
                 </div>
                 <div class="affiliate-preset-actions">
                   <span class="affiliate-preset-status ${health.tone}" id="${containerId}_presetStatus_${preset.key}">${esc(health.label)}</span>
-                  <button class="btn-cp" type="button" onclick="useAffiliatePreset('${containerId}','${preset.key}')">Dùng link</button>
-                  <button class="btn-cp" type="button" onclick="checkAffiliatePreset('${preset.key}','${containerId}')">Check</button>
+                  <button class="btn-cp" type="button" id="${containerId}_presetUse_${preset.key}" onclick="useAffiliatePreset('${containerId}','${preset.key}')" ${usable ? "" : "disabled"}>Dùng link</button>
+                  <button class="btn-cp" type="button" id="${containerId}_presetCheck_${preset.key}" onclick="checkAffiliatePreset('${preset.key}','${containerId}')" ${pending ? "disabled" : ""}>${pending ? "Đang check..." : "Check"}</button>
                 </div>
               </div>`;
           })
@@ -4566,6 +4986,7 @@ function renderForm(containerId) {
                 <div style="font-size:20px">🎬</div>
                 <p style="font-size:10px;color:var(--text3);margin-top:2px">Upload video</p>
               </div>
+              <div id="${containerId}_videoUploadStatus" style="display:none;margin-top:4px;font-size:11px;color:var(--text3)"></div>
               <video id="${containerId}_vpreview"
                 style="width:100%;max-height:72px;border-radius:6px;display:none;object-fit:cover;background:#000;margin-top:4px"
                 muted></video>
@@ -4586,9 +5007,23 @@ function renderForm(containerId) {
                 </div>
               </div>
               <div>
-                <label class="fl" style="margin-bottom:3px">Nội dung CTA (hiện sau 5s)</label>
+                <label class="fl" style="margin-bottom:3px">Nội dung CTA popup</label>
                 <input type="text" class="fi" id="${containerId}_videotext"
                   placeholder="🛒 Bấm để xem sản phẩm →" maxlength="80" style="font-size:12px"/>
+              </div>
+              <div>
+                <label class="fl" style="margin-bottom:3px">Link popup riêng theo từng mốc (tùy chọn)</label>
+                <div style="display:grid;gap:7px">
+                  <input type="hidden" id="${containerId}_video_popup_url_3s"/>
+                  <div style="padding:9px 12px;border:1px dashed var(--border2);border-radius:8px;background:var(--bg4);font-size:12px;color:var(--text2)">
+                    Popup <strong style="color:var(--text)">3s</strong> mặc định mở <strong style="color:var(--text)">link gốc ở trên</strong>.
+                  </div>
+                  <input type="url" class="fi" id="${containerId}_video_popup_url_5s"
+                    placeholder="Popup 5s mở link nào (để trống = dùng link gốc ở trên)" style="font-size:12px"/>
+                  <input type="url" class="fi" id="${containerId}_video_popup_url_300s"
+                    placeholder="Popup 300s mở link nào (để trống = dùng link gốc ở trên)" style="font-size:12px"/>
+                </div>
+                <div id="${containerId}_videoLinkRolesHint" style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(59,130,246,.08);font-size:11px;color:var(--text2)"></div>
               </div>
               <div class="create-ai-actions">
                 <button type="button" class="btn-cp" onclick="triggerVideoMetadataAi('${containerId}', true)">AI gợi ý title & desc</button>
@@ -4599,7 +5034,7 @@ function renderForm(containerId) {
 
           <div style="margin-top:8px;padding:6px 10px;background:rgba(59,130,246,.07);border-radius:6px;
                       font-size:11px;color:var(--text2)">
-            💡 Video autoplay → 5s → lớp phủ toàn màn hình → user bấm bất kỳ đâu → mở App Shopee/TikTok.<br/>
+            💡 Video autoplay → popup 3s → popup 5s chồng lớp → popup 300s → user bấm popup trên cùng để mở App Shopee/TikTok.<br/>
             ✏️ Tiêu đề, mô tả và ảnh preview nhập ở phần <strong>Preview khi share</strong> bên dưới.
           </div>
           <div class="create-ai-hint" id="${containerId}_aihint"></div>
@@ -4645,6 +5080,7 @@ function renderForm(containerId) {
                 <div style="font-size:20px;margin-bottom:3px">📷</div>
                 <p style="font-size:11px;color:var(--text2)">Bấm để chọn ảnh<br/><span style="color:var(--text3)">JPG · PNG · WebP · 10MB</span></p>
               </div>
+              <div id="${containerId}_imgUploadStatus" style="display:none;margin-bottom:8px;font-size:11px;color:var(--text3)"></div>
               <img id="${containerId}_preview" src="" alt=""
                 style="width:100%;border-radius:7px;display:none;object-fit:cover;max-height:100px;margin-bottom:8px"/>
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
@@ -4704,6 +5140,21 @@ function renderForm(containerId) {
     if (resultMount) resultMount.innerHTML = resultCardMarkup;
   }
 
+  bindAffiliatePresetTargets(containerId);
+  ["shopee", "tiktok"].forEach((platform) =>
+    syncAffiliatePresetActionState(containerId, platform),
+  );
+  [
+    `${containerId}_video_popup_url_3s`,
+    `${containerId}_video_popup_url_5s`,
+    `${containerId}_video_popup_url_300s`,
+  ].forEach((fieldId) => {
+    const input = document.getElementById(fieldId);
+    if (!input) return;
+    input.addEventListener("input", () => syncVideoOverlayRoleHint(containerId));
+  });
+  syncVideoOverlayRoleHint(containerId);
+
   // Attach URL input events
   const urlIn = document.getElementById(`${containerId}_url`);
   if (urlIn) {
@@ -4724,6 +5175,50 @@ function setCreateUrlHint(cid, message) {
   hint.classList.toggle("show", !!message);
 }
 
+function syncVideoOverlayRoleHint(cid) {
+  const hint = document.getElementById(`${cid}_videoLinkRolesHint`);
+  if (!hint) return;
+  const linkType = document.getElementById(`${cid}_ltype`)?.value || "direct";
+  if (linkType !== "video") {
+    hint.style.display = "none";
+    hint.textContent = "";
+    return;
+  }
+  const baseUrl = document.getElementById(`${cid}_url`)?.value.trim() || "";
+  const stages = [
+    {
+      key: "5s",
+      label: "5s",
+      value:
+        document.getElementById(`${cid}_video_popup_url_5s`)?.value.trim() || "",
+    },
+    {
+      key: "300s",
+      label: "300s",
+      value:
+        document.getElementById(`${cid}_video_popup_url_300s`)?.value.trim() || "",
+    },
+  ];
+  const overrideStages = stages.filter((stage) => !!stage.value).map((stage) => stage.label);
+  const fallbackStages = stages.filter((stage) => !stage.value).map((stage) => stage.label);
+
+  let message =
+    "Link ở ô trên là link gốc của short link video và cũng là link popup 3s mặc định.";
+  if (!baseUrl) {
+    message += " Các ô dưới chỉ là link popup riêng cho mốc 5s và 300s khi bạn cần override.";
+  } else if (!overrideStages.length) {
+    message += " Hiện tại popup 3s / 5s / 300s đều đang dùng chính link gốc này.";
+  } else if (overrideStages.length === stages.length) {
+    message +=
+      " Popup 5s và 300s đang dùng link riêng bên dưới; popup 3s vẫn dùng link gốc ở trên.";
+  } else {
+    message += ` Popup ${overrideStages.join(" / ")} dùng link riêng; mốc ${fallbackStages.join(" / ")} vẫn dùng link gốc ở trên cùng với popup 3s.`;
+  }
+
+  hint.style.display = "block";
+  hint.textContent = message;
+}
+
 function syncVideoOptionAvailability(cid) {
   const url = document.getElementById(`${cid}_url`)?.value.trim() || "";
   const select = document.getElementById(`${cid}_ltype`);
@@ -4742,6 +5237,7 @@ function syncVideoOptionAvailability(cid) {
   } else if (shouldShowVideoOption) {
     setCreateUrlHint(cid, "");
   }
+  syncVideoOverlayRoleHint(cid);
 }
 
 function onUrlInput(cid) {
@@ -4764,6 +5260,7 @@ function onUrlInput(cid) {
   syncAutoAliasPreview(cid);
   document.getElementById(`${cid}_res`)?.classList.remove("show");
   document.getElementById(`${cid}_err`)?.classList.remove("show");
+  syncVideoOverlayRoleHint(cid);
 }
 
 function renderIntegrationsPage() {
@@ -5247,7 +5744,7 @@ function normalizeTeamTemplateSectionCopy() {
   const emptyCell = document.querySelector("#teamTemplateBody .tbl-empty");
   if (
     emptyCell &&
-    /Äang|Ã¢ÂÂ³|mÃ¡ÂºÂ«u link chung/i.test(emptyCell.textContent || "")
+    /Đang|⏳|mẫu link chung/i.test(emptyCell.textContent || "")
   ) {
     emptyCell.textContent = "Đang tải mẫu link chung...";
   }
@@ -6386,6 +6883,9 @@ function useTeamTemplate(templateId) {
     link_type: template.link_type || "direct",
     video_url: template.video_url || "",
     video_overlay_text: template.video_overlay_text || "",
+    video_popup_url_3s: template.video_popup_url_3s || "",
+    video_popup_url_5s: template.video_popup_url_5s || "",
+    video_popup_url_300s: template.video_popup_url_300s || "",
     domain_hostname: template.domain_hostname || "",
   };
   navigate("create");
@@ -6406,6 +6906,9 @@ function applyPendingTeamTemplateDraft(containerId) {
     `${containerId}_ogimg`,
     `${containerId}_videourl`,
     `${containerId}_videotext`,
+    `${containerId}_video_popup_url_3s`,
+    `${containerId}_video_popup_url_5s`,
+    `${containerId}_video_popup_url_300s`,
     `${containerId}_fileinput`,
     `${containerId}_vfile`,
   ];
@@ -6437,6 +6940,15 @@ function applyPendingTeamTemplateDraft(containerId) {
   const ogImageInput = document.getElementById(`${containerId}_ogimg`);
   const videoUrlInput = document.getElementById(`${containerId}_videourl`);
   const videoTextInput = document.getElementById(`${containerId}_videotext`);
+  const videoPopup3sInput = document.getElementById(
+    `${containerId}_video_popup_url_3s`,
+  );
+  const videoPopup5sInput = document.getElementById(
+    `${containerId}_video_popup_url_5s`,
+  );
+  const videoPopup300sInput = document.getElementById(
+    `${containerId}_video_popup_url_300s`,
+  );
   const metaBody = document.getElementById(`${containerId}_metabody`);
   if (urlInput) {
     urlInput.value = draft.original_url || "";
@@ -6466,6 +6978,12 @@ function applyPendingTeamTemplateDraft(containerId) {
   if (ogImageInput) ogImageInput.value = draft.og_image || "";
   if (videoUrlInput) videoUrlInput.value = draft.video_url || "";
   if (videoTextInput) videoTextInput.value = draft.video_overlay_text || "";
+  if (videoPopup3sInput)
+    videoPopup3sInput.value = draft.video_popup_url_3s || "";
+  if (videoPopup5sInput)
+    videoPopup5sInput.value = draft.video_popup_url_5s || "";
+  if (videoPopup300sInput)
+    videoPopup300sInput.value = draft.video_popup_url_300s || "";
 
   fieldIds.forEach((fieldId) => {
     const element = document.getElementById(fieldId);
@@ -6567,6 +7085,98 @@ function isShopeeUrlCandidate(value) {
   }
 }
 
+function setInlineUploadStatus(targetId, message = "", tone = "", progress = null) {
+  const el = document.getElementById(targetId);
+  if (!el) return;
+  if (!message) {
+    el.style.display = "none";
+    el.textContent = "";
+    return;
+  }
+  const palette = {
+    ok: "var(--green)",
+    err: "var(--red)",
+    warn: "var(--brand)",
+  };
+  el.style.display = "block";
+  el.style.color = palette[tone] || "var(--text3)";
+  el.textContent =
+    progress === null
+      ? message
+      : `${message} ${Math.max(0, Math.min(100, Number(progress) || 0))}%`;
+}
+
+function uploadFormDataWithProgress(
+  url,
+  formData,
+  { onProgress, withCredentials = false } = {},
+) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.withCredentials = withCredentials;
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || typeof onProgress !== "function") return;
+      onProgress(Math.round((event.loaded / event.total) * 100), event);
+    };
+    xhr.onerror = () => reject(new Error("Lỗi kết nối"));
+    xhr.onload = () => {
+      let payload = {};
+      try {
+        payload = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+      } catch {
+        payload = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(payload);
+        return;
+      }
+      const error = new Error(
+        payload.error ||
+          payload?.error?.message ||
+          `Upload thất bại (${xhr.status})`,
+      );
+      error.status = xhr.status;
+      error.payload = payload;
+      reject(error);
+    };
+    xhr.send(formData);
+  });
+}
+
+async function uploadImageFileToField(file, options = {}) {
+  const {
+    inputId = "",
+    previewId = "",
+    statusId = "",
+    areaId = "",
+    onAfterSet = null,
+  } = options;
+  const fd = new FormData();
+  fd.append("image", file);
+  const area = areaId ? document.getElementById(areaId) : null;
+  if (area) area.style.borderColor = "var(--brand)";
+  setInlineUploadStatus(statusId, "Đang upload ảnh...", "warn", 0);
+  const data = await uploadFormDataWithProgress("/api/upload-image", fd, {
+    onProgress: (progress) =>
+      setInlineUploadStatus(statusId, "Đang upload ảnh...", "warn", progress),
+  });
+  const absoluteUrl = data.url.startsWith("/")
+    ? window.location.origin + data.url
+    : data.url;
+  const input = inputId ? document.getElementById(inputId) : null;
+  if (input) input.value = absoluteUrl;
+  const preview = previewId ? document.getElementById(previewId) : null;
+  if (preview) {
+    preview.src = absoluteUrl;
+    preview.style.display = "block";
+  }
+  if (typeof onAfterSet === "function") onAfterSet(absoluteUrl, data);
+  if (area) area.style.borderColor = "var(--green)";
+  setInlineUploadStatus(statusId, "Upload ảnh xong", "ok", 100);
+  return { ...data, url: absoluteUrl };
+}
+
 async function persistGeneratedThumb(dataUrl, inputId, onAfterSet) {
   if (!dataUrl) return null;
   const response = await fetch(dataUrl);
@@ -6595,47 +7205,35 @@ async function persistGeneratedThumb(dataUrl, inputId, onAfterSet) {
 }
 
 async function handleVideoUploadLegacy(event, cid) {
-  const file = event.target.files[0];
+  const input = event?.target;
+  const file = input?.files?.[0];
   if (!file) return;
-  // Show local preview immediately + extract thumb via canvas
   const preview = document.getElementById(cid + "_vpreview");
   if (preview) {
     preview.src = URL.createObjectURL(file);
     preview.style.display = "block";
-    // Auto-extract thumbnail via canvas after video loads
     preview.onloadeddata = () => extractThumbFromVideoElement(preview, cid);
   }
-  // Upload to server
   const area = document.getElementById(cid + "_vuploadarea");
   if (area) area.style.borderColor = "var(--brand)";
+  setInlineUploadStatus(`${cid}_videoUploadStatus`, "Đang upload video...", "warn", 0);
   const fd = new FormData();
   fd.append("video", file);
   try {
-    const r = await fetch("/api/upload-video", {
-      method: "POST",
-      body: fd,
+    const d = await uploadFormDataWithProgress("/api/upload-video", fd, {
+      onProgress: (progress) =>
+        setInlineUploadStatus(
+          `${cid}_videoUploadStatus`,
+          "Đang upload video...",
+          "warn",
+          progress,
+        ),
     });
-    const d = await r.json();
-    if (!r.ok) {
-      if (r.status === 401) {
-        redirectToAuth("login", "Cần đăng nhập để upload video.");
-        return;
-      }
-      if (r.status === 403 && d.upgrade) {
-        toast(d.error || "Tính năng này yêu cầu gói Pro", "warn");
-        return;
-      }
-      toast(d.error || "Upload video thất bại", "err");
-      if (area) area.style.borderColor = "var(--border2)";
-      return;
-    }
-    // Set video URL (Cloudinary URL is absolute, local is relative)
     const urlInput = document.getElementById(cid + "_videourl");
     if (urlInput)
       urlInput.value = d.url.startsWith("/")
         ? window.location.origin + d.url
         : d.url;
-    // Auto-fill thumbnail from Cloudinary
     if (d.thumb) {
       const imgInput = document.getElementById(cid + "_ogimg");
       if (
@@ -6650,10 +7248,26 @@ async function handleVideoUploadLegacy(event, cid) {
       toast("✅ Upload video thành công!", "ok");
     }
     if (area) area.style.borderColor = "var(--green)";
+    setInlineUploadStatus(`${cid}_videoUploadStatus`, "Upload video xong", "ok", 100);
     void triggerVideoMetadataAi(cid, true);
-  } catch {
-    toast("Lỗi upload video", "err");
+  } catch (error) {
+    if (error?.status === 401) {
+      redirectToAuth("login", "Cần đăng nhập để upload video.");
+      return;
+    }
+    if (error?.status === 403 && error?.payload?.upgrade) {
+      toast(error.payload.error || "Tính năng này yêu cầu gói Pro", "warn");
+      return;
+    }
+    setInlineUploadStatus(
+      `${cid}_videoUploadStatus`,
+      error?.message || "Upload video thất bại",
+      "err",
+    );
+    toast(error?.message || "Lỗi upload video", "err");
     if (area) area.style.borderColor = "var(--border2)";
+  } finally {
+    if (input) input.value = "";
   }
 }
 
@@ -6715,7 +7329,7 @@ async function fetchVideoUploadSignature() {
   return data;
 }
 
-async function uploadVideoDirectToCloudinary(file) {
+async function uploadVideoDirectToCloudinary(file, onProgress) {
   const signatureData = await fetchVideoUploadSignature();
   if (
     signatureData.max_bytes &&
@@ -6735,19 +7349,11 @@ async function uploadVideoDirectToCloudinary(file) {
   formData.append("folder", signatureData.folder);
   formData.append("public_id", signatureData.public_id);
 
-  const response = await fetch(
+  const data = await uploadFormDataWithProgress(
     `https://api.cloudinary.com/v1_1/${signatureData.cloud_name}/video/upload`,
-    {
-      method: "POST",
-      body: formData,
-    },
+    formData,
+    { onProgress },
   );
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(
-      data?.error?.message || "Upload video len Cloudinary that bai",
-    );
-  }
   return {
     url: buildCloudinaryPlayableVideoUrl(data.secure_url),
     thumb: buildCloudinaryVideoThumb(data),
@@ -6757,7 +7363,8 @@ async function uploadVideoDirectToCloudinary(file) {
 }
 
 async function handleVideoUpload(event, cid) {
-  const file = event.target.files[0];
+  const input = event?.target;
+  const file = input?.files?.[0];
   if (!file) return;
 
   const preview = document.getElementById(cid + "_vpreview");
@@ -6769,11 +7376,19 @@ async function handleVideoUpload(event, cid) {
 
   const area = document.getElementById(cid + "_vuploadarea");
   if (area) area.style.borderColor = "var(--brand)";
+  setInlineUploadStatus(`${cid}_videoUploadStatus`, "Đang upload video...", "warn", 0);
 
   try {
     let uploadData;
     try {
-      uploadData = await uploadVideoDirectToCloudinary(file);
+      uploadData = await uploadVideoDirectToCloudinary(file, (progress) =>
+        setInlineUploadStatus(
+          `${cid}_videoUploadStatus`,
+          "Đang upload video...",
+          "warn",
+          progress,
+        ),
+      );
     } catch (directError) {
       const canFallback =
         directError?.status === 503 ||
@@ -6806,17 +7421,26 @@ async function handleVideoUpload(event, cid) {
     }
 
     if (area) area.style.borderColor = "var(--green)";
+    setInlineUploadStatus(`${cid}_videoUploadStatus`, "Upload video xong", "ok", 100);
+    void triggerVideoMetadataAi(cid, true);
   } catch (error) {
     if (error?.status === 401) {
-      redirectToAuth("login", "Can dang nhap de upload video.");
+      redirectToAuth("login", "Cần đăng nhập để upload video.");
       return;
     }
     if (error?.status === 403 && error?.payload?.upgrade) {
-      toast(error.payload.error || "Tinh nang nay yeu cau goi Pro", "warn");
+      toast(error.payload.error || "Tính năng này yêu cầu gói Pro", "warn");
       return;
     }
-    toast(error?.message || "Loi upload video", "err");
+    setInlineUploadStatus(
+      `${cid}_videoUploadStatus`,
+      error?.message || "Lỗi upload video",
+      "err",
+    );
+    toast(error?.message || "Lỗi upload video", "err");
     if (area) area.style.borderColor = "var(--border2)";
+  } finally {
+    if (input) input.value = "";
   }
 }
 
@@ -6998,44 +7622,35 @@ function updateVideoThumbPreview(cid) {
   syncAutoAliasPreview(cid);
 }
 async function handleFileUpload(event, cid) {
-  const file = event.target.files[0];
+  const input = event?.target;
+  const file = input?.files?.[0];
   if (!file) return;
-  const fd = new FormData();
-  fd.append("image", file);
   try {
-    const r = await fetch("/api/upload-image", {
-      method: "POST",
-      body: fd,
+    const data = await uploadImageFileToField(file, {
+      inputId: `${cid}_ogimg`,
+      previewId: `${cid}_preview`,
+      statusId: `${cid}_imgUploadStatus`,
+      areaId: `${cid}_uarea`,
+      onAfterSet: () => updateOgPreview(cid),
     });
-    const d = await r.json();
-    if (!r.ok) {
-      if (r.status === 401) {
-        redirectToAuth("login", "Cần đăng nhập để upload ảnh.");
-        return;
-      }
-      if (r.status === 403 && d.upgrade) {
-        toast(d.error || "Tính năng này yêu cầu gói Pro", "warn");
-        return;
-      }
-      toast(d.error || "Upload thất bại", "err");
+    toast(data?.url ? "✅ Upload ảnh thành công!" : "✅ Upload ảnh xong!", "ok");
+  } catch (error) {
+    if (error?.status === 401) {
+      redirectToAuth("login", "Cần đăng nhập để upload ảnh.");
       return;
     }
-    // Show preview
-    const preview = document.getElementById(`${cid}_preview`);
-    if (preview) {
-      preview.src = d.url;
-      preview.style.display = "block";
+    if (error?.status === 403 && error?.payload?.upgrade) {
+      toast(error.payload.error || "Tính năng này yêu cầu gói Pro", "warn");
+      return;
     }
-    // Set image URL
-    const imgInput = document.getElementById(`${cid}_ogimg`);
-    if (imgInput)
-      imgInput.value = d.url.startsWith("/")
-        ? window.location.origin + d.url
-        : d.url;
-    updateOgPreview(cid);
-    toast("✅ Upload ảnh thành công!", "ok");
-  } catch {
-    toast("Lỗi upload", "err");
+    setInlineUploadStatus(
+      `${cid}_imgUploadStatus`,
+      error?.message || "Upload ảnh thất bại",
+      "err",
+    );
+    toast(error?.message || "Lỗi upload", "err");
+  } finally {
+    if (input) input.value = "";
   }
 }
 
@@ -7068,6 +7683,7 @@ function onLinkTypeChange(cid) {
 
   // Hiện/ẩn video section
   if (vidSec) vidSec.className = "video-sec" + (val === "video" ? " show" : "");
+  syncVideoOverlayRoleHint(cid);
 
   // Với deeplink và video: tự động mở meta section nếu có quyền
   if ((val === "deeplink" || val === "video") && canOg) {
@@ -7131,6 +7747,12 @@ async function doShorten(cid, confirmAffiliate = false) {
     document.getElementById(`${cid}_videourl`)?.value.trim() || "";
   const video_overlay_text =
     document.getElementById(`${cid}_videotext`)?.value.trim() || "";
+  const video_popup_url_3s =
+    document.getElementById(`${cid}_video_popup_url_3s`)?.value.trim() || "";
+  const video_popup_url_5s =
+    document.getElementById(`${cid}_video_popup_url_5s`)?.value.trim() || "";
+  const video_popup_url_300s =
+    document.getElementById(`${cid}_video_popup_url_300s`)?.value.trim() || "";
   const btn = document.getElementById(`${cid}_btn`);
   const errEl = document.getElementById(`${cid}_err`);
   const teamTemplateId = Number(pendingTeamTemplateDraft?.id || 0) || null;
@@ -7215,12 +7837,15 @@ async function doShorten(cid, confirmAffiliate = false) {
         og_desc,
         og_image,
         domain_hostname,
-        link_type,
-        video_url,
-        video_overlay_text,
-        team_template_id: teamTemplateId,
-        confirm_affiliate: confirmAffiliate && affiliateUrl,
-      }),
+          link_type,
+          video_url,
+          video_overlay_text,
+          video_popup_url_3s,
+          video_popup_url_5s,
+          video_popup_url_300s,
+          team_template_id: teamTemplateId,
+          confirm_affiliate: confirmAffiliate && affiliateUrl,
+        }),
     });
     const data = await r.json();
     if (!r.ok) {
@@ -7322,15 +7947,31 @@ function getDashboardPlatformMetrics() {
   )
     ? statsAnalytics.platforms.unique_distribution
     : [];
+  const uniqueTodayRows = Array.isArray(
+    statsAnalytics?.platforms?.unique_today_distribution,
+  )
+    ? statsAnalytics.platforms.unique_today_distribution
+    : [];
   const rawRows = Array.isArray(statsAnalytics?.platforms?.distribution)
     ? statsAnalytics.platforms.distribution
+    : [];
+  const rawTodayRows = Array.isArray(statsAnalytics?.platforms?.today_distribution)
+    ? statsAnalytics.platforms.today_distribution
     : [];
   const readMetric = (key) => ({
     unique: Number(
       uniqueRows.find((item) => String(item?.key || "") === key)?.clicks || 0,
     ),
+    uniqueToday: Number(
+      uniqueTodayRows.find((item) => String(item?.key || "") === key)
+        ?.clicks_today || 0,
+    ),
     raw: Number(
       rawRows.find((item) => String(item?.key || "") === key)?.clicks || 0,
+    ),
+    rawToday: Number(
+      rawTodayRows.find((item) => String(item?.key || "") === key)?.clicks_today ||
+        0,
     ),
   });
   return {
@@ -7396,13 +8037,17 @@ async function loadData(prefetched = null) {
     document.getElementById("dShopee").textContent = Number(
       dashboardPlatformMetrics.shopee.unique,
     ).toLocaleString();
-    document.getElementById("dShopeeSub").textContent = `Raw clicks: ${Number(
+    document.getElementById("dShopeeSub").textContent = `Hôm nay: ${Number(
+      dashboardPlatformMetrics.shopee.uniqueToday,
+    ).toLocaleString()} · Raw clicks: ${Number(
       dashboardPlatformMetrics.shopee.raw,
     ).toLocaleString()}`;
     document.getElementById("dTiktok").textContent = Number(
       dashboardPlatformMetrics.tiktok.unique,
     ).toLocaleString();
-    document.getElementById("dTiktokSub").textContent = `Raw clicks: ${Number(
+    document.getElementById("dTiktokSub").textContent = `Hôm nay: ${Number(
+      dashboardPlatformMetrics.tiktok.uniqueToday,
+    ).toLocaleString()} · Raw clicks: ${Number(
       dashboardPlatformMetrics.tiktok.raw,
     ).toLocaleString()}`;
     renderActivity(links, "dashActivity");
@@ -8377,13 +9022,37 @@ let billingRequests = [];
 let paymentRequestDraft = null;
 let paymentSelectedPlan = "pro";
 let paymentQrStyler = null;
+let supportMessages = [];
+let supportThread = null;
+let supportLoading = false;
+let supportSending = false;
+let supportNotice = "";
+let supportWidgetOpen = false;
+let supportLoaded = false;
+let supportSyncInFlight = false;
+let supportPollTimer = null;
+let supportEventSource = null;
+let supportEventSourceMode = "";
+let adminSupportThreads = [];
+let adminSupportMessages = [];
+let adminSupportSelectedUserId = null;
+let adminSupportActiveUser = null;
+let adminSupportLoading = false;
+let adminSupportSending = false;
+let adminSupportNotice = "";
+let adminSupportSyncInFlight = false;
+let adminSupportConversationSyncInFlight = false;
+let adminSupportPollTimer = null;
+let adminSupportEventSource = null;
 const ADMIN_PAGE_SIZE = 20;
+const SUPPORT_POLL_INTERVAL_MS = 7000;
 
 function syncAdminSectionUI() {
   const availableSections = new Set([
     "overview",
     "users",
     "payments",
+    "support",
     "system",
     "logs",
   ]);
@@ -8486,6 +9155,288 @@ function filterAdminPayments(value) {
   renderAdminPayments();
 }
 
+function getAdminSupportSelectedThread() {
+  return adminSupportThreads.find(
+    (thread) => Number(thread.user_id) === Number(adminSupportSelectedUserId),
+  );
+}
+
+function sortAdminSupportThreads() {
+  adminSupportThreads = [...adminSupportThreads].sort(
+    (a, b) =>
+      new Date(b.last_message_at || 0).getTime() -
+      new Date(a.last_message_at || 0).getTime(),
+  );
+}
+
+function renderAdminSupportThreadList() {
+  const listEl = document.getElementById("adminSupportThreadList");
+  const countEl = document.getElementById("adminSupportThreadCount");
+  if (countEl) countEl.textContent = String(adminSupportThreads.length);
+  if (!listEl) return;
+  if (!adminSupportThreads.length) {
+    listEl.innerHTML =
+      '<div class="support-empty">Chưa có cuộc trò chuyện nào từ người dùng.</div>';
+    return;
+  }
+  listEl.innerHTML = adminSupportThreads
+    .map((thread) => {
+      const threadUser = thread.user || {};
+      const isActive =
+        Number(thread.user_id || 0) === Number(adminSupportSelectedUserId || 0);
+      const threadName =
+        threadUser.name || threadUser.email || `User #${thread.user_id}`;
+      const plan = String(threadUser.plan || "free").toUpperCase();
+      return `<button
+        class="support-thread-item ${isActive ? "active" : ""}"
+        type="button"
+        onclick="selectAdminSupportThread(${Number(thread.user_id)})"
+      >
+        <div class="support-thread-top">
+          <div class="support-thread-name">${esc(threadName)}</div>
+          ${
+            thread.unread_for_admin
+              ? `<span class="support-thread-badge">${esc(String(thread.unread_for_admin))}</span>`
+              : ""
+          }
+        </div>
+        <div class="support-thread-email">${esc(threadUser.email || `ID #${thread.user_id}`)}</div>
+        <div class="support-thread-preview">${esc(
+          thread.last_message || "Chưa có tin nhắn nào.",
+        )}</div>
+        <div class="support-thread-meta">
+          <span class="support-thread-time">${esc(
+            formatSupportTimelineTime(thread.last_message_at),
+          )}</span>
+          <span class="support-thread-email">${esc(
+            `${plan} • ${thread.last_sender_role === "admin" ? "admin" : "user"}`,
+          )}</span>
+        </div>
+      </button>`;
+    })
+    .join("");
+}
+
+function renderAdminSupportConversation() {
+  const selectedThread = getAdminSupportSelectedThread();
+  const metaEl = document.getElementById("adminSupportThreadMeta");
+  const noteEl = document.getElementById("adminSupportComposerNote");
+  const btn = document.getElementById("adminSupportSendBtn");
+  const activeUser = adminSupportActiveUser || selectedThread?.user || null;
+  if (metaEl) {
+    if (!selectedThread && !activeUser) {
+      metaEl.textContent = "Chọn một hội thoại để xem chi tiết.";
+    } else {
+      const title = activeUser?.name || activeUser?.email || `User #${selectedThread?.user_id || "?"}`;
+      const email = activeUser?.email || "Chưa có email";
+      const role = String(activeUser?.role || "user").toUpperCase();
+      const plan = String(activeUser?.plan || "free").toUpperCase();
+      metaEl.textContent = `${title} • ${email} • ${plan} • ${role}`;
+    }
+  }
+  renderSupportTimeline("adminSupportConversationList", adminSupportMessages, {
+    viewerRole: "admin",
+    ownLabel: "Admin",
+    otherLabel:
+      activeUser?.name || activeUser?.email || `User #${selectedThread?.user_id || ""}`,
+    emptyText: selectedThread
+      ? "Chưa có tin nhắn nào trong hội thoại này."
+      : "Chọn một hội thoại để xem chi tiết.",
+  });
+  if (noteEl) {
+    noteEl.textContent =
+      adminSupportNotice ||
+      (selectedThread?.unread_for_admin
+        ? `${selectedThread.unread_for_admin} tin nhắn từ user chưa được mở trước đó.`
+        : "Chọn thread ở cột trái rồi gửi phản hồi.");
+  }
+  if (btn) {
+    btn.disabled = !adminSupportSelectedUserId || adminSupportSending;
+    btn.textContent = adminSupportSending ? "Đang gửi..." : "Gửi phản hồi";
+  }
+}
+
+async function refreshAdminSupport(options = {}) {
+  if (!isAdminUser() || adminSupportSyncInFlight) return;
+  const silent = !!options.silent;
+  const includeConversation = options.includeConversation !== false;
+  adminSupportSyncInFlight = true;
+  if (!silent) {
+    adminSupportLoading = true;
+    adminSupportNotice = "Đang tải hộp thư hỗ trợ...";
+    renderAdminSupportThreadList();
+    renderAdminSupportConversation();
+  }
+  try {
+    const response = await fetch("/api/admin/support");
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể tải hộp thư hỗ trợ");
+    }
+    adminSupportThreads = Array.isArray(data.threads) ? data.threads : [];
+    sortAdminSupportThreads();
+    if (
+      adminSupportSelectedUserId &&
+      !adminSupportThreads.some(
+        (thread) =>
+          Number(thread.user_id) === Number(adminSupportSelectedUserId),
+      )
+    ) {
+      adminSupportSelectedUserId = null;
+      adminSupportMessages = [];
+      adminSupportActiveUser = null;
+    }
+    if (!adminSupportSelectedUserId && adminSupportThreads.length) {
+      adminSupportSelectedUserId = Number(adminSupportThreads[0].user_id);
+    }
+    if (!silent) {
+      adminSupportNotice = "";
+    }
+    renderAdminSupportThreadList();
+    renderAdminSupportConversation();
+    if (includeConversation && adminSupportSelectedUserId) {
+      await loadAdminSupportConversation(adminSupportSelectedUserId, {
+        silent: true,
+        peek: silent,
+      });
+    }
+  } catch (error) {
+    if (!silent || !adminSupportThreads.length) {
+      adminSupportNotice = error.message || "Không thể tải hộp thư hỗ trợ";
+    }
+    renderAdminSupportThreadList();
+    renderAdminSupportConversation();
+  } finally {
+    adminSupportSyncInFlight = false;
+    if (!silent) {
+      adminSupportLoading = false;
+    }
+  }
+}
+
+async function loadAdminSupportConversation(userId, options = {}) {
+  if (adminSupportConversationSyncInFlight) return;
+  const normalizedUserId = Number(userId);
+  if (!Number.isInteger(normalizedUserId) || normalizedUserId < 1) return;
+  adminSupportSelectedUserId = normalizedUserId;
+  const silent = !!options.silent;
+  const peekOnly = !!options.peek;
+  adminSupportConversationSyncInFlight = true;
+  if (!silent) {
+    adminSupportNotice = "Đang tải hội thoại...";
+    renderAdminSupportThreadList();
+    renderAdminSupportConversation();
+  }
+  try {
+    const response = await fetch(
+      peekOnly
+        ? `/api/admin/support/${normalizedUserId}/messages?peek=1`
+        : `/api/admin/support/${normalizedUserId}/messages`,
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể tải hội thoại");
+    }
+    adminSupportMessages = Array.isArray(data.messages) ? data.messages : [];
+    adminSupportActiveUser = data.user || getAdminSupportSelectedThread()?.user || null;
+    adminSupportThreads = adminSupportThreads.map((thread) =>
+      Number(thread.user_id) === normalizedUserId
+        ? {
+            ...(thread || {}),
+            ...(data.thread || {}),
+            user: data.user || thread.user,
+            unread_for_admin: 0,
+          }
+        : thread,
+    );
+    sortAdminSupportThreads();
+    if (!silent) {
+      adminSupportNotice = "";
+    }
+  } catch (error) {
+    if (!silent || !adminSupportMessages.length) {
+      adminSupportNotice = error.message || "Không thể tải hội thoại";
+    }
+  } finally {
+    adminSupportConversationSyncInFlight = false;
+    renderAdminSupportThreadList();
+    renderAdminSupportConversation();
+  }
+}
+
+function selectAdminSupportThread(userId) {
+  adminSupportSelectedUserId = Number(userId) || null;
+  void loadAdminSupportConversation(adminSupportSelectedUserId);
+}
+
+async function sendAdminSupportMessage() {
+  if (!adminSupportSelectedUserId || adminSupportSending) return;
+  const input = document.getElementById("adminSupportMessageInput");
+  const message = String(input?.value || "").trim();
+  if (!message) {
+    toast("Nhập phản hồi trước khi gửi cho user", "warn");
+    input?.focus();
+    return;
+  }
+  adminSupportSending = true;
+  adminSupportNotice = "Đang gửi phản hồi...";
+  renderAdminSupportConversation();
+  try {
+    const response = await fetch(
+      `/api/admin/support/${adminSupportSelectedUserId}/messages`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể gửi phản hồi");
+    }
+    const created = data.message || null;
+    adminSupportActiveUser = data.user || adminSupportActiveUser;
+    if (created) {
+      adminSupportMessages = [...adminSupportMessages, created];
+      const existingThread = getAdminSupportSelectedThread();
+      const nextThread = {
+        ...(existingThread || {
+          user_id: adminSupportSelectedUserId,
+          user: adminSupportActiveUser,
+          total_messages: 0,
+          unread_for_admin: 0,
+          unread_for_user: 0,
+        }),
+        user: adminSupportActiveUser || existingThread?.user || null,
+        total_messages: Number(existingThread?.total_messages || 0) + 1,
+        unread_for_admin: 0,
+        unread_for_user: Number(existingThread?.unread_for_user || 0) + 1,
+        last_message: created.message || message,
+        last_message_at: created.created_at || new Date().toISOString(),
+        last_sender_role: "admin",
+      };
+      adminSupportThreads = [
+        nextThread,
+        ...adminSupportThreads.filter(
+          (thread) =>
+            Number(thread.user_id) !== Number(adminSupportSelectedUserId),
+        ),
+      ];
+      sortAdminSupportThreads();
+    }
+    if (input) input.value = "";
+    adminSupportNotice = "Phản hồi đã được gửi cho user.";
+    toast("Đã gửi phản hồi cho user", "ok");
+  } catch (error) {
+    adminSupportNotice = error.message || "Không thể gửi phản hồi";
+    toast(adminSupportNotice, "err");
+  } finally {
+    adminSupportSending = false;
+    renderAdminSupportThreadList();
+    renderAdminSupportConversation();
+  }
+}
+
 function setAdminUserPlanFilter(value) {
   adminUserPlanFilter = String(value || "all").trim() || "all";
   adminUserPage = 1;
@@ -8521,6 +9472,7 @@ async function loadAdminData() {
   if (!isAdminUser()) {
     return;
   }
+  void refreshAdminSupport();
   try {
     const [sr, dr, ur, rr, pr] = await Promise.all([
       fetch("/api/admin/stats"),
@@ -8887,7 +9839,7 @@ function renderAdminUserDetailField(label, value) {
   return `
     <div class="admin-user-detail-item">
       <span class="admin-user-detail-label">${esc(label)}</span>
-      <strong class="admin-user-detail-value">${esc(value || "â€”")}</strong>
+      <strong class="admin-user-detail-value">${esc(value || "—")}</strong>
     </div>`;
 }
 
@@ -8909,8 +9861,8 @@ function openAdminUserDetailModal(userId, event) {
   );
   if (!modal || !userItem) return;
 
-  const name = String(userItem.name || "").trim() || "ChÆ°a cáº­p nháº­t";
-  const email = String(userItem.email || "").trim() || "â€”";
+  const name = String(userItem.name || "").trim() || "Chưa cập nhật";
+  const email = String(userItem.email || "").trim() || "—";
   const plan = String(userItem.plan || "free").trim() || "free";
   const role = String(userItem.role || "user").trim() || "user";
   const avatarText = (name || email || "U").charAt(0).toUpperCase();
@@ -8929,7 +9881,7 @@ function openAdminUserDetailModal(userId, event) {
     summaryEl.innerHTML = `
       <span class="admin-user-plan">${esc(plan)}</span>
       <span class="badge-role ${esc(role)}">${esc(role)}</span>
-      <span class="admin-user-detail-id">ID #${esc(String(userItem.id || "â€”"))}</span>`;
+      <span class="admin-user-detail-id">ID #${esc(String(userItem.id || "—"))}</span>`;
   }
   if (metaEl) {
     metaEl.innerHTML = [
@@ -9363,6 +10315,42 @@ async function deleteSelectedAdminUsers() {
 // ══════════════════════════════════════════════════
 //  EDIT MODAL
 // ══════════════════════════════════════════════════
+function triggerEditImageUpload() {
+  document.getElementById("editOgImageFile")?.click();
+}
+
+async function handleEditImageUpload(event) {
+  const input = event?.target;
+  const file = input?.files?.[0];
+  if (!file) return;
+  try {
+    await uploadImageFileToField(file, {
+      inputId: "editOgImage",
+      previewId: "editThumbPreview",
+      statusId: "editImageUploadStatus",
+      onAfterSet: () => updateEditThumbPreview(),
+    });
+    toast("Upload ảnh xong!", "ok");
+  } catch (error) {
+    if (error?.status === 401) {
+      redirectToAuth("login", "Cần đăng nhập để upload ảnh.");
+      return;
+    }
+    if (error?.status === 403 && error?.payload?.upgrade) {
+      toast(error.payload.error || "Tính năng này yêu cầu gói Pro", "warn");
+      return;
+    }
+    setInlineUploadStatus(
+      "editImageUploadStatus",
+      error?.message || "Upload ảnh thất bại",
+      "err",
+    );
+    toast(error?.message || "Không thể upload ảnh", "err");
+  } finally {
+    if (input) input.value = "";
+  }
+}
+
 function openEditModal(linkId) {
   const link =
     links.find((l) => l.id == linkId) || adminLinks.find((l) => l.id == linkId);
@@ -9381,9 +10369,18 @@ function openEditModal(linkId) {
   document.getElementById("editOgTitle").value = link.og_title || "";
   document.getElementById("editOgDesc").value = link.og_desc || "";
   document.getElementById("editOgImage").value = link.og_image || "";
+  setInlineUploadStatus("editImageUploadStatus", "");
+  const editImageFileInput = document.getElementById("editOgImageFile");
+  if (editImageFileInput) editImageFileInput.value = "";
   document.getElementById("editVideoUrl").value = link.video_url || "";
   document.getElementById("editVideoText").value =
     link.video_overlay_text || "";
+  const editPopup3s = document.getElementById("editVideoPopupUrl3s");
+  const editPopup5s = document.getElementById("editVideoPopupUrl5s");
+  const editPopup300s = document.getElementById("editVideoPopupUrl300s");
+  if (editPopup3s) editPopup3s.value = link.video_popup_url_3s || "";
+  if (editPopup5s) editPopup5s.value = link.video_popup_url_5s || "";
+  if (editPopup300s) editPopup300s.value = link.video_popup_url_300s || "";
   onEditLinkTypeChange();
   updateEditThumbPreview();
   document.getElementById("editErr").classList.remove("show");
@@ -9495,6 +10492,12 @@ async function saveEditLink() {
         video_overlay_text: document
           .getElementById("editVideoText")
           .value.trim(),
+        video_popup_url_3s:
+          document.getElementById("editVideoPopupUrl3s")?.value.trim() || "",
+        video_popup_url_5s:
+          document.getElementById("editVideoPopupUrl5s")?.value.trim() || "",
+        video_popup_url_300s:
+          document.getElementById("editVideoPopupUrl300s")?.value.trim() || "",
       }),
     });
     const d = await r.json();
@@ -10126,5 +11129,6 @@ window.addEventListener("hashchange", () => {
     showAuthScreen(getAuthRouteMode());
   }
 })();
+
 
 

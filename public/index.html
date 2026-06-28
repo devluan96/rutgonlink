@@ -2584,6 +2584,7 @@
                   </table>
                 </div>
               </section>
+
             </div>
           </div>
 
@@ -2595,6 +2596,15 @@
                 Quản lý người dùng, liên kết, domain và nhật ký vận hành toàn hệ
                 thống.
               </p>
+              <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap">
+                <a
+                  href="/admin/article-funnel-lab"
+                  class="btn-cp"
+                  style="display: inline-flex; align-items: center; gap: 8px"
+                >
+                  🧪 Mở Article Funnel Lab
+                </a>
+              </div>
             </div>
             <div
               class="admin-tabs"
@@ -2633,6 +2643,17 @@
                 onclick="setAdminSection('payments')"
               >
                 Thanh toán
+              </button>
+              <button
+                class="admin-tab-btn"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="adminPanelSupport"
+                data-admin-section="support"
+                onclick="setAdminSection('support')"
+              >
+                Tin nhắn
               </button>
               <button
                 class="admin-tab-btn"
@@ -2957,6 +2978,73 @@
 
             <section
               class="admin-panel"
+              id="adminPanelSupport"
+              data-admin-panel="support"
+              role="tabpanel"
+              hidden
+            >
+              <div class="tbl-card">
+                <div class="tbl-head">
+                  <div>
+                    <h3>
+                      💬 Hộp thư hỗ trợ (<span id="adminSupportThreadCount">0</span>)
+                    </h3>
+                    <p style="margin: 6px 0 0; font-size: 12px; color: var(--text3)">
+                      User có thể nhắn trực tiếp cho admin từ trang Thanh toán.
+                    </p>
+                  </div>
+                  <button
+                    class="user-btn secondary"
+                    type="button"
+                    onclick="refreshAdminSupport()"
+                  >
+                    Tải lại
+                  </button>
+                </div>
+                <div class="support-admin-grid">
+                  <div class="support-thread-list" id="adminSupportThreadList">
+                    <div class="support-empty">
+                      Chưa có cuộc trò chuyện nào từ người dùng.
+                    </div>
+                  </div>
+                  <div class="support-admin-panel">
+                    <div class="support-admin-panel-head" id="adminSupportThreadMeta">
+                      Chọn một hội thoại để xem chi tiết.
+                    </div>
+                    <div class="support-timeline support-timeline--admin" id="adminSupportConversationList">
+                      <div class="support-empty">
+                        Chưa có tin nhắn nào trong hội thoại này.
+                      </div>
+                    </div>
+                    <div class="support-compose">
+                      <label class="fl" for="adminSupportMessageInput">Phản hồi của admin</label>
+                      <textarea
+                        class="fi support-textarea"
+                        id="adminSupportMessageInput"
+                        rows="4"
+                        placeholder="Nhập phản hồi để gửi lại cho user..."
+                      ></textarea>
+                      <div class="support-compose-actions">
+                        <div class="support-compose-note" id="adminSupportComposerNote">
+                          Chọn thread ở cột trái rồi gửi phản hồi.
+                        </div>
+                        <button
+                          class="user-btn primary"
+                          type="button"
+                          id="adminSupportSendBtn"
+                          onclick="sendAdminSupportMessage()"
+                        >
+                          Gửi phản hồi
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="admin-panel"
               id="adminPanelSystem"
               data-admin-panel="system"
               role="tabpanel"
@@ -3119,6 +3207,75 @@
         <!-- /content -->
       </div>
       <!-- /app-body -->
+
+      <button
+        class="support-fab"
+        type="button"
+        id="supportWidgetLauncher"
+        onclick="toggleSupportWidget()"
+        aria-label="Mở chat với admin"
+        hidden
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+          <path
+            d="M7 10.5h10M7 14.5h6m-5.2 5.5 1.9-3.6H18a3 3 0 0 0 3-3v-8a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h1.8Z"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <span class="support-fab-badge" id="supportFabBadge" hidden>0</span>
+      </button>
+
+      <div
+        class="support-widget"
+        id="supportWidget"
+        aria-hidden="true"
+        hidden
+      >
+        <div class="support-widget-head">
+          <div>
+            <strong>Chat với admin</strong>
+            <span id="supportWidgetStatus">Nhấn để mở hội thoại hỗ trợ trực tiếp.</span>
+          </div>
+          <button
+            class="support-widget-close"
+            type="button"
+            onclick="closeSupportWidget()"
+            aria-label="Đóng chat"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="support-widget-body">
+          <div class="support-timeline" id="supportConversationList">
+            <div class="support-empty">
+              Chưa có cuộc trò chuyện nào. Hãy gửi tin nhắn đầu tiên cho admin.
+            </div>
+          </div>
+          <div class="support-compose">
+            <label class="fl" for="supportMessageInput">Nội dung tin nhắn</label>
+            <textarea
+              class="fi support-textarea"
+              id="supportMessageInput"
+              rows="4"
+              placeholder="Ví dụ: Em đã chuyển khoản rồi nhưng chưa thấy duyệt, admin kiểm tra giúp em với."
+            ></textarea>
+            <div class="support-compose-actions">
+              <div class="support-compose-note" id="supportComposerNote">
+                Admin sẽ thấy tin nhắn này trong tab Quản trị > Tin nhắn.
+              </div>
+              <button
+                class="user-btn primary"
+                type="button"
+                id="supportSendBtn"
+                onclick="sendSupportMessage()"
+              >
+                Gửi cho admin
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <!-- /appScreen -->
 
@@ -3366,6 +3523,21 @@
               placeholder="https://example.com/anh.jpg"
               oninput="updateEditThumbPreview()"
             />
+            <input
+              type="file"
+              id="editOgImageFile"
+              accept="image/jpg,image/jpeg,image/png,image/webp"
+              style="display: none"
+              onchange="handleEditImageUpload(event)"
+            />
+            <button
+              class="btn-thumb"
+              type="button"
+              onclick="triggerEditImageUpload()"
+              title="Chọn ảnh từ thư mục"
+            >
+              📁 Ảnh
+            </button>
             <button
               class="btn-thumb"
               onclick="autoExtractThumb()"
@@ -3374,6 +3546,10 @@
               🖼️ Auto
             </button>
           </div>
+          <div
+            id="editImageUploadStatus"
+            style="display: none; margin-bottom: 8px; font-size: 11px; color: var(--text3)"
+          ></div>
         </div>
 
         <!-- Video fields (shown only when link_type=video) -->
@@ -3418,6 +3594,40 @@
               placeholder="🛒 Bấm vào đây để ủng hộ →"
               maxlength="100"
             />
+          </div>
+          <div class="form-group" style="margin-top: 10px">
+            <label class="fl">Link popup riêng theo từng mốc</label>
+            <div style="display: grid; gap: 8px">
+              <input
+                type="hidden"
+                id="editVideoPopupUrl3s"
+              />
+              <div
+                style="
+                  padding: 9px 12px;
+                  border: 1px dashed var(--border2);
+                  border-radius: 8px;
+                  background: var(--bg4);
+                  font-size: 12px;
+                  color: var(--text2);
+                "
+              >
+                Popup <strong style="color: var(--text)">3s</strong> mặc định mở
+                <strong style="color: var(--text)">link gốc của short link</strong>.
+              </div>
+              <input
+                type="url"
+                class="fi"
+                id="editVideoPopupUrl5s"
+                placeholder="Popup 5s mở link nào (để trống = dùng link gốc)"
+              />
+              <input
+                type="url"
+                class="fi"
+                id="editVideoPopupUrl300s"
+                placeholder="Popup 300s mở link nào (để trống = dùng link gốc)"
+              />
+            </div>
           </div>
         </div>
 

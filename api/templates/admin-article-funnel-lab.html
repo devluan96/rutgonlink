@@ -1,0 +1,1840 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Article Funnel Lab</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1220;
+        --panel: #101827;
+        --panel-soft: #16213a;
+        --line: rgba(148, 163, 184, 0.18);
+        --text: #f8fafc;
+        --muted: #95a3ba;
+        --brand: #f97316;
+        --brand-soft: rgba(249, 115, 22, 0.14);
+        --blue: #2563eb;
+        --green: #22c55e;
+        --red: #ef4444;
+        --shadow: 0 26px 60px rgba(2, 6, 23, 0.4);
+        --radius: 22px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(249, 115, 22, 0.14), transparent 28%),
+          radial-gradient(circle at top right, rgba(37, 99, 235, 0.16), transparent 26%),
+          var(--bg);
+        color: var(--text);
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: minmax(380px, 500px) minmax(0, 1fr);
+        gap: 22px;
+        padding: 24px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: linear-gradient(180deg, rgba(16, 24, 39, 0.98), rgba(11, 18, 32, 0.96));
+        box-shadow: var(--shadow);
+      }
+
+      .editor {
+        position: sticky;
+        top: 24px;
+        height: calc(100vh - 48px);
+        overflow: auto;
+        padding: 20px;
+      }
+
+      .preview-wrap {
+        padding: 20px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: var(--brand-soft);
+        color: #ffd9bf;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 14px 0 8px;
+        font-size: clamp(28px, 4vw, 42px);
+        line-height: 1.06;
+      }
+
+      h2 {
+        margin: 0 0 6px;
+        font-size: 16px;
+      }
+
+      .subhead {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .grid {
+        display: grid;
+        gap: 16px;
+        margin-top: 22px;
+      }
+
+      .section-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(15, 23, 42, 0.56);
+        padding: 16px;
+      }
+
+      .actions,
+      .block-toolbar,
+      .preview-controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .field-grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .field-grid.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      label {
+        font-size: 12px;
+        font-weight: 800;
+        color: #d8e2f0;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(15, 23, 42, 0.72);
+        color: var(--text);
+        padding: 12px 13px;
+        font: inherit;
+      }
+
+      textarea {
+        resize: vertical;
+        min-height: 96px;
+      }
+
+      .hint {
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      .btn,
+      .ghost-btn,
+      .block-btn,
+      .icon-btn,
+      .overlay-launch,
+      .comment-copy-btn,
+      .feed-btn {
+        appearance: none;
+        border: 1px solid transparent;
+        border-radius: 14px;
+        font: inherit;
+        cursor: pointer;
+        transition:
+          transform 0.16s ease,
+          border-color 0.16s ease,
+          background 0.16s ease,
+          opacity 0.16s ease;
+      }
+
+      .btn:hover,
+      .ghost-btn:hover,
+      .block-btn:hover,
+      .icon-btn:hover,
+      .overlay-launch:hover,
+      .comment-copy-btn:hover,
+      .feed-btn:hover {
+        transform: translateY(-1px);
+      }
+
+      .btn {
+        padding: 11px 14px;
+        background: linear-gradient(135deg, #fb923c, #f97316);
+        color: #fff7ed;
+        font-weight: 800;
+      }
+
+      .ghost-btn,
+      .comment-copy-btn,
+      .feed-btn {
+        padding: 11px 14px;
+        background: rgba(148, 163, 184, 0.08);
+        border-color: var(--line);
+        color: var(--text);
+      }
+
+      .block-btn {
+        padding: 10px 12px;
+        background: rgba(37, 99, 235, 0.12);
+        border-color: rgba(37, 99, 235, 0.22);
+        color: #dbeafe;
+      }
+
+      .block-list {
+        display: grid;
+        gap: 14px;
+        margin-top: 16px;
+      }
+
+      .block-item {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(11, 18, 32, 0.85);
+        padding: 14px;
+      }
+
+      .block-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .block-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.12);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .block-head-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .icon-btn {
+        width: 34px;
+        height: 34px;
+        background: rgba(148, 163, 184, 0.08);
+        border-color: var(--line);
+        color: var(--text);
+      }
+
+      .icon-btn.danger {
+        color: #fecaca;
+        border-color: rgba(239, 68, 68, 0.22);
+        background: rgba(239, 68, 68, 0.1);
+      }
+
+      .json-box {
+        margin-top: 10px;
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(2, 6, 23, 0.9);
+        border: 1px solid var(--line);
+        color: #cbd5e1;
+        font-size: 12px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .preview-frame {
+        width: min(100%, 960px);
+        margin: 0 auto;
+      }
+
+      .preview-topbar {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .preview-stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .comment-card {
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 22px;
+        background: #1d232f;
+        padding: 18px;
+      }
+
+      .comment-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .comment-author {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .comment-avatar {
+        display: grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #2563eb, #60a5fa);
+        font-weight: 800;
+      }
+
+      .comment-name {
+        font-weight: 800;
+      }
+
+      .comment-meta {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 2px;
+      }
+
+      .comment-bubble {
+        margin-top: 14px;
+        border-radius: 18px;
+        background: #242d3c;
+        padding: 14px;
+      }
+
+      .comment-link {
+        display: inline-block;
+        color: #7cc2ff;
+        font-weight: 700;
+        text-decoration: none;
+        word-break: break-word;
+      }
+
+      .link-preview {
+        margin-top: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 18px;
+        overflow: hidden;
+        background: #111827;
+      }
+
+      .link-preview-image {
+        aspect-ratio: 1200 / 630;
+        background: #0f172a center/cover no-repeat;
+      }
+
+      .link-preview-copy {
+        padding: 12px 14px;
+      }
+
+      .link-preview-domain {
+        color: #9ca3af;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .link-preview-title {
+        margin-top: 6px;
+        font-size: 26px;
+        line-height: 1.2;
+      }
+
+      .phone {
+        background: #05070c;
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        border-radius: 32px;
+        padding: 14px;
+        box-shadow: 0 32px 70px rgba(2, 6, 23, 0.48);
+      }
+
+      .phone-screen {
+        position: relative;
+        overflow: hidden;
+        border-radius: 24px;
+        min-height: 760px;
+        background: #0f1115;
+      }
+
+      .article {
+        min-height: 760px;
+        padding: 28px 0 60px;
+        background: #181a1d;
+        color: #f8fafc;
+      }
+
+      .article-inner {
+        width: min(100%, 652px);
+        margin: 0 auto;
+        padding: 0 18px;
+      }
+
+      .article-title {
+        margin: 0;
+        font-size: clamp(38px, 4vw, 62px);
+        line-height: 1.08;
+        letter-spacing: -0.04em;
+        font-weight: 400;
+      }
+
+      .article-blocks {
+        margin-top: 26px;
+        display: grid;
+        gap: 22px;
+      }
+
+      .article-paragraph {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.8;
+        color: #f8fafc;
+        white-space: pre-wrap;
+      }
+
+      .article-media {
+        overflow: hidden;
+        background: #050505;
+      }
+
+      .article-media img,
+      .article-media video {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .article-caption {
+        padding: 10px 12px 0;
+        color: #8ea0bc;
+        font-size: 13px;
+      }
+
+      .sensitive-wrap {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .sensitive-wrap img {
+        filter: blur(22px);
+        transform: scale(1.08);
+        transition:
+          filter 0.2s ease,
+          transform 0.2s ease;
+      }
+
+      .sensitive-wrap.revealed img {
+        filter: none;
+        transform: scale(1);
+      }
+
+      .reveal-btn {
+        position: absolute;
+        inset: auto 14px 14px 14px;
+        padding: 12px 14px;
+        border: 0;
+        border-radius: 14px;
+        background: rgba(15, 23, 42, 0.9);
+        color: #fff;
+        font: inherit;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .follow-box {
+        margin-top: 28px;
+        padding-top: 20px;
+        border-top: 1px solid rgba(148, 163, 184, 0.18);
+        display: grid;
+        gap: 16px;
+      }
+
+      .follow-row {
+        color: #f8fafc;
+        font-size: 18px;
+        line-height: 1.7;
+      }
+
+      .follow-row strong {
+        font-weight: 400;
+      }
+
+      .follow-row a {
+        color: #ffffff;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 4;
+      }
+
+      .overlay.show {
+        display: flex;
+      }
+
+      .overlay-stack {
+        position: relative;
+        width: min(100%, 352px);
+        min-height: 320px;
+      }
+
+      .overlay-card {
+        position: absolute;
+        inset: auto 0 0 0;
+        width: min(100%, 328px);
+        margin: 0 auto;
+        border-radius: 22px;
+        overflow: hidden;
+        background: #ffffff;
+        color: #0f172a;
+        box-shadow: 0 32px 70px rgba(0, 0, 0, 0.44);
+      }
+
+      .overlay-card img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .overlay-image-hit {
+        display: block;
+        cursor: pointer;
+      }
+
+      .overlay-close {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 36px;
+        height: 36px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.82);
+        color: #ffffff;
+        font: inherit;
+        font-weight: 800;
+        cursor: pointer;
+        z-index: 2;
+      }
+
+      .toast {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        max-width: 340px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(15, 23, 42, 0.96);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+        color: var(--text);
+        font-size: 13px;
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition:
+          opacity 0.18s ease,
+          transform 0.18s ease;
+      }
+
+      .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .muted-line {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      @media (max-width: 1180px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        .editor {
+          position: static;
+          height: auto;
+        }
+
+        .preview-topbar {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="panel editor">
+        <span class="eyebrow">Admin only • Sandbox</span>
+        <h1>Article Funnel Lab</h1>
+        <p class="subhead">
+          Khu dựng thử riêng cho kiểu comment Facebook → vào bài viết → popup 3s / 5s / 300s
+          → nhảy app. Trang này chỉ dành cho admin và không chạm vào luồng rút gọn hiện tại.
+        </p>
+
+        <div class="grid">
+          <div class="section-card">
+            <h2>Workspace</h2>
+            <div class="actions" style="margin-top: 12px">
+              <button class="btn" type="button" id="saveDraftBtn">Lưu draft local</button>
+              <button class="ghost-btn" type="button" id="loadPresetBtn">Nạp preset</button>
+              <button class="ghost-btn" type="button" id="resetDraftBtn">Xóa draft</button>
+              <button class="ghost-btn" type="button" id="copyJsonBtn">Copy JSON</button>
+              <a class="ghost-btn" href="/admin">Về admin</a>
+            </div>
+            <div class="muted-line" style="margin-top: 12px">
+              Gợi ý workflow: dựng bài trong lab, copy JSON config, chốt cấu trúc xong rồi mới
+              nối tiếp sang DB hoặc link type riêng.
+            </div>
+          </div>
+
+          <div class="section-card">
+            <h2>Thông tin bài viết</h2>
+            <div class="field-grid two" style="margin-top: 12px">
+              <div class="field">
+                <label for="sourceDomainInput">Domain hiển thị</label>
+                <input id="sourceDomainInput" type="text" />
+              </div>
+              <div class="field">
+                <label for="slugInput">Slug bài viết</label>
+                <input id="slugInput" type="text" />
+              </div>
+            </div>
+            <div class="field-grid" style="margin-top: 14px">
+              <div class="field">
+                <label for="titleInput">Tiêu đề</label>
+                <textarea id="titleInput" style="min-height: 88px"></textarea>
+              </div>
+              <div class="field">
+                <label>URL comment sẽ đặt</label>
+                <input id="articleUrlOutput" type="text" readonly />
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <h2>Link funnel</h2>
+            <div class="field-grid" style="margin-top: 12px">
+              <div class="field">
+                <label for="baseUrlInput">Link gốc / popup 3s mặc định</label>
+                <input id="baseUrlInput" type="url" />
+                <div class="hint">
+                  Đây là link đích mặc định của popup 3s. Nếu popup 5s và 300s để trống, chúng
+                  cũng sẽ dùng link này.
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label for="popup5sInput">Popup 5s override</label>
+                  <input id="popup5sInput" type="url" />
+                </div>
+                <div class="field">
+                  <label for="popup300sInput">Popup 300s override</label>
+                  <input id="popup300sInput" type="url" />
+                </div>
+              </div>
+              <div class="field-grid two">
+                <div class="field">
+                  <label for="overlayImageInput">Ảnh popup</label>
+                  <input id="overlayImageInput" type="url" />
+                </div>
+                <div class="field">
+                  <label for="shareImageInput">Ảnh share / hero đầu bài</label>
+                  <input id="shareImageInput" type="url" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <h2>Thông tin follow cuối trang</h2>
+            <div class="field-grid two" style="margin-top: 12px">
+              <div class="field">
+                <label for="groupLabelInput">Nhãn dòng 1</label>
+                <input id="groupLabelInput" type="text" />
+              </div>
+              <div class="field">
+                <label for="groupUrlInput">Link dòng 1</label>
+                <input id="groupUrlInput" type="url" />
+              </div>
+            </div>
+            <div class="field-grid two" style="margin-top: 14px">
+              <div class="field">
+                <label for="backupLabelInput">Nhãn dòng 2</label>
+                <input id="backupLabelInput" type="text" />
+              </div>
+              <div class="field">
+                <label for="backupUrlInput">Link dòng 2</label>
+                <input id="backupUrlInput" type="url" />
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <h2>Khối nội dung</h2>
+            <p class="subhead">
+              Bài viết kiểu này chủ yếu là ảnh và video xếp từ trên xuống. Phần preview bên phải
+              còn có mô phỏng “hiện dần” từng block.
+            </p>
+            <div class="block-toolbar" style="margin-top: 12px">
+              <button class="block-btn" type="button" data-add-block="image">
+                + Ảnh thường
+              </button>
+              <button class="block-btn" type="button" data-add-block="sensitive-image">
+                + Ảnh mờ
+              </button>
+              <button class="block-btn" type="button" data-add-block="video">
+                + Video
+              </button>
+            </div>
+            <div class="block-list" id="blockList"></div>
+          </div>
+
+          <div class="section-card">
+            <h2>Import / Export config</h2>
+            <div class="field-grid" style="margin-top: 12px">
+              <div class="field">
+                <label for="importInput">Dán JSON config để nạp lại</label>
+                <textarea id="importInput" placeholder='{"type":"article_funnel_lab", ...}'></textarea>
+              </div>
+            </div>
+            <div class="actions" style="margin-top: 12px">
+              <button class="ghost-btn" type="button" id="applyImportBtn">Áp JSON vào lab</button>
+              <button class="ghost-btn" type="button" id="fillImportBtn">Đổ JSON hiện tại</button>
+            </div>
+            <div class="json-box" id="jsonOutput"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel preview-wrap">
+        <div class="preview-frame">
+          <div class="preview-topbar">
+            <div>
+              <span class="eyebrow">Preview</span>
+              <p class="subhead" style="margin-top: 10px">
+                Mô phỏng 2 lớp: comment Facebook dẫn vào bài viết, rồi trong bài mới bật popup
+                deeplink theo mốc thời gian.
+              </p>
+            </div>
+            <div class="preview-controls">
+              <button class="ghost-btn" type="button" id="startTimersBtn">Start timers</button>
+              <button class="ghost-btn" type="button" id="show3sBtn">Show 3s</button>
+              <button class="ghost-btn" type="button" id="show5sBtn">Show 5s</button>
+              <button class="ghost-btn" type="button" id="show300sBtn">Show 300s</button>
+              <button class="ghost-btn" type="button" id="closeOverlayBtn">Ẩn popup</button>
+            </div>
+          </div>
+
+          <div class="preview-stack">
+            <section class="comment-card">
+              <div class="comment-head">
+                <div class="comment-author">
+                  <div class="comment-avatar">H</div>
+                  <div>
+                    <div class="comment-name">Hóng Hớt Đường Phố</div>
+                    <div class="comment-meta">Bình luận mẫu để đặt link bài viết</div>
+                  </div>
+                </div>
+                <button class="comment-copy-btn" type="button" id="copyArticleUrlBtn">
+                  Copy URL bài
+                </button>
+              </div>
+
+              <div class="comment-bubble">
+                <a class="comment-link" id="commentUrlPreview" href="#" target="_blank" rel="noopener"></a>
+                <div class="link-preview">
+                  <div class="link-preview-image" id="commentShareImage"></div>
+                  <div class="link-preview-copy">
+                    <div class="link-preview-domain" id="commentDomainPreview"></div>
+                    <div class="link-preview-title" id="commentTitlePreview"></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <div class="actions">
+              <button class="feed-btn" type="button" id="resetFeedBtn">Reset feed</button>
+              <button class="feed-btn" type="button" id="showNextBlockBtn">Hiện thêm 1 block</button>
+              <button class="feed-btn" type="button" id="showAllBlocksBtn">Hiện tất cả</button>
+              <div class="muted-line" id="feedStateLabel"></div>
+            </div>
+
+            <div class="phone">
+              <div class="phone-screen">
+                <div class="article">
+                  <div class="article-inner">
+                    <h2 class="article-title" id="previewTitle"></h2>
+                    <div class="article-blocks" id="previewBlocks"></div>
+                    <div class="follow-box">
+                      <div class="follow-row">
+                        <strong id="followGroupLabel"></strong>:
+                        <a id="followGroupLink" href="#" target="_blank" rel="noopener"></a>
+                      </div>
+                      <div class="follow-row">
+                        <strong id="followBackupLabel"></strong>:
+                        <a id="followBackupLink" href="#" target="_blank" rel="noopener"></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="overlay" id="overlay">
+                  <div class="overlay-stack" id="overlayStack"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+      (() => {
+        const STORAGE_KEY = "rgl-admin-article-funnel-lab-v2";
+        const clone = (value) => JSON.parse(JSON.stringify(value));
+        const newId = () =>
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+        const defaultState = {
+          sourceDomain: "honghot.site",
+          slug: "2026/06/26/ha-noi-24",
+          title: "Ha Noi: Vu viec buc xuc nhat luc nay",
+          baseUrl:
+            "https://shopee.vn/product/37251933/591989399?utm_source=admin-lab",
+          popup5sUrl: "",
+          popup300sUrl: "",
+          cta: "Bam vao day de mo app va xem san pham",
+          overlayImage:
+            "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80",
+          shareImage:
+            "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=1200&q=80",
+          groupLabel: "Group facebook",
+          groupUrl: "https://www.facebook.com/groups/example-group",
+          backupLabel: "Page phu",
+          backupUrl: "https://www.facebook.com/profile.php?id=61571239912820",
+          blocks: [
+            {
+              id: newId(),
+              type: "image",
+              text: "",
+              src: "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80",
+              caption: "Anh mo dau de neo tam ly va tao cam giac nhu mot bai viet that.",
+            },
+            {
+              id: newId(),
+              type: "video",
+              text: "",
+              src: "https://cdn.videy.co/jGmWQI0v1.mp4",
+              caption: "Video ngan o giua bai giup tang thoi gian onsite.",
+            },
+            {
+              id: newId(),
+              type: "sensitive-image",
+              text: "",
+              src: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80",
+              caption: "Neu can, co the lam kieu anh mo roi moi cho user bam de mo.",
+            },
+          ],
+        };
+
+        const state = loadState();
+        let activeStage = "";
+        let timer3s = null;
+        let timer5s = null;
+        let timer300s = null;
+        let visibleBlockCount = Math.min(state.blocks.length, 2);
+        let pendingStages = [];
+        const resolvedLaunchCache = new Map();
+        const resolvingLaunchCache = new Map();
+
+        const els = {
+          sourceDomainInput: document.getElementById("sourceDomainInput"),
+          slugInput: document.getElementById("slugInput"),
+          titleInput: document.getElementById("titleInput"),
+          articleUrlOutput: document.getElementById("articleUrlOutput"),
+          baseUrlInput: document.getElementById("baseUrlInput"),
+          popup5sInput: document.getElementById("popup5sInput"),
+          popup300sInput: document.getElementById("popup300sInput"),
+          overlayImageInput: document.getElementById("overlayImageInput"),
+          shareImageInput: document.getElementById("shareImageInput"),
+          groupLabelInput: document.getElementById("groupLabelInput"),
+          groupUrlInput: document.getElementById("groupUrlInput"),
+          backupLabelInput: document.getElementById("backupLabelInput"),
+          backupUrlInput: document.getElementById("backupUrlInput"),
+          importInput: document.getElementById("importInput"),
+          blockList: document.getElementById("blockList"),
+          jsonOutput: document.getElementById("jsonOutput"),
+          commentUrlPreview: document.getElementById("commentUrlPreview"),
+          commentDomainPreview: document.getElementById("commentDomainPreview"),
+          commentTitlePreview: document.getElementById("commentTitlePreview"),
+          commentShareImage: document.getElementById("commentShareImage"),
+          previewTitle: document.getElementById("previewTitle"),
+          previewBlocks: document.getElementById("previewBlocks"),
+          followGroupLabel: document.getElementById("followGroupLabel"),
+          followGroupLink: document.getElementById("followGroupLink"),
+          followBackupLabel: document.getElementById("followBackupLabel"),
+          followBackupLink: document.getElementById("followBackupLink"),
+          feedStateLabel: document.getElementById("feedStateLabel"),
+          overlay: document.getElementById("overlay"),
+          overlayStack: document.getElementById("overlayStack"),
+          toast: document.getElementById("toast"),
+        };
+
+        function loadState() {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return clone(defaultState);
+            const parsed = JSON.parse(raw);
+            return normalizeImportedState(parsed);
+          } catch {
+            return clone(defaultState);
+          }
+        }
+
+        function normalizeImportedState(input) {
+          const base = clone(defaultState);
+          const source = input && typeof input === "object" ? input : {};
+          const articleUrl = String(source.article_url || "").trim();
+          const fromUrl = splitArticleUrl(articleUrl);
+          const overlay = source.overlay && typeof source.overlay === "object" ? source.overlay : {};
+          const blockSource = Array.isArray(source.blocks) ? source.blocks : source.blocks || [];
+
+          return {
+            ...base,
+            sourceDomain: String(source.sourceDomain || fromUrl.domain || base.sourceDomain),
+            slug: String(source.slug || fromUrl.slug || base.slug),
+            title: String(source.title || base.title),
+            baseUrl: String(
+              source.baseUrl ||
+                source.popup_3s_url ||
+                overlay.popup_3s_url ||
+                base.baseUrl,
+            ),
+            popup5sUrl: String(
+              source.popup5sUrl ||
+                source.popup_5s_url ||
+                overlay.popup_5s_url ||
+                base.popup5sUrl,
+            ),
+            popup300sUrl: String(
+              source.popup300sUrl ||
+                source.popup_300s_url ||
+                overlay.popup_300s_url ||
+                base.popup300sUrl,
+            ),
+            cta: String(source.cta || overlay.cta || base.cta),
+            overlayImage: String(source.overlayImage || overlay.image || base.overlayImage),
+            shareImage: String(source.shareImage || source.share_image || base.shareImage),
+            groupLabel: String(source.groupLabel || source.group_label || base.groupLabel),
+            groupUrl: String(source.groupUrl || source.group_url || base.groupUrl),
+            backupLabel: String(source.backupLabel || source.backup_label || base.backupLabel),
+            backupUrl: String(source.backupUrl || source.backup_url || base.backupUrl),
+            blocks:
+              Array.isArray(blockSource) && blockSource.length
+                ? blockSource.map((block) => normalizeBlock(block))
+                : base.blocks.map((block) => normalizeBlock(block)),
+          };
+        }
+
+        function normalizeBlock(block) {
+          return {
+            id: block.id || newId(),
+            type: block.type || "paragraph",
+            text: String(block.text || ""),
+            src: String(block.src || ""),
+            caption: String(block.caption || ""),
+          };
+        }
+
+        function splitArticleUrl(url) {
+          try {
+            if (!url) return { domain: "", slug: "" };
+            const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+            const parsed = new URL(normalized);
+            return {
+              domain: parsed.hostname,
+              slug: parsed.pathname.replace(/^\/+/, ""),
+            };
+          } catch {
+            return { domain: "", slug: "" };
+          }
+        }
+
+        function getArticleUrl() {
+          const domain = state.sourceDomain.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+          const slug = state.slug.trim().replace(/^\/+/, "");
+          if (!domain && !slug) return "";
+          return `https://${domain}/${slug}`.replace(/\/+$/, "");
+        }
+
+        function getEffectiveTarget(stageKey) {
+          if (stageKey === "5s" && state.popup5sUrl.trim()) return state.popup5sUrl.trim();
+          if (stageKey === "300s" && state.popup300sUrl.trim()) return state.popup300sUrl.trim();
+          return state.baseUrl.trim();
+        }
+
+        function detectTargetPlatform(targetUrl) {
+          try {
+            if (!targetUrl) return "generic";
+            const normalized = /^https?:\/\//i.test(targetUrl)
+              ? targetUrl
+              : `https://${targetUrl}`;
+            const hostname = new URL(normalized).hostname.toLowerCase();
+            if (
+              hostname === "shopee.vn" ||
+              hostname.endsWith(".shopee.vn") ||
+              hostname === "s.shopee.vn" ||
+              hostname === "shope.ee"
+            ) {
+              return "shopee";
+            }
+            if (
+              hostname === "tiktok.com" ||
+              hostname.endsWith(".tiktok.com") ||
+              hostname === "vm.tiktok.com" ||
+              hostname === "vt.tiktok.com"
+            ) {
+              return "tiktok";
+            }
+          } catch (_) {}
+          return "generic";
+        }
+
+        function openViaAnchor(targetUrl, targetName, relValue) {
+          if (!targetUrl) return false;
+          try {
+            const anchor = document.createElement("a");
+            anchor.href = targetUrl;
+            anchor.rel = relValue || "noreferrer noopener";
+            anchor.target = targetName || "_self";
+            anchor.style.display = "none";
+            document.body.appendChild(anchor);
+            anchor.click();
+            setTimeout(() => {
+              try {
+                anchor.remove();
+              } catch (_) {}
+            }, 0);
+            return true;
+          } catch (_) {
+            return false;
+          }
+        }
+
+        function buildAndroidIntentUrl(targetUrl, packageName, fallbackUrl) {
+          if (!targetUrl || !packageName) return "";
+          try {
+            const parsed = new URL(targetUrl);
+            const noScheme = targetUrl.replace(/^https?:\/\//i, "");
+            const fallback = fallbackUrl || targetUrl;
+            return (
+              "intent://" +
+              noScheme +
+              "#Intent;scheme=" +
+              parsed.protocol.replace(":", "") +
+              ";package=" +
+              packageName +
+              ";S.browser_fallback_url=" +
+              encodeURIComponent(fallback) +
+              ";end"
+            );
+          } catch (_) {
+            return "";
+          }
+        }
+
+        async function resolveLaunchConfig(targetUrl) {
+          const cacheKey = String(targetUrl || "").trim();
+          if (!cacheKey) return null;
+          if (resolvedLaunchCache.has(cacheKey)) {
+            return resolvedLaunchCache.get(cacheKey);
+          }
+          if (resolvingLaunchCache.has(cacheKey)) {
+            return resolvingLaunchCache.get(cacheKey);
+          }
+
+          const request = fetch("/api/admin/article-funnel-lab/resolve-target", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: cacheKey }),
+          })
+            .then(async (response) => {
+              if (!response.ok) {
+                throw new Error("resolve_failed");
+              }
+              const data = await response.json();
+              resolvedLaunchCache.set(cacheKey, data);
+              resolvingLaunchCache.delete(cacheKey);
+              return data;
+            })
+            .catch((error) => {
+              resolvingLaunchCache.delete(cacheKey);
+              throw error;
+            });
+
+          resolvingLaunchCache.set(cacheKey, request);
+          return request;
+        }
+
+        function buildFallbackLaunchConfig(targetUrl) {
+          const platform = detectTargetPlatform(targetUrl);
+          return {
+            target_url: targetUrl,
+            direct_platform: platform,
+            direct_web_url: targetUrl,
+            direct_app_url: targetUrl,
+            direct_ios_url: targetUrl,
+            direct_ios_fb_url: targetUrl,
+            direct_ios_browser_url: targetUrl,
+            direct_android_url: targetUrl,
+            direct_android_intent_url:
+              platform === "shopee"
+                ? buildAndroidIntentUrl(targetUrl, "com.shopee.vn", targetUrl)
+                : "",
+            direct_android_package:
+              platform === "shopee"
+                ? "com.shopee.vn"
+                : platform === "tiktok"
+                  ? "com.zhiliaoapp.musically"
+                  : "",
+          };
+        }
+
+        function primeResolvedTarget(targetUrl) {
+          if (!targetUrl) return;
+          resolveLaunchConfig(targetUrl).catch(() => {});
+        }
+
+        function primeResolvedTargets() {
+          [
+            getEffectiveTarget("3s"),
+            getEffectiveTarget("5s"),
+            getEffectiveTarget("300s"),
+          ]
+            .filter(Boolean)
+            .forEach((targetUrl) => primeResolvedTarget(targetUrl));
+        }
+
+        function launchLabTarget(launchConfig) {
+          if (!launchConfig) return false;
+
+          const ua = navigator.userAgent || "";
+          const isIOS = /iphone|ipad|ipod/i.test(ua);
+          const isAndroid = /android/i.test(ua);
+          const isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
+          const isZalo = /ZaloApp/i.test(ua);
+          const isInApp = isFacebook || isZalo;
+          const platform = launchConfig.direct_platform || "generic";
+          const targetUrl =
+            launchConfig.direct_web_url ||
+            launchConfig.target_url ||
+            launchConfig.direct_app_url ||
+            "";
+
+          if (platform === "shopee") {
+            if (isAndroid) {
+              const intentUrl =
+                launchConfig.direct_android_intent_url ||
+                buildAndroidIntentUrl(
+                  launchConfig.direct_android_url || targetUrl,
+                  launchConfig.direct_android_package || "com.shopee.vn",
+                  launchConfig.direct_web_url || targetUrl,
+                );
+              if (intentUrl) {
+                openViaAnchor(intentUrl);
+              } else if (launchConfig.direct_app_url) {
+                openViaAnchor(launchConfig.direct_app_url);
+              } else {
+                openViaAnchor(targetUrl, "_blank", "noopener");
+              }
+              setTimeout(() => {
+                if (!document.hidden) {
+                  openViaAnchor(
+                    launchConfig.direct_web_url || targetUrl,
+                    "_blank",
+                    "noopener",
+                  );
+                }
+              }, 1600);
+              return true;
+            }
+
+            if (isIOS) {
+              const iosTarget = isInApp
+                ? (
+                    launchConfig.direct_ios_fb_url ||
+                    launchConfig.direct_web_url ||
+                    launchConfig.direct_ios_url
+                  )
+                : (
+                    launchConfig.direct_ios_browser_url ||
+                    launchConfig.direct_ios_url ||
+                    launchConfig.direct_web_url
+                  );
+              openViaAnchor(
+                iosTarget || targetUrl,
+                isInApp ? "_blank" : "_self",
+                "noopener",
+              );
+              setTimeout(() => {
+                if (!document.hidden) {
+                  openViaAnchor(
+                    launchConfig.direct_web_url || targetUrl,
+                    "_blank",
+                    "noopener",
+                  );
+                }
+              }, isInApp ? 1500 : 1600);
+              return true;
+            }
+
+            return openViaAnchor(
+              launchConfig.direct_web_url || targetUrl,
+              "_blank",
+              "noopener",
+            );
+          }
+
+          if (platform === "tiktok") {
+            const tiktokTarget = isIOS
+              ? (
+                  launchConfig.direct_ios_url ||
+                  launchConfig.direct_app_url ||
+                  launchConfig.direct_web_url
+                )
+              : isAndroid
+                ? (
+                    launchConfig.direct_android_url ||
+                    launchConfig.direct_app_url ||
+                    launchConfig.direct_web_url
+                  )
+                : launchConfig.direct_web_url || targetUrl;
+            if (isAndroid) {
+              if (tiktokTarget) {
+                openViaAnchor(tiktokTarget);
+              }
+              setTimeout(() => {
+                if (!document.hidden) {
+                  openViaAnchor(
+                    launchConfig.direct_web_url || targetUrl,
+                    "_blank",
+                    "noopener",
+                  );
+                }
+              }, 1600);
+              return true;
+            }
+
+            if (isIOS) {
+              if (tiktokTarget) {
+                openViaAnchor(
+                  tiktokTarget,
+                  isInApp ? "_blank" : "_self",
+                  "noopener",
+                );
+              }
+              setTimeout(() => {
+                if (!document.hidden) {
+                  openViaAnchor(
+                    launchConfig.direct_web_url || targetUrl,
+                    "_blank",
+                    "noopener",
+                  );
+                }
+              }, isInApp ? 1500 : 1600);
+              return true;
+            }
+
+            return openViaAnchor(tiktokTarget || targetUrl, "_blank", "noopener");
+          }
+
+          return openViaAnchor(targetUrl, "_blank", "noopener");
+        }
+
+        function getExportPayload() {
+          return {
+            type: "article_funnel_lab",
+            sourceDomain: state.sourceDomain.trim(),
+            slug: state.slug.trim(),
+            article_url: getArticleUrl(),
+            title: state.title.trim(),
+            share_image: state.shareImage.trim(),
+            group_label: state.groupLabel.trim(),
+            group_url: state.groupUrl.trim(),
+            backup_label: state.backupLabel.trim(),
+            backup_url: state.backupUrl.trim(),
+            overlay: {
+              cta: state.cta.trim(),
+              image: state.overlayImage.trim(),
+              popup_3s_url: state.baseUrl.trim(),
+              popup_5s_url: state.popup5sUrl.trim() || state.baseUrl.trim(),
+              popup_300s_url: state.popup300sUrl.trim() || state.baseUrl.trim(),
+            },
+            blocks: state.blocks.map((block) => ({
+              type: block.type,
+              text: block.text || "",
+              src: block.src || "",
+              caption: block.caption || "",
+            })),
+          };
+        }
+
+        function saveState(message) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          if (message) showToast(message);
+        }
+
+        function showToast(message) {
+          els.toast.textContent = message;
+          els.toast.classList.add("show");
+          clearTimeout(showToast.timer);
+          showToast.timer = setTimeout(() => {
+            els.toast.classList.remove("show");
+          }, 2200);
+        }
+
+        function resetTimers() {
+          [timer3s, timer5s, timer300s].forEach((timer) => {
+            if (timer) clearTimeout(timer);
+          });
+          timer3s = timer5s = timer300s = null;
+        }
+
+        function clearResolvedCache() {
+          resolvedLaunchCache.clear();
+          resolvingLaunchCache.clear();
+        }
+
+        function getStackStyle(index, total) {
+          const depthFromTop = total - index - 1;
+          const offset = depthFromTop * 16;
+          const scale = 1 - depthFromTop * 0.035;
+          const opacity = Math.max(0.48, 1 - depthFromTop * 0.14);
+          return `transform: translateY(${offset}px) scale(${scale}); opacity: ${opacity}; z-index: ${index + 1};`;
+        }
+
+        function renderOverlayStack() {
+          if (!pendingStages.length) {
+            els.overlay.classList.remove("show");
+            els.overlayStack.innerHTML = "";
+            return;
+          }
+
+          els.overlay.classList.add("show");
+          els.overlayStack.innerHTML = pendingStages
+            .map((stageKey, index) => {
+              const target = getEffectiveTarget(stageKey);
+              const isTop = index === pendingStages.length - 1;
+              return `
+                <div class="overlay-card" style="${getStackStyle(index, pendingStages.length)}" data-overlay-card="${stageKey}">
+                  <button class="overlay-close" type="button" data-overlay-close="${stageKey}">×</button>
+                  <a
+                    class="overlay-image-hit"
+                    href="${escapeAttr(target || "#")}"
+                    target="_blank"
+                    rel="noopener"
+                    data-overlay-launch="${stageKey}"
+                    data-target="${escapeAttr(target || "")}"
+                    ${isTop ? "" : 'tabindex="-1"'}
+                  >
+                    <img src="${escapeAttr(state.overlayImage.trim() || state.shareImage.trim())}" alt="" />
+                  </a>
+                </div>
+              `;
+            })
+            .join("");
+        }
+
+        function resetFeed(count) {
+          visibleBlockCount = typeof count === "number" ? count : Math.min(state.blocks.length, 2);
+          renderPreviewBlocks();
+          renderPreviewShell();
+        }
+
+        function showAllBlocks() {
+          visibleBlockCount = state.blocks.length;
+          renderPreviewBlocks();
+          renderPreviewShell();
+        }
+
+        function showNextBlock() {
+          visibleBlockCount = Math.min(state.blocks.length, visibleBlockCount + 1);
+          renderPreviewBlocks();
+          renderPreviewShell();
+        }
+
+        function renderBlockEditor() {
+          els.blockList.innerHTML = state.blocks
+            .map((block, index) => {
+              const typeLabel =
+                block.type === "paragraph"
+                  ? "Đoạn text"
+                  : block.type === "image"
+                    ? "Ảnh thường"
+                    : block.type === "sensitive-image"
+                      ? "Ảnh mờ"
+                      : "Video";
+              return `
+                <div class="block-item">
+                  <div class="block-head">
+                    <span class="block-chip">${index + 1}. ${typeLabel}</span>
+                    <div class="block-head-actions">
+                      <button class="icon-btn" type="button" data-move-up="${block.id}" title="Đẩy lên">↑</button>
+                      <button class="icon-btn" type="button" data-move-down="${block.id}" title="Đẩy xuống">↓</button>
+                      <button class="icon-btn danger" type="button" data-remove-block="${block.id}" title="Xóa">✕</button>
+                    </div>
+                  </div>
+                  ${
+                    block.type === "paragraph"
+                      ? `
+                        <div class="field">
+                          <label>Nội dung</label>
+                          <textarea data-field="text" data-block-id="${block.id}">${escapeHtml(block.text || "")}</textarea>
+                        </div>
+                      `
+                      : `
+                        <div class="field-grid">
+                          <div class="field">
+                            <label>${block.type === "video" ? "URL video MP4" : "URL ảnh"}</label>
+                            <input type="url" value="${escapeAttr(block.src || "")}" data-field="src" data-block-id="${block.id}" />
+                          </div>
+                          <div class="field">
+                            <label>Caption</label>
+                            <input type="text" value="${escapeAttr(block.caption || "")}" data-field="caption" data-block-id="${block.id}" />
+                          </div>
+                        </div>
+                      `
+                  }
+                </div>
+              `;
+            })
+            .join("");
+        }
+
+        function renderPreviewBlocks() {
+          const visibleBlocks = state.blocks.slice(0, Math.max(0, visibleBlockCount));
+          els.previewBlocks.innerHTML = visibleBlocks
+            .map((block) => {
+              if (block.type === "paragraph") {
+                return `<p class="article-paragraph">${escapeHtml(block.text || "")}</p>`;
+              }
+              if (block.type === "video") {
+                return `
+                  <figure class="article-media">
+                    <video controls preload="metadata" src="${escapeAttr(block.src || "")}"></video>
+                    ${block.caption ? `<figcaption class="article-caption">${escapeHtml(block.caption)}</figcaption>` : ""}
+                  </figure>
+                `;
+              }
+              if (block.type === "sensitive-image") {
+                return `
+                  <figure class="article-media">
+                    <div class="sensitive-wrap" data-sensitive-wrap>
+                      <img src="${escapeAttr(block.src || "")}" alt="" />
+                      <button class="reveal-btn" type="button" data-reveal-sensitive>Bấm để hiện ảnh</button>
+                    </div>
+                    ${block.caption ? `<figcaption class="article-caption">${escapeHtml(block.caption)}</figcaption>` : ""}
+                  </figure>
+                `;
+              }
+              return `
+                <figure class="article-media">
+                  <img src="${escapeAttr(block.src || "")}" alt="" />
+                  ${block.caption ? `<figcaption class="article-caption">${escapeHtml(block.caption)}</figcaption>` : ""}
+                </figure>
+              `;
+            })
+            .join("");
+
+          els.previewBlocks.querySelectorAll("[data-reveal-sensitive]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              btn.closest("[data-sensitive-wrap]")?.classList.add("revealed");
+              btn.remove();
+            });
+          });
+
+          els.feedStateLabel.textContent = `Đang hiện ${visibleBlocks.length}/${state.blocks.length} block`;
+        }
+
+        function renderPreviewShell() {
+          const articleUrl = getArticleUrl();
+          els.articleUrlOutput.value = articleUrl;
+          els.commentUrlPreview.textContent = articleUrl || "https://domain-cua-ban/slug-bai-viet";
+          els.commentUrlPreview.href = articleUrl || "#";
+          els.commentDomainPreview.textContent = (state.sourceDomain.trim() || "honghot.site").toUpperCase();
+          els.commentTitlePreview.textContent = state.title.trim() || "Tiêu đề bài viết";
+          els.commentShareImage.style.backgroundImage = state.shareImage.trim()
+            ? `url("${escapeCssUrl(state.shareImage.trim())}")`
+            : "none";
+          els.previewTitle.textContent = state.title.trim() || "Tiêu đề bài viết";
+          els.followGroupLabel.textContent = state.groupLabel.trim() || "Group facebook";
+          els.followGroupLink.textContent = state.groupUrl.trim() || "https://facebook.com";
+          els.followGroupLink.href = state.groupUrl.trim() || "#";
+          els.followBackupLabel.textContent = state.backupLabel.trim() || "Page phu";
+          els.followBackupLink.textContent = state.backupUrl.trim() || "https://facebook.com";
+          els.followBackupLink.href = state.backupUrl.trim() || "#";
+        }
+
+        function renderJsonOutput() {
+          els.jsonOutput.textContent = JSON.stringify(getExportPayload(), null, 2);
+        }
+
+        function syncFields() {
+          els.sourceDomainInput.value = state.sourceDomain;
+          els.slugInput.value = state.slug;
+          els.titleInput.value = state.title;
+          els.baseUrlInput.value = state.baseUrl;
+          els.popup5sInput.value = state.popup5sUrl;
+          els.popup300sInput.value = state.popup300sUrl;
+          els.overlayImageInput.value = state.overlayImage;
+          els.shareImageInput.value = state.shareImage;
+          els.groupLabelInput.value = state.groupLabel;
+          els.groupUrlInput.value = state.groupUrl;
+          els.backupLabelInput.value = state.backupLabel;
+          els.backupUrlInput.value = state.backupUrl;
+        }
+
+        function render() {
+          if (visibleBlockCount > state.blocks.length) {
+            visibleBlockCount = state.blocks.length;
+          }
+          syncFields();
+          renderBlockEditor();
+          renderPreviewBlocks();
+          renderPreviewShell();
+          renderJsonOutput();
+          renderOverlayStack();
+        }
+
+        function addBlock(type) {
+          state.blocks.push({
+            id: newId(),
+            type,
+            text: type === "paragraph" ? "Nhap noi dung moi..." : "",
+            src: "",
+            caption: "",
+          });
+          render();
+          saveState("Đã thêm block mới");
+        }
+
+        function moveBlock(blockId, direction) {
+          const index = state.blocks.findIndex((block) => block.id === blockId);
+          if (index === -1) return;
+          const targetIndex = direction === "up" ? index - 1 : index + 1;
+          if (targetIndex < 0 || targetIndex >= state.blocks.length) return;
+          const [block] = state.blocks.splice(index, 1);
+          state.blocks.splice(targetIndex, 0, block);
+          render();
+          saveState();
+        }
+
+        function removeBlock(blockId) {
+          state.blocks = state.blocks.filter((block) => block.id !== blockId);
+          if (!state.blocks.length) {
+            state.blocks.push(normalizeBlock(defaultState.blocks[0]));
+          }
+          render();
+          saveState("Đã xóa block");
+        }
+
+        function openOverlay(stageKey) {
+          activeStage = stageKey;
+          primeResolvedTarget(getEffectiveTarget(stageKey));
+          if (!pendingStages.includes(stageKey)) {
+            pendingStages.push(stageKey);
+          }
+          renderOverlayStack();
+        }
+
+        function closeOverlay(stageKey) {
+          if (stageKey) {
+            pendingStages = pendingStages.filter((item) => item !== stageKey);
+          } else {
+            pendingStages = [];
+          }
+          if (pendingStages.length) {
+            activeStage = pendingStages[pendingStages.length - 1];
+          } else {
+            activeStage = "";
+          }
+          renderOverlayStack();
+        }
+
+        function startTimers() {
+          resetTimers();
+          closeOverlay();
+          primeResolvedTargets();
+          showToast("Đã bắt đầu mô phỏng timer 3s / 5s / 300s");
+          timer3s = setTimeout(() => openOverlay("3s"), 3000);
+          timer5s = setTimeout(() => openOverlay("5s"), 5000);
+          timer300s = setTimeout(() => openOverlay("300s"), 300000);
+        }
+
+        function applyImport() {
+          const raw = els.importInput.value.trim();
+          if (!raw) {
+            showToast("Chưa có JSON để import");
+            return;
+          }
+
+          try {
+            const parsed = JSON.parse(raw);
+            const nextState = normalizeImportedState(parsed);
+            Object.keys(state).forEach((key) => delete state[key]);
+            Object.assign(state, nextState);
+            resetTimers();
+            clearResolvedCache();
+            closeOverlay();
+            resetFeed();
+            render();
+            saveState("Đã áp JSON vào lab");
+          } catch {
+            showToast("JSON không hợp lệ");
+          }
+        }
+
+        function copyCurrentJsonToImport() {
+          els.importInput.value = JSON.stringify(getExportPayload(), null, 2);
+          showToast("Đã đổ JSON hiện tại xuống ô import");
+        }
+
+        function loadPreset() {
+          Object.keys(state).forEach((key) => delete state[key]);
+          Object.assign(state, clone(defaultState));
+          resetTimers();
+          clearResolvedCache();
+          closeOverlay();
+          resetFeed();
+          render();
+          saveState("Đã nạp lại preset");
+        }
+
+        function escapeHtml(value) {
+          return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+        }
+
+        function escapeAttr(value) {
+          return escapeHtml(value).replace(/'/g, "&#39;");
+        }
+
+        function escapeCssUrl(value) {
+          return String(value || "").replace(/"/g, '\\"');
+        }
+
+        function shortUrl(value) {
+          const raw = String(value || "").trim();
+          if (!raw) return "chưa có";
+          return raw.length > 84 ? `${raw.slice(0, 81)}...` : raw;
+        }
+
+        document.querySelectorAll("[data-add-block]").forEach((button) => {
+          button.addEventListener("click", () => addBlock(button.dataset.addBlock));
+        });
+
+        els.blockList.addEventListener("input", (event) => {
+          const target = event.target;
+          const field = target.dataset.field;
+          const blockId = target.dataset.blockId;
+          if (!field || !blockId) return;
+          const block = state.blocks.find((item) => item.id === blockId);
+          if (!block) return;
+          block[field] = target.value;
+          renderPreviewBlocks();
+          renderPreviewShell();
+          renderJsonOutput();
+          saveState();
+        });
+
+        els.blockList.addEventListener("click", (event) => {
+          const button = event.target.closest("button");
+          if (!button) return;
+          const moveUpId = button.dataset.moveUp;
+          const moveDownId = button.dataset.moveDown;
+          const removeId = button.dataset.removeBlock;
+          if (moveUpId) moveBlock(moveUpId, "up");
+          if (moveDownId) moveBlock(moveDownId, "down");
+          if (removeId) removeBlock(removeId);
+        });
+
+        [
+          ["sourceDomainInput", "sourceDomain"],
+          ["slugInput", "slug"],
+          ["titleInput", "title"],
+          ["baseUrlInput", "baseUrl"],
+          ["popup5sInput", "popup5sUrl"],
+          ["popup300sInput", "popup300sUrl"],
+          ["overlayImageInput", "overlayImage"],
+          ["shareImageInput", "shareImage"],
+          ["groupLabelInput", "groupLabel"],
+          ["groupUrlInput", "groupUrl"],
+          ["backupLabelInput", "backupLabel"],
+          ["backupUrlInput", "backupUrl"],
+        ].forEach(([elementKey, stateKey]) => {
+          const input = els[elementKey];
+          input.addEventListener("input", () => {
+            state[stateKey] = input.value;
+            if (
+              stateKey === "baseUrl" ||
+              stateKey === "popup5sUrl" ||
+              stateKey === "popup300sUrl"
+            ) {
+              clearResolvedCache();
+            }
+            renderPreviewShell();
+            renderJsonOutput();
+            saveState();
+          });
+        });
+
+        document.getElementById("saveDraftBtn").addEventListener("click", () => {
+          saveState("Đã lưu draft local");
+        });
+
+        document.getElementById("loadPresetBtn").addEventListener("click", loadPreset);
+
+        document.getElementById("resetDraftBtn").addEventListener("click", () => {
+          localStorage.removeItem(STORAGE_KEY);
+          loadPreset();
+          showToast("Đã xóa draft local và quay về preset");
+        });
+
+        document.getElementById("copyJsonBtn").addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(JSON.stringify(getExportPayload(), null, 2));
+            showToast("Đã copy JSON config");
+          } catch {
+            showToast("Không copy được clipboard trên trình duyệt này");
+          }
+        });
+
+        document.getElementById("applyImportBtn").addEventListener("click", applyImport);
+        document.getElementById("fillImportBtn").addEventListener("click", copyCurrentJsonToImport);
+
+        document.getElementById("copyArticleUrlBtn").addEventListener("click", async () => {
+          const articleUrl = getArticleUrl();
+          if (!articleUrl) {
+            showToast("Chưa có URL bài viết để copy");
+            return;
+          }
+          try {
+            await navigator.clipboard.writeText(articleUrl);
+            showToast("Đã copy URL bài viết");
+          } catch {
+            showToast("Không copy được URL bài viết");
+          }
+        });
+
+        document.getElementById("startTimersBtn").addEventListener("click", startTimers);
+        document.getElementById("show3sBtn").addEventListener("click", () => openOverlay("3s"));
+        document.getElementById("show5sBtn").addEventListener("click", () => openOverlay("5s"));
+        document.getElementById("show300sBtn").addEventListener("click", () => openOverlay("300s"));
+        document.getElementById("closeOverlayBtn").addEventListener("click", closeOverlay);
+        document.getElementById("resetFeedBtn").addEventListener("click", () => resetFeed());
+        document.getElementById("showNextBlockBtn").addEventListener("click", showNextBlock);
+        document.getElementById("showAllBlocksBtn").addEventListener("click", showAllBlocks);
+
+        els.overlay.addEventListener("click", (event) => {
+          if (event.target === els.overlay) closeOverlay();
+        });
+
+        els.overlayStack.addEventListener("click", (event) => {
+          const launchButton = event.target.closest("[data-overlay-launch]");
+          if (launchButton) {
+            event.preventDefault();
+            const stageKey = launchButton.dataset.overlayLaunch || "";
+            const target = launchButton.dataset.target || "";
+            if (target) {
+              const resolvedConfig =
+                resolvedLaunchCache.get(target) || buildFallbackLaunchConfig(target);
+              launchLabTarget(resolvedConfig);
+              if (!resolvedLaunchCache.has(target)) {
+                primeResolvedTarget(target);
+              }
+            }
+            showToast(`Đang thử mở app ở popup ${stageKey || "?"}`);
+            closeOverlay(stageKey);
+            return;
+          }
+
+          const closeButton = event.target.closest("[data-overlay-close]");
+          if (closeButton) {
+            const stageKey = closeButton.dataset.overlayClose || "";
+            closeOverlay(stageKey);
+          }
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>

@@ -213,6 +213,11 @@
       ) {
         return "/dashboard";
       }
+      target.searchParams.delete("next");
+      target.searchParams.delete("code");
+      target.searchParams.delete("error");
+      target.searchParams.delete("error_description");
+      target.searchParams.delete("state");
       const path = `${target.pathname}${target.search}${target.hash}`;
       return path || "/dashboard";
     } catch {
