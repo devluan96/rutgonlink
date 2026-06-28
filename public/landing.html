@@ -5747,7 +5747,9 @@
       class="landing-support-fab"
       type="button"
       id="landingSupportLauncher"
-      aria-label="Mở chat với admin"
+      aria-expanded="false"
+      onclick="window.toggleLandingSupportPanel?.(); return false;"
+      aria-label="Mở hỗ trợ trực tiếp"
     >
       <span class="landing-support-fab-core" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
@@ -5758,13 +5760,13 @@
           />
         </svg>
       </span>
-      <span class="landing-support-fab-label">Chat admin</span>
+      <span class="landing-support-fab-label">Hỗ trợ nhanh</span>
     </button>
 
     <div class="landing-support-panel" id="landingSupportPanel" aria-hidden="true">
       <div class="landing-support-head">
         <div>
-          <strong>Chat với admin</strong>
+          <strong>Hỗ trợ trực tiếp</strong>
           <span id="landingSupportIntro">
             Hỗ trợ thanh toán, mở gói và kiểm tra lịch sử ngay trong hộp chat.
           </span>
@@ -5780,7 +5782,7 @@
       </div>
       <div class="landing-support-body">
         <div class="landing-support-status" id="landingSupportStatus">
-          Đăng nhập để nhắn trực tiếp với admin và giữ lại toàn bộ lịch sử hội thoại.
+          Đăng nhập để nhắn trực tiếp với đội hỗ trợ và giữ lại toàn bộ lịch sử hội thoại.
         </div>
         <div class="landing-support-actions">
           <a class="btn btn-brand" id="landingSupportPrimary" href="/login">Đăng nhập</a>
@@ -5788,6 +5790,91 @@
         </div>
       </div>
     </div>
+
+    <script>
+      (() => {
+        const launcher = document.getElementById("landingSupportLauncher");
+        const panel = document.getElementById("landingSupportPanel");
+        const closeBtn = document.getElementById("landingSupportClose");
+        const heading = panel?.querySelector("strong");
+        const intro = document.getElementById("landingSupportIntro");
+        const status = document.getElementById("landingSupportStatus");
+        const primary = document.getElementById("landingSupportPrimary");
+        const secondary = document.getElementById("landingSupportSecondary");
+        if (!launcher || !panel || !closeBtn) return;
+
+        const nextPath = `${location.pathname}${location.search}${location.hash}`;
+        const loginUrl = new URL("/login", location.origin);
+        const registerUrl = new URL("/register", location.origin);
+        loginUrl.searchParams.set("next", nextPath);
+        registerUrl.searchParams.set("next", nextPath);
+
+        const setOpen = (nextOpen) => {
+          const open = !!nextOpen;
+          panel.classList.toggle("show", open);
+          panel.setAttribute("aria-hidden", open ? "false" : "true");
+          launcher.setAttribute("aria-expanded", open ? "true" : "false");
+          panel.style.opacity = open ? "1" : "0";
+          panel.style.transform = open
+            ? "translateY(0) scale(1)"
+            : "translateY(12px) scale(0.98)";
+          panel.style.pointerEvents = open ? "auto" : "none";
+        };
+
+        window.toggleLandingSupportPanel = () => {
+          const isOpen = panel.getAttribute("aria-hidden") === "false";
+          setOpen(!isOpen);
+        };
+        window.closeLandingSupportPanel = () => {
+          setOpen(false);
+        };
+
+        launcher.setAttribute("aria-label", "M\u1edf h\u1ed7 tr\u1ee3 tr\u1ef1c ti\u1ebfp");
+        launcher.setAttribute("aria-expanded", "false");
+        closeBtn.setAttribute("aria-label", "\u0110\u00f3ng chat");
+        closeBtn.textContent = "\u2715";
+        if (heading) heading.textContent = "H\u1ed7 tr\u1ee3 tr\u1ef1c ti\u1ebfp";
+        if (intro) {
+          intro.textContent =
+            "H\u1ed7 tr\u1ee3 thanh to\u00e1n, m\u1edf g\u00f3i v\u00e0 ki\u1ec3m tra l\u1ecbch s\u1eed ngay trong h\u1ed9p chat.";
+        }
+        if (status) {
+          status.textContent =
+            "\u0110\u0103ng nh\u1eadp \u0111\u1ec3 nh\u1eafn tr\u1ef1c ti\u1ebfp v\u1edbi \u0111\u1ed9i h\u1ed7 tr\u1ee3 v\u00e0 gi\u1eef l\u1ea1i to\u00e0n b\u1ed9 l\u1ecbch s\u1eed h\u1ed9i tho\u1ea1i.";
+        }
+        if (primary) {
+          primary.textContent = "\u0110\u0103ng nh\u1eadp";
+          primary.href = `${loginUrl.pathname}${loginUrl.search}${loginUrl.hash}`;
+        }
+        if (secondary) {
+          secondary.hidden = false;
+          secondary.textContent = "T\u1ea1o t\u00e0i kho\u1ea3n";
+          secondary.href = `${registerUrl.pathname}${registerUrl.search}${registerUrl.hash}`;
+        }
+
+        setOpen(false);
+
+        launcher.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          window.toggleLandingSupportPanel();
+        });
+        closeBtn.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          window.closeLandingSupportPanel();
+        });
+        document.addEventListener("click", (event) => {
+          if (
+            panel.getAttribute("aria-hidden") === "false" &&
+            !launcher.contains(event.target) &&
+            !panel.contains(event.target)
+          ) {
+            window.closeLandingSupportPanel();
+          }
+        });
+      })();
+    </script>
 
     <footer class="footer">
       <div class="container">
@@ -5993,7 +6080,7 @@
           `${location.pathname}${location.search}${location.hash}`;
 
         const buildLandingAuthUrl = (mode = "login") => {
-          const path = mode === "register" ? "/user/register" : "/user/login";
+          const path = mode === "register" ? "/register" : "/login";
           const url = new URL(path, location.origin);
           url.searchParams.set("next", getLandingNextUrl());
           return `${url.pathname}${url.search}${url.hash}`;
@@ -6031,6 +6118,7 @@
               landingAuthName.textContent = getLandingDisplayName(authUser);
           }
           renderLandingSupportState(authUser);
+          syncLandingSupportCopy(authUser);
         };
 
         const setLandingSupportPanelOpen = (nextOpen) => {
@@ -6041,6 +6129,17 @@
             "aria-hidden",
             landingSupportOpen ? "false" : "true",
           );
+          landingSupportLauncher?.setAttribute(
+            "aria-expanded",
+            landingSupportOpen ? "true" : "false",
+          );
+        };
+
+        window.toggleLandingSupportPanel = () => {
+          setLandingSupportPanelOpen(!landingSupportOpen);
+        };
+        window.closeLandingSupportPanel = () => {
+          setLandingSupportPanelOpen(false);
         };
 
         const renderLandingSupportState = (authUser) => {
@@ -6060,7 +6159,7 @@
             landingSupportIntro.textContent =
               "Hỗ trợ thanh toán, mở gói và kiểm tra lịch sử ngay trong hộp chat.";
             landingSupportStatus.textContent =
-              "Đăng nhập để nhắn trực tiếp với admin và giữ lại toàn bộ lịch sử hội thoại.";
+              "Đăng nhập để nhắn trực tiếp với đội hỗ trợ và giữ lại toàn bộ lịch sử hội thoại.";
             landingSupportPrimary.textContent = "Đăng nhập";
             landingSupportPrimary.href = buildLandingAuthUrl("login");
             landingSupportSecondary.hidden = false;
@@ -6079,9 +6178,72 @@
             return;
           }
           landingSupportIntro.textContent =
-            "Bạn đã đăng nhập. Hộp chat trực tiếp với admin đã sẵn sàng trong dashboard.";
+            "Bạn đã đăng nhập. Hộp chat trực tiếp với đội hỗ trợ đã sẵn sàng trong dashboard.";
           landingSupportStatus.textContent =
-            "Mở dashboard để xem lịch sử chat, phản hồi thanh toán và nhận tin nhắn mới từ admin.";
+            "Mở dashboard để xem lịch sử chat, phản hồi thanh toán và nhận tin nhắn mới từ đội hỗ trợ.";
+          landingSupportPrimary.textContent = "Mở dashboard";
+          landingSupportPrimary.href = "/dashboard";
+          landingSupportSecondary.hidden = true;
+        };
+
+        const syncLandingSupportCopy = (authUser) => {
+          const supportHeading = landingSupportPanel?.querySelector("strong");
+          if (supportHeading) supportHeading.textContent = "Hỗ trợ trực tiếp";
+          if (landingSupportLauncher) {
+            landingSupportLauncher.setAttribute("aria-label", "Mở hỗ trợ trực tiếp");
+          }
+          if (landingSupportClose) {
+            landingSupportClose.setAttribute("aria-label", "Đóng chat");
+            landingSupportClose.textContent = "✕";
+            landingSupportClose.setAttribute(
+              "onclick",
+              "window.closeLandingSupportPanel?.(); return false;",
+            );
+          }
+          if (landingSupportLauncher) {
+            landingSupportLauncher.setAttribute(
+              "onclick",
+              "window.toggleLandingSupportPanel?.(); return false;",
+            );
+          }
+          if (
+            !landingSupportIntro ||
+            !landingSupportStatus ||
+            !landingSupportPrimary ||
+            !landingSupportSecondary
+          ) {
+            return;
+          }
+          const signedIn = !!authUser;
+          const isAdmin =
+            signedIn &&
+            String(authUser?.role || "").trim().toLowerCase() === "admin";
+          if (!signedIn) {
+            landingSupportIntro.textContent =
+              "Hỗ trợ thanh toán, mở gói và kiểm tra lịch sử ngay trong hộp chat.";
+            landingSupportStatus.textContent =
+              "Đăng nhập để nhắn trực tiếp với đội hỗ trợ và giữ lại toàn bộ lịch sử hội thoại.";
+            landingSupportPrimary.textContent = "Đăng nhập";
+            landingSupportPrimary.href = buildLandingAuthUrl("login");
+            landingSupportSecondary.hidden = false;
+            landingSupportSecondary.textContent = "Tạo tài khoản";
+            landingSupportSecondary.href = buildLandingAuthUrl("register");
+            return;
+          }
+          if (isAdmin) {
+            landingSupportIntro.textContent =
+              "Bạn đang đăng nhập bằng tài khoản quản trị.";
+            landingSupportStatus.textContent =
+              "Mở dashboard để vào nhanh tab Tin nhắn và trả lời user theo thời gian thực.";
+            landingSupportPrimary.textContent = "Mở quản trị";
+            landingSupportPrimary.href = "/admin";
+            landingSupportSecondary.hidden = true;
+            return;
+          }
+          landingSupportIntro.textContent =
+            "Bạn đã đăng nhập. Hộp chat trực tiếp với đội hỗ trợ đã sẵn sàng trong dashboard.";
+          landingSupportStatus.textContent =
+            "Mở dashboard để xem lịch sử chat, phản hồi thanh toán và nhận tin nhắn mới từ đội hỗ trợ.";
           landingSupportPrimary.textContent = "Mở dashboard";
           landingSupportPrimary.href = "/dashboard";
           landingSupportSecondary.hidden = true;
@@ -6133,11 +6295,15 @@
           renderLandingAuthNav(authUser);
         });
 
-        landingSupportLauncher?.addEventListener("click", () => {
-          setLandingSupportPanelOpen(!landingSupportOpen);
+        landingSupportLauncher?.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          window.toggleLandingSupportPanel?.();
         });
-        landingSupportClose?.addEventListener("click", () => {
-          setLandingSupportPanelOpen(false);
+        landingSupportClose?.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          window.closeLandingSupportPanel?.();
         });
         document.addEventListener("click", (event) => {
           if (

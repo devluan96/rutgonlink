@@ -136,6 +136,10 @@ let unreadNotificationCount = 0;
 let notificationStatsSnapshot = null;
 let adminNotificationSnapshot = null;
 let notificationPollTimer = null;
+const STATS_PAYLOAD_CACHE_TTL_MS = 2000;
+let statsPayloadPromise = null;
+let statsPayloadCache = null;
+let statsPayloadCacheAt = 0;
 let confirmModalResolver = null;
 let accountLoginEvents = [];
 let accountLoginEventsLoading = false;
@@ -969,13 +973,21 @@ function isAdminUser() {
   return user?.plan === "admin" || user?.role === "admin";
 }
 
+function isSupportAgentUser() {
+  return isAdminUser() || String(user?.role || "").trim().toLowerCase() === "support";
+}
+
 function guardAdminRoute() {
   if (isAdminUser()) return "admin";
+  if (isSupportAgentUser()) {
+    adminSection = "support";
+    return "admin";
+  }
   if (!user) {
     redirectToAuth("login", "Cần đăng nhập để vào trang quản trị.");
     return null;
   }
-  toast("Bạn không có quyền truy cập trang quản trị.", "warn");
+  toast("Bạn không có quyền truy cập khu vực hỗ trợ.", "warn");
   return "dashboard";
 }
 
@@ -2330,9 +2342,8 @@ function rememberAdminNotificationSnapshot(
 async function pollRealtimeNotifications() {
   if (!document.getElementById("appScreen")?.classList.contains("show")) return;
   try {
-    const statsResponse = await fetch("/api/stats");
-    const statsPayload = await statsResponse.json().catch(() => null);
-    if (statsResponse.ok && statsPayload) {
+    const statsPayload = await getStatsPayload({ preferCache: true });
+    if (statsPayload) {
       enqueueStatsAlerts(statsPayload);
       const previous = notificationStatsSnapshot;
       const next = buildStatsNotificationSnapshot(statsPayload);
@@ -2534,12 +2545,20 @@ function updateTopbar() {
       ? "Hồ sơ cá nhân"
       : "Đăng nhập để quản lý";
   }
+  const canOpenSupportInbox =
+    plan === "admin" || role === "admin" || role === "support";
   document.getElementById("popupAdminBtn").style.display =
-    plan === "admin" || role === "admin" ? "" : "none";
+    canOpenSupportInbox ? "" : "none";
+  document.getElementById("popupAdminBtn").textContent =
+    role === "support" ? "Hộp thư hỗ trợ" : "Quản trị";
 
   const isAdmin = plan === "admin" || role === "admin";
   const adminNav = document.getElementById("adminNavItem");
-  if (adminNav) adminNav.style.display = isAdmin ? "" : "none";
+  if (adminNav) {
+    adminNav.style.display = canOpenSupportInbox ? "" : "none";
+    const label = adminNav.querySelector(".slabel");
+    if (label) label.textContent = role === "support" ? "Hỗ trợ" : "Quản trị";
+  }
   const sf = document.getElementById("sidebarFooter");
   sf.style.display =
     plan === "pro" || plan === "business" || isAdmin ? "none" : "";
@@ -2995,7 +3014,7 @@ function renderSupportTimeline(
   {
     viewerRole = "user",
     ownLabel = "Bạn",
-    otherLabel = "Admin",
+    otherLabel = "Đội hỗ trợ",
     emptyText = "Chưa có tin nhắn nào.",
   } = {},
 ) {
@@ -3069,7 +3088,7 @@ function renderSupportConversation() {
   const adminPageActive = !!document
     .getElementById("page-admin")
     ?.classList.contains("active");
-  const canOpenSupportPopup = canShowSupport && !isAdminUser();
+  const canOpenSupportPopup = canShowSupport && !isSupportAgentUser();
   const showLauncher =
     canShowSupport && !(window.innerWidth <= 768 && adminPageActive);
 
@@ -3093,7 +3112,7 @@ function renderSupportConversation() {
     supportWidgetOpen = false;
     if (statusEl) {
       statusEl.textContent =
-        "Admin có thể bấm icon này để mở nhanh tab Tin nhắn trong trang quản trị.";
+        "Nhân viên hỗ trợ có thể bấm icon này để mở nhanh tab Tin nhắn.";
     }
     if (badgeEl) {
       badgeEl.hidden = true;
@@ -3107,18 +3126,18 @@ function renderSupportConversation() {
   renderSupportTimeline("supportConversationList", supportMessages, {
     viewerRole: "user",
     ownLabel: "Bạn",
-    otherLabel: "Admin",
+    otherLabel: "Đội hỗ trợ",
     emptyText:
-      "Chưa có cuộc trò chuyện nào. Hãy gửi tin nhắn đầu tiên cho admin.",
+      "Chưa có cuộc trò chuyện nào. Hãy gửi tin nhắn đầu tiên cho đội hỗ trợ.",
   });
 
   if (statusEl) {
     if (supportLoading) {
       statusEl.textContent = "Đang tải hội thoại...";
     } else if (!supportLoaded) {
-      statusEl.textContent = "Bấm để mở popup chat trực tiếp với admin.";
+      statusEl.textContent = "Bấm để mở popup chat trực tiếp với đội hỗ trợ.";
     } else if (supportThread?.unread_for_user) {
-      statusEl.textContent = `${supportThread.unread_for_user} phản hồi mới từ admin.`;
+      statusEl.textContent = `${supportThread.unread_for_user} phản hồi mới từ đội hỗ trợ.`;
     } else if (supportThread?.total_messages) {
       statusEl.textContent = "Hội thoại đã sẵn sàng, bạn có thể nhắn ngay.";
     } else {
@@ -3141,12 +3160,12 @@ function renderSupportConversation() {
       supportNotice ||
       (supportThread?.last_message_at
         ? `Tin nhắn gần nhất: ${formatSupportTimelineTime(supportThread.last_message_at)}`
-        : "Admin sẽ thấy tin nhắn này trong tab Quản trị > Tin nhắn.");
+        : "Đội hỗ trợ sẽ thấy tin nhắn này trong tab Tin nhắn.");
   }
 
   if (btn) {
     btn.disabled = !user || supportSending;
-    btn.textContent = supportSending ? "Đang gửi..." : "Gửi cho admin";
+    btn.textContent = supportSending ? "Đang gửi..." : "Gửi hỗ trợ";
   }
 }
 
@@ -3216,12 +3235,12 @@ async function sendSupportMessage() {
   const input = document.getElementById("supportMessageInput");
   const message = String(input?.value || "").trim();
   if (!message) {
-    toast("Nhập nội dung trước khi gửi cho admin", "warn");
+    toast("Nhập nội dung trước khi gửi cho đội hỗ trợ", "warn");
     input?.focus();
     return;
   }
   supportSending = true;
-  supportNotice = "Đang gửi tin nhắn tới admin...";
+  supportNotice = "Đang gửi tin nhắn tới đội hỗ trợ...";
   renderSupportConversation();
   try {
     const response = await fetch("/api/support/messages", {
@@ -3248,8 +3267,8 @@ async function sendSupportMessage() {
       };
     }
     if (input) input.value = "";
-    supportNotice = "Tin nhắn đã được chuyển tới admin.";
-    toast("Đã gửi tin nhắn cho admin", "ok");
+    supportNotice = "Tin nhắn đã được chuyển tới đội hỗ trợ.";
+    toast("Đã gửi tin nhắn tới đội hỗ trợ", "ok");
     void loadSupportMessages({ silent: true });
   } catch (error) {
     supportNotice = error.message || "Không thể gửi tin nhắn";
@@ -3262,7 +3281,7 @@ async function sendSupportMessage() {
 
 function openSupportWidget() {
   if (!user) return;
-  if (isAdminUser()) {
+  if (isSupportAgentUser()) {
     navigate("admin", document.getElementById("adminNavItem"));
     setAdminSection("support");
     void refreshAdminSupport();
@@ -3289,7 +3308,7 @@ function toggleSupportWidget() {
 }
 
 async function pollSupportMessages() {
-  if (!user?.id || isAdminUser() || supportSending) return;
+  if (!user?.id || isSupportAgentUser() || supportSending) return;
   await loadSupportMessages({
     peek: !supportWidgetOpen,
     silent: true,
@@ -3297,7 +3316,7 @@ async function pollSupportMessages() {
 }
 
 async function pollAdminSupportMessages() {
-  if (!user?.id || !isAdminUser() || adminSupportSending) return;
+  if (!user?.id || !isSupportAgentUser() || adminSupportSending) return;
   const adminPageActive = !!document
     .getElementById("page-admin")
     ?.classList.contains("active");
@@ -3345,7 +3364,7 @@ function startSupportPollingFallback() {
   if (supportPollTimer) return;
   void pollSupportMessages();
   supportPollTimer = setInterval(() => {
-    if (document.hidden || !user?.id || isAdminUser()) return;
+    if (document.hidden || !user?.id || isSupportAgentUser()) return;
     void pollSupportMessages();
   }, SUPPORT_POLL_INTERVAL_MS);
 }
@@ -3354,7 +3373,7 @@ function startAdminSupportPollingFallback() {
   if (adminSupportPollTimer) return;
   void pollAdminSupportMessages();
   adminSupportPollTimer = setInterval(() => {
-    if (document.hidden || !user?.id || !isAdminUser()) return;
+    if (document.hidden || !user?.id || !isSupportAgentUser()) return;
     void pollAdminSupportMessages();
   }, SUPPORT_POLL_INTERVAL_MS);
 }
@@ -3388,7 +3407,7 @@ function connectUserSupportStream() {
     });
   });
   supportEventSource.onerror = () => {
-    if (!user?.id || isAdminUser()) return;
+    if (!user?.id || isSupportAgentUser()) return;
     startSupportPollingFallback();
   };
 }
@@ -3424,7 +3443,7 @@ function connectAdminSupportStream() {
     });
   });
   adminSupportEventSource.onerror = () => {
-    if (!user?.id || !isAdminUser()) return;
+    if (!user?.id || !isSupportAgentUser()) return;
     startAdminSupportPollingFallback();
   };
 }
@@ -3432,7 +3451,7 @@ function connectAdminSupportStream() {
 function startSupportSyncLoops() {
   stopSupportSyncLoops();
   if (!user?.id) return;
-  if (isAdminUser()) {
+  if (isSupportAgentUser()) {
     connectAdminSupportStream();
     return;
   }
@@ -4201,24 +4220,24 @@ async function reviewAdminPayment(requestId, status) {
 }
 
 function syncAdminSectionUI() {
-  const availableSections = new Set([
-    "overview",
-    "users",
-    "payments",
-    "support",
-    "system",
-    "logs",
-  ]);
+  const availableSections = isAdminUser()
+    ? new Set(["overview", "users", "payments", "support", "system", "logs"])
+    : isSupportAgentUser()
+      ? new Set(["support"])
+      : new Set();
   if (!availableSections.has(adminSection)) {
-    adminSection = "overview";
+    adminSection = availableSections.has("overview") ? "overview" : "support";
   }
   document.querySelectorAll(".admin-tab-btn").forEach((btn) => {
-    const isActive = btn.dataset.adminSection === adminSection;
+    const isAllowed = availableSections.has(btn.dataset.adminSection);
+    const isActive = isAllowed && btn.dataset.adminSection === adminSection;
+    btn.hidden = !isAllowed;
     btn.classList.toggle("active", isActive);
     btn.setAttribute("aria-selected", isActive ? "true" : "false");
   });
   document.querySelectorAll(".admin-panel").forEach((panel) => {
-    const isActive = panel.dataset.adminPanel === adminSection;
+    const isAllowed = availableSections.has(panel.dataset.adminPanel);
+    const isActive = isAllowed && panel.dataset.adminPanel === adminSection;
     panel.classList.toggle("active", isActive);
     panel.hidden = !isActive;
   });
@@ -4474,10 +4493,15 @@ function renderAdminOverviewTrend() {
 }
 
 async function loadAdminData() {
-  if (!isAdminUser()) {
+  if (!isSupportAgentUser()) {
     return;
   }
   void refreshAdminSupport();
+  if (!isAdminUser()) {
+    adminSection = "support";
+    syncAdminSectionUI();
+    return;
+  }
   try {
     const [sr, dr, ur, rr, pr] = await Promise.all([
       fetch("/api/admin/stats"),
@@ -4635,11 +4659,19 @@ function updateTopbar() {
       ? "Hồ sơ cá nhân"
       : "Đăng nhập để quản lý";
   }
+  const canOpenSupportInbox =
+    plan === "admin" || role === "admin" || role === "support";
   document.getElementById("popupAdminBtn").style.display =
-    plan === "admin" || role === "admin" ? "" : "none";
+    canOpenSupportInbox ? "" : "none";
+  document.getElementById("popupAdminBtn").textContent =
+    role === "support" ? "Hộp thư hỗ trợ" : "Quản trị";
   const isAdmin = plan === "admin" || role === "admin";
   const adminNav = document.getElementById("adminNavItem");
-  if (adminNav) adminNav.style.display = isAdmin ? "" : "none";
+  if (adminNav) {
+    adminNav.style.display = canOpenSupportInbox ? "" : "none";
+    const label = adminNav.querySelector(".slabel");
+    if (label) label.textContent = role === "support" ? "Hỗ trợ" : "Quản trị";
+  }
   const sf = document.getElementById("sidebarFooter");
   if (sf) {
     sf.style.display =
@@ -8111,14 +8143,44 @@ function getDashboardPlatformMetrics() {
   };
 }
 
+function rememberStatsPayloadCache(payload) {
+  if (!payload || typeof payload !== "object") return;
+  statsPayloadCache = payload;
+  statsPayloadCacheAt = Date.now();
+}
+
+async function getStatsPayload({ preferCache = false } = {}) {
+  const now = Date.now();
+  if (
+    preferCache &&
+    statsPayloadCache &&
+    now - statsPayloadCacheAt <= STATS_PAYLOAD_CACHE_TTL_MS
+  ) {
+    return statsPayloadCache;
+  }
+  if (statsPayloadPromise) {
+    return statsPayloadPromise;
+  }
+  statsPayloadPromise = (async () => {
+    const response = await fetch("/api/stats");
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(payload?.error || "Không thể tải thống kê");
+    }
+    rememberStatsPayloadCache(payload || {});
+    return payload || {};
+  })();
+  try {
+    return await statsPayloadPromise;
+  } finally {
+    statsPayloadPromise = null;
+  }
+}
+
 async function loadData(prefetched = null) {
   try {
-    const d =
-      prefetched ||
-      (await (async () => {
-        const r = await fetch("/api/stats");
-        return r.json();
-      })());
+    const d = prefetched || (await getStatsPayload());
+    rememberStatsPayloadCache(d);
     statsAnalytics = d.analytics || null;
     links = d.recent || [];
     const displayTotalClicks = Number(
@@ -9199,24 +9261,24 @@ const ADMIN_PAGE_SIZE = 20;
 const SUPPORT_POLL_INTERVAL_MS = 7000;
 
 function syncAdminSectionUI() {
-  const availableSections = new Set([
-    "overview",
-    "users",
-    "payments",
-    "support",
-    "system",
-    "logs",
-  ]);
+  const availableSections = isAdminUser()
+    ? new Set(["overview", "users", "payments", "support", "system", "logs"])
+    : isSupportAgentUser()
+      ? new Set(["support"])
+      : new Set();
   if (!availableSections.has(adminSection)) {
-    adminSection = "overview";
+    adminSection = availableSections.has("overview") ? "overview" : "support";
   }
   document.querySelectorAll(".admin-tab-btn").forEach((btn) => {
-    const isActive = btn.dataset.adminSection === adminSection;
+    const isAllowed = availableSections.has(btn.dataset.adminSection);
+    const isActive = isAllowed && btn.dataset.adminSection === adminSection;
+    btn.hidden = !isAllowed;
     btn.classList.toggle("active", isActive);
     btn.setAttribute("aria-selected", isActive ? "true" : "false");
   });
   document.querySelectorAll(".admin-panel").forEach((panel) => {
-    const isActive = panel.dataset.adminPanel === adminSection;
+    const isAllowed = availableSections.has(panel.dataset.adminPanel);
+    const isActive = isAllowed && panel.dataset.adminPanel === adminSection;
     panel.classList.toggle("active", isActive);
     panel.hidden = !isActive;
   });
@@ -9360,7 +9422,7 @@ function renderAdminSupportThreadList() {
             formatSupportTimelineTime(thread.last_message_at),
           )}</span>
           <span class="support-thread-email">${esc(
-            `${plan} • ${thread.last_sender_role === "admin" ? "admin" : "user"}`,
+            `${plan} • ${thread.last_sender_role === "admin" ? "hỗ trợ" : "user"}`,
           )}</span>
         </div>
       </button>`;
@@ -9387,7 +9449,7 @@ function renderAdminSupportConversation() {
   }
   renderSupportTimeline("adminSupportConversationList", adminSupportMessages, {
     viewerRole: "admin",
-    ownLabel: "Admin",
+    ownLabel: isAdminUser() ? "Admin" : "Hỗ trợ",
     otherLabel:
       activeUser?.name || activeUser?.email || `User #${selectedThread?.user_id || ""}`,
     emptyText: selectedThread
@@ -9408,7 +9470,7 @@ function renderAdminSupportConversation() {
 }
 
 async function refreshAdminSupport(options = {}) {
-  if (!isAdminUser() || adminSupportSyncInFlight) return;
+  if (!isSupportAgentUser() || adminSupportSyncInFlight) return;
   const silent = !!options.silent;
   const includeConversation = options.includeConversation !== false;
   adminSupportSyncInFlight = true;
@@ -9620,10 +9682,15 @@ function syncAdminUserSelectionUI(filteredUsers, pageRows) {
 }
 
 async function loadAdminData() {
-  if (!isAdminUser()) {
+  if (!isSupportAgentUser()) {
     return;
   }
   void refreshAdminSupport();
+  if (!isAdminUser()) {
+    adminSection = "support";
+    syncAdminSectionUI();
+    return;
+  }
   try {
     const [sr, dr, ur, rr, pr] = await Promise.all([
       fetch("/api/admin/stats"),
@@ -9860,7 +9927,11 @@ function renderAdminUsers() {
         ${["free", "pro", "business", "admin"].map((p) => `<option value="${p}"${u.plan === p ? " selected" : ""}>${p}</option>`).join("")}
       </select>
     </td>
-    <td><span class="badge-role ${u.role || "user"}">${u.role || "user"}</span></td>
+    <td onclick="event.stopPropagation()">
+      <select class="plan-select" data-current-role="${esc(u.role || "user")}" onchange="adminSetRole(${u.id},this)">
+        ${["user", "support", "admin"].map((role) => `<option value="${role}"${String(u.role || "user") === role ? " selected" : ""}>${getManagedUserRoleLabel(role)}</option>`).join("")}
+      </select>
+    </td>
     <td style="color:var(--text3);font-size:11px">${(u.created_at || "").substring(0, 10)}</td>
     <td class="td-actions"><button class="btn-del" onclick="adminDeleteUser(${u.id},'${esc(u.email)}')">Xóa</button></td>
   </tr>`;
@@ -10022,6 +10093,7 @@ function openAdminUserDetailModal(userId, event) {
   const email = String(userItem.email || "").trim() || "—";
   const plan = String(userItem.plan || "free").trim() || "free";
   const role = String(userItem.role || "user").trim() || "user";
+  const roleLabel = getManagedUserRoleLabel(role);
   const avatarText = (name || email || "U").charAt(0).toUpperCase();
 
   const titleEl = document.getElementById("adminUserDetailTitle");
@@ -10037,7 +10109,7 @@ function openAdminUserDetailModal(userId, event) {
   if (summaryEl) {
     summaryEl.innerHTML = `
       <span class="admin-user-plan">${esc(plan)}</span>
-      <span class="badge-role ${esc(role)}">${esc(role)}</span>
+      <span class="badge-role ${esc(role)}">${esc(roleLabel)}</span>
       <span class="admin-user-detail-id">ID #${esc(String(userItem.id || "—"))}</span>`;
   }
   if (metaEl) {
@@ -10045,7 +10117,7 @@ function openAdminUserDetailModal(userId, event) {
       renderAdminUserDetailField("Tên hiển thị", name),
       renderAdminUserDetailField("Email", email),
       renderAdminUserDetailField("Gói hiện tại", plan),
-      renderAdminUserDetailField("Role", role),
+      renderAdminUserDetailField("Role", roleLabel),
       renderAdminUserDetailField(
         "Ngày tạo",
         formatAdminUserDateTime(userItem.created_at),
@@ -10393,6 +10465,70 @@ async function adminSetPlan(userId, selectEl) {
   } catch {
     if (selectEl) selectEl.value = currentPlan;
     toast("Lỗi kết nối", "err");
+  }
+}
+
+function getManagedUserRoleLabel(role) {
+  const normalizedRole = String(role || "user").trim().toLowerCase();
+  if (normalizedRole === "admin") return "Admin";
+  if (normalizedRole === "support") return "Hỗ trợ";
+  return "User";
+}
+
+async function adminSetRole(userId, selectEl) {
+  const nextRole = String(selectEl?.value || "")
+    .trim()
+    .toLowerCase();
+  const currentRole = String(selectEl?.dataset?.currentRole || "user")
+    .trim()
+    .toLowerCase();
+  if (!nextRole || nextRole === currentRole) return;
+  const targetUser = adminUsers.find((u) => Number(u.id) === Number(userId));
+  const confirmed = await showConfirmDialog({
+    title: "Cập nhật vai trò người dùng",
+    message: `Chuyển ${targetUser?.email || "người dùng này"} sang vai trò "${getManagedUserRoleLabel(nextRole)}"?`,
+    note:
+      nextRole === "support"
+        ? "Vai trò này chỉ dùng để đọc và trả lời hộp thư hỗ trợ."
+        : nextRole === "admin"
+          ? "Vai trò admin sẽ mở toàn bộ khu vực quản trị."
+          : "Vai trò user sẽ quay về quyền sử dụng thông thường.",
+    confirmLabel: "Cập nhật vai trò",
+  });
+  if (!confirmed) {
+    if (selectEl) selectEl.value = currentRole;
+    return;
+  }
+  try {
+    const r = await fetch("/api/admin/users/" + userId, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: nextRole }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if (selectEl) selectEl.value = currentRole;
+      throw new Error(data.error || "Không thể cập nhật vai trò");
+    }
+    const updatedUser = data.user || {};
+    if (selectEl) {
+      selectEl.dataset.currentRole = String(updatedUser.role || nextRole);
+      selectEl.value = String(updatedUser.role || nextRole);
+    }
+    adminUsers = adminUsers.map((userItem) =>
+      Number(userItem.id) === Number(userId)
+        ? {
+            ...userItem,
+            role: updatedUser.role || nextRole,
+            plan: updatedUser.plan || userItem.plan,
+          }
+        : userItem,
+    );
+    renderAdminUsers();
+    toast(`✅ Đã cập nhật role → ${getManagedUserRoleLabel(updatedUser.role || nextRole)}`, "ok");
+  } catch (error) {
+    if (selectEl) selectEl.value = currentRole;
+    toast(error.message || "Không thể cập nhật vai trò", "err");
   }
 }
 

@@ -5682,6 +5682,10 @@
         background: rgba(245, 158, 11, 0.15);
         color: #fcd34d;
       }
+      .badge-role.support {
+        background: rgba(59, 130, 246, 0.14);
+        color: #93c5fd;
+      }
       .badge-role.user {
         background: rgba(100, 116, 139, 0.1);
         color: var(--text3);

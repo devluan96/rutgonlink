@@ -2995,7 +2995,7 @@
                       💬 Hộp thư hỗ trợ (<span id="adminSupportThreadCount">0</span>)
                     </h3>
                     <p style="margin: 6px 0 0; font-size: 12px; color: var(--text3)">
-                      User có thể nhắn trực tiếp cho admin từ trang Thanh toán.
+                      User có thể nhắn trực tiếp cho đội hỗ trợ từ app.
                     </p>
                   </div>
                   <button
@@ -3022,7 +3022,7 @@
                       </div>
                     </div>
                     <div class="support-compose">
-                      <label class="fl" for="adminSupportMessageInput">Phản hồi của admin</label>
+                        <label class="fl" for="adminSupportMessageInput">Phản hồi của đội hỗ trợ</label>
                       <textarea
                         class="fi support-textarea"
                         id="adminSupportMessageInput"
@@ -3218,7 +3218,7 @@
         type="button"
         id="supportWidgetLauncher"
         onclick="toggleSupportWidget()"
-        aria-label="Mở chat với admin"
+        aria-label="Mở hỗ trợ trực tiếp"
         hidden
       >
         <span class="support-fab-core" aria-hidden="true">
@@ -3242,8 +3242,8 @@
       >
         <div class="support-widget-head">
           <div>
-            <strong>Chat với admin</strong>
-            <span id="supportWidgetStatus">Nhấn để mở hội thoại hỗ trợ trực tiếp.</span>
+            <strong>Hỗ trợ trực tiếp</strong>
+            <span id="supportWidgetStatus">Nhấn để mở hội thoại với đội hỗ trợ.</span>
           </div>
           <button
             class="support-widget-close"
@@ -3257,7 +3257,7 @@
         <div class="support-widget-body">
           <div class="support-timeline" id="supportConversationList">
             <div class="support-empty">
-              Chưa có cuộc trò chuyện nào. Hãy gửi tin nhắn đầu tiên cho admin.
+              Chưa có cuộc trò chuyện nào. Hãy gửi tin nhắn đầu tiên cho đội hỗ trợ.
             </div>
           </div>
           <div class="support-compose">
@@ -3266,11 +3266,11 @@
               class="fi support-textarea"
               id="supportMessageInput"
               rows="4"
-              placeholder="Ví dụ: Em đã chuyển khoản rồi nhưng chưa thấy duyệt, admin kiểm tra giúp em với."
+              placeholder="Ví dụ: Em đã chuyển khoản rồi nhưng chưa thấy duyệt, đội hỗ trợ kiểm tra giúp em với."
             ></textarea>
             <div class="support-compose-actions">
               <div class="support-compose-note" id="supportComposerNote">
-                Admin sẽ thấy tin nhắn này trong tab Quản trị > Tin nhắn.
+                Đội hỗ trợ sẽ thấy tin nhắn này trong tab Tin nhắn.
               </div>
               <button
                 class="user-btn primary"
@@ -3278,7 +3278,7 @@
                 id="supportSendBtn"
                 onclick="sendSupportMessage()"
               >
-                Gửi cho admin
+                Gửi hỗ trợ
               </button>
             </div>
           </div>

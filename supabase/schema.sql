@@ -95,7 +95,9 @@ ALTER TABLE links ADD COLUMN IF NOT EXISTS created_from_template BOOLEAN DEFAULT
 CREATE INDEX IF NOT EXISTS idx_links_short_code ON links(short_code);
 CREATE INDEX IF NOT EXISTS idx_links_alias ON links(alias);
 CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id);
+CREATE INDEX IF NOT EXISTS idx_links_user_id_created_at ON links(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_links_guest_session_id ON links(guest_session_id);
+CREATE INDEX IF NOT EXISTS idx_links_guest_session_id_created_at ON links(guest_session_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_links_domain_hostname ON links(domain_hostname);
 CREATE INDEX IF NOT EXISTS idx_links_workspace_id ON links(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_links_template_id ON links(template_id);
@@ -144,6 +146,7 @@ ALTER TABLE clicks ADD COLUMN IF NOT EXISTS city TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_clicks_link_id ON clicks(link_id);
 CREATE INDEX IF NOT EXISTS idx_clicks_clicked_at ON clicks(clicked_at);
+CREATE INDEX IF NOT EXISTS idx_clicks_link_id_clicked_at ON clicks(link_id, clicked_at DESC);
 CREATE INDEX IF NOT EXISTS idx_clicks_country_code ON clicks(country_code);
 
 -- Domains

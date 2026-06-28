@@ -66,6 +66,12 @@ const regionNamesEn =
     : null;
 let redirectLogDirReady = null;
 let redirectLogWriteQueue = Promise.resolve();
+const STATS_RESPONSE_CACHE_TTL_MS = Math.max(
+  Number(process.env.STATS_RESPONSE_CACHE_TTL_MS) || 10000,
+  0,
+);
+const statsResponseCache = new Map();
+const statsResponseInFlight = new Map();
 
 // ── Cloudinary config ────────────────────────────────────────────────────────
 const CLOUDINARY_OK = !!(
@@ -1001,6 +1007,38 @@ async function requireAdmin(req, res, next) {
   }
 }
 
+function isSupportRole(role) {
+  return String(role || "")
+    .trim()
+    .toLowerCase() === "support";
+}
+
+function canAccessSupportInbox(user) {
+  if (!user) return false;
+  return (
+    user.role === "admin" || isAdminEmail(user.email) || isSupportRole(user.role)
+  );
+}
+
+async function requireSupportInbox(req, res, next) {
+  const token = parseToken(req);
+  if (!token) return res.status(401).json({ error: "Chưa đăng nhập" });
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = await resolveUserFromTokenPayload(payload);
+    if (!user || !canAccessSupportInbox(user)) {
+      return res
+        .status(403)
+        .json({ error: "Không có quyền truy cập hộp thư hỗ trợ" });
+    }
+    req._tokenPayload = payload;
+    req.currentUser = user;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Token không hợp lệ" });
+  }
+}
+
 function getMobilePlatform(ua = "") {
   const u = ua.toLowerCase();
   if (/iphone|ipad|ipod/.test(u)) return "ios";
@@ -1540,10 +1578,12 @@ function getAnalyticsVisitorKey(row = {}) {
   return `${linkId}:${ip}:${ua}`;
 }
 
-function accumulateAnalyticsMaps(target, row, { unique = false } = {}) {
-  const clickedAt = row?.clicked_at;
-  if (clickedAt) {
-    const dayKey = getAnalyticsDayKey(clickedAt);
+function accumulateAnalyticsMaps(
+  target,
+  row,
+  { unique = false, dayKey = "", platform = null } = {},
+) {
+  if (dayKey) {
     target.timelineMap.set(dayKey, (target.timelineMap.get(dayKey) || 0) + 1);
   }
 
@@ -1571,17 +1611,18 @@ function accumulateAnalyticsMaps(target, row, { unique = false } = {}) {
     );
   }
 
-  const platform = getLinkAnalyticsPlatform(row?.links || row?.link || row);
-  if (!target.platformMap.has(platform.key)) {
-    target.platformMap.set(platform.key, {
-      key: platform.key,
-      label: platform.label,
-      color: platform.color,
+  const effectivePlatform =
+    platform || getLinkAnalyticsPlatform(row?.links || row?.link || row);
+  if (!target.platformMap.has(effectivePlatform.key)) {
+    target.platformMap.set(effectivePlatform.key, {
+      key: effectivePlatform.key,
+      label: effectivePlatform.label,
+      color: effectivePlatform.color,
       clicks: 0,
       unique,
     });
   }
-  target.platformMap.get(platform.key).clicks += 1;
+  target.platformMap.get(effectivePlatform.key).clicks += 1;
 }
 
 function finalizeAnalyticsCountryList(countryMap = new Map()) {
@@ -1637,24 +1678,30 @@ function buildStatsAnalytics(clickRows = []) {
     platformTodayMap: new Map(),
     trackedGeoClicks: 0,
   };
-  const sortedRows = [...clickRows].sort((a, b) => {
-    const left = new Date(a?.clicked_at || 0).getTime();
-    const right = new Date(b?.clicked_at || 0).getTime();
-    return left - right;
-  });
   const lastSeenByVisitor = new Map();
+  const orderedRows = Array.isArray(clickRows) ? clickRows : [];
 
-  for (const row of sortedRows) {
-    accumulateAnalyticsMaps(rawState, row, { unique: false });
-    if (getAnalyticsDayKey(row?.clicked_at) === todayKey) {
-      const platform = getLinkAnalyticsPlatform(row?.links || row?.link || row);
+  // `getClickAnalytics()` already returns rows sorted DESC by `clicked_at`.
+  // Iterate from the tail so unique-window dedupe still runs in ASC order
+  // without paying for another full sort in Node.
+  for (let index = orderedRows.length - 1; index >= 0; index -= 1) {
+    const row = orderedRows[index];
+    const clickedAt = row?.clicked_at || "";
+    const dayKey = clickedAt ? getAnalyticsDayKey(clickedAt) : "";
+    const platform = getLinkAnalyticsPlatform(row?.link || row?.links || row);
+    accumulateAnalyticsMaps(rawState, row, {
+      unique: false,
+      dayKey,
+      platform,
+    });
+    if (dayKey === todayKey) {
       rawState.platformTodayMap.set(
         platform.key,
         (rawState.platformTodayMap.get(platform.key) || 0) + 1,
       );
     }
 
-    const clickedAtMs = new Date(row?.clicked_at || 0).getTime();
+    const clickedAtMs = clickedAt ? Date.parse(clickedAt) : NaN;
     if (!Number.isFinite(clickedAtMs)) continue;
     const visitorKey = getAnalyticsVisitorKey(row);
     const lastSeenMs = lastSeenByVisitor.get(visitorKey) || 0;
@@ -1662,9 +1709,12 @@ function buildStatsAnalytics(clickRows = []) {
       !lastSeenMs || clickedAtMs - lastSeenMs > UNIQUE_CLICK_WINDOW_MS;
     if (!isUnique) continue;
     lastSeenByVisitor.set(visitorKey, clickedAtMs);
-    accumulateAnalyticsMaps(uniqueState, row, { unique: true });
-    if (getAnalyticsDayKey(row?.clicked_at) === todayKey) {
-      const platform = getLinkAnalyticsPlatform(row?.links || row?.link || row);
+    accumulateAnalyticsMaps(uniqueState, row, {
+      unique: true,
+      dayKey,
+      platform,
+    });
+    if (dayKey === todayKey) {
       uniqueState.platformTodayMap.set(
         platform.key,
         (uniqueState.platformTodayMap.get(platform.key) || 0) + 1,
@@ -1672,7 +1722,7 @@ function buildStatsAnalytics(clickRows = []) {
     }
   }
 
-  const rawClicks = sortedRows.length;
+  const rawClicks = orderedRows.length;
   const uniqueClicks = [...uniqueState.timelineMap.values()].reduce(
     (sum, value) => sum + value,
     0,
@@ -1741,6 +1791,12 @@ function buildStatsAnalytics(clickRows = []) {
       unique_today_top_platforms: uniquePlatformTodayDistribution.slice(0, 8),
     },
   };
+}
+
+function buildStatsCacheKey(userId, guestSessionId) {
+  if (userId) return `user:${userId}`;
+  if (guestSessionId) return `guest:${guestSessionId}`;
+  return "guest:anonymous";
 }
 
 function normalizeDomainVerificationStatus(input) {
@@ -3085,6 +3141,97 @@ async function resolveWorkspaceContext(
   { ensureOwnerWorkspace = true } = {},
 ) {
   if (!database || !user?.id) return null;
+  const selected = await resolveWorkspaceSelection(database, user, {
+    ensureOwnerWorkspace,
+  });
+  if (!selected) return null;
+
+  const workspace = await database.getWorkspaceById(selected.workspace.id);
+  const members = (await database.listWorkspaceMembers(workspace.id)).map(
+    buildWorkspaceMemberResponse,
+  );
+  const links = await database.getRecentLinks(user.id, null);
+  const templatesRaw = await database.listWorkspaceTemplates(workspace.id);
+  const buildLinkEntry = (link) => ({
+    short_url: buildLinkShortUrl(link, BASE_URL),
+    original_url: link.original_url || "",
+    og_title: link.og_title || "",
+    og_image: link.og_image || "",
+    video_url: link.video_url || "",
+    alias: link.alias || "",
+    short_code: link.alias || link.short_code || "",
+  });
+  const linkMap = new Map(
+    links.map((link) => [`link:${link.id}`, buildLinkEntry(link)]),
+  );
+  const templateLinkIds = [
+    ...new Set(
+      templatesRaw.flatMap((template) => {
+        const ids = [
+          Number(template?.source_link_id),
+          Number(template?.media_link_id),
+        ];
+        if (Array.isArray(template?.source_link_ids_json)) {
+          ids.push(
+            ...template.source_link_ids_json.map((value) => Number(value)),
+          );
+        }
+        return ids.filter((value) => Number.isInteger(value) && value > 0);
+      }),
+    ),
+  ];
+  const missingTemplateLinkIds = templateLinkIds.filter(
+    (linkId) => !linkMap.has(`link:${linkId}`),
+  );
+  if (missingTemplateLinkIds.length) {
+    const templateLinks = await Promise.all(
+      missingTemplateLinkIds.map((linkId) => database.getLinkById(linkId)),
+    );
+    for (const link of templateLinks) {
+      if (!link?.id) continue;
+      linkMap.set(`link:${link.id}`, buildLinkEntry(link));
+    }
+  }
+  const memberMap = new Map(
+    members.map((member) => [Number(member.user_id || 0), member]),
+  );
+  for (const [key, value] of linkMap.entries()) {
+    memberMap.set(key, value);
+  }
+  const templates = templatesRaw.map((template) =>
+    buildWorkspaceTemplateResponse(template, memberMap, BASE_URL),
+  );
+
+  return {
+    workspace,
+    membership: selected.membership,
+    members,
+    templates,
+    sourceLinks: links.map((link) => attachVideoOverlayPublicFields({
+      id: link.id,
+      short_url: buildLinkShortUrl(link, BASE_URL),
+      short_code: link.alias || link.short_code || "",
+      alias: link.alias || "",
+      original_url: link.original_url || "",
+      og_title: link.og_title || "",
+      og_desc: link.og_desc || "",
+      og_image: link.og_image || "",
+      link_type: link.link_type || "direct",
+      video_url: link.video_url || "",
+      video_overlay_text: link.video_overlay_text || "",
+      domain_hostname: link.domain_hostname || null,
+      created_at: link.created_at || null,
+      workspace_id: link.workspace_id || null,
+    })),
+  };
+}
+
+async function resolveWorkspaceSelection(
+  database,
+  user,
+  { ensureOwnerWorkspace = true } = {},
+) {
+  if (!database || !user?.id) return null;
   const rawMemberships = await database.listWorkspaceMembershipsForIdentity(
     user.id,
     user.email,
@@ -3161,84 +3308,9 @@ async function resolveWorkspaceContext(
     };
   }
   if (!selected) return null;
-
-  const workspace = await database.getWorkspaceById(selected.workspace.id);
-  const members = (await database.listWorkspaceMembers(workspace.id)).map(
-    buildWorkspaceMemberResponse,
-  );
-  const links = await database.getRecentLinks(user.id, null);
-  const templatesRaw = await database.listWorkspaceTemplates(workspace.id);
-  const buildLinkEntry = (link) => ({
-    short_url: buildLinkShortUrl(link, BASE_URL),
-    original_url: link.original_url || "",
-    og_title: link.og_title || "",
-    og_image: link.og_image || "",
-    video_url: link.video_url || "",
-    alias: link.alias || "",
-    short_code: link.alias || link.short_code || "",
-  });
-  const linkMap = new Map(
-    links.map((link) => [`link:${link.id}`, buildLinkEntry(link)]),
-  );
-  const templateLinkIds = [
-    ...new Set(
-      templatesRaw.flatMap((template) => {
-        const ids = [
-          Number(template?.source_link_id),
-          Number(template?.media_link_id),
-        ];
-        if (Array.isArray(template?.source_link_ids_json)) {
-          ids.push(
-            ...template.source_link_ids_json.map((value) => Number(value)),
-          );
-        }
-        return ids.filter((value) => Number.isInteger(value) && value > 0);
-      }),
-    ),
-  ];
-  const missingTemplateLinkIds = templateLinkIds.filter(
-    (linkId) => !linkMap.has(`link:${linkId}`),
-  );
-  if (missingTemplateLinkIds.length) {
-    const templateLinks = await Promise.all(
-      missingTemplateLinkIds.map((linkId) => database.getLinkById(linkId)),
-    );
-    for (const link of templateLinks) {
-      if (!link?.id) continue;
-      linkMap.set(`link:${link.id}`, buildLinkEntry(link));
-    }
-  }
-  const memberMap = new Map(
-    members.map((member) => [Number(member.user_id || 0), member]),
-  );
-  for (const [key, value] of linkMap.entries()) {
-    memberMap.set(key, value);
-  }
-  const templates = templatesRaw.map((template) =>
-    buildWorkspaceTemplateResponse(template, memberMap, BASE_URL),
-  );
-
   return {
-    workspace,
+    workspace: selected.workspace,
     membership: selected.member,
-    members,
-    templates,
-    sourceLinks: links.map((link) => attachVideoOverlayPublicFields({
-      id: link.id,
-      short_url: buildLinkShortUrl(link, BASE_URL),
-      short_code: link.alias || link.short_code || "",
-      alias: link.alias || "",
-      original_url: link.original_url || "",
-      og_title: link.og_title || "",
-      og_desc: link.og_desc || "",
-      og_image: link.og_image || "",
-      link_type: link.link_type || "direct",
-      video_url: link.video_url || "",
-      video_overlay_text: link.video_overlay_text || "",
-      domain_hostname: link.domain_hostname || null,
-      created_at: link.created_at || null,
-      workspace_id: link.workspace_id || null,
-    })),
   };
 }
 
@@ -5189,6 +5261,22 @@ async function checkAdmin(req, res) {
   return user;
 }
 
+async function checkSupportInboxAccess(req, res) {
+  const user = await resolveUser(req);
+  if (!user || !canAccessSupportInbox(user)) {
+    res.status(403).json({ error: "Không có quyền truy cập hộp thư hỗ trợ" });
+    return null;
+  }
+  if (isAdminEmail(user.email) && user.role !== "admin") {
+    const database = await getDb();
+    await database.updateUserRole(user.id, "admin");
+    await database.updateUserPlan(user.id, "admin");
+    user.role = "admin";
+    user.plan = "admin";
+  }
+  return user;
+}
+
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
@@ -5230,8 +5318,8 @@ app.get("/api/admin/payments", requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/api/admin/support", requireAdmin, async (req, res) => {
-  if (!(await checkAdmin(req, res))) return;
+app.get("/api/admin/support", requireSupportInbox, async (req, res) => {
+  if (!(await checkSupportInboxAccess(req, res))) return;
   try {
     const database = await getDb();
     const [messages, users] = await Promise.all([
@@ -5246,16 +5334,16 @@ app.get("/api/admin/support", requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/api/admin/support/stream", requireAdmin, async (req, res) => {
-  const adminUser = await checkAdmin(req, res);
-  if (!adminUser) return;
+app.get("/api/admin/support/stream", requireSupportInbox, async (req, res) => {
+  const supportUser = await checkSupportInboxAccess(req, res);
+  if (!supportUser) return;
   try {
     initSupportStream(res);
     const cleanup = registerSupportAdminStreamClient(res);
     req.on("close", cleanup);
     writeSupportStreamEvent(res, "ready", {
-      role: "admin",
-      user_id: adminUser.id,
+      role: isSupportRole(supportUser.role) ? "support" : "admin",
+      user_id: supportUser.id,
       connected_at: new Date().toISOString(),
     });
   } catch (e) {
@@ -5267,8 +5355,8 @@ app.get("/api/admin/support/stream", requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/api/admin/support/:userId/messages", requireAdmin, async (req, res) => {
-  if (!(await checkAdmin(req, res))) return;
+app.get("/api/admin/support/:userId/messages", requireSupportInbox, async (req, res) => {
+  if (!(await checkSupportInboxAccess(req, res))) return;
   try {
     const targetUserId = Number(req.params.userId);
     if (!Number.isInteger(targetUserId) || targetUserId < 1) {
@@ -5305,9 +5393,9 @@ app.get("/api/admin/support/:userId/messages", requireAdmin, async (req, res) =>
   }
 });
 
-app.post("/api/admin/support/:userId/messages", requireAdmin, async (req, res) => {
-  const adminUser = await checkAdmin(req, res);
-  if (!adminUser) return;
+app.post("/api/admin/support/:userId/messages", requireSupportInbox, async (req, res) => {
+  const supportUser = await checkSupportInboxAccess(req, res);
+  if (!supportUser) return;
   try {
     const targetUserId = Number(req.params.userId);
     if (!Number.isInteger(targetUserId) || targetUserId < 1) {
@@ -5326,7 +5414,7 @@ app.post("/api/admin/support/:userId/messages", requireAdmin, async (req, res) =
     }
     const created = await database.createSupportMessage({
       user_id: targetUserId,
-      sender_user_id: adminUser.id,
+      sender_user_id: supportUser.id,
       sender_role: "admin",
       message,
       is_read_by_user: false,
@@ -5396,10 +5484,55 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
-    const { plan, role } = req.body;
+    const { plan, role } = req.body || {};
     const uid = Number(req.params.id);
-    if (plan) await database.updateUserPlan(uid, plan);
-    if (role) await database.updateUserRole(uid, role);
+    if (!Number.isInteger(uid) || uid < 1) {
+      return res.status(400).json({ error: "User không hợp lệ" });
+    }
+    const targetUser = await database.getUserById(uid);
+    if (!targetUser) {
+      return res.status(404).json({ error: "Không tìm thấy người dùng" });
+    }
+    const allowedPlans = new Set(["free", "pro", "business", "admin"]);
+    const allowedRoles = new Set(["user", "support", "admin"]);
+    const nextPlan = Object.prototype.hasOwnProperty.call(req.body || {}, "plan")
+      ? String(plan || "")
+          .trim()
+          .toLowerCase()
+      : "";
+    const nextRole = Object.prototype.hasOwnProperty.call(req.body || {}, "role")
+      ? String(role || "")
+          .trim()
+          .toLowerCase()
+      : "";
+
+    if (nextPlan && !allowedPlans.has(nextPlan)) {
+      return res.status(400).json({ error: "Gói người dùng không hợp lệ" });
+    }
+    if (nextRole && !allowedRoles.has(nextRole)) {
+      return res.status(400).json({ error: "Vai trò người dùng không hợp lệ" });
+    }
+    if (isAdminEmail(targetUser.email) && nextRole && nextRole !== "admin") {
+      return res
+        .status(400)
+        .json({ error: "Tài khoản admin hệ thống không thể bị hạ quyền" });
+    }
+
+    let effectiveRole = nextRole || "";
+    let effectivePlan = nextPlan || "";
+    if (effectivePlan === "admin") effectiveRole = "admin";
+    if (effectiveRole === "admin") effectivePlan = "admin";
+    if (
+      effectiveRole &&
+      effectiveRole !== "admin" &&
+      !effectivePlan &&
+      String(targetUser.plan || "").trim().toLowerCase() === "admin"
+    ) {
+      effectivePlan = "free";
+    }
+
+    if (effectivePlan) await database.updateUserPlan(uid, effectivePlan);
+    if (effectiveRole) await database.updateUserRole(uid, effectiveRole);
     const updated = await database.getUserById(uid);
     res.json({
       user: {
@@ -6086,59 +6219,116 @@ app.post("/api/extract-thumb", requireAuth, async (req, res) => {
 app.get("/api/stats", async (req, res) => {
   try {
     const database = await getDb();
-    const publicBaseUrl = await getPublicBaseUrl();
-    const user = await resolveUser(req);
+    const [publicBaseUrl, user] = await Promise.all([
+      getPublicBaseUrl(),
+      resolveUser(req),
+    ]);
     const userId = user?.id || null;
     const guestSessionId = user ? null : req.guestSessionId;
-    const totals = await database.getTotals(userId, guestSessionId);
-    const today = await database.getTodayStats(userId, guestSessionId);
-    const clickRows = await database.getClickAnalytics(userId, guestSessionId);
-    const analytics = buildStatsAnalytics(clickRows);
-    const todayKey = getAnalyticsDayKey(new Date());
-    const uniqueClicksToday =
-      (analytics.unique_timeline || []).find((item) => item.date === todayKey)
-        ?.clicks || 0;
-    const latestLoginEvent = user
-      ? await database.getLatestLoginEvent(user.id)
-      : null;
-    const workspaceContext = user
-      ? await resolveWorkspaceContext(database, user, {
-          ensureOwnerWorkspace: false,
-        })
-      : null;
-    const alerts = buildStatsAlertPayload({
-      planName: user?.plan || "guest",
-      linksToday: today.linksToday || 0,
-      hasAccount: !!user,
-      clickRows,
-      latestLoginEvent,
-    });
-    const workspaceInviteAlert =
-      buildWorkspaceInvitationAlert(workspaceContext);
-    if (workspaceInviteAlert) {
-      alerts.active = Array.isArray(alerts.active) ? alerts.active : [];
-      alerts.active.push(workspaceInviteAlert);
+    const cacheKey = buildStatsCacheKey(userId, guestSessionId);
+    const cachedEntry = statsResponseCache.get(cacheKey);
+    if (
+      cachedEntry &&
+      cachedEntry.expiresAt > Date.now() &&
+      cachedEntry.publicBaseUrl === publicBaseUrl &&
+      cachedEntry.plan === (user?.plan || "guest")
+    ) {
+      return res.json(cachedEntry.payload);
     }
-    const recent = (await database.getRecentLinks(userId, guestSessionId)).map(
-      (l) => ({
+    if (statsResponseInFlight.has(cacheKey)) {
+      const payload = await statsResponseInFlight.get(cacheKey);
+      return res.json(payload);
+    }
+
+    const requestPromise = (async () => {
+      const startedAt = Date.now();
+      const dataStartedAt = Date.now();
+      const [
+        totals,
+        today,
+        clickRows,
+        latestLoginEvent,
+        workspaceSelection,
+        recentLinks,
+      ] = await Promise.all([
+        database.getTotals(userId, guestSessionId),
+        database.getTodayStats(userId, guestSessionId),
+        database.getClickAnalytics(userId, guestSessionId),
+        user ? database.getLatestLoginEvent(user.id) : Promise.resolve(null),
+        user
+          ? resolveWorkspaceSelection(database, user, {
+              ensureOwnerWorkspace: false,
+            })
+          : Promise.resolve(null),
+        database.getRecentLinks(userId, guestSessionId),
+      ]);
+      const dataFetchMs = Date.now() - dataStartedAt;
+      const analyticsStartedAt = Date.now();
+      const analytics = buildStatsAnalytics(clickRows);
+      const analyticsMs = Date.now() - analyticsStartedAt;
+      const todayKey = getAnalyticsDayKey(new Date());
+      const uniqueClicksToday =
+        (analytics.unique_timeline || []).find((item) => item.date === todayKey)
+          ?.clicks || 0;
+      const alerts = buildStatsAlertPayload({
+        planName: user?.plan || "guest",
+        linksToday: today.linksToday || 0,
+        hasAccount: !!user,
+        clickRows,
+        latestLoginEvent,
+      });
+      const workspaceInviteAlert =
+        buildWorkspaceInvitationAlert(workspaceSelection);
+      if (workspaceInviteAlert) {
+        alerts.active = Array.isArray(alerts.active) ? alerts.active : [];
+        alerts.active.push(workspaceInviteAlert);
+      }
+      const recent = recentLinks.map((l) => ({
         ...attachVideoOverlayPublicFields(l),
         short_url: buildLinkShortUrl(l, publicBaseUrl),
-      }),
-    );
-    res.json({
-      ...totals,
-      ...today,
-      totalClicks: analytics.unique_clicks || 0,
-      uniqueTotalClicks: analytics.unique_clicks || 0,
-      rawTotalClicks: totals.totalClicks || 0,
-      clicksToday: uniqueClicksToday,
-      uniqueClicksToday,
-      rawClicksToday: today.clicksToday || 0,
-      recent,
-      analytics,
-      alerts,
-      plan: user?.plan || "guest",
-    });
+      }));
+      const payload = {
+        ...totals,
+        ...today,
+        totalClicks: analytics.unique_clicks || 0,
+        uniqueTotalClicks: analytics.unique_clicks || 0,
+        rawTotalClicks: totals.totalClicks || 0,
+        clicksToday: uniqueClicksToday,
+        uniqueClicksToday,
+        rawClicksToday: today.clicksToday || 0,
+        recent,
+        analytics,
+        alerts,
+        plan: user?.plan || "guest",
+      };
+      const totalMs = Date.now() - startedAt;
+      if (totalMs >= 1500) {
+        console.log("[stats] slow request", {
+          totalMs,
+          dataFetchMs,
+          analyticsMs,
+          clickRows: clickRows.length,
+          recentLinks: recentLinks.length,
+          hasUser: !!user,
+        });
+      }
+      if (STATS_RESPONSE_CACHE_TTL_MS > 0) {
+        statsResponseCache.set(cacheKey, {
+          payload,
+          expiresAt: Date.now() + STATS_RESPONSE_CACHE_TTL_MS,
+          publicBaseUrl,
+          plan: user?.plan || "guest",
+        });
+      }
+      return payload;
+    })();
+    statsResponseInFlight.set(cacheKey, requestPromise);
+    try {
+      const payload = await requestPromise;
+      return res.json(payload);
+    } finally {
+      statsResponseInFlight.delete(cacheKey);
+    }
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
