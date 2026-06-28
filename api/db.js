@@ -43,6 +43,34 @@ function check(error, context='') {
   throw new Error(error.message || JSON.stringify(error));
 }
 
+async function fetchPaginatedRows(fetchPage, limit = 1000, pageSize = 1000) {
+  const safeLimit = Math.max(Number(limit) || 0, 0);
+  if (!safeLimit) return { data: [], error: null };
+
+  const safePageSize = Math.max(
+    1,
+    Math.min(Number(pageSize) || 1000, safeLimit, 1000),
+  );
+  const rows = [];
+  let from = 0;
+
+  while (rows.length < safeLimit) {
+    const remaining = safeLimit - rows.length;
+    const currentPageSize = Math.min(safePageSize, remaining);
+    const result = await fetchPage(from, from + currentPageSize - 1);
+    if (result?.error) {
+      return { data: rows, error: result.error };
+    }
+    const pageRows = Array.isArray(result?.data) ? result.data : [];
+
+    rows.push(...pageRows);
+    if (pageRows.length < currentPageSize) break;
+    from += currentPageSize;
+  }
+
+  return { data: rows, error: null };
+}
+
 async function init() {
   const sb = getClient();
 
@@ -1098,28 +1126,34 @@ async function init() {
     },
 
     async getClickAnalytics(userId, guestSessionId, limit = 5000) {
-      const buildQuery = (selectExpr) => {
+      const buildQuery = (selectExpr, from, to) => {
         let q = sb
           .from('clicks')
           .select(selectExpr)
           .order('clicked_at', { ascending: false })
-          .limit(limit);
+          .range(from, to);
         if (userId) q = q.eq('links.user_id', userId);
         else if (guestSessionId) q = q.eq('links.guest_session_id', guestSessionId);
         else q = q.is('links.user_id', null).is('links.guest_session_id', null);
         return q;
       };
 
-      let result = await buildQuery(
-        'id,link_id,ip,user_agent,referrer,clicked_at,country_code,country_name,city,links!inner(id,original_url,link_type,user_id,guest_session_id)',
-      );
+      const selectExpr =
+        'id,link_id,ip,user_agent,referrer,clicked_at,country_code,country_name,city,links!inner(id,original_url,link_type,user_id,guest_session_id)';
+      const fallbackSelectExpr =
+        'id,link_id,ip,user_agent,referrer,clicked_at,links!inner(id,original_url,link_type,user_id,guest_session_id)';
+      const fetchRows = async (expr) =>
+        fetchPaginatedRows(
+          (from, to) => buildQuery(expr, from, to),
+          limit,
+        );
+
+      let result = await fetchRows(selectExpr);
       if (
         result.error &&
         /country_code|country_name|city|schema cache/i.test(result.error.message || '')
       ) {
-        result = await buildQuery(
-          'id,link_id,ip,user_agent,referrer,clicked_at,links!inner(id,original_url,link_type,user_id,guest_session_id)',
-        );
+        result = await fetchRows(fallbackSelectExpr);
       }
       check(result.error, 'click_analytics');
       return (result.data || []).map((row) => ({
@@ -1130,23 +1164,29 @@ async function init() {
     },
 
     async getAdminClickAnalytics(limit = 5000) {
-      const buildQuery = (selectExpr) =>
+      const buildQuery = (selectExpr, from, to) =>
         sb
           .from('clicks')
           .select(selectExpr)
           .order('clicked_at', { ascending: false })
-          .limit(limit);
+          .range(from, to);
 
-      let result = await buildQuery(
-        'id,link_id,ip,user_agent,referrer,clicked_at,country_code,country_name,city,links!inner(id,original_url,link_type,user_id,guest_session_id)',
-      );
+      const selectExpr =
+        'id,link_id,ip,user_agent,referrer,clicked_at,country_code,country_name,city,links!inner(id,original_url,link_type,user_id,guest_session_id)';
+      const fallbackSelectExpr =
+        'id,link_id,ip,user_agent,referrer,clicked_at,links!inner(id,original_url,link_type,user_id,guest_session_id)';
+      const fetchRows = async (expr) =>
+        fetchPaginatedRows(
+          (from, to) => buildQuery(expr, from, to),
+          limit,
+        );
+
+      let result = await fetchRows(selectExpr);
       if (
         result.error &&
         /country_code|country_name|city|schema cache/i.test(result.error.message || '')
       ) {
-        result = await buildQuery(
-          'id,link_id,ip,user_agent,referrer,clicked_at,links!inner(id,original_url,link_type,user_id,guest_session_id)',
-        );
+        result = await fetchRows(fallbackSelectExpr);
       }
       check(result.error, 'admin_click_analytics');
       return (result.data || []).map((row) => ({
@@ -1310,4 +1350,9 @@ async function init() {
   };
 }
 
-module.exports = { init };
+module.exports = {
+  init,
+  __testUtils: {
+    fetchPaginatedRows,
+  },
+};
