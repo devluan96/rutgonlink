@@ -127,6 +127,22 @@ CREATE INDEX IF NOT EXISTS idx_workspace_link_templates_created_by ON workspace_
 CREATE INDEX IF NOT EXISTS idx_workspace_link_templates_source_link_id ON workspace_link_templates(source_link_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_link_templates_media_link_id ON workspace_link_templates(media_link_id);
 
+-- Article funnel publishes
+CREATE TABLE IF NOT EXISTS article_funnels (
+  id                 BIGSERIAL PRIMARY KEY,
+  route_slug         TEXT UNIQUE NOT NULL,
+  domain_hostname    TEXT,
+  title              TEXT,
+  config_json        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  created_at         TIMESTAMPTZ DEFAULT NOW(),
+  updated_at         TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_article_funnels_domain_hostname ON article_funnels(domain_hostname);
+CREATE INDEX IF NOT EXISTS idx_article_funnels_created_by_user_id ON article_funnels(created_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_article_funnels_created_at ON article_funnels(created_at DESC);
+
 -- Clicks
 CREATE TABLE IF NOT EXISTS clicks (
   id           BIGSERIAL PRIMARY KEY,

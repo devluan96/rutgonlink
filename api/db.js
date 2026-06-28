@@ -626,6 +626,43 @@ async function init() {
       return true;
     },
 
+    async upsertArticleFunnel(payload = {}) {
+      const routeSlug = String(payload.route_slug || '').trim();
+      if (!routeSlug) {
+        throw new Error('ARTICLE_FUNNEL_ROUTE_SLUG_REQUIRED');
+      }
+      const insertPayload = {
+        route_slug: routeSlug,
+        domain_hostname: payload.domain_hostname || null,
+        title: payload.title || null,
+        config_json:
+          payload.config_json && typeof payload.config_json === 'object'
+            ? payload.config_json
+            : {},
+        created_by_user_id: payload.created_by_user_id || null,
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error } = await sb
+        .from('article_funnels')
+        .upsert(insertPayload, { onConflict: 'route_slug' })
+        .select('*')
+        .single();
+      check(error, 'article_funnel_upsert');
+      return data;
+    },
+
+    async getArticleFunnelBySlug(routeSlug) {
+      const normalizedSlug = String(routeSlug || '').trim();
+      if (!normalizedSlug) return null;
+      const { data, error } = await sb
+        .from('article_funnels')
+        .select('*')
+        .eq('route_slug', normalizedSlug)
+        .maybeSingle();
+      check(error, 'article_funnel_get');
+      return data;
+    },
+
     async countUsers() {
       const { count, error } = await sb.from('users').select('*', { count: 'exact', head: true });
       check(error);

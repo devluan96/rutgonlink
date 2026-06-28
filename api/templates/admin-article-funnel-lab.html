@@ -625,6 +625,7 @@
               <button class="ghost-btn" type="button" id="resetDraftBtn">Xoa draft</button>
               <button class="ghost-btn" type="button" id="copyJsonBtn">Copy JSON</button>
               <button class="ghost-btn" type="button" id="generatePreviewLinkBtn">Tao public preview link</button>
+              <button class="ghost-btn" type="button" id="publishShortLinkBtn">Publish link ngan</button>
               <a class="ghost-btn" href="/admin">Ve admin</a>
             </div>
             <div class="muted-line" style="margin-top: 12px">
@@ -633,9 +634,14 @@
             </div>
             <div class="field-grid" style="margin-top: 14px">
               <div class="field">
-                <label for="publicPreviewUrlOutput">Public preview route</label>
+                <label for="publicPreviewUrlOutput">Public preview route de dat vao comment</label>
                 <input id="publicPreviewUrlOutput" type="text" readonly />
-                <div class="hint" id="publicPreviewMeta">Chua tao link public de test comment Facebook.</div>
+                <div class="hint" id="publicPreviewMeta">Phai tao link public nay roi moi test dung OG va overlay trong comment Facebook.</div>
+              </div>
+              <div class="field">
+                <label for="publishedUrlOutput">Published link ngan de dat comment</label>
+                <input id="publishedUrlOutput" type="text" readonly />
+                <div class="hint" id="publishedUrlMeta">Bam Publish link ngan de tao URL gon hon, dung cho comment Facebook that.</div>
               </div>
             </div>
           </div>
@@ -658,8 +664,9 @@
                 <textarea id="titleInput" style="min-height: 88px"></textarea>
               </div>
               <div class="field">
-                <label>URL comment se dat</label>
+                <label>URL bai goc tham chieu</label>
                 <input id="articleUrlOutput" type="text" readonly />
+                <div class="hint">URL nay chi de doi chieu noi dung bai. Khi test comment Facebook, hay dung public preview route o tren.</div>
               </div>
             </div>
           </div>
@@ -789,7 +796,7 @@
                   </div>
                 </div>
                 <button class="comment-copy-btn" type="button" id="copyArticleUrlBtn">
-                  Copy URL bai
+                  Copy link comment
                 </button>
               </div>
 
@@ -902,6 +909,9 @@
         let pendingStages = [];
         let generatedPreviewUrl = "";
         let generatedPreviewExpiresAt = "";
+        let generatedPublishedUrl = "";
+        let generatedPublishedUpdatedAt = "";
+        let generatedPublishedDomainNote = "";
         const resolvedLaunchCache = new Map();
         const resolvingLaunchCache = new Map();
 
@@ -912,6 +922,8 @@
           articleUrlOutput: document.getElementById("articleUrlOutput"),
           publicPreviewUrlOutput: document.getElementById("publicPreviewUrlOutput"),
           publicPreviewMeta: document.getElementById("publicPreviewMeta"),
+          publishedUrlOutput: document.getElementById("publishedUrlOutput"),
+          publishedUrlMeta: document.getElementById("publishedUrlMeta"),
           baseUrlInput: document.getElementById("baseUrlInput"),
           popup5sInput: document.getElementById("popup5sInput"),
           popup300sInput: document.getElementById("popup300sInput"),
@@ -1088,6 +1100,12 @@
         function clearGeneratedPreviewLink() {
           generatedPreviewUrl = "";
           generatedPreviewExpiresAt = "";
+        }
+
+        function clearGeneratedPublishedLink() {
+          generatedPublishedUrl = "";
+          generatedPublishedUpdatedAt = "";
+          generatedPublishedDomainNote = "";
         }
 
         function resetFeed(count) {
@@ -1505,14 +1523,18 @@
           els.publicPreviewUrlOutput.value = generatedPreviewUrl;
           els.publicPreviewMeta.textContent = generatedPreviewUrl
             ? `Het han: ${generatedPreviewExpiresAt || "7 ngay"}`
-            : "Chua tao link public de test comment Facebook.";
-          const commentTarget = generatedPreviewUrl || articleUrl;
-          els.commentUrlPreview.textContent = commentTarget || "https://domain-cua-ban/slug-bai-viet";
+            : "Chua tao link public. Neu dat article URL goc vao comment, Facebook se lay OG cua trang nguon va khong co overlay cua lab.";
+          els.publishedUrlOutput.value = generatedPublishedUrl;
+          els.publishedUrlMeta.textContent = generatedPublishedUrl
+            ? `${generatedPublishedDomainNote ? `${generatedPublishedDomainNote} ` : ""}Cap nhat: ${generatedPublishedUpdatedAt || "vua xong"}`
+            : "Bam Publish link ngan de tao URL gon hon, dung cho comment Facebook that.";
+          const commentTarget = generatedPublishedUrl || generatedPreviewUrl;
+          els.commentUrlPreview.textContent = commentTarget || "Bam 'Publish link ngan' hoac 'Tao public preview link' de lay URL dat vao comment Facebook";
           els.commentUrlPreview.href = commentTarget || "#";
           els.commentDomainPreview.textContent = (
-            generatedPreviewUrl
-              ? new URL(generatedPreviewUrl).hostname
-              : state.sourceDomain.trim() || "honghot.site"
+            commentTarget
+              ? new URL(commentTarget).hostname
+              : "public-preview"
           ).toUpperCase();
           els.commentTitlePreview.textContent = state.title.trim() || "Tieu de bai viet";
           els.commentShareImage.style.backgroundImage = state.shareImage.trim()
@@ -1592,6 +1614,7 @@
 
         function addBlock(type) {
           clearGeneratedPreviewLink();
+          clearGeneratedPublishedLink();
           state.blocks.push({
             id: newId(),
             type,
@@ -1609,6 +1632,7 @@
           const targetIndex = direction === "up" ? index - 1 : index + 1;
           if (targetIndex < 0 || targetIndex >= state.blocks.length) return;
           clearGeneratedPreviewLink();
+          clearGeneratedPublishedLink();
           const [block] = state.blocks.splice(index, 1);
           state.blocks.splice(targetIndex, 0, block);
           render();
@@ -1617,6 +1641,7 @@
 
         function removeBlock(blockId) {
           clearGeneratedPreviewLink();
+          clearGeneratedPublishedLink();
           state.blocks = state.blocks.filter((block) => block.id !== blockId);
           if (!state.blocks.length) {
             state.blocks.push(normalizeBlock(defaultState.blocks[0]));
@@ -1673,6 +1698,7 @@
             resetTimers();
             clearResolvedCache();
             clearGeneratedPreviewLink();
+            clearGeneratedPublishedLink();
             closeOverlay();
             resetFeed();
             render();
@@ -1707,6 +1733,27 @@
           }
         }
 
+        async function publishShortLink() {
+          try {
+            const response = await fetch("/api/admin/article-funnel-lab/publish", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ config: getExportPayload() }),
+            });
+            if (!response.ok) {
+              throw new Error("publish_short_link_failed");
+            }
+            const data = await response.json();
+            generatedPublishedUrl = String(data.published_url || "").trim();
+            generatedPublishedUpdatedAt = String(data.updated_at || "").trim();
+            generatedPublishedDomainNote = String(data.domain_note || "").trim();
+            renderPreviewShell();
+            showToast("Da publish link ngan");
+          } catch {
+            showToast("Khong publish duoc link ngan");
+          }
+        }
+
         document.querySelectorAll("[data-add-block]").forEach((button) => {
           button.addEventListener("click", () => addBlock(button.dataset.addBlock));
         });
@@ -1719,6 +1766,7 @@
           const block = state.blocks.find((item) => item.id === blockId);
           if (!block) return;
           clearGeneratedPreviewLink();
+          clearGeneratedPublishedLink();
           block[field] = target.value;
           renderPreviewBlocks();
           renderPreviewShell();
@@ -1755,6 +1803,7 @@
           input.addEventListener("input", () => {
             state[stateKey] = input.value;
             clearGeneratedPreviewLink();
+            clearGeneratedPublishedLink();
             if (
               stateKey === "baseUrl" ||
               stateKey === "popup5sUrl" ||
@@ -1778,6 +1827,7 @@
           resetTimers();
           clearResolvedCache();
           clearGeneratedPreviewLink();
+          clearGeneratedPublishedLink();
           closeOverlay();
           resetFeed();
           render();
@@ -1791,6 +1841,7 @@
           resetTimers();
           clearResolvedCache();
           clearGeneratedPreviewLink();
+          clearGeneratedPublishedLink();
           closeOverlay();
           resetFeed();
           render();
@@ -1807,20 +1858,21 @@
         });
 
         document.getElementById("generatePreviewLinkBtn").addEventListener("click", createPublicPreviewLink);
+        document.getElementById("publishShortLinkBtn").addEventListener("click", publishShortLink);
         document.getElementById("applyImportBtn").addEventListener("click", applyImport);
         document.getElementById("fillImportBtn").addEventListener("click", copyCurrentJsonToImport);
 
         document.getElementById("copyArticleUrlBtn").addEventListener("click", async () => {
-          const articleUrl = generatedPreviewUrl || getArticleUrl();
+          const articleUrl = generatedPublishedUrl || generatedPreviewUrl;
           if (!articleUrl) {
-            showToast("Chua co URL bai viet de copy");
+            showToast("Chua co link comment de copy");
             return;
           }
           try {
             await navigator.clipboard.writeText(articleUrl);
-            showToast("Da copy URL bai viet");
+            showToast("Da copy link comment");
           } catch {
-            showToast("Khong copy duoc URL bai viet");
+            showToast("Khong copy duoc link comment");
           }
         });
 

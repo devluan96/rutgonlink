@@ -342,34 +342,7 @@ app.post("/api/admin/article-funnel-lab/preview-link", requireAdmin, async (req,
       req.body?.config && typeof req.body.config === "object"
         ? req.body.config
         : req.body;
-    const baseConfig = normalizeArticleFunnelPreviewConfig(rawConfig);
-    const resolvedStages = await Promise.all(
-      (baseConfig.stages || []).map(async (stage) => {
-        const candidateUrl =
-          stage.target_url || stage.direct_web_url || stage.direct_app_url || "";
-        let finalUrl = candidateUrl;
-        try {
-          const normalizedUrl =
-            normalizeAffiliatePresetUrl(
-              candidateUrl,
-              inferAffiliatePlatformFromUrl(candidateUrl),
-            ) ||
-            normalizeAffiliatePresetUrl(candidateUrl) ||
-            candidateUrl;
-          const health = await fetchAffiliateHealth(normalizedUrl);
-          finalUrl = String(health?.final_url || normalizedUrl || candidateUrl).trim();
-        } catch {}
-        return {
-          stage_key: stage.stage_key,
-          delay_ms: stage.delay_ms,
-          ...buildDirectLaunchConfig(finalUrl),
-        };
-      }),
-    );
-    const previewConfig = normalizeArticleFunnelPreviewConfig(
-      rawConfig,
-      resolvedStages,
-    );
+    const previewConfig = await resolveArticleFunnelConfig(rawConfig);
     const expiresAt = Date.now() + ARTICLE_FUNNEL_PREVIEW_TOKEN_TTL_MS;
     const token = encodeArticleFunnelPreviewToken({
       v: 1,
@@ -390,6 +363,56 @@ app.post("/api/admin/article-funnel-lab/preview-link", requireAdmin, async (req,
     return res.status(500).json({ error: "Không thể tạo preview link" });
   }
 });
+app.post("/api/admin/article-funnel-lab/publish", requireAdmin, async (req, res) => {
+  try {
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const rawConfig =
+      req.body?.config && typeof req.body.config === "object"
+        ? req.body.config
+        : req.body;
+    const publishedConfig = await resolveArticleFunnelConfig(rawConfig);
+    const routeSlug = normalizeArticleFunnelPreviewSlug(
+      publishedConfig.slug || publishedConfig.title,
+    );
+    const requestedDomainHostname = normalizeDomainHost(
+      publishedConfig.source_domain,
+    );
+    const activeRequestedDomain = requestedDomainHostname
+      ? await resolveActiveDomainHostname(database, requestedDomainHostname)
+      : null;
+    const fallbackDomainHostname = normalizeDomainHost(publicBaseUrl);
+    const selectedDomainHostname =
+      activeRequestedDomain || fallbackDomainHostname || null;
+    const saved = await database.upsertArticleFunnel({
+      route_slug: routeSlug,
+      domain_hostname: selectedDomainHostname,
+      title: publishedConfig.title || null,
+      config_json: publishedConfig,
+      created_by_user_id: req.currentUser?.id || null,
+    });
+    const publishedUrl = buildArticleFunnelPublicUrl(
+      saved.route_slug,
+      saved.domain_hostname,
+      publicBaseUrl,
+    );
+    const domainNote =
+      requestedDomainHostname && requestedDomainHostname !== selectedDomainHostname
+        ? `Domain ${requestedDomainHostname} chua nam trong danh sach domain dang hoat dong, da fallback sang ${selectedDomainHostname || normalizeDomainHost(BASE_URL) || "domain mac dinh"}.`
+        : "";
+    return res.json({
+      ok: true,
+      published_url: publishedUrl,
+      route_slug: saved.route_slug,
+      domain_hostname: saved.domain_hostname || "",
+      domain_note: domainNote,
+      updated_at: saved.updated_at || saved.created_at || new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[article-funnel-lab/publish]", error);
+    return res.status(500).json({ error: "Khong the publish article funnel" });
+  }
+});
 app.get(
   ["/_lab/article-funnel/:slug/:token", "/_lab/article-funnel/:slug/:token/"],
   (req, res) => {
@@ -401,7 +424,13 @@ app.get(
       "Cache-Control": "no-store",
       "Content-Type": "text/html;charset=utf-8",
     });
-    return res.send(buildArticleFunnelPreviewPage(config, canonicalUrl));
+    return res.send(
+      buildArticleFunnelPreviewPage(
+        config,
+        canonicalUrl,
+        `/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
+      ),
+    );
   } catch (error) {
     const code = String(error?.message || "");
     const status =
@@ -409,6 +438,97 @@ app.get(
         ? 400
         : 500;
     return res.status(status).send("Preview link không hợp lệ hoặc đã hết hạn");
+  }
+});
+app.get(
+  [
+    "/_lab/article-funnel-launch/:slug/:token/:stageKey",
+    "/_lab/article-funnel-launch/:slug/:token/:stageKey/",
+  ],
+  (req, res) => {
+    try {
+      const payload = decodeArticleFunnelPreviewToken(req.params.token);
+      const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
+      const canonicalUrl = `${BASE_URL}/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}/${encodeURIComponent(req.params.stageKey || "")}`;
+      return handleArticleFunnelStageLaunch({
+        req,
+        res,
+        config,
+        stageKey: String(req.params.stageKey || "").trim(),
+        canonicalUrl,
+      });
+    } catch (error) {
+      const code = String(error?.message || "");
+      const status =
+        code === "PREVIEW_TOKEN_EXPIRED" || code.startsWith("INVALID_PREVIEW_")
+          ? 400
+          : 500;
+      return res.status(status).send("Launch link khong hop le hoac da het han");
+    }
+  },
+);
+app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
+  try {
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const articleFunnel = await database.getArticleFunnelBySlug(req.params.slug);
+    if (!articleFunnel) {
+      return res
+        .status(404)
+        .sendFile(path.join(__dirname, "..", "public", "404.html"));
+    }
+    const config = normalizeArticleFunnelPreviewConfig(
+      articleFunnel.config_json || {},
+    );
+    const canonicalUrl = buildArticleFunnelPublicUrl(
+      articleFunnel.route_slug,
+      articleFunnel.domain_hostname,
+      publicBaseUrl,
+    );
+    res.set({
+      "Cache-Control": "no-store",
+      "Content-Type": "text/html;charset=utf-8",
+    });
+    return res.send(
+      buildArticleFunnelPreviewPage(
+        config,
+        canonicalUrl,
+        `/af-launch/${encodeURIComponent(articleFunnel.route_slug)}`,
+      ),
+    );
+  } catch (error) {
+    console.error("[article-funnel/published]", error);
+    return res.status(500).send("Khong the mo article funnel");
+  }
+});
+app.get(["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"], async (req, res) => {
+  try {
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const articleFunnel = await database.getArticleFunnelBySlug(req.params.slug);
+    if (!articleFunnel) {
+      return res
+        .status(404)
+        .sendFile(path.join(__dirname, "..", "public", "404.html"));
+    }
+    const config = normalizeArticleFunnelPreviewConfig(
+      articleFunnel.config_json || {},
+    );
+    const canonicalUrl = `${buildArticleFunnelPublicUrl(
+      articleFunnel.route_slug,
+      articleFunnel.domain_hostname,
+      publicBaseUrl,
+    ).replace(/\/+$/, "")}/launch/${encodeURIComponent(req.params.stageKey || "")}`;
+    return handleArticleFunnelStageLaunch({
+      req,
+      res,
+      config,
+      stageKey: String(req.params.stageKey || "").trim(),
+      canonicalUrl,
+    });
+  } catch (error) {
+    console.error("[article-funnel/published-launch]", error);
+    return res.status(500).send("Khong the launch article funnel");
   }
 });
 app.get("/favicon.ico", (_req, res) => {
@@ -3562,7 +3682,190 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
   };
 }
 
-function buildArticleFunnelPreviewPage(config, canonicalUrl) {
+async function resolveArticleFunnelConfig(rawConfig) {
+  const baseConfig = normalizeArticleFunnelPreviewConfig(rawConfig);
+  const resolvedStages = await Promise.all(
+    (baseConfig.stages || []).map(async (stage) => {
+      const candidateUrl =
+        stage.target_url || stage.direct_web_url || stage.direct_app_url || "";
+      let finalUrl = candidateUrl;
+      try {
+        const normalizedUrl =
+          normalizeAffiliatePresetUrl(
+            candidateUrl,
+            inferAffiliatePlatformFromUrl(candidateUrl),
+          ) ||
+          normalizeAffiliatePresetUrl(candidateUrl) ||
+          candidateUrl;
+        const health = await fetchAffiliateHealth(normalizedUrl);
+        finalUrl = String(
+          health?.final_url || normalizedUrl || candidateUrl,
+        ).trim();
+      } catch {}
+      return {
+        stage_key: stage.stage_key,
+        delay_ms: stage.delay_ms,
+        ...buildDirectLaunchConfig(finalUrl),
+      };
+    }),
+  );
+  return normalizeArticleFunnelPreviewConfig(rawConfig, resolvedStages);
+}
+
+function buildArticleFunnelPublicUrl(
+  routeSlug,
+  domainHostname,
+  fallbackBaseUrl = BASE_URL,
+) {
+  const baseUrl = domainHostname ? `https://${domainHostname}` : fallbackBaseUrl;
+  return buildShortUrl(baseUrl, `af/${encodeURIComponent(routeSlug || "")}`);
+}
+
+function handleArticleFunnelStageLaunch({
+  req,
+  res,
+  config,
+  stageKey,
+  canonicalUrl,
+}) {
+  const normalizedStageKey = String(stageKey || "").trim();
+  const stage = (config.stages || []).find(
+    (item) => String(item?.stage_key || "").trim() === normalizedStageKey,
+  );
+  if (!stage) {
+    return res.status(404).send("Khong tim thay popup stage");
+  }
+
+  const targetUrl = String(
+    stage.target_url || stage.direct_web_url || stage.direct_app_url || "",
+  ).trim();
+  if (!targetUrl) {
+    return res.status(400).send("Stage target khong hop le");
+  }
+
+  const ua = req.headers["user-agent"] || "";
+  const referer = req.headers["referer"] || "";
+  const platform = getMobilePlatform(ua);
+  const uaKind = getRedirectUaKind(ua);
+  const info = detectPlatformDeep(targetUrl, platform);
+  const isFacebookInApp = isFacebookInAppBrowser(ua);
+  const launchLink = {
+    original_url: targetUrl,
+    og_title: config.title || "Article preview",
+    og_desc: config.title || "Dang mo ung dung dich de tiep tuc xem noi dung.",
+    og_image: config.share_image || config.overlay_image || "",
+  };
+
+  if (
+    platform !== "desktop" &&
+    info.platform_name === "shopee" &&
+    isFacebookInApp
+  ) {
+    setRedirectDebugHeaders(res, {
+      mode: "article-funnel-launch-shopee-facebook-bridge",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: 0,
+      code: `article-funnel:${normalizedStageKey}`,
+      mode: "article-funnel-launch-shopee-facebook-bridge",
+      platform: info.platform_name,
+      uaKind,
+      status: 200,
+      target: targetUrl,
+      referer,
+    });
+    res.set({
+      "Cache-Control": "no-cache,no-store,must-revalidate",
+      Pragma: "no-cache",
+      "Content-Type": "text/html;charset=utf-8",
+      "X-Frame-Options": "SAMEORIGIN",
+    });
+    return res.send(buildDirectBridgePage(launchLink, canonicalUrl, info));
+  }
+
+  if (platform === "desktop") {
+    setRedirectDebugHeaders(res, {
+      mode: "article-funnel-launch-desktop-redirect",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: 0,
+      code: `article-funnel:${normalizedStageKey}`,
+      mode: "article-funnel-launch-desktop-redirect",
+      platform: info.platform_name,
+      uaKind,
+      status: 302,
+      target: targetUrl,
+      referer,
+    });
+    return res.redirect(302, targetUrl);
+  }
+
+  if (info.platform_name === "shopee") {
+    const shopeeTarget = info.deeplink || targetUrl;
+    setRedirectDebugHeaders(res, {
+      mode: "article-funnel-launch-shopee-direct-redirect",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: 0,
+      code: `article-funnel:${normalizedStageKey}`,
+      mode: "article-funnel-launch-shopee-direct-redirect",
+      platform: info.platform_name,
+      uaKind,
+      status: 301,
+      target: shopeeTarget,
+      referer,
+    });
+    return res.redirect(301, shopeeTarget);
+  }
+
+  if (info.deeplink) {
+    setRedirectDebugHeaders(res, {
+      mode: "article-funnel-launch-deeplink-bridge",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: 0,
+      code: `article-funnel:${normalizedStageKey}`,
+      mode: "article-funnel-launch-deeplink-bridge",
+      platform: info.platform_name,
+      uaKind,
+      status: 200,
+      target: info.deeplink || targetUrl,
+      referer,
+    });
+    res.set({
+      "Cache-Control": "no-cache,no-store,must-revalidate",
+      Pragma: "no-cache",
+    });
+    return res.send(buildDirectBridgePage(launchLink, canonicalUrl, info));
+  }
+
+  setRedirectDebugHeaders(res, {
+    mode: "article-funnel-launch-mobile-direct",
+    platform: info.platform_name,
+  });
+  logRedirectDecision({
+    requestId: req.requestId,
+    linkId: 0,
+    code: `article-funnel:${normalizedStageKey}`,
+    mode: "article-funnel-launch-mobile-direct",
+    platform: info.platform_name,
+    uaKind,
+    status: 302,
+    target: targetUrl,
+    referer,
+  });
+  return res.redirect(302, targetUrl);
+}
+
+function buildArticleFunnelPreviewPage(config, canonicalUrl, launchBasePath = "") {
   const title = esc(config.title || "Article preview");
   const shareImage = String(config.share_image || config.overlay_image || "").trim();
   const groupLabel = esc(config.group_label || "Group facebook");
@@ -3576,6 +3879,7 @@ function buildArticleFunnelPreviewPage(config, canonicalUrl) {
   const blocks = JSON.stringify(config.blocks || []);
   const stages = JSON.stringify(config.stages || []);
   const overlayImage = JSON.stringify(config.overlay_image || shareImage || "");
+  const launchBasePathJson = JSON.stringify(String(launchBasePath || "").trim());
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -3636,6 +3940,7 @@ ${ogImageTag}
   var blocks = ${blocks};
   var stages = ${stages};
   var overlayImage = ${overlayImage};
+  var launchBasePath = ${launchBasePathJson};
   var pendingStages = [];
   var overlayEl = document.getElementById('overlay');
   var overlayStackEl = document.getElementById('overlayStack');
@@ -3665,64 +3970,9 @@ ${ogImageTag}
     return 'transform: translateY('+offset+'px) scale('+scale+'); opacity:'+opacity+'; z-index:'+(index+1)+';';
   }
 
-  function openViaAnchor(targetUrl,targetName,relValue){
-    if(!targetUrl) return false;
-    try{
-      var anchor=document.createElement('a');
-      anchor.href=targetUrl;
-      anchor.rel=relValue||'noreferrer noopener';
-      anchor.target=targetName||'_self';
-      anchor.style.display='none';
-      document.body.appendChild(anchor);
-      anchor.click();
-      setTimeout(function(){try{anchor.remove();}catch(_){ }},0);
-      return true;
-    }catch(_){ return false; }
-  }
-
-  function buildAndroidIntentUrl(targetUrl,packageName,fallbackUrl){
-    if(!targetUrl||!packageName) return '';
-    try{
-      var parsed=new URL(targetUrl);
-      var noScheme=targetUrl.replace(/^https?:\\/\\//i,'');
-      var fallback=fallbackUrl||targetUrl;
-      return 'intent://'+noScheme+'#Intent;scheme='+parsed.protocol.replace(':','')+';package='+packageName+';S.browser_fallback_url='+encodeURIComponent(fallback)+';end';
-    }catch(_){ return ''; }
-  }
-
-  function launchDirectTarget(stage){
-    if(!stage) return false;
-    var ua=navigator.userAgent||'';
-    var isIOS=/iphone|ipad|ipod/i.test(ua);
-    var isAndroid=/android/i.test(ua);
-    var isFacebook=/FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
-    var isZalo=/ZaloApp/i.test(ua);
-    var isInApp=isFacebook||isZalo;
-    if(stage.direct_platform==='shopee'){
-      if(isAndroid){
-        var shopeeIntent=stage.direct_android_intent_url||buildAndroidIntentUrl(stage.direct_android_url||stage.direct_web_url,stage.direct_android_package||'com.shopee.vn',stage.direct_web_url);
-        if(shopeeIntent){ openViaAnchor(shopeeIntent); }
-        else if(stage.direct_app_url){ openViaAnchor(stage.direct_app_url); }
-        setTimeout(function(){ if(!document.hidden&&stage.direct_web_url){ window.location.replace(stage.direct_web_url); } },1600);
-        return true;
-      }
-      if(isIOS){
-        var iosTarget=isInApp?(stage.direct_ios_fb_url||stage.direct_web_url||stage.direct_ios_url):(stage.direct_ios_browser_url||stage.direct_ios_url||stage.direct_web_url);
-        if(iosTarget){ openViaAnchor(iosTarget,isInApp?'_blank':'_self','noopener'); }
-        setTimeout(function(){ if(!document.hidden&&stage.direct_web_url){ window.location.replace(stage.direct_web_url); } },isInApp?1500:1600);
-        return true;
-      }
-      if(stage.direct_web_url){ openViaAnchor(stage.direct_web_url); return true; }
-    }
-    if(stage.direct_platform==='tiktok'){
-      var tiktokTarget=isIOS?(stage.direct_ios_url||stage.direct_app_url||stage.direct_web_url):isAndroid?(stage.direct_android_url||stage.direct_app_url||stage.direct_web_url):stage.direct_web_url;
-      if(!tiktokTarget) return false;
-      openViaAnchor(tiktokTarget);
-      setTimeout(function(){ if(!document.hidden&&stage.direct_web_url){ window.location.replace(stage.direct_web_url); } },1600);
-      return true;
-    }
-    if(stage.direct_web_url){ openViaAnchor(stage.direct_web_url,'_blank','noopener'); return true; }
-    return false;
+  function getLaunchUrl(stage){
+    var stageKey = encodeURIComponent(String(stage && stage.stage_key || ''));
+    return (launchBasePath || location.pathname) + '/' + stageKey;
   }
 
   function renderOverlayStack(){
@@ -3733,9 +3983,10 @@ ${ogImageTag}
     }
     overlayEl.classList.add('show');
     overlayStackEl.innerHTML = pendingStages.map(function(stage,index){
+      var launchUrl = getLaunchUrl(stage);
       return '<div class="overlay-card" style="'+getStackStyle(index,pendingStages.length)+'">' +
         '<button class="overlay-close" type="button" data-overlay-close="'+escHtml(stage.stage_key)+'">×</button>' +
-        '<a class="overlay-image-hit" href="'+escHtml(stage.direct_web_url||stage.target_url||'#')+'" target="_blank" rel="noopener" data-overlay-launch="'+escHtml(stage.stage_key)+'">' +
+        '<a class="overlay-image-hit" href="'+escHtml(launchUrl||'#')+'" target="_self" rel="noreferrer">' +
           '<img src="'+escHtml(overlayImage)+'" alt="" />' +
         '</a>' +
       '</div>';
@@ -3766,15 +4017,6 @@ ${ogImageTag}
     var closeButton = event.target.closest('[data-overlay-close]');
     if(closeButton){
       removeStage(closeButton.getAttribute('data-overlay-close')||'');
-      return;
-    }
-    var launchButton = event.target.closest('[data-overlay-launch]');
-    if(launchButton){
-      event.preventDefault();
-      var stageKey = launchButton.getAttribute('data-overlay-launch')||'';
-      var stage = pendingStages.find(function(item){ return item.stage_key === stageKey; });
-      launchDirectTarget(stage);
-      removeStage(stageKey);
     }
   });
 
