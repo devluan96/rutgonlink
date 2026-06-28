@@ -8,6 +8,7 @@ const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
+const zlib = require("zlib");
 const { nanoid } = require("nanoid");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -327,6 +328,81 @@ app.post("/api/admin/article-funnel-lab/resolve-target", requireAdmin, async (re
   } catch (error) {
     console.error("[article-funnel-lab/resolve-target]", error);
     return res.status(500).json({ error: "Resolve target thất bại" });
+  }
+});
+app.post("/api/admin/article-funnel-lab/preview-link", requireAdmin, async (req, res) => {
+  try {
+    const rawConfig =
+      req.body?.config && typeof req.body.config === "object"
+        ? req.body.config
+        : req.body;
+    const baseConfig = normalizeArticleFunnelPreviewConfig(rawConfig);
+    const resolvedStages = await Promise.all(
+      (baseConfig.stages || []).map(async (stage) => {
+        const candidateUrl =
+          stage.target_url || stage.direct_web_url || stage.direct_app_url || "";
+        let finalUrl = candidateUrl;
+        try {
+          const normalizedUrl =
+            normalizeAffiliatePresetUrl(
+              candidateUrl,
+              inferAffiliatePlatformFromUrl(candidateUrl),
+            ) ||
+            normalizeAffiliatePresetUrl(candidateUrl) ||
+            candidateUrl;
+          const health = await fetchAffiliateHealth(normalizedUrl);
+          finalUrl = String(health?.final_url || normalizedUrl || candidateUrl).trim();
+        } catch {}
+        return {
+          stage_key: stage.stage_key,
+          delay_ms: stage.delay_ms,
+          ...buildDirectLaunchConfig(finalUrl),
+        };
+      }),
+    );
+    const previewConfig = normalizeArticleFunnelPreviewConfig(
+      rawConfig,
+      resolvedStages,
+    );
+    const expiresAt = Date.now() + ARTICLE_FUNNEL_PREVIEW_TOKEN_TTL_MS;
+    const token = encodeArticleFunnelPreviewToken({
+      v: 1,
+      exp: expiresAt,
+      config: previewConfig,
+    });
+    const previewSlug = normalizeArticleFunnelPreviewSlug(
+      previewConfig.slug || previewConfig.title,
+    );
+    const previewUrl = `${BASE_URL}/_lab/article-funnel/${previewSlug}/${token}`;
+    return res.json({
+      ok: true,
+      preview_url: previewUrl,
+      expires_at: new Date(expiresAt).toISOString(),
+    });
+  } catch (error) {
+    console.error("[article-funnel-lab/preview-link]", error);
+    return res.status(500).json({ error: "Không thể tạo preview link" });
+  }
+});
+app.get(
+  ["/_lab/article-funnel/:slug/:token", "/_lab/article-funnel/:slug/:token/"],
+  (req, res) => {
+  try {
+    const payload = decodeArticleFunnelPreviewToken(req.params.token);
+    const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
+    const canonicalUrl = `${BASE_URL}/_lab/article-funnel/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`;
+    res.set({
+      "Cache-Control": "no-store",
+      "Content-Type": "text/html;charset=utf-8",
+    });
+    return res.send(buildArticleFunnelPreviewPage(config, canonicalUrl));
+  } catch (error) {
+    const code = String(error?.message || "");
+    const status =
+      code === "PREVIEW_TOKEN_EXPIRED" || code.startsWith("INVALID_PREVIEW_")
+        ? 400
+        : 500;
+    return res.status(status).send("Preview link không hợp lệ hoặc đã hết hạn");
   }
 });
 app.get("/favicon.ico", (_req, res) => {
@@ -3264,6 +3340,377 @@ function buildDirectLaunchConfig(targetUrl) {
           ? TIKTOK_ANDROID_PACKAGE
           : "",
   };
+}
+
+const ARTICLE_FUNNEL_PREVIEW_TOKEN_TTL_MS = 7 * 24 * 3600 * 1000;
+
+function base64UrlEncode(input) {
+  return Buffer.from(input)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function base64UrlDecode(input) {
+  const normalized = String(input || "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const padLength = (4 - (normalized.length % 4)) % 4;
+  return Buffer.from(normalized + "=".repeat(padLength), "base64");
+}
+
+function signArticleFunnelPreviewBuffer(buffer) {
+  return crypto
+    .createHmac("sha256", JWT_SECRET)
+    .update(buffer)
+    .digest();
+}
+
+function encodeArticleFunnelPreviewToken(payload) {
+  const jsonBuffer = Buffer.from(JSON.stringify(payload), "utf8");
+  const compressed = zlib.deflateRawSync(jsonBuffer);
+  const signature = signArticleFunnelPreviewBuffer(compressed);
+  return `${base64UrlEncode(compressed)}.${base64UrlEncode(signature)}`;
+}
+
+function decodeArticleFunnelPreviewToken(token) {
+  const [payloadPart, signaturePart] = String(token || "").split(".");
+  if (!payloadPart || !signaturePart) {
+    throw new Error("INVALID_PREVIEW_TOKEN");
+  }
+  const compressed = base64UrlDecode(payloadPart);
+  const signature = base64UrlDecode(signaturePart);
+  const expectedSignature = signArticleFunnelPreviewBuffer(compressed);
+  if (
+    signature.length !== expectedSignature.length ||
+    !crypto.timingSafeEqual(signature, expectedSignature)
+  ) {
+    throw new Error("INVALID_PREVIEW_SIGNATURE");
+  }
+  const inflated = zlib.inflateRawSync(compressed);
+  const payload = JSON.parse(inflated.toString("utf8"));
+  if (!payload || typeof payload !== "object") {
+    throw new Error("INVALID_PREVIEW_PAYLOAD");
+  }
+  if (Number(payload.exp || 0) < Date.now()) {
+    throw new Error("PREVIEW_TOKEN_EXPIRED");
+  }
+  return payload;
+}
+
+function normalizeArticleFunnelBlocks(blocks) {
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .map((block) => ({
+      type: ["image", "video", "sensitive-image", "paragraph"].includes(
+        String(block?.type || ""),
+      )
+        ? String(block.type)
+        : "image",
+      text: String(block?.text || ""),
+      src: String(block?.src || "").trim(),
+      caption: String(block?.caption || "").trim(),
+    }))
+    .filter((block) => block.type === "paragraph" || block.src);
+}
+
+function normalizeArticleFunnelPreviewSlug(input = "") {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//i, "")
+    .replace(/[\/_]+/g, "-")
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 90) || "article-preview";
+}
+
+function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
+  const config = input && typeof input === "object" ? input : {};
+  const overlay = config.overlay && typeof config.overlay === "object"
+    ? config.overlay
+    : {};
+  const normalizedStages =
+    resolvedStages ||
+    [
+      {
+        stage_key: "3s",
+        delay_ms: 3000,
+        ...buildDirectLaunchConfig(
+          overlay.popup_3s_url || config.baseUrl || "",
+        ),
+      },
+      {
+        stage_key: "5s",
+        delay_ms: 5000,
+        ...buildDirectLaunchConfig(
+          overlay.popup_5s_url || overlay.popup_3s_url || config.baseUrl || "",
+        ),
+      },
+      {
+        stage_key: "300s",
+        delay_ms: 300000,
+        ...buildDirectLaunchConfig(
+          overlay.popup_300s_url || overlay.popup_3s_url || config.baseUrl || "",
+        ),
+      },
+    ];
+
+  return {
+    source_domain: String(config.sourceDomain || config.source_domain || "").trim(),
+    slug: String(config.slug || "").trim(),
+    title: String(config.title || "").trim() || "Article preview",
+    share_image: String(config.share_image || config.shareImage || "").trim(),
+    overlay_image: String(overlay.image || config.overlayImage || "").trim(),
+    group_label: String(config.group_label || config.groupLabel || "Group facebook").trim(),
+    group_url: String(config.group_url || config.groupUrl || "").trim(),
+    backup_label: String(config.backup_label || config.backupLabel || "Page phu").trim(),
+    backup_url: String(config.backup_url || config.backupUrl || "").trim(),
+    blocks: normalizeArticleFunnelBlocks(config.blocks),
+    stages: normalizedStages.map((stage) => ({
+      stage_key: String(stage.stage_key || "").trim(),
+      delay_ms: Number(stage.delay_ms || 0) || 0,
+      target_url: String(stage.target_url || "").trim(),
+      direct_platform: String(stage.direct_platform || "generic").trim(),
+      direct_web_url: String(stage.direct_web_url || "").trim(),
+      direct_app_url: String(stage.direct_app_url || "").trim(),
+      direct_ios_url: String(stage.direct_ios_url || "").trim(),
+      direct_ios_fb_url: String(stage.direct_ios_fb_url || "").trim(),
+      direct_ios_browser_url: String(stage.direct_ios_browser_url || "").trim(),
+      direct_android_url: String(stage.direct_android_url || "").trim(),
+      direct_android_intent_url: String(
+        stage.direct_android_intent_url || "",
+      ).trim(),
+      direct_android_package: String(
+        stage.direct_android_package || "",
+      ).trim(),
+    })),
+  };
+}
+
+function buildArticleFunnelPreviewPage(config, canonicalUrl) {
+  const title = esc(config.title || "Article preview");
+  const shareImage = String(config.share_image || config.overlay_image || "").trim();
+  const groupLabel = esc(config.group_label || "Group facebook");
+  const groupUrl = esc(config.group_url || "");
+  const backupLabel = esc(config.backup_label || "Page phu");
+  const backupUrl = esc(config.backup_url || "");
+  const ogImageTag = shareImage
+    ? `<meta property="og:image" content="${esc(shareImage)}" />
+<meta name="twitter:image" content="${esc(shareImage)}" />`
+    : "";
+  const blocks = JSON.stringify(config.blocks || []);
+  const stages = JSON.stringify(config.stages || []);
+  const overlayImage = JSON.stringify(config.overlay_image || shareImage || "");
+
+  return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${title}</title>
+<meta name="description" content="${title}" />
+<meta name="robots" content="noindex, nofollow" />
+<link rel="canonical" href="${esc(canonicalUrl)}" />
+<meta property="og:type" content="article" />
+<meta property="og:title" content="${title}" />
+<meta property="og:description" content="${title}" />
+<meta property="og:url" content="${esc(canonicalUrl)}" />
+<meta property="og:site_name" content="BocLink Article Preview" />
+${ogImageTag}
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${title}" />
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  body{margin:0;background:#181a1d;color:#f8fafc;font-family:"Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
+  .article{min-height:100vh;padding:28px 0 60px;background:#181a1d}
+  .article-inner{width:min(100%,652px);margin:0 auto;padding:0 18px}
+  .article-title{margin:0;font-size:clamp(38px,4vw,62px);line-height:1.08;letter-spacing:-.04em;font-weight:400}
+  .article-blocks{margin-top:26px;display:grid;gap:22px}
+  .article-paragraph{margin:0;font-size:18px;line-height:1.8;color:#f8fafc;white-space:pre-wrap}
+  .article-media{overflow:hidden;background:#050505}
+  .article-media img,.article-media video{display:block;width:100%;height:auto}
+  .article-caption{padding:10px 12px 0;color:#8ea0bc;font-size:13px}
+  .follow-box{margin-top:28px;padding-top:20px;border-top:1px solid rgba(148,163,184,.18);display:grid;gap:16px}
+  .follow-row{color:#f8fafc;font-size:18px;line-height:1.7}
+  .follow-row strong{font-weight:400}
+  .follow-row a{color:#fff;text-decoration:underline;text-underline-offset:3px}
+  .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.6);z-index:30}
+  .overlay.show{display:flex}
+  .overlay-stack{position:relative;width:min(100%,352px);min-height:320px}
+  .overlay-card{position:absolute;inset:auto 0 0 0;width:min(100%,328px);margin:0 auto;border-radius:22px;overflow:hidden;background:#fff;box-shadow:0 32px 70px rgba(0,0,0,.44)}
+  .overlay-image-hit{display:block;cursor:pointer}
+  .overlay-card img{display:block;width:100%;height:auto}
+  .overlay-close{position:absolute;top:10px;right:10px;width:36px;height:36px;border:0;border-radius:999px;background:rgba(15,23,42,.82);color:#fff;font:inherit;font-weight:800;cursor:pointer;z-index:2}
+</style>
+</head>
+<body>
+  <div class="article">
+    <div class="article-inner">
+      <h1 class="article-title">${title}</h1>
+      <div class="article-blocks" id="previewBlocks"></div>
+      <div class="follow-box">
+        <div class="follow-row"><strong>${groupLabel}</strong>: <a href="${groupUrl}" target="_blank" rel="noopener">${groupUrl}</a></div>
+        <div class="follow-row"><strong>${backupLabel}</strong>: <a href="${backupUrl}" target="_blank" rel="noopener">${backupUrl}</a></div>
+      </div>
+    </div>
+  </div>
+  <div class="overlay" id="overlay"><div class="overlay-stack" id="overlayStack"></div></div>
+<script>
+(function(){
+  var blocks = ${blocks};
+  var stages = ${stages};
+  var overlayImage = ${overlayImage};
+  var pendingStages = [];
+  var overlayEl = document.getElementById('overlay');
+  var overlayStackEl = document.getElementById('overlayStack');
+  var previewBlocksEl = document.getElementById('previewBlocks');
+
+  function escHtml(value){
+    return String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function renderBlocks(){
+    previewBlocksEl.innerHTML = blocks.map(function(block){
+      if (block.type === 'paragraph') {
+        return '<p class="article-paragraph">'+escHtml(block.text||'')+'</p>';
+      }
+      if (block.type === 'video') {
+        return '<figure class="article-media"><video controls preload="metadata" src="'+escHtml(block.src||'')+'"></video>'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
+      }
+      return '<figure class="article-media"><img src="'+escHtml(block.src||'')+'" alt="" />'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
+    }).join('');
+  }
+
+  function getStackStyle(index,total){
+    var depthFromTop = total-index-1;
+    var offset = depthFromTop*16;
+    var scale = 1-depthFromTop*0.035;
+    var opacity = Math.max(0.48,1-depthFromTop*0.14);
+    return 'transform: translateY('+offset+'px) scale('+scale+'); opacity:'+opacity+'; z-index:'+(index+1)+';';
+  }
+
+  function openViaAnchor(targetUrl,targetName,relValue){
+    if(!targetUrl) return false;
+    try{
+      var anchor=document.createElement('a');
+      anchor.href=targetUrl;
+      anchor.rel=relValue||'noreferrer noopener';
+      anchor.target=targetName||'_self';
+      anchor.style.display='none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      setTimeout(function(){try{anchor.remove();}catch(_){ }},0);
+      return true;
+    }catch(_){ return false; }
+  }
+
+  function buildAndroidIntentUrl(targetUrl,packageName,fallbackUrl){
+    if(!targetUrl||!packageName) return '';
+    try{
+      var parsed=new URL(targetUrl);
+      var noScheme=targetUrl.replace(/^https?:\\/\\//i,'');
+      var fallback=fallbackUrl||targetUrl;
+      return 'intent://'+noScheme+'#Intent;scheme='+parsed.protocol.replace(':','')+';package='+packageName+';S.browser_fallback_url='+encodeURIComponent(fallback)+';end';
+    }catch(_){ return ''; }
+  }
+
+  function launchDirectTarget(stage){
+    if(!stage) return false;
+    var ua=navigator.userAgent||'';
+    var isIOS=/iphone|ipad|ipod/i.test(ua);
+    var isAndroid=/android/i.test(ua);
+    var isFacebook=/FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
+    var isZalo=/ZaloApp/i.test(ua);
+    var isInApp=isFacebook||isZalo;
+    if(stage.direct_platform==='shopee'){
+      if(isAndroid){
+        var shopeeIntent=stage.direct_android_intent_url||buildAndroidIntentUrl(stage.direct_android_url||stage.direct_web_url,stage.direct_android_package||'com.shopee.vn',stage.direct_web_url);
+        if(shopeeIntent){ openViaAnchor(shopeeIntent); }
+        else if(stage.direct_app_url){ openViaAnchor(stage.direct_app_url); }
+        setTimeout(function(){ if(!document.hidden&&stage.direct_web_url){ window.location.replace(stage.direct_web_url); } },1600);
+        return true;
+      }
+      if(isIOS){
+        var iosTarget=isInApp?(stage.direct_ios_fb_url||stage.direct_web_url||stage.direct_ios_url):(stage.direct_ios_browser_url||stage.direct_ios_url||stage.direct_web_url);
+        if(iosTarget){ openViaAnchor(iosTarget,isInApp?'_blank':'_self','noopener'); }
+        setTimeout(function(){ if(!document.hidden&&stage.direct_web_url){ window.location.replace(stage.direct_web_url); } },isInApp?1500:1600);
+        return true;
+      }
+      if(stage.direct_web_url){ openViaAnchor(stage.direct_web_url); return true; }
+    }
+    if(stage.direct_platform==='tiktok'){
+      var tiktokTarget=isIOS?(stage.direct_ios_url||stage.direct_app_url||stage.direct_web_url):isAndroid?(stage.direct_android_url||stage.direct_app_url||stage.direct_web_url):stage.direct_web_url;
+      if(!tiktokTarget) return false;
+      openViaAnchor(tiktokTarget);
+      setTimeout(function(){ if(!document.hidden&&stage.direct_web_url){ window.location.replace(stage.direct_web_url); } },1600);
+      return true;
+    }
+    if(stage.direct_web_url){ openViaAnchor(stage.direct_web_url,'_blank','noopener'); return true; }
+    return false;
+  }
+
+  function renderOverlayStack(){
+    if(!pendingStages.length){
+      overlayEl.classList.remove('show');
+      overlayStackEl.innerHTML='';
+      return;
+    }
+    overlayEl.classList.add('show');
+    overlayStackEl.innerHTML = pendingStages.map(function(stage,index){
+      return '<div class="overlay-card" style="'+getStackStyle(index,pendingStages.length)+'">' +
+        '<button class="overlay-close" type="button" data-overlay-close="'+escHtml(stage.stage_key)+'">×</button>' +
+        '<a class="overlay-image-hit" href="'+escHtml(stage.direct_web_url||stage.target_url||'#')+'" target="_blank" rel="noopener" data-overlay-launch="'+escHtml(stage.stage_key)+'">' +
+          '<img src="'+escHtml(overlayImage)+'" alt="" />' +
+        '</a>' +
+      '</div>';
+    }).join('');
+  }
+
+  function removeStage(stageKey){
+    pendingStages = pendingStages.filter(function(stage){ return stage.stage_key !== stageKey; });
+    renderOverlayStack();
+  }
+
+  stages.forEach(function(stage){
+    if(!stage || !stage.delay_ms) return;
+    setTimeout(function(){
+      pendingStages.push(stage);
+      renderOverlayStack();
+    }, stage.delay_ms);
+  });
+
+  overlayEl.addEventListener('click', function(event){
+    if(event.target === overlayEl){
+      pendingStages = [];
+      renderOverlayStack();
+    }
+  });
+
+  overlayStackEl.addEventListener('click', function(event){
+    var closeButton = event.target.closest('[data-overlay-close]');
+    if(closeButton){
+      removeStage(closeButton.getAttribute('data-overlay-close')||'');
+      return;
+    }
+    var launchButton = event.target.closest('[data-overlay-launch]');
+    if(launchButton){
+      event.preventDefault();
+      var stageKey = launchButton.getAttribute('data-overlay-launch')||'';
+      var stage = pendingStages.find(function(item){ return item.stage_key === stageKey; });
+      launchDirectTarget(stage);
+      removeStage(stageKey);
+    }
+  });
+
+  renderBlocks();
+})();
+</script>
+</body>
+</html>`;
 }
 
 async function promoteAdminIfNeeded(database, user) {

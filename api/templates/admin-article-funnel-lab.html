@@ -9,15 +9,11 @@
         color-scheme: dark;
         --bg: #0b1220;
         --panel: #101827;
-        --panel-soft: #16213a;
         --line: rgba(148, 163, 184, 0.18);
         --text: #f8fafc;
         --muted: #95a3ba;
         --brand: #f97316;
         --brand-soft: rgba(249, 115, 22, 0.14);
-        --blue: #2563eb;
-        --green: #22c55e;
-        --red: #ef4444;
         --shadow: 0 26px 60px rgba(2, 6, 23, 0.4);
         --radius: 22px;
       }
@@ -162,7 +158,8 @@
         min-height: 96px;
       }
 
-      .hint {
+      .hint,
+      .muted-line {
         font-size: 12px;
         line-height: 1.6;
         color: var(--muted);
@@ -172,7 +169,6 @@
       .ghost-btn,
       .block-btn,
       .icon-btn,
-      .overlay-launch,
       .comment-copy-btn,
       .feed-btn {
         appearance: none;
@@ -183,15 +179,13 @@
         transition:
           transform 0.16s ease,
           border-color 0.16s ease,
-          background 0.16s ease,
-          opacity 0.16s ease;
+          background 0.16s ease;
       }
 
       .btn:hover,
       .ghost-btn:hover,
       .block-btn:hover,
       .icon-btn:hover,
-      .overlay-launch:hover,
       .comment-copy-btn:hover,
       .feed-btn:hover {
         transform: translateY(-1px);
@@ -544,15 +538,15 @@
         box-shadow: 0 32px 70px rgba(0, 0, 0, 0.44);
       }
 
+      .overlay-image-hit {
+        display: block;
+        cursor: pointer;
+      }
+
       .overlay-card img {
         display: block;
         width: 100%;
         height: auto;
-      }
-
-      .overlay-image-hit {
-        display: block;
-        cursor: pointer;
       }
 
       .overlay-close {
@@ -596,16 +590,6 @@
         transform: translateY(0);
       }
 
-      .muted-line {
-        color: var(--muted);
-        font-size: 12px;
-        line-height: 1.6;
-      }
-
-      .hidden {
-        display: none;
-      }
-
       @media (max-width: 1180px) {
         .shell {
           grid-template-columns: 1fr;
@@ -628,45 +612,53 @@
         <span class="eyebrow">Admin only • Sandbox</span>
         <h1>Article Funnel Lab</h1>
         <p class="subhead">
-          Khu dựng thử riêng cho kiểu comment Facebook → vào bài viết → popup 3s / 5s / 300s
-          → nhảy app. Trang này chỉ dành cho admin và không chạm vào luồng rút gọn hiện tại.
+          Khu dung thu rieng cho kieu comment Facebook -> vao bai viet -> popup 3s / 5s / 300s
+          -> nhay app. Trang nay chi danh cho admin va khong cham vao luong rut gon hien tai.
         </p>
 
         <div class="grid">
           <div class="section-card">
             <h2>Workspace</h2>
             <div class="actions" style="margin-top: 12px">
-              <button class="btn" type="button" id="saveDraftBtn">Lưu draft local</button>
-              <button class="ghost-btn" type="button" id="loadPresetBtn">Nạp preset</button>
-              <button class="ghost-btn" type="button" id="resetDraftBtn">Xóa draft</button>
+              <button class="btn" type="button" id="saveDraftBtn">Luu draft local</button>
+              <button class="ghost-btn" type="button" id="loadPresetBtn">Nap preset</button>
+              <button class="ghost-btn" type="button" id="resetDraftBtn">Xoa draft</button>
               <button class="ghost-btn" type="button" id="copyJsonBtn">Copy JSON</button>
-              <a class="ghost-btn" href="/admin">Về admin</a>
+              <button class="ghost-btn" type="button" id="generatePreviewLinkBtn">Tao public preview link</button>
+              <a class="ghost-btn" href="/admin">Ve admin</a>
             </div>
             <div class="muted-line" style="margin-top: 12px">
-              Gợi ý workflow: dựng bài trong lab, copy JSON config, chốt cấu trúc xong rồi mới
-              nối tiếp sang DB hoặc link type riêng.
+              Goi y workflow: dung bai trong lab, copy JSON config, chot cau truc xong roi moi
+              noi tiep sang DB hoac link type rieng.
+            </div>
+            <div class="field-grid" style="margin-top: 14px">
+              <div class="field">
+                <label for="publicPreviewUrlOutput">Public preview route</label>
+                <input id="publicPreviewUrlOutput" type="text" readonly />
+                <div class="hint" id="publicPreviewMeta">Chua tao link public de test comment Facebook.</div>
+              </div>
             </div>
           </div>
 
           <div class="section-card">
-            <h2>Thông tin bài viết</h2>
+            <h2>Thong tin bai viet</h2>
             <div class="field-grid two" style="margin-top: 12px">
               <div class="field">
-                <label for="sourceDomainInput">Domain hiển thị</label>
+                <label for="sourceDomainInput">Domain hien thi</label>
                 <input id="sourceDomainInput" type="text" />
               </div>
               <div class="field">
-                <label for="slugInput">Slug bài viết</label>
+                <label for="slugInput">Slug bai viet</label>
                 <input id="slugInput" type="text" />
               </div>
             </div>
             <div class="field-grid" style="margin-top: 14px">
               <div class="field">
-                <label for="titleInput">Tiêu đề</label>
+                <label for="titleInput">Tieu de</label>
                 <textarea id="titleInput" style="min-height: 88px"></textarea>
               </div>
               <div class="field">
-                <label>URL comment sẽ đặt</label>
+                <label>URL comment se dat</label>
                 <input id="articleUrlOutput" type="text" readonly />
               </div>
             </div>
@@ -676,11 +668,11 @@
             <h2>Link funnel</h2>
             <div class="field-grid" style="margin-top: 12px">
               <div class="field">
-                <label for="baseUrlInput">Link gốc / popup 3s mặc định</label>
+                <label for="baseUrlInput">Link goc / popup 3s mac dinh</label>
                 <input id="baseUrlInput" type="url" />
                 <div class="hint">
-                  Đây là link đích mặc định của popup 3s. Nếu popup 5s và 300s để trống, chúng
-                  cũng sẽ dùng link này.
+                  Day la link dich mac dinh cua popup 3s. Neu popup 5s va 300s de trong, chung
+                  cung se dung link nay.
                 </div>
               </div>
               <div class="field-grid two">
@@ -695,11 +687,11 @@
               </div>
               <div class="field-grid two">
                 <div class="field">
-                  <label for="overlayImageInput">Ảnh popup</label>
+                  <label for="overlayImageInput">Anh popup</label>
                   <input id="overlayImageInput" type="url" />
                 </div>
                 <div class="field">
-                  <label for="shareImageInput">Ảnh share / hero đầu bài</label>
+                  <label for="shareImageInput">Anh share / hero dau bai</label>
                   <input id="shareImageInput" type="url" />
                 </div>
               </div>
@@ -707,41 +699,41 @@
           </div>
 
           <div class="section-card">
-            <h2>Thông tin follow cuối trang</h2>
+            <h2>Thong tin follow cuoi trang</h2>
             <div class="field-grid two" style="margin-top: 12px">
               <div class="field">
-                <label for="groupLabelInput">Nhãn dòng 1</label>
+                <label for="groupLabelInput">Nhan dong 1</label>
                 <input id="groupLabelInput" type="text" />
               </div>
               <div class="field">
-                <label for="groupUrlInput">Link dòng 1</label>
+                <label for="groupUrlInput">Link dong 1</label>
                 <input id="groupUrlInput" type="url" />
               </div>
             </div>
             <div class="field-grid two" style="margin-top: 14px">
               <div class="field">
-                <label for="backupLabelInput">Nhãn dòng 2</label>
+                <label for="backupLabelInput">Nhan dong 2</label>
                 <input id="backupLabelInput" type="text" />
               </div>
               <div class="field">
-                <label for="backupUrlInput">Link dòng 2</label>
+                <label for="backupUrlInput">Link dong 2</label>
                 <input id="backupUrlInput" type="url" />
               </div>
             </div>
           </div>
 
           <div class="section-card">
-            <h2>Khối nội dung</h2>
+            <h2>Khoi noi dung</h2>
             <p class="subhead">
-              Bài viết kiểu này chủ yếu là ảnh và video xếp từ trên xuống. Phần preview bên phải
-              còn có mô phỏng “hiện dần” từng block.
+              Bai viet kieu nay chu yeu la anh va video xep tu tren xuong. Phan preview ben phai
+              con co mo phong "hien dan" tung block.
             </p>
             <div class="block-toolbar" style="margin-top: 12px">
               <button class="block-btn" type="button" data-add-block="image">
-                + Ảnh thường
+                + Anh thuong
               </button>
               <button class="block-btn" type="button" data-add-block="sensitive-image">
-                + Ảnh mờ
+                + Anh mo
               </button>
               <button class="block-btn" type="button" data-add-block="video">
                 + Video
@@ -754,13 +746,13 @@
             <h2>Import / Export config</h2>
             <div class="field-grid" style="margin-top: 12px">
               <div class="field">
-                <label for="importInput">Dán JSON config để nạp lại</label>
+                <label for="importInput">Dan JSON config de nap lai</label>
                 <textarea id="importInput" placeholder='{"type":"article_funnel_lab", ...}'></textarea>
               </div>
             </div>
             <div class="actions" style="margin-top: 12px">
-              <button class="ghost-btn" type="button" id="applyImportBtn">Áp JSON vào lab</button>
-              <button class="ghost-btn" type="button" id="fillImportBtn">Đổ JSON hiện tại</button>
+              <button class="ghost-btn" type="button" id="applyImportBtn">Ap JSON vao lab</button>
+              <button class="ghost-btn" type="button" id="fillImportBtn">Do JSON hien tai</button>
             </div>
             <div class="json-box" id="jsonOutput"></div>
           </div>
@@ -773,8 +765,8 @@
             <div>
               <span class="eyebrow">Preview</span>
               <p class="subhead" style="margin-top: 10px">
-                Mô phỏng 2 lớp: comment Facebook dẫn vào bài viết, rồi trong bài mới bật popup
-                deeplink theo mốc thời gian.
+                Mo phong 2 lop: comment Facebook dan vao bai viet, roi trong bai moi bat popup
+                deeplink theo moc thoi gian.
               </p>
             </div>
             <div class="preview-controls">
@@ -782,7 +774,7 @@
               <button class="ghost-btn" type="button" id="show3sBtn">Show 3s</button>
               <button class="ghost-btn" type="button" id="show5sBtn">Show 5s</button>
               <button class="ghost-btn" type="button" id="show300sBtn">Show 300s</button>
-              <button class="ghost-btn" type="button" id="closeOverlayBtn">Ẩn popup</button>
+              <button class="ghost-btn" type="button" id="closeOverlayBtn">An popup</button>
             </div>
           </div>
 
@@ -792,12 +784,12 @@
                 <div class="comment-author">
                   <div class="comment-avatar">H</div>
                   <div>
-                    <div class="comment-name">Hóng Hớt Đường Phố</div>
-                    <div class="comment-meta">Bình luận mẫu để đặt link bài viết</div>
+                    <div class="comment-name">Hong Hot Duong Pho</div>
+                    <div class="comment-meta">Binh luan mau de dat link bai viet</div>
                   </div>
                 </div>
                 <button class="comment-copy-btn" type="button" id="copyArticleUrlBtn">
-                  Copy URL bài
+                  Copy URL bai
                 </button>
               </div>
 
@@ -815,8 +807,8 @@
 
             <div class="actions">
               <button class="feed-btn" type="button" id="resetFeedBtn">Reset feed</button>
-              <button class="feed-btn" type="button" id="showNextBlockBtn">Hiện thêm 1 block</button>
-              <button class="feed-btn" type="button" id="showAllBlocksBtn">Hiện tất cả</button>
+              <button class="feed-btn" type="button" id="showNextBlockBtn">Hien them 1 block</button>
+              <button class="feed-btn" type="button" id="showAllBlocksBtn">Hien tat ca</button>
               <div class="muted-line" id="feedStateLabel"></div>
             </div>
 
@@ -868,7 +860,6 @@
             "https://shopee.vn/product/37251933/591989399?utm_source=admin-lab",
           popup5sUrl: "",
           popup300sUrl: "",
-          cta: "Bam vao day de mo app va xem san pham",
           overlayImage:
             "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80",
           shareImage:
@@ -909,6 +900,8 @@
         let timer300s = null;
         let visibleBlockCount = Math.min(state.blocks.length, 2);
         let pendingStages = [];
+        let generatedPreviewUrl = "";
+        let generatedPreviewExpiresAt = "";
         const resolvedLaunchCache = new Map();
         const resolvingLaunchCache = new Map();
 
@@ -917,6 +910,8 @@
           slugInput: document.getElementById("slugInput"),
           titleInput: document.getElementById("titleInput"),
           articleUrlOutput: document.getElementById("articleUrlOutput"),
+          publicPreviewUrlOutput: document.getElementById("publicPreviewUrlOutput"),
+          publicPreviewMeta: document.getElementById("publicPreviewMeta"),
           baseUrlInput: document.getElementById("baseUrlInput"),
           popup5sInput: document.getElementById("popup5sInput"),
           popup300sInput: document.getElementById("popup300sInput"),
@@ -987,7 +982,6 @@
                 overlay.popup_300s_url ||
                 base.popup300sUrl,
             ),
-            cta: String(source.cta || overlay.cta || base.cta),
             overlayImage: String(source.overlayImage || overlay.image || base.overlayImage),
             shareImage: String(source.shareImage || source.share_image || base.shareImage),
             groupLabel: String(source.groupLabel || source.group_label || base.groupLabel),
@@ -1004,7 +998,7 @@
         function normalizeBlock(block) {
           return {
             id: block.id || newId(),
-            type: block.type || "paragraph",
+            type: block.type || "image",
             text: String(block.text || ""),
             src: String(block.src || ""),
             caption: String(block.caption || ""),
@@ -1038,6 +1032,82 @@
           return state.baseUrl.trim();
         }
 
+        function getExportPayload() {
+          return {
+            type: "article_funnel_lab",
+            sourceDomain: state.sourceDomain.trim(),
+            slug: state.slug.trim(),
+            article_url: getArticleUrl(),
+            title: state.title.trim(),
+            share_image: state.shareImage.trim(),
+            group_label: state.groupLabel.trim(),
+            group_url: state.groupUrl.trim(),
+            backup_label: state.backupLabel.trim(),
+            backup_url: state.backupUrl.trim(),
+            overlay: {
+              image: state.overlayImage.trim(),
+              popup_3s_url: state.baseUrl.trim(),
+              popup_5s_url: state.popup5sUrl.trim() || state.baseUrl.trim(),
+              popup_300s_url: state.popup300sUrl.trim() || state.baseUrl.trim(),
+            },
+            blocks: state.blocks.map((block) => ({
+              type: block.type,
+              text: block.text || "",
+              src: block.src || "",
+              caption: block.caption || "",
+            })),
+          };
+        }
+
+        function saveState(message) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          if (message) showToast(message);
+        }
+
+        function showToast(message) {
+          els.toast.textContent = message;
+          els.toast.classList.add("show");
+          clearTimeout(showToast.timer);
+          showToast.timer = setTimeout(() => {
+            els.toast.classList.remove("show");
+          }, 2200);
+        }
+
+        function resetTimers() {
+          [timer3s, timer5s, timer300s].forEach((timer) => {
+            if (timer) clearTimeout(timer);
+          });
+          timer3s = timer5s = timer300s = null;
+        }
+
+        function clearResolvedCache() {
+          resolvedLaunchCache.clear();
+          resolvingLaunchCache.clear();
+        }
+
+        function clearGeneratedPreviewLink() {
+          generatedPreviewUrl = "";
+          generatedPreviewExpiresAt = "";
+        }
+
+        function resetFeed(count) {
+          visibleBlockCount = typeof count === "number" ? count : Math.min(state.blocks.length, 2);
+          renderPreviewBlocks();
+          renderPreviewShell();
+        }
+
+        function showAllBlocks() {
+          visibleBlockCount = state.blocks.length;
+          renderPreviewBlocks();
+          renderPreviewShell();
+        }
+
+        function showNextBlock() {
+          visibleBlockCount = Math.min(state.blocks.length, visibleBlockCount + 1);
+          renderPreviewBlocks();
+          renderPreviewShell();
+        }
+
         function detectTargetPlatform(targetUrl) {
           try {
             if (!targetUrl) return "generic";
@@ -1049,7 +1119,7 @@
               hostname === "shopee.vn" ||
               hostname.endsWith(".shopee.vn") ||
               hostname === "s.shopee.vn" ||
-              hostname === "shope.ee"
+              hostname === "shopee.vn"
             ) {
               return "shopee";
             }
@@ -1063,6 +1133,50 @@
             }
           } catch (_) {}
           return "generic";
+        }
+
+        async function resolveLaunchConfig(targetUrl) {
+          const cacheKey = String(targetUrl || "").trim();
+          if (!cacheKey) return null;
+          if (resolvedLaunchCache.has(cacheKey)) {
+            return resolvedLaunchCache.get(cacheKey);
+          }
+          if (resolvingLaunchCache.has(cacheKey)) {
+            return resolvingLaunchCache.get(cacheKey);
+          }
+
+          const request = fetch("/api/admin/article-funnel-lab/resolve-target", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: cacheKey }),
+          })
+            .then(async (response) => {
+              if (!response.ok) {
+                throw new Error("resolve_failed");
+              }
+              const data = await response.json();
+              resolvedLaunchCache.set(cacheKey, data);
+              resolvingLaunchCache.delete(cacheKey);
+              return data;
+            })
+            .catch((error) => {
+              resolvingLaunchCache.delete(cacheKey);
+              throw error;
+            });
+
+          resolvingLaunchCache.set(cacheKey, request);
+          return request;
+        }
+
+        function primeResolvedTarget(targetUrl) {
+          if (!targetUrl) return;
+          resolveLaunchConfig(targetUrl).catch(() => {});
+        }
+
+        function primeResolvedTargets() {
+          [getEffectiveTarget("3s"), getEffectiveTarget("5s"), getEffectiveTarget("300s")]
+            .filter(Boolean)
+            .forEach((targetUrl) => primeResolvedTarget(targetUrl));
         }
 
         function openViaAnchor(targetUrl, targetName, relValue) {
@@ -1108,39 +1222,6 @@
           }
         }
 
-        async function resolveLaunchConfig(targetUrl) {
-          const cacheKey = String(targetUrl || "").trim();
-          if (!cacheKey) return null;
-          if (resolvedLaunchCache.has(cacheKey)) {
-            return resolvedLaunchCache.get(cacheKey);
-          }
-          if (resolvingLaunchCache.has(cacheKey)) {
-            return resolvingLaunchCache.get(cacheKey);
-          }
-
-          const request = fetch("/api/admin/article-funnel-lab/resolve-target", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: cacheKey }),
-          })
-            .then(async (response) => {
-              if (!response.ok) {
-                throw new Error("resolve_failed");
-              }
-              const data = await response.json();
-              resolvedLaunchCache.set(cacheKey, data);
-              resolvingLaunchCache.delete(cacheKey);
-              return data;
-            })
-            .catch((error) => {
-              resolvingLaunchCache.delete(cacheKey);
-              throw error;
-            });
-
-          resolvingLaunchCache.set(cacheKey, request);
-          return request;
-        }
-
         function buildFallbackLaunchConfig(targetUrl) {
           const platform = detectTargetPlatform(targetUrl);
           return {
@@ -1163,21 +1244,6 @@
                   ? "com.zhiliaoapp.musically"
                   : "",
           };
-        }
-
-        function primeResolvedTarget(targetUrl) {
-          if (!targetUrl) return;
-          resolveLaunchConfig(targetUrl).catch(() => {});
-        }
-
-        function primeResolvedTargets() {
-          [
-            getEffectiveTarget("3s"),
-            getEffectiveTarget("5s"),
-            getEffectiveTarget("300s"),
-          ]
-            .filter(Boolean)
-            .forEach((targetUrl) => primeResolvedTarget(targetUrl));
         }
 
         function launchLabTarget(launchConfig) {
@@ -1316,58 +1382,20 @@
           return openViaAnchor(targetUrl, "_blank", "noopener");
         }
 
-        function getExportPayload() {
-          return {
-            type: "article_funnel_lab",
-            sourceDomain: state.sourceDomain.trim(),
-            slug: state.slug.trim(),
-            article_url: getArticleUrl(),
-            title: state.title.trim(),
-            share_image: state.shareImage.trim(),
-            group_label: state.groupLabel.trim(),
-            group_url: state.groupUrl.trim(),
-            backup_label: state.backupLabel.trim(),
-            backup_url: state.backupUrl.trim(),
-            overlay: {
-              cta: state.cta.trim(),
-              image: state.overlayImage.trim(),
-              popup_3s_url: state.baseUrl.trim(),
-              popup_5s_url: state.popup5sUrl.trim() || state.baseUrl.trim(),
-              popup_300s_url: state.popup300sUrl.trim() || state.baseUrl.trim(),
-            },
-            blocks: state.blocks.map((block) => ({
-              type: block.type,
-              text: block.text || "",
-              src: block.src || "",
-              caption: block.caption || "",
-            })),
-          };
+        function escapeHtml(value) {
+          return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
         }
 
-        function saveState(message) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-          if (message) showToast(message);
+        function escapeAttr(value) {
+          return escapeHtml(value).replace(/'/g, "&#39;");
         }
 
-        function showToast(message) {
-          els.toast.textContent = message;
-          els.toast.classList.add("show");
-          clearTimeout(showToast.timer);
-          showToast.timer = setTimeout(() => {
-            els.toast.classList.remove("show");
-          }, 2200);
-        }
-
-        function resetTimers() {
-          [timer3s, timer5s, timer300s].forEach((timer) => {
-            if (timer) clearTimeout(timer);
-          });
-          timer3s = timer5s = timer300s = null;
-        }
-
-        function clearResolvedCache() {
-          resolvedLaunchCache.clear();
-          resolvingLaunchCache.clear();
+        function escapeCssUrl(value) {
+          return String(value || "").replace(/"/g, '\\"');
         }
 
         function getStackStyle(index, total) {
@@ -1378,89 +1406,39 @@
           return `transform: translateY(${offset}px) scale(${scale}); opacity: ${opacity}; z-index: ${index + 1};`;
         }
 
-        function renderOverlayStack() {
-          if (!pendingStages.length) {
-            els.overlay.classList.remove("show");
-            els.overlayStack.innerHTML = "";
-            return;
-          }
-
-          els.overlay.classList.add("show");
-          els.overlayStack.innerHTML = pendingStages
-            .map((stageKey, index) => {
-              const target = getEffectiveTarget(stageKey);
-              const isTop = index === pendingStages.length - 1;
-              return `
-                <div class="overlay-card" style="${getStackStyle(index, pendingStages.length)}" data-overlay-card="${stageKey}">
-                  <button class="overlay-close" type="button" data-overlay-close="${stageKey}">×</button>
-                  <a
-                    class="overlay-image-hit"
-                    href="${escapeAttr(target || "#")}"
-                    target="_blank"
-                    rel="noopener"
-                    data-overlay-launch="${stageKey}"
-                    data-target="${escapeAttr(target || "")}"
-                    ${isTop ? "" : 'tabindex="-1"'}
-                  >
-                    <img src="${escapeAttr(state.overlayImage.trim() || state.shareImage.trim())}" alt="" />
-                  </a>
-                </div>
-              `;
-            })
-            .join("");
-        }
-
-        function resetFeed(count) {
-          visibleBlockCount = typeof count === "number" ? count : Math.min(state.blocks.length, 2);
-          renderPreviewBlocks();
-          renderPreviewShell();
-        }
-
-        function showAllBlocks() {
-          visibleBlockCount = state.blocks.length;
-          renderPreviewBlocks();
-          renderPreviewShell();
-        }
-
-        function showNextBlock() {
-          visibleBlockCount = Math.min(state.blocks.length, visibleBlockCount + 1);
-          renderPreviewBlocks();
-          renderPreviewShell();
-        }
-
         function renderBlockEditor() {
           els.blockList.innerHTML = state.blocks
             .map((block, index) => {
               const typeLabel =
                 block.type === "paragraph"
-                  ? "Đoạn text"
+                  ? "Doan text"
                   : block.type === "image"
-                    ? "Ảnh thường"
+                    ? "Anh thuong"
                     : block.type === "sensitive-image"
-                      ? "Ảnh mờ"
+                      ? "Anh mo"
                       : "Video";
               return `
                 <div class="block-item">
                   <div class="block-head">
                     <span class="block-chip">${index + 1}. ${typeLabel}</span>
                     <div class="block-head-actions">
-                      <button class="icon-btn" type="button" data-move-up="${block.id}" title="Đẩy lên">↑</button>
-                      <button class="icon-btn" type="button" data-move-down="${block.id}" title="Đẩy xuống">↓</button>
-                      <button class="icon-btn danger" type="button" data-remove-block="${block.id}" title="Xóa">✕</button>
+                      <button class="icon-btn" type="button" data-move-up="${block.id}" title="Day len">↑</button>
+                      <button class="icon-btn" type="button" data-move-down="${block.id}" title="Day xuong">↓</button>
+                      <button class="icon-btn danger" type="button" data-remove-block="${block.id}" title="Xoa">✕</button>
                     </div>
                   </div>
                   ${
                     block.type === "paragraph"
                       ? `
                         <div class="field">
-                          <label>Nội dung</label>
+                          <label>Noi dung</label>
                           <textarea data-field="text" data-block-id="${block.id}">${escapeHtml(block.text || "")}</textarea>
                         </div>
                       `
                       : `
                         <div class="field-grid">
                           <div class="field">
-                            <label>${block.type === "video" ? "URL video MP4" : "URL ảnh"}</label>
+                            <label>${block.type === "video" ? "URL video MP4" : "URL anh"}</label>
                             <input type="url" value="${escapeAttr(block.src || "")}" data-field="src" data-block-id="${block.id}" />
                           </div>
                           <div class="field">
@@ -1496,7 +1474,7 @@
                   <figure class="article-media">
                     <div class="sensitive-wrap" data-sensitive-wrap>
                       <img src="${escapeAttr(block.src || "")}" alt="" />
-                      <button class="reveal-btn" type="button" data-reveal-sensitive>Bấm để hiện ảnh</button>
+                      <button class="reveal-btn" type="button" data-reveal-sensitive">Bam de hien anh</button>
                     </div>
                     ${block.caption ? `<figcaption class="article-caption">${escapeHtml(block.caption)}</figcaption>` : ""}
                   </figure>
@@ -1518,20 +1496,29 @@
             });
           });
 
-          els.feedStateLabel.textContent = `Đang hiện ${visibleBlocks.length}/${state.blocks.length} block`;
+          els.feedStateLabel.textContent = `Dang hien ${visibleBlocks.length}/${state.blocks.length} block`;
         }
 
         function renderPreviewShell() {
           const articleUrl = getArticleUrl();
           els.articleUrlOutput.value = articleUrl;
-          els.commentUrlPreview.textContent = articleUrl || "https://domain-cua-ban/slug-bai-viet";
-          els.commentUrlPreview.href = articleUrl || "#";
-          els.commentDomainPreview.textContent = (state.sourceDomain.trim() || "honghot.site").toUpperCase();
-          els.commentTitlePreview.textContent = state.title.trim() || "Tiêu đề bài viết";
+          els.publicPreviewUrlOutput.value = generatedPreviewUrl;
+          els.publicPreviewMeta.textContent = generatedPreviewUrl
+            ? `Het han: ${generatedPreviewExpiresAt || "7 ngay"}`
+            : "Chua tao link public de test comment Facebook.";
+          const commentTarget = generatedPreviewUrl || articleUrl;
+          els.commentUrlPreview.textContent = commentTarget || "https://domain-cua-ban/slug-bai-viet";
+          els.commentUrlPreview.href = commentTarget || "#";
+          els.commentDomainPreview.textContent = (
+            generatedPreviewUrl
+              ? new URL(generatedPreviewUrl).hostname
+              : state.sourceDomain.trim() || "honghot.site"
+          ).toUpperCase();
+          els.commentTitlePreview.textContent = state.title.trim() || "Tieu de bai viet";
           els.commentShareImage.style.backgroundImage = state.shareImage.trim()
             ? `url("${escapeCssUrl(state.shareImage.trim())}")`
             : "none";
-          els.previewTitle.textContent = state.title.trim() || "Tiêu đề bài viết";
+          els.previewTitle.textContent = state.title.trim() || "Tieu de bai viet";
           els.followGroupLabel.textContent = state.groupLabel.trim() || "Group facebook";
           els.followGroupLink.textContent = state.groupUrl.trim() || "https://facebook.com";
           els.followGroupLink.href = state.groupUrl.trim() || "#";
@@ -1559,6 +1546,38 @@
           els.backupUrlInput.value = state.backupUrl;
         }
 
+        function renderOverlayStack() {
+          if (!pendingStages.length) {
+            els.overlay.classList.remove("show");
+            els.overlayStack.innerHTML = "";
+            return;
+          }
+
+          els.overlay.classList.add("show");
+          els.overlayStack.innerHTML = pendingStages
+            .map((stageKey, index) => {
+              const target = getEffectiveTarget(stageKey);
+              const isTop = index === pendingStages.length - 1;
+              return `
+                <div class="overlay-card" style="${getStackStyle(index, pendingStages.length)}" data-overlay-card="${stageKey}">
+                  <button class="overlay-close" type="button" data-overlay-close="${stageKey}">×</button>
+                  <a
+                    class="overlay-image-hit"
+                    href="${escapeAttr(target || "#")}"
+                    target="_blank"
+                    rel="noopener"
+                    data-overlay-launch="${stageKey}"
+                    data-target="${escapeAttr(target || "")}"
+                    ${isTop ? "" : 'tabindex="-1"'}
+                  >
+                    <img src="${escapeAttr(state.overlayImage.trim() || state.shareImage.trim())}" alt="" />
+                  </a>
+                </div>
+              `;
+            })
+            .join("");
+        }
+
         function render() {
           if (visibleBlockCount > state.blocks.length) {
             visibleBlockCount = state.blocks.length;
@@ -1572,6 +1591,7 @@
         }
 
         function addBlock(type) {
+          clearGeneratedPreviewLink();
           state.blocks.push({
             id: newId(),
             type,
@@ -1580,7 +1600,7 @@
             caption: "",
           });
           render();
-          saveState("Đã thêm block mới");
+          saveState("Da them block moi");
         }
 
         function moveBlock(blockId, direction) {
@@ -1588,6 +1608,7 @@
           if (index === -1) return;
           const targetIndex = direction === "up" ? index - 1 : index + 1;
           if (targetIndex < 0 || targetIndex >= state.blocks.length) return;
+          clearGeneratedPreviewLink();
           const [block] = state.blocks.splice(index, 1);
           state.blocks.splice(targetIndex, 0, block);
           render();
@@ -1595,12 +1616,13 @@
         }
 
         function removeBlock(blockId) {
+          clearGeneratedPreviewLink();
           state.blocks = state.blocks.filter((block) => block.id !== blockId);
           if (!state.blocks.length) {
             state.blocks.push(normalizeBlock(defaultState.blocks[0]));
           }
           render();
-          saveState("Đã xóa block");
+          saveState("Da xoa block");
         }
 
         function openOverlay(stageKey) {
@@ -1630,7 +1652,7 @@
           resetTimers();
           closeOverlay();
           primeResolvedTargets();
-          showToast("Đã bắt đầu mô phỏng timer 3s / 5s / 300s");
+          showToast("Da bat dau mo phong timer 3s / 5s / 300s");
           timer3s = setTimeout(() => openOverlay("3s"), 3000);
           timer5s = setTimeout(() => openOverlay("5s"), 5000);
           timer300s = setTimeout(() => openOverlay("300s"), 300000);
@@ -1639,7 +1661,7 @@
         function applyImport() {
           const raw = els.importInput.value.trim();
           if (!raw) {
-            showToast("Chưa có JSON để import");
+            showToast("Chua co JSON de import");
             return;
           }
 
@@ -1650,51 +1672,39 @@
             Object.assign(state, nextState);
             resetTimers();
             clearResolvedCache();
+            clearGeneratedPreviewLink();
             closeOverlay();
             resetFeed();
             render();
-            saveState("Đã áp JSON vào lab");
+            saveState("Da ap JSON vao lab");
           } catch {
-            showToast("JSON không hợp lệ");
+            showToast("JSON khong hop le");
           }
         }
 
         function copyCurrentJsonToImport() {
           els.importInput.value = JSON.stringify(getExportPayload(), null, 2);
-          showToast("Đã đổ JSON hiện tại xuống ô import");
+          showToast("Da do JSON hien tai xuong o import");
         }
 
-        function loadPreset() {
-          Object.keys(state).forEach((key) => delete state[key]);
-          Object.assign(state, clone(defaultState));
-          resetTimers();
-          clearResolvedCache();
-          closeOverlay();
-          resetFeed();
-          render();
-          saveState("Đã nạp lại preset");
-        }
-
-        function escapeHtml(value) {
-          return String(value || "")
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;");
-        }
-
-        function escapeAttr(value) {
-          return escapeHtml(value).replace(/'/g, "&#39;");
-        }
-
-        function escapeCssUrl(value) {
-          return String(value || "").replace(/"/g, '\\"');
-        }
-
-        function shortUrl(value) {
-          const raw = String(value || "").trim();
-          if (!raw) return "chưa có";
-          return raw.length > 84 ? `${raw.slice(0, 81)}...` : raw;
+        async function createPublicPreviewLink() {
+          try {
+            const response = await fetch("/api/admin/article-funnel-lab/preview-link", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ config: getExportPayload() }),
+            });
+            if (!response.ok) {
+              throw new Error("preview_link_failed");
+            }
+            const data = await response.json();
+            generatedPreviewUrl = String(data.preview_url || "").trim();
+            generatedPreviewExpiresAt = String(data.expires_at || "").trim();
+            renderPreviewShell();
+            showToast("Da tao public preview link");
+          } catch {
+            showToast("Khong tao duoc public preview link");
+          }
         }
 
         document.querySelectorAll("[data-add-block]").forEach((button) => {
@@ -1708,6 +1718,7 @@
           if (!field || !blockId) return;
           const block = state.blocks.find((item) => item.id === blockId);
           if (!block) return;
+          clearGeneratedPreviewLink();
           block[field] = target.value;
           renderPreviewBlocks();
           renderPreviewShell();
@@ -1743,6 +1754,7 @@
           const input = els[elementKey];
           input.addEventListener("input", () => {
             state[stateKey] = input.value;
+            clearGeneratedPreviewLink();
             if (
               stateKey === "baseUrl" ||
               stateKey === "popup5sUrl" ||
@@ -1757,40 +1769,58 @@
         });
 
         document.getElementById("saveDraftBtn").addEventListener("click", () => {
-          saveState("Đã lưu draft local");
+          saveState("Da luu draft local");
         });
 
-        document.getElementById("loadPresetBtn").addEventListener("click", loadPreset);
+        document.getElementById("loadPresetBtn").addEventListener("click", () => {
+          Object.keys(state).forEach((key) => delete state[key]);
+          Object.assign(state, clone(defaultState));
+          resetTimers();
+          clearResolvedCache();
+          clearGeneratedPreviewLink();
+          closeOverlay();
+          resetFeed();
+          render();
+          saveState("Da nap lai preset");
+        });
 
         document.getElementById("resetDraftBtn").addEventListener("click", () => {
           localStorage.removeItem(STORAGE_KEY);
-          loadPreset();
-          showToast("Đã xóa draft local và quay về preset");
+          Object.keys(state).forEach((key) => delete state[key]);
+          Object.assign(state, clone(defaultState));
+          resetTimers();
+          clearResolvedCache();
+          clearGeneratedPreviewLink();
+          closeOverlay();
+          resetFeed();
+          render();
+          showToast("Da xoa draft local va quay ve preset");
         });
 
         document.getElementById("copyJsonBtn").addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(JSON.stringify(getExportPayload(), null, 2));
-            showToast("Đã copy JSON config");
+            showToast("Da copy JSON config");
           } catch {
-            showToast("Không copy được clipboard trên trình duyệt này");
+            showToast("Khong copy duoc clipboard tren trinh duyet nay");
           }
         });
 
+        document.getElementById("generatePreviewLinkBtn").addEventListener("click", createPublicPreviewLink);
         document.getElementById("applyImportBtn").addEventListener("click", applyImport);
         document.getElementById("fillImportBtn").addEventListener("click", copyCurrentJsonToImport);
 
         document.getElementById("copyArticleUrlBtn").addEventListener("click", async () => {
-          const articleUrl = getArticleUrl();
+          const articleUrl = generatedPreviewUrl || getArticleUrl();
           if (!articleUrl) {
-            showToast("Chưa có URL bài viết để copy");
+            showToast("Chua co URL bai viet de copy");
             return;
           }
           try {
             await navigator.clipboard.writeText(articleUrl);
-            showToast("Đã copy URL bài viết");
+            showToast("Da copy URL bai viet");
           } catch {
-            showToast("Không copy được URL bài viết");
+            showToast("Khong copy duoc URL bai viet");
           }
         });
 
@@ -1821,7 +1851,7 @@
                 primeResolvedTarget(target);
               }
             }
-            showToast(`Đang thử mở app ở popup ${stageKey || "?"}`);
+            showToast(`Dang thu mo app o popup ${stageKey || "?"}`);
             closeOverlay(stageKey);
             return;
           }
