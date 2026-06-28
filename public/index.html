@@ -723,6 +723,9 @@
       <!-- TOPBAR -->
       <header class="topbar">
         <button
+          class="tb-menu-btn"
+          type="button"
+          aria-label="Mở menu"
           onclick="toggleSidebar()"
           style="
             background: none;
@@ -1653,7 +1656,7 @@
                 <div class="user-note" id="teamInviteHint" style="margin: 10px 0 0">Team workspace thật: owner mời, user xác nhận rồi mới thấy dữ liệu chung.</div>
               </div>
               <div style="overflow-x: auto">
-                <table><thead><tr><th>Người dùng</th><th>Vai trò</th><th>Trạng thái</th><th>Focus</th><th>Hoạt động gần nhất</th><th></th></tr></thead><tbody id="teamMemberBody"><tr><td colspan="6" class="tbl-empty">⏳ Đang tải team workspace...</td></tr></tbody></table>
+                <table class="mobile-card-table"><thead><tr><th>Người dùng</th><th>Vai trò</th><th>Trạng thái</th><th>Focus</th><th>Hoạt động gần nhất</th><th></th></tr></thead><tbody id="teamMemberBody"><tr><td colspan="6" class="tbl-empty">⏳ Đang tải team workspace...</td></tr></tbody></table>
               </div>
             </div>
             <div class="tbl-card" id="teamTemplatesCard" style="margin-bottom: 18px">
@@ -1794,7 +1797,7 @@
                 </div>
               </div>
               <div style="overflow-x: auto">
-                <table>
+                <table class="mobile-card-table">
                   <thead>
                     <tr>
                       <th>
@@ -2076,19 +2079,21 @@
             <div class="account-shell">
               <section class="account-hero">
                 <div class="account-hero-main">
-                  <div
-                    class="account-avatar account-avatar--xl"
-                    id="accountHeroAvatar"
-                  >
-                    U
+                  <div class="account-avatar-stack">
+                    <div
+                      class="account-avatar account-avatar--xl"
+                      id="accountHeroAvatar"
+                    >
+                      U
+                    </div>
+                    <span class="account-avatar-badge" id="accountHeroPlan">FREE</span>
                   </div>
                   <div class="account-hero-copy">
                     <div class="account-kicker">BocLink ID</div>
                     <h2 id="accountHeroName">Tài khoản cá nhân</h2>
+                    <div class="account-hero-email" id="accountHeroEmail">user@example.com</div>
                     <div class="account-hero-meta">
-                      <span id="accountHeroEmail">user@example.com</span>
-                      <span id="accountHeroPlan">FREE</span>
-                      <span id="accountHero2fa">2FA chưa bật</span>
+                      <span class="account-status-chip warn" id="accountHero2fa">2FA chưa bật</span>
                     </div>
                   </div>
                 </div>
@@ -2566,7 +2571,7 @@
                   Chưa có yêu cầu thanh toán nào gần đây.
                 </div>
                 <div class="account-table-wrap">
-                  <table class="account-table">
+                  <table class="account-table mobile-card-table">
                     <thead>
                       <tr>
                         <th>ID giao dịch</th>
@@ -2887,7 +2892,7 @@
                   </div>
                 </div>
                 <div style="overflow-x: auto">
-                  <table>
+                  <table class="mobile-card-table">
                     <thead>
                       <tr>
                         <th class="td-check">
@@ -2950,7 +2955,7 @@
                   </div>
                 </div>
                 <div style="overflow-x: auto">
-                  <table>
+                  <table class="mobile-card-table">
                     <thead>
                       <tr>
                         <th>Mã</th>
@@ -3123,7 +3128,7 @@
                   </div>
                 </div>
                 <div style="overflow-x: auto">
-                  <table>
+                  <table class="mobile-card-table">
                     <thead>
                       <tr>
                         <th>Domain</th>
@@ -3180,7 +3185,7 @@
                   </button>
                 </div>
                 <div style="overflow-x: auto">
-                  <table>
+                  <table class="mobile-card-table">
                     <thead>
                       <tr>
                         <th>Thời gian</th>
@@ -3216,13 +3221,16 @@
         aria-label="Mở chat với admin"
         hidden
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
-          <path
-            d="M7 10.5h10M7 14.5h6m-5.2 5.5 1.9-3.6H18a3 3 0 0 0 3-3v-8a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h1.8Z"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
+        <span class="support-fab-core" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+            <path
+              d="M7 11.25h10M7 15.25h6m-5.4 5.05 1.85-3.35H18a3.2 3.2 0 0 0 3.2-3.2V6.95A3.2 3.2 0 0 0 18 3.75H6a3.2 3.2 0 0 0-3.2 3.2v6.8A3.2 3.2 0 0 0 6 16.95h1.6Z"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        <span class="support-fab-dot" id="supportFabDot" hidden></span>
         <span class="support-fab-badge" id="supportFabBadge" hidden>0</span>
       </button>
 

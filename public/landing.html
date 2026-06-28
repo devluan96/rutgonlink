@@ -304,6 +304,125 @@
         color: var(--ink-soft);
         font-weight: 600;
       }
+      .landing-support-fab {
+        position: fixed;
+        right: 22px;
+        bottom: 22px;
+        z-index: 1200;
+        border: 0;
+        border-radius: 999px;
+        padding: 9px 14px 9px 9px;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: #fff;
+        background: linear-gradient(135deg, var(--brand-1), var(--brand-2));
+        box-shadow:
+          0 22px 46px rgba(59, 130, 246, 0.28),
+          0 12px 26px rgba(15, 23, 42, 0.2);
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+      }
+      .landing-support-fab:hover {
+        transform: translateY(-2px);
+        box-shadow:
+          0 26px 52px rgba(59, 130, 246, 0.32),
+          0 14px 28px rgba(15, 23, 42, 0.24);
+      }
+      .landing-support-fab-core {
+        width: 48px;
+        height: 48px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, 0.16);
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        backdrop-filter: blur(12px);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+      }
+      .landing-support-fab-core svg {
+        width: 24px;
+        height: 24px;
+      }
+      .landing-support-fab-label {
+        font-size: 0.94rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      .landing-support-panel {
+        position: fixed;
+        right: 22px;
+        bottom: 92px;
+        z-index: 1200;
+        width: min(360px, calc(100vw - 24px));
+        padding: 16px;
+        border-radius: 26px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 248, 255, 0.94)),
+          #ffffff;
+        box-shadow:
+          0 28px 64px rgba(15, 23, 42, 0.18),
+          0 12px 28px rgba(59, 130, 246, 0.1);
+        opacity: 0;
+        transform: translateY(12px) scale(0.98);
+        pointer-events: none;
+        transition: opacity 0.18s ease, transform 0.18s ease;
+      }
+      .landing-support-panel.show {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+      }
+      .landing-support-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .landing-support-head strong {
+        display: block;
+        font-size: 1rem;
+        color: var(--ink);
+      }
+      .landing-support-head span {
+        display: block;
+        margin-top: 0.35rem;
+        color: var(--ink-soft);
+        font-size: 0.86rem;
+        line-height: 1.55;
+      }
+      .landing-support-close {
+        width: 36px;
+        height: 36px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        background: rgba(255, 255, 255, 0.76);
+        color: var(--ink-soft);
+        display: inline-grid;
+        place-items: center;
+      }
+      .landing-support-body {
+        margin-top: 14px;
+        padding: 14px;
+        border-radius: 20px;
+        background: rgba(59, 130, 246, 0.06);
+        border: 1px solid rgba(59, 130, 246, 0.1);
+      }
+      .landing-support-status {
+        color: var(--ink);
+        font-size: 0.92rem;
+        line-height: 1.6;
+      }
+      .landing-support-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.7rem;
+        margin-top: 1rem;
+      }
+      .landing-support-actions .btn {
+        flex: 1 1 0;
+        min-width: 0;
+      }
 
       .hero {
         position: relative;
@@ -422,6 +541,8 @@
         box-shadow: none !important;
         font-size: 1.02rem;
         padding-left: 1rem;
+        width: 100%;
+        min-width: 0;
         color: var(--ink);
       }
 
@@ -3924,7 +4045,75 @@
 
       @media (max-width: 575.98px) {
         .site-header .wrap {
-          min-height: 76px;
+          min-height: 64px;
+          gap: 0.75rem !important;
+          padding: 10px 0;
+        }
+
+        .site-header .wrap > .brand {
+          min-width: 0;
+          gap: 10px;
+        }
+
+        .brand-mark {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+        }
+
+        .brand-title {
+          font-size: 0.98rem;
+        }
+
+        .site-header .wrap > div:last-child {
+          gap: 0.5rem !important;
+        }
+
+        .theme-toggle {
+          width: 42px;
+          height: 42px;
+        }
+
+        .landing-auth-shell {
+          gap: 0.45rem;
+        }
+
+        .landing-auth-user {
+          display: none;
+        }
+
+        .landing-support-fab {
+          right: 14px;
+          bottom: 14px;
+          padding: 8px;
+        }
+
+        .landing-support-fab-label {
+          display: none;
+        }
+
+        .landing-support-panel {
+          right: 12px;
+          left: 12px;
+          bottom: 82px;
+          width: auto;
+          border-radius: 22px;
+        }
+
+        #landingLoginBtn,
+        #landingRegisterBtn,
+        #landingDashboardBtn {
+          padding: 0.72rem 1rem !important;
+          font-size: 0.84rem;
+        }
+
+        .hero {
+          padding: 2.7rem 0 2.2rem;
+        }
+
+        .hero-kicker {
+          padding: 0.58rem 0.85rem;
+          font-size: 0.76rem;
         }
 
         .boclink-section,
@@ -4129,17 +4318,46 @@
         }
 
         .hero-title {
-          font-size: 2.2rem;
-          line-height: 0.92;
+          margin: 0.95rem 0 0.8rem;
+          font-size: 1.98rem;
+          line-height: 0.96;
+        }
+
+        .hero-lead {
+          font-size: 0.96rem;
+          line-height: 1.65;
+        }
+
+        .hero-form {
+          margin-top: 1.2rem;
+          padding: 0.7rem;
+          border-radius: 20px;
+        }
+
+        .hero-form .form-control {
+          min-height: 50px;
+          padding-inline: 0.95rem;
         }
 
         .hero-form .input-group {
           flex-direction: column;
+          gap: 0.5rem;
         }
 
         .hero-form .btn {
           width: 100%;
-          margin-top: 0.5rem;
+          margin-top: 0;
+        }
+
+        .hero-actions a,
+        .hero-actions button {
+          width: 100%;
+          justify-content: center;
+        }
+
+        .hero-pill {
+          width: 100%;
+          justify-content: flex-start;
         }
 
         .hero-pills,
@@ -5525,6 +5743,52 @@
       </section>
     </main>
 
+    <button
+      class="landing-support-fab"
+      type="button"
+      id="landingSupportLauncher"
+      aria-label="Mở chat với admin"
+    >
+      <span class="landing-support-fab-core" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+          <path
+            d="M7 11.25h10M7 15.25h6m-5.4 5.05 1.85-3.35H18a3.2 3.2 0 0 0 3.2-3.2V6.95A3.2 3.2 0 0 0 18 3.75H6a3.2 3.2 0 0 0-3.2 3.2v6.8A3.2 3.2 0 0 0 6 16.95h1.6Z"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </span>
+      <span class="landing-support-fab-label">Chat admin</span>
+    </button>
+
+    <div class="landing-support-panel" id="landingSupportPanel" aria-hidden="true">
+      <div class="landing-support-head">
+        <div>
+          <strong>Chat với admin</strong>
+          <span id="landingSupportIntro">
+            Hỗ trợ thanh toán, mở gói và kiểm tra lịch sử ngay trong hộp chat.
+          </span>
+        </div>
+        <button
+          class="landing-support-close"
+          type="button"
+          id="landingSupportClose"
+          aria-label="Đóng chat"
+        >
+          ✕
+        </button>
+      </div>
+      <div class="landing-support-body">
+        <div class="landing-support-status" id="landingSupportStatus">
+          Đăng nhập để nhắn trực tiếp với admin và giữ lại toàn bộ lịch sử hội thoại.
+        </div>
+        <div class="landing-support-actions">
+          <a class="btn btn-brand" id="landingSupportPrimary" href="/login">Đăng nhập</a>
+          <a class="btn btn-brand-outline" id="landingSupportSecondary" href="/register">Tạo tài khoản</a>
+        </div>
+      </div>
+    </div>
+
     <footer class="footer">
       <div class="container">
         <div class="footer-shell">
@@ -5698,10 +5962,32 @@
         const landingAuthUserShell = document.getElementById("landingAuthUser");
         const landingAuthAvatar = document.getElementById("landingAuthAvatar");
         const landingAuthName = document.getElementById("landingAuthName");
+        const landingSupportLauncher = document.getElementById(
+          "landingSupportLauncher",
+        );
+        const landingSupportPanel = document.getElementById(
+          "landingSupportPanel",
+        );
+        const landingSupportClose = document.getElementById(
+          "landingSupportClose",
+        );
+        const landingSupportIntro = document.getElementById(
+          "landingSupportIntro",
+        );
+        const landingSupportStatus = document.getElementById(
+          "landingSupportStatus",
+        );
+        const landingSupportPrimary = document.getElementById(
+          "landingSupportPrimary",
+        );
+        const landingSupportSecondary = document.getElementById(
+          "landingSupportSecondary",
+        );
         let landingAuthState = null;
         let landingAuthLoaded = false;
         let landingAuthPromise = null;
         let landingShortenBusy = false;
+        let landingSupportOpen = false;
 
         const getLandingNextUrl = () =>
           `${location.pathname}${location.search}${location.hash}`;
@@ -5744,6 +6030,61 @@
             if (landingAuthName)
               landingAuthName.textContent = getLandingDisplayName(authUser);
           }
+          renderLandingSupportState(authUser);
+        };
+
+        const setLandingSupportPanelOpen = (nextOpen) => {
+          landingSupportOpen = !!nextOpen;
+          if (!landingSupportPanel) return;
+          landingSupportPanel.classList.toggle("show", landingSupportOpen);
+          landingSupportPanel.setAttribute(
+            "aria-hidden",
+            landingSupportOpen ? "false" : "true",
+          );
+        };
+
+        const renderLandingSupportState = (authUser) => {
+          if (
+            !landingSupportIntro ||
+            !landingSupportStatus ||
+            !landingSupportPrimary ||
+            !landingSupportSecondary
+          ) {
+            return;
+          }
+          const signedIn = !!authUser;
+          const isAdmin =
+            signedIn &&
+            String(authUser?.role || "").trim().toLowerCase() === "admin";
+          if (!signedIn) {
+            landingSupportIntro.textContent =
+              "Hỗ trợ thanh toán, mở gói và kiểm tra lịch sử ngay trong hộp chat.";
+            landingSupportStatus.textContent =
+              "Đăng nhập để nhắn trực tiếp với admin và giữ lại toàn bộ lịch sử hội thoại.";
+            landingSupportPrimary.textContent = "Đăng nhập";
+            landingSupportPrimary.href = buildLandingAuthUrl("login");
+            landingSupportSecondary.hidden = false;
+            landingSupportSecondary.textContent = "Tạo tài khoản";
+            landingSupportSecondary.href = buildLandingAuthUrl("register");
+            return;
+          }
+          if (isAdmin) {
+            landingSupportIntro.textContent =
+              "Bạn đang đăng nhập bằng tài khoản quản trị.";
+            landingSupportStatus.textContent =
+              "Mở dashboard để vào nhanh tab Tin nhắn và trả lời user theo thời gian thực.";
+            landingSupportPrimary.textContent = "Mở quản trị";
+            landingSupportPrimary.href = "/admin";
+            landingSupportSecondary.hidden = true;
+            return;
+          }
+          landingSupportIntro.textContent =
+            "Bạn đã đăng nhập. Hộp chat trực tiếp với admin đã sẵn sàng trong dashboard.";
+          landingSupportStatus.textContent =
+            "Mở dashboard để xem lịch sử chat, phản hồi thanh toán và nhận tin nhắn mới từ admin.";
+          landingSupportPrimary.textContent = "Mở dashboard";
+          landingSupportPrimary.href = "/dashboard";
+          landingSupportSecondary.hidden = true;
         };
 
         const isAffiliateLandingUrl = (value) => {
@@ -5790,6 +6131,24 @@
         renderLandingAuthNav(null);
         void loadLandingAuthState().then((authUser) => {
           renderLandingAuthNav(authUser);
+        });
+
+        landingSupportLauncher?.addEventListener("click", () => {
+          setLandingSupportPanelOpen(!landingSupportOpen);
+        });
+        landingSupportClose?.addEventListener("click", () => {
+          setLandingSupportPanelOpen(false);
+        });
+        document.addEventListener("click", (event) => {
+          if (
+            landingSupportOpen &&
+            landingSupportLauncher &&
+            landingSupportPanel &&
+            !landingSupportLauncher.contains(event.target) &&
+            !landingSupportPanel.contains(event.target)
+          ) {
+            setLandingSupportPanelOpen(false);
+          }
         });
 
         const showLandingShortenGate = (message, mode = "guest") => {

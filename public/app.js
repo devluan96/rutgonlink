@@ -104,6 +104,7 @@ let linkSearchQuery = "";
 let linkTypeFilter = "all";
 let currentFilteredLinks = [];
 let selectedLinkIds = new Set();
+let expandedOriginalLinkIds = new Set();
 let availableDomains = [];
 let availableDomainsPromise = null;
 let createDomainSelection = "";
@@ -1177,8 +1178,7 @@ function syncLandingIntroLanguage() {
   });
   const quickInput = document.getElementById("landingQuickUrl");
   if (quickInput) quickInput.placeholder = copy.quickPlaceholder;
-  const topbarSearch = document.getElementById("tbSearch");
-  if (topbarSearch) topbarSearch.placeholder = copy.searchPlaceholder;
+  syncTopbarSearchPlaceholder(copy.searchPlaceholder);
   const langSwitch = document.getElementById("tbLangSwitch");
   if (langSwitch) {
     langSwitch.setAttribute(
@@ -2738,6 +2738,9 @@ function renderAccountTwoFactorState() {
     hero2fa.textContent = user.two_factor_enabled
       ? "2FA đã bật"
       : "2FA chưa bật";
+    hero2fa.className = user.two_factor_enabled
+      ? "account-status-chip ok"
+      : "account-status-chip warn";
   }
   if (secretInput) {
     secretInput.value = accountTwoFactorSetup?.manual_entry_key || "";
@@ -2819,12 +2822,41 @@ function renderAccountDevices() {
     .join("");
 }
 
+function syncMobileCardTableLabels(target) {
+  const table =
+    target instanceof HTMLElement
+      ? target.closest("table")
+      : document.getElementById(String(target || ""))?.closest("table") ||
+        document.querySelector(String(target || ""));
+  if (!table) return;
+  const headers = Array.from(table.querySelectorAll("thead th")).map((th) =>
+    String(th.textContent || "").trim(),
+  );
+  Array.from(table.tBodies || []).forEach((tbody) => {
+    Array.from(tbody.rows || []).forEach((row) => {
+      Array.from(row.cells || []).forEach((cell, index) => {
+        if (cell.classList.contains("tbl-empty") || Number(cell.colSpan || 1) > 1) {
+          cell.removeAttribute("data-label");
+          return;
+        }
+        const fallback =
+          cell.classList.contains("td-check") ||
+          cell.classList.contains("td-actions")
+            ? "Thao tác"
+            : `Cột ${index + 1}`;
+        cell.dataset.label = headers[index] || fallback;
+      });
+    });
+  });
+}
+
 function renderAccountBillingHistory() {
   const body = document.getElementById("accountBillingHistoryBody");
   if (!body) return;
   if (!Array.isArray(billingRequests) || !billingRequests.length) {
     body.innerHTML =
       '<tr><td colspan="5" class="tbl-empty">Chưa có lịch sử thanh toán.</td></tr>';
+    syncMobileCardTableLabels(body);
     return;
   }
   body.innerHTML = billingRequests
@@ -2839,6 +2871,7 @@ function renderAccountBillingHistory() {
         </tr>`,
     )
     .join("");
+  syncMobileCardTableLabels(body);
 }
 
 function renderAccountAffiliateSettings(options = {}) {
@@ -2902,9 +2935,16 @@ function renderAccountPage() {
     getUserDisplayName(user);
   document.getElementById("accountHeroEmail").textContent =
     user.email || "Chưa có email";
-  document.getElementById("accountHeroPlan").textContent = (
-    user.plan || "free"
-  ).toUpperCase();
+  const accountHeroPlanBadge = document.getElementById("accountHeroPlan");
+  if (accountHeroPlanBadge) {
+    const badgeKey =
+      String(user.role || "").toLowerCase() === "admin"
+        ? "admin"
+        : String(user.plan || "free").toLowerCase();
+    accountHeroPlanBadge.textContent =
+      badgeKey === "admin" ? "ADMIN" : badgeKey.toUpperCase();
+    accountHeroPlanBadge.className = `account-avatar-badge is-${badgeKey}`;
+  }
   resetAccountProfileForm();
   renderAccountBillingHistory();
   renderAccountAffiliateSettings();
@@ -2982,17 +3022,58 @@ function renderSupportTimeline(
   wrap.scrollTop = wrap.scrollHeight;
 }
 
+function playSupportReplySound() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return;
+  try {
+    const ctx = new AudioCtx();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(740, ctx.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(
+      1040,
+      ctx.currentTime + 0.12,
+    );
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + 0.24);
+    oscillator.onended = () => {
+      try {
+        ctx.close();
+      } catch {}
+    };
+  } catch {}
+}
+
+function triggerSupportReplyAlert() {
+  const now = Date.now();
+  if (now - supportReplySoundAt < 1200) return;
+  supportReplySoundAt = now;
+  playSupportReplySound();
+}
+
 function renderSupportConversation() {
   const launcher = document.getElementById("supportWidgetLauncher");
   const widget = document.getElementById("supportWidget");
   const statusEl = document.getElementById("supportWidgetStatus");
   const badgeEl = document.getElementById("supportFabBadge");
+  const dotEl = document.getElementById("supportFabDot");
   const noteEl = document.getElementById("supportComposerNote");
   const btn = document.getElementById("supportSendBtn");
   const canShowSupport = !!user;
+  const adminPageActive = !!document
+    .getElementById("page-admin")
+    ?.classList.contains("active");
   const canOpenSupportPopup = canShowSupport && !isAdminUser();
+  const showLauncher =
+    canShowSupport && !(window.innerWidth <= 768 && adminPageActive);
 
-  if (launcher) launcher.hidden = !canShowSupport;
+  if (launcher) launcher.hidden = !showLauncher;
   if (widget) {
     widget.hidden = !canOpenSupportPopup;
     widget.classList.toggle("show", canOpenSupportPopup && supportWidgetOpen);
@@ -3000,6 +3081,9 @@ function renderSupportConversation() {
       "aria-hidden",
       canOpenSupportPopup && supportWidgetOpen ? "false" : "true",
     );
+  }
+  if (!showLauncher) {
+    supportWidgetOpen = false;
   }
   if (!canShowSupport) {
     supportWidgetOpen = false;
@@ -3015,6 +3099,8 @@ function renderSupportConversation() {
       badgeEl.hidden = true;
       badgeEl.textContent = "0";
     }
+    if (dotEl) dotEl.hidden = true;
+    launcher?.classList.remove("has-unread");
     return;
   }
 
@@ -3046,6 +3132,8 @@ function renderSupportConversation() {
       : Number(supportThread?.unread_for_user || 0);
     badgeEl.hidden = unreadCount < 1;
     badgeEl.textContent = String(unreadCount);
+    launcher?.classList.toggle("has-unread", unreadCount > 0);
+    if (dotEl) dotEl.hidden = unreadCount < 1;
   }
 
   if (noteEl) {
@@ -3066,6 +3154,13 @@ async function loadSupportMessages(options = {}) {
   if (!user?.id || supportSyncInFlight) return;
   const peekOnly = !!options.peek;
   const silent = !!options.silent;
+  const hadLoaded = supportLoaded;
+  const previousMessageKey = String(
+    supportMessages.at(-1)?.id ||
+      supportMessages.at(-1)?.created_at ||
+      supportThread?.last_message_at ||
+      "",
+  );
   supportSyncInFlight = true;
   if (!silent) {
     supportLoading = true;
@@ -3085,6 +3180,21 @@ async function loadSupportMessages(options = {}) {
     supportMessages = Array.isArray(data.messages) ? data.messages : [];
     supportThread = data.thread || null;
     supportLoaded = true;
+    const nextMessage = supportMessages.at(-1) || null;
+    const nextMessageKey = String(
+      nextMessage?.id || nextMessage?.created_at || supportThread?.last_message_at || "",
+    );
+    const lastSenderRole = String(
+      supportThread?.last_sender_role || nextMessage?.sender_role || "",
+    ).toLowerCase();
+    if (
+      hadLoaded &&
+      nextMessageKey &&
+      nextMessageKey !== previousMessageKey &&
+      lastSenderRole === "admin"
+    ) {
+      triggerSupportReplyAlert();
+    }
     if (!silent) {
       supportNotice = "";
     }
@@ -3215,6 +3325,20 @@ function stopSupportSyncLoops() {
     clearInterval(adminSupportPollTimer);
     adminSupportPollTimer = null;
   }
+}
+
+function syncTopbarSearchPlaceholder(placeholder) {
+  const topbarSearch = document.getElementById("tbSearch");
+  if (!topbarSearch) return;
+  const basePlaceholder =
+    placeholder ||
+    (appLanguage === "en"
+      ? "Search links... (Ctrl+K)"
+      : "Tìm link... (Ctrl+K)");
+  topbarSearch.placeholder =
+    window.innerWidth <= 768
+      ? basePlaceholder.replace(/\s*\([^)]*\)\s*$/, "")
+      : basePlaceholder;
 }
 
 function startSupportPollingFallback() {
@@ -3993,6 +4117,7 @@ function renderAdminPayments() {
   if (!pagination.total) {
     body.innerHTML =
       '<tr><td colspan="8" class="tbl-empty">Chưa có yêu cầu thanh toán nào.</td></tr>';
+    syncMobileCardTableLabels(body);
     renderAdminPagination(
       "adPaymentPagination",
       pagination,
@@ -4016,13 +4141,14 @@ function renderAdminPayments() {
             <td><span class="payment-status ${esc(request.status || "awaiting_payment")}">${esc(request.status || "awaiting_payment")}</span></td>
             <td>${esc(formatAdminDateTime(request.submitted_at || request.created_at))}</td>
             <td class="td-orig" title="${esc(request.payer_note || request.admin_note || "")}">${esc(request.payer_note || request.transfer_note || "—")}</td>
-            <td style="display:flex;gap:6px;flex-wrap:wrap">
+            <td class="td-actions" style="display:flex;gap:6px;flex-wrap:wrap">
               <button class="btn-cp" type="button" onclick="reviewAdminPayment(${request.id},'approved')" ${canReview ? "" : "disabled"}>Duyệt</button>
               <button class="btn-del" type="button" onclick="reviewAdminPayment(${request.id},'rejected')" ${canReview ? "" : "disabled"}>Từ chối</button>
             </td>
           </tr>`;
     })
     .join("");
+  syncMobileCardTableLabels(body);
   renderAdminPagination(
     "adPaymentPagination",
     pagination,
@@ -4561,6 +4687,10 @@ document.addEventListener("click", (e) => {
   }
 });
 
+window.addEventListener("resize", () => {
+  syncTopbarSearchPlaceholder();
+});
+
 function showConfirmDialog(options = {}) {
   const modal = document.getElementById("confirmModal");
   const titleEl = document.getElementById("confirmTitle");
@@ -4652,6 +4782,7 @@ function navigate(page, el) {
   if (`${location.pathname}${location.search}` !== nextUrl || location.hash) {
     history.replaceState(null, "", nextUrl);
   }
+  renderSupportConversation();
 }
 
 function toggleSidebar() {
@@ -8090,12 +8221,35 @@ function renderActivity(arr, id) {
     .join("");
 }
 
+function shouldUseOriginalLinkClamp(link = null, platform = "") {
+  const normalizedPlatform = String(platform || "").trim().toLowerCase();
+  const originalUrl = String(link?.original_url || "").trim();
+  return normalizedPlatform === "tiktok" && originalUrl.length > 120;
+}
+
+function renderOriginalLinkCell(link = null, platform = "", linkId = 0) {
+  const originalUrl = String(link?.original_url || "").trim();
+  if (!originalUrl) {
+    return '<span style="color:var(--text3)">—</span>';
+  }
+  if (!shouldUseOriginalLinkClamp(link, platform)) {
+    return esc(originalUrl);
+  }
+  const normalizedId = Number(linkId);
+  const isExpanded = expandedOriginalLinkIds.has(normalizedId);
+  return `<div class="td-orig-wrap ${isExpanded ? "is-expanded" : "is-clamped"}">
+    <span class="td-orig-text">${esc(originalUrl)}</span>
+    <button class="td-orig-toggle" type="button" onclick="toggleOriginalLinkExpand(${normalizedId})">${isExpanded ? "Thu gọn" : "Xem thêm"}</button>
+  </div>`;
+}
+
 function renderTable(arr) {
   const tb = document.getElementById("tblBody");
   currentFilteredLinks = Array.isArray(arr) ? arr.slice() : [];
   if (!arr.length) {
     tb.innerHTML =
       '<tr><td colspan="8" class="tbl-empty">Chưa có link. <span style="color:var(--brand);cursor:pointer" onclick="navigate(\'create\')">Tạo ngay →</span></td></tr>';
+    syncMobileCardTableLabels(tb);
     syncLinkBulkToolbar(currentFilteredLinks);
     return;
   }
@@ -8119,12 +8273,12 @@ function renderTable(arr) {
         </label>
       </td>
       <td><a class="td-link" href="${l.short_url || "#"}" target="_blank">${short}</a></td>
-      <td class="td-orig" title="${l.original_url || ""}">${l.original_url || ""}</td>
+      <td class="td-orig" title="${l.original_url || ""}">${renderOriginalLinkCell(l, p, linkId)}</td>
       <td><span class="pill ${p}">${lbl[p]}</span></td>
       <td>${l.og_title ? `<span style="font-size:11px;color:var(--green)">✅ ${esc(l.og_title).substring(0, 20)}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
       <td style="font-weight:700;color:var(--text)">${l.clicks || 0}</td>
       <td style="color:var(--text3)">${date}</td>
-      <td style="display:flex;gap:5px">
+      <td class="td-actions" style="display:flex;gap:5px">
         <button class="btn-cp" onclick="copyClip('${l.short_url || ""}')">📋</button>
         <button class="btn-cp" onclick="openEditModal(${l.id})" style="color:var(--brand)" title="Chỉnh sửa">✏️</button>
         <button class="btn-cp" onclick="deleteMyLink(${l.id},'${(l.short_url || "").replace(/^https?:\/\//, "")}')" style="color:var(--red);border-color:rgba(239,68,68,.2)" title="Xóa">🗑️</button>
@@ -8132,7 +8286,19 @@ function renderTable(arr) {
     </tr>`;
     })
     .join("");
+  syncMobileCardTableLabels(tb);
   syncLinkBulkToolbar(currentFilteredLinks);
+}
+
+function toggleOriginalLinkExpand(linkId) {
+  const normalizedId = Number(linkId);
+  if (!Number.isFinite(normalizedId)) return;
+  if (expandedOriginalLinkIds.has(normalizedId)) {
+    expandedOriginalLinkIds.delete(normalizedId);
+  } else {
+    expandedOriginalLinkIds.add(normalizedId);
+  }
+  renderTable(currentFilteredLinks);
 }
 
 function syncLinkBulkToolbar(arr = currentFilteredLinks) {
@@ -8451,23 +8617,7 @@ function setChartDays(n, btn) {
 function renderChart() {
   const ctx = document.getElementById("clickChart");
   if (!ctx) return;
-  const labels = [],
-    vals = [];
-  const now = new Date();
-  for (let i = chartDays - 1; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    labels.push(
-      d.toLocaleDateString("vi", { day: "2-digit", month: "2-digit" }),
-    );
-    vals.push(0);
-  }
-  links.forEach((l) => {
-    if (!l.created_at) return;
-    const diff = Math.floor((now - new Date(l.created_at)) / 86400000);
-    const idx = chartDays - 1 - diff;
-    if (idx >= 0 && idx < chartDays) vals[idx] += l.clicks || 0;
-  });
+  const { labels, vals } = getStatsTimelineSeries();
   if (chart) chart.destroy();
   chart = new Chart(ctx, {
     type: "line",
@@ -9033,6 +9183,7 @@ let supportSyncInFlight = false;
 let supportPollTimer = null;
 let supportEventSource = null;
 let supportEventSourceMode = "";
+let supportReplySoundAt = 0;
 let adminSupportThreads = [];
 let adminSupportMessages = [];
 let adminSupportSelectedUserId = null;
@@ -9557,6 +9708,7 @@ function renderAdminRedirects(arr, fileLabel = "logs/redirect.log") {
   if (!pagination.total) {
     tb.innerHTML =
       '<tr><td colspan="7" class="tbl-empty">Chưa có redirect log nào.</td></tr>';
+    syncMobileCardTableLabels(tb);
     renderAdminPagination(
       "adRedirectPagination",
       pagination,
@@ -9589,6 +9741,7 @@ function renderAdminRedirects(arr, fileLabel = "logs/redirect.log") {
     </tr>`;
     })
     .join("");
+  syncMobileCardTableLabels(tb);
   renderAdminPagination(
     "adRedirectPagination",
     pagination,
@@ -9637,6 +9790,7 @@ function renderAdminDomains(arr) {
   if (!arr.length) {
     tb.innerHTML =
       '<tr><td colspan="8" class="tbl-empty">Chưa có domain</td></tr>';
+    syncMobileCardTableLabels(tb);
     return;
   }
   tb.innerHTML = arr
@@ -9659,7 +9813,7 @@ function renderAdminDomains(arr) {
       </td>
       <td><input class="plan-select" type="date" id="domainExpiry_${d.id}" value="${esc(expiresAt)}" /></td>
       <td style="color:var(--text3);font-size:11px">${(d.created_at || "").substring(0, 10)}</td>
-      <td style="display:flex;gap:5px;flex-wrap:wrap">
+      <td class="td-actions" style="display:flex;gap:5px;flex-wrap:wrap">
         <button class="btn-cp" onclick="updateDomainHealth(${d.id},'${esc(d.hostname || "")}')">Lưu</button>
         <button class="btn-cp" onclick="setPrimaryDomain(${d.id},'${esc(d.hostname || "")}')" ${isPrimary ? "disabled" : ""}>Primary</button>
         <button class="btn-cp" onclick="toggleDomainActive(${d.id},${isActive ? "false" : "true"},'${esc(d.hostname || "")}')">${isActive ? "Pause" : "Activate"}</button>
@@ -9668,6 +9822,7 @@ function renderAdminDomains(arr) {
     </tr>`;
     })
     .join("");
+  syncMobileCardTableLabels(tb);
 }
 
 function renderAdminUsers() {
@@ -9681,6 +9836,7 @@ function renderAdminUsers() {
   if (!filteredUsers.length) {
     tb.innerHTML =
       '<tr><td colspan="8" class="tbl-empty">Không có người dùng phù hợp bộ lọc.</td></tr>';
+    syncMobileCardTableLabels(tb);
     syncAdminUserSelectionUI(filteredUsers, []);
     renderAdminPagination("adUserPagination", pagination, "setAdminUserPage");
     return;
@@ -9706,10 +9862,11 @@ function renderAdminUsers() {
     </td>
     <td><span class="badge-role ${u.role || "user"}">${u.role || "user"}</span></td>
     <td style="color:var(--text3);font-size:11px">${(u.created_at || "").substring(0, 10)}</td>
-    <td><button class="btn-del" onclick="adminDeleteUser(${u.id},'${esc(u.email)}')">Xóa</button></td>
+    <td class="td-actions"><button class="btn-del" onclick="adminDeleteUser(${u.id},'${esc(u.email)}')">Xóa</button></td>
   </tr>`;
     })
     .join("");
+  syncMobileCardTableLabels(tb);
   syncAdminUserSelectionUI(filteredUsers, pageRows);
   renderAdminPagination("adUserPagination", pagination, "setAdminUserPage");
 }
@@ -10556,12 +10713,14 @@ function renderTeamMembers(members) {
 
   if (!user) {
     body.innerHTML = `<tr><td colspan="6" class="tbl-empty">Đăng nhập để mời cộng tác viên. <a href="${buildAuthUrl("login")}" style="color:var(--brand);font-weight:700">Đăng nhập</a></td></tr>`;
+    syncMobileCardTableLabels(body);
     return;
   }
 
   if (!Array.isArray(members) || !members.length) {
     body.innerHTML =
       '<tr><td colspan="6" class="tbl-empty">Chưa có thành viên nào trong workspace.</td></tr>';
+    syncMobileCardTableLabels(body);
     return;
   }
 
@@ -10599,10 +10758,11 @@ function renderTeamMembers(members) {
       <td>${esc(getStatusLabel(member.status))}</td>
       <td style="max-width:240px;color:var(--text2)">${esc(getRoleFocus(member.role))}</td>
       <td style="color:var(--text3);font-size:12px">${esc(formatTeamDateTime(member.joined_at || member.updated_at || member.created_at, "Chưa tham gia"))}</td>
-      <td style="display:flex;gap:6px;flex-wrap:wrap">${actionMarkup}</td>
+      <td class="td-actions" style="display:flex;gap:6px;flex-wrap:wrap">${actionMarkup}</td>
     </tr>`;
     })
     .join("");
+  syncMobileCardTableLabels(body);
 }
 
 function renderTeamTemplates(templates) {

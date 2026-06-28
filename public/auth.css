@@ -1081,38 +1081,59 @@ body.auth-page::after {
 
   .auth-shell {
     width: min(100%, 100%);
-    gap: 16px;
-  }
-
-  .auth-hero-copy h1 {
-    font-size: 2.35rem;
-    line-height: 0.94;
-  }
-
-  .auth-scene {
-    min-height: 222px;
-    padding: 14px;
-  }
-
-  .auth-scene-chip--left {
-    top: 96px;
-  }
-
-  .auth-scene-chip--right {
-    top: 166px;
-  }
-
-  .auth-scene-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .auth-metrics {
-    grid-template-columns: 1fr;
+    gap: 14px;
   }
 
   .auth-card {
-    padding: 20px;
-    border-radius: 26px;
+    order: 1;
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .auth-hero {
+    order: 2;
+    gap: 12px;
+    padding: 0 2px 2px;
+  }
+
+  .auth-brand-mark {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+  }
+
+  .auth-brand-copy span {
+    font-size: 0.84rem;
+  }
+
+  .auth-kicker,
+  .auth-route-badge {
+    padding: 0.5rem 0.78rem;
+    font-size: 0.74rem;
+  }
+
+  .auth-hero-copy {
+    gap: 8px;
+  }
+
+  .auth-hero-copy h1 {
+    max-width: none;
+    font-size: 1.95rem;
+    line-height: 0.98;
+  }
+
+  .auth-hero-copy p {
+    max-width: none;
+    font-size: 0.94rem;
+    line-height: 1.55;
+  }
+
+  .auth-scene {
+    display: none;
+  }
+
+  .auth-metrics {
+    display: none;
   }
 
   .auth-card-top h2 {
