@@ -3923,7 +3923,7 @@ function handleArticleFunnelStageLaunch({
     og_image: config.share_image || config.overlay_image || "",
   };
 
-  if (isIosInApp) {
+  if (isIosInApp && info.platform_name !== "tiktok") {
     const iosInAppTarget = String(
       stage.direct_ios_fb_url ||
         stage.direct_web_url ||
@@ -4185,6 +4185,11 @@ ${ogImageTag}
     return isIOS && (isFacebook || isZalo);
   }
 
+  function shouldPreferLaunchRouteForStage(stage) {
+    if (!stage) return false;
+    return shouldUseLaunchRouteDirectly() && stage.direct_platform === 'tiktok';
+  }
+
   function shouldUseNativeAnchorLaunch(stage) {
     if (!stage) return false;
     var ua = navigator.userAgent || '';
@@ -4387,6 +4392,10 @@ ${ogImageTag}
       }
       event.preventDefault();
       removeStage(stageKey);
+      if (shouldPreferLaunchRouteForStage(stage) && fallbackUrl) {
+        window.location.href = fallbackUrl;
+        return;
+      }
       if (launchDirectTarget(stage)) {
         return;
       }
