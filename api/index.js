@@ -3975,6 +3975,121 @@ ${ogImageTag}
     return (launchBasePath || location.pathname) + '/' + stageKey;
   }
 
+  function getStageByKey(stageKey){
+    return stages.find(function(stage){
+      return String(stage && stage.stage_key || '') === String(stageKey || '');
+    }) || null;
+  }
+
+  function openViaAnchor(targetUrl, targetName, relValue) {
+    if (!targetUrl) return false;
+    try {
+      var anchor = document.createElement('a');
+      anchor.href = targetUrl;
+      anchor.rel = relValue || 'noreferrer noopener';
+      anchor.target = targetName || '_self';
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      setTimeout(function() {
+        try { anchor.remove(); } catch (_) {}
+      }, 0);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function buildAndroidIntentUrl(targetUrl, packageName, fallbackUrl) {
+    if (!targetUrl || !packageName) return '';
+    try {
+      var parsed = new URL(targetUrl);
+      var noScheme = targetUrl.replace(/^https?:\\/\\//i, '');
+      var fallback = fallbackUrl || targetUrl;
+      return 'intent://' + noScheme +
+        '#Intent;scheme=' + parsed.protocol.replace(':', '') +
+        ';package=' + packageName +
+        ';S.browser_fallback_url=' + encodeURIComponent(fallback) +
+        ';end';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function launchDirectTarget(stage) {
+    if (!stage) return false;
+    var ua = navigator.userAgent || '';
+    var isIOS = /iphone|ipad|ipod/i.test(ua);
+    var isAndroid = /android/i.test(ua);
+    var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
+    var isZalo = /ZaloApp/i.test(ua);
+    var isInApp = isFacebook || isZalo;
+    var targetUrl = stage.direct_web_url || stage.target_url || stage.direct_app_url || '';
+
+    if (stage.direct_platform === 'shopee') {
+      if (isAndroid) {
+        var shopeeIntentUrl =
+          stage.direct_android_intent_url ||
+          buildAndroidIntentUrl(
+            stage.direct_android_url || stage.direct_web_url,
+            stage.direct_android_package || 'com.shopee.vn',
+            stage.direct_web_url
+          );
+        if (shopeeIntentUrl) {
+          openViaAnchor(shopeeIntentUrl);
+        } else if (stage.direct_app_url) {
+          openViaAnchor(stage.direct_app_url);
+        } else if (targetUrl) {
+          openViaAnchor(targetUrl);
+        }
+        setTimeout(function() {
+          if (!document.hidden && stage.direct_web_url) {
+            window.location.replace(stage.direct_web_url);
+          }
+        }, 1600);
+        return true;
+      }
+      if (isIOS) {
+        var iosTarget = isInApp
+          ? (stage.direct_ios_fb_url || stage.direct_web_url || stage.direct_ios_url)
+          : (stage.direct_ios_browser_url || stage.direct_ios_url || stage.direct_web_url);
+        if (iosTarget) {
+          openViaAnchor(iosTarget, isInApp ? '_blank' : '_self', 'noopener');
+        }
+        setTimeout(function() {
+          if (!document.hidden && stage.direct_web_url) {
+            window.location.replace(stage.direct_web_url);
+          }
+        }, isInApp ? 1500 : 1600);
+        return true;
+      }
+      if (stage.direct_web_url) {
+        openViaAnchor(stage.direct_web_url);
+        return true;
+      }
+    }
+
+    if (stage.direct_platform === 'tiktok') {
+      var tiktokTarget = isIOS
+        ? (stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
+        : isAndroid
+          ? (stage.direct_android_url || stage.direct_app_url || stage.direct_web_url)
+          : stage.direct_web_url;
+      if (!tiktokTarget) return false;
+      openViaAnchor(tiktokTarget, isInApp ? '_blank' : '_self', 'noopener');
+      setTimeout(function() {
+        if (!document.hidden && stage.direct_web_url) {
+          window.location.replace(stage.direct_web_url);
+        }
+      }, isInApp ? 1500 : 1600);
+      return true;
+    }
+
+    if (!targetUrl) return false;
+    openViaAnchor(targetUrl, isInApp ? '_blank' : '_self', 'noopener');
+    return true;
+  }
+
   function renderOverlayStack(){
     if(!pendingStages.length){
       overlayEl.classList.remove('show');
@@ -3986,7 +4101,7 @@ ${ogImageTag}
       var launchUrl = getLaunchUrl(stage);
       return '<div class="overlay-card" style="'+getStackStyle(index,pendingStages.length)+'">' +
         '<button class="overlay-close" type="button" data-overlay-close="'+escHtml(stage.stage_key)+'">×</button>' +
-        '<a class="overlay-image-hit" href="'+escHtml(launchUrl||'#')+'" target="_self" rel="noreferrer">' +
+        '<a class="overlay-image-hit" href="'+escHtml(launchUrl||stage.direct_web_url||"#")+'" target="_self" rel="noreferrer" data-overlay-launch="'+escHtml(stage.stage_key)+'">' +
           '<img src="'+escHtml(overlayImage)+'" alt="" />' +
         '</a>' +
       '</div>';
@@ -4017,6 +4132,21 @@ ${ogImageTag}
     var closeButton = event.target.closest('[data-overlay-close]');
     if(closeButton){
       removeStage(closeButton.getAttribute('data-overlay-close')||'');
+      return;
+    }
+    var launchButton = event.target.closest('[data-overlay-launch]');
+    if(launchButton){
+      event.preventDefault();
+      var stageKey = launchButton.getAttribute('data-overlay-launch') || '';
+      var stage = getStageByKey(stageKey);
+      removeStage(stageKey);
+      if (launchDirectTarget(stage)) {
+        return;
+      }
+      var fallbackUrl = launchButton.getAttribute('href') || getLaunchUrl(stage);
+      if (fallbackUrl) {
+        window.location.href = fallbackUrl;
+      }
     }
   });
 

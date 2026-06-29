@@ -251,6 +251,47 @@
         gap: 8px;
       }
 
+      .upload-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+
+      .upload-btn {
+        padding: 9px 12px;
+        background: rgba(37, 99, 235, 0.12);
+        border: 1px solid rgba(37, 99, 235, 0.22);
+        color: #dbeafe;
+        border-radius: 12px;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .upload-btn[disabled] {
+        opacity: 0.65;
+        cursor: wait;
+      }
+
+      .upload-status {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .upload-status[data-tone="ok"] {
+        color: #86efac;
+      }
+
+      .upload-status[data-tone="err"] {
+        color: #fca5a5;
+      }
+
+      .sr-only-input {
+        display: none;
+      }
+
       .icon-btn {
         width: 34px;
         height: 34px;
@@ -1416,6 +1457,98 @@
           return String(value || "").replace(/"/g, '\\"');
         }
 
+        function getBlockById(blockId) {
+          return state.blocks.find((item) => item.id === blockId) || null;
+        }
+
+        function setUploadStatus(blockId, message, tone = "") {
+          const status = els.blockList.querySelector(
+            `[data-upload-status="${blockId}"]`,
+          );
+          if (!status) return;
+          status.textContent = message || "";
+          if (tone) {
+            status.dataset.tone = tone;
+          } else {
+            delete status.dataset.tone;
+          }
+        }
+
+        function setUploadBusy(blockId, busy) {
+          const trigger = els.blockList.querySelector(
+            `[data-upload-trigger="${blockId}"]`,
+          );
+          const input = els.blockList.querySelector(
+            `[data-upload-input="${blockId}"]`,
+          );
+          if (trigger) trigger.disabled = !!busy;
+          if (input) input.disabled = !!busy;
+        }
+
+        async function uploadBlockAsset(file, blockType) {
+          const isVideo = blockType === "video";
+          const formData = new FormData();
+          formData.append(isVideo ? "video" : "image", file);
+          const response = await fetch(
+            isVideo ? "/api/upload-video" : "/api/upload-image",
+            {
+              method: "POST",
+              body: formData,
+            },
+          );
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const error = new Error(
+              data.error ||
+                (isVideo ? "Upload video that bai" : "Upload anh that bai"),
+            );
+            error.status = response.status;
+            error.payload = data;
+            throw error;
+          }
+          return {
+            ...data,
+            url:
+              typeof data.url === "string" && data.url.startsWith("/")
+                ? window.location.origin + data.url
+                : String(data.url || "").trim(),
+          };
+        }
+
+        async function handleBlockFileSelection(blockId, file) {
+          const block = getBlockById(blockId);
+          if (!block || !file) return;
+          try {
+            setUploadBusy(blockId, true);
+            setUploadStatus(
+              blockId,
+              block.type === "video" ? "Dang upload video..." : "Dang upload anh...",
+            );
+            const uploaded = await uploadBlockAsset(file, block.type);
+            if (!uploaded.url) {
+              throw new Error("Khong nhan duoc URL sau upload");
+            }
+            clearGeneratedPreviewLink();
+            clearGeneratedPublishedLink();
+            block.src = uploaded.url;
+            render();
+            saveState();
+            setUploadStatus(blockId, "Upload xong", "ok");
+            showToast(block.type === "video" ? "Da tai video len" : "Da tai anh len");
+          } catch (error) {
+            const message =
+              error?.status === 401
+                ? "Can dang nhap lai de upload"
+                : error?.status === 403
+                  ? error?.payload?.error || "Tai khoan hien tai khong duoc upload"
+                  : error?.message || "Upload that bai";
+            setUploadStatus(blockId, message, "err");
+            showToast(message);
+          } finally {
+            setUploadBusy(blockId, false);
+          }
+        }
+
         function getStackStyle(index, total) {
           const depthFromTop = total - index - 1;
           const offset = depthFromTop * 16;
@@ -1458,6 +1591,20 @@
                           <div class="field">
                             <label>${block.type === "video" ? "URL video MP4" : "URL anh"}</label>
                             <input type="url" value="${escapeAttr(block.src || "")}" data-field="src" data-block-id="${block.id}" />
+                            <div class="upload-row">
+                              <button
+                                class="upload-btn"
+                                type="button"
+                                data-upload-trigger="${block.id}"
+                              >${block.type === "video" ? "Chon video tu may" : "Chon anh tu may"}</button>
+                              <input
+                                class="sr-only-input"
+                                type="file"
+                                ${block.type === "video" ? 'accept="video/mp4,video/webm,video/quicktime"' : 'accept="image/*"'}
+                                data-upload-input="${block.id}"
+                              />
+                              <span class="upload-status" data-upload-status="${block.id}">Co the dan URL hoac chon file tu may.</span>
+                            </div>
                           </div>
                           <div class="field">
                             <label>Caption</label>
@@ -1579,17 +1726,16 @@
           els.overlayStack.innerHTML = pendingStages
             .map((stageKey, index) => {
               const target = getEffectiveTarget(stageKey);
+              const launchUrl = getOverlayLaunchUrl(stageKey) || target;
               const isTop = index === pendingStages.length - 1;
               return `
                 <div class="overlay-card" style="${getStackStyle(index, pendingStages.length)}" data-overlay-card="${stageKey}">
                   <button class="overlay-close" type="button" data-overlay-close="${stageKey}">×</button>
                   <a
                     class="overlay-image-hit"
-                    href="${escapeAttr(target || "#")}"
-                    target="_blank"
-                    rel="noopener"
-                    data-overlay-launch="${stageKey}"
-                    data-target="${escapeAttr(target || "")}"
+                    href="${escapeAttr(launchUrl || "#")}"
+                    target="_self"
+                    rel="noreferrer"
                     ${isTop ? "" : 'tabindex="-1"'}
                   >
                     <img src="${escapeAttr(state.overlayImage.trim() || state.shareImage.trim())}" alt="" />
@@ -1598,6 +1744,43 @@
               `;
             })
             .join("");
+        }
+
+        function getOverlayLaunchUrl(stageKey) {
+          const normalizedStageKey = encodeURIComponent(String(stageKey || "").trim());
+          if (!normalizedStageKey) return "";
+
+          if (generatedPublishedUrl) {
+            try {
+              const published = new URL(generatedPublishedUrl, window.location.origin);
+              const slug = published.pathname
+                .replace(/^\/+|\/+$/g, "")
+                .replace(/^af\//, "");
+              if (slug) {
+                return `${published.origin}/af-launch/${slug}/${normalizedStageKey}`;
+              }
+            } catch (_) {}
+          }
+
+          if (generatedPreviewUrl) {
+            try {
+              const preview = new URL(generatedPreviewUrl, window.location.origin);
+              const parts = preview.pathname.replace(/^\/+|\/+$/g, "").split("/");
+              if (
+                parts.length >= 4 &&
+                parts[0] === "_lab" &&
+                parts[1] === "article-funnel"
+              ) {
+                const slug = encodeURIComponent(parts[2] || "article-preview");
+                const token = parts.slice(3).join("/");
+                if (token) {
+                  return `${preview.origin}/_lab/article-funnel-launch/${slug}/${token}/${normalizedStageKey}`;
+                }
+              }
+            } catch (_) {}
+          }
+
+          return "";
         }
 
         function render() {
@@ -1775,6 +1958,17 @@
         });
 
         els.blockList.addEventListener("click", (event) => {
+          const uploadTrigger = event.target.closest("[data-upload-trigger]");
+          if (uploadTrigger) {
+            const blockId = uploadTrigger.dataset.uploadTrigger || "";
+            const input = els.blockList.querySelector(
+              `[data-upload-input="${blockId}"]`,
+            );
+            if (input && !input.disabled) {
+              input.click();
+            }
+            return;
+          }
           const button = event.target.closest("button");
           if (!button) return;
           const moveUpId = button.dataset.moveUp;
@@ -1783,6 +1977,15 @@
           if (moveUpId) moveBlock(moveUpId, "up");
           if (moveDownId) moveBlock(moveDownId, "down");
           if (removeId) removeBlock(removeId);
+        });
+
+        els.blockList.addEventListener("change", async (event) => {
+          const input = event.target.closest("[data-upload-input]");
+          if (!input) return;
+          const blockId = input.dataset.uploadInput || "";
+          const file = input.files?.[0];
+          await handleBlockFileSelection(blockId, file);
+          input.value = "";
         });
 
         [
@@ -1890,24 +2093,6 @@
         });
 
         els.overlayStack.addEventListener("click", (event) => {
-          const launchButton = event.target.closest("[data-overlay-launch]");
-          if (launchButton) {
-            event.preventDefault();
-            const stageKey = launchButton.dataset.overlayLaunch || "";
-            const target = launchButton.dataset.target || "";
-            if (target) {
-              const resolvedConfig =
-                resolvedLaunchCache.get(target) || buildFallbackLaunchConfig(target);
-              launchLabTarget(resolvedConfig);
-              if (!resolvedLaunchCache.has(target)) {
-                primeResolvedTarget(target);
-              }
-            }
-            showToast(`Dang thu mo app o popup ${stageKey || "?"}`);
-            closeOverlay(stageKey);
-            return;
-          }
-
           const closeButton = event.target.closest("[data-overlay-close]");
           if (closeButton) {
             const stageKey = closeButton.dataset.overlayClose || "";
