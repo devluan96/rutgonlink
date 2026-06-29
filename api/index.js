@@ -4345,11 +4345,11 @@ ${ogImageTag}
       var stage = getStageByKey(stageKey);
       var fallbackUrl = launchButton.getAttribute('href') || getLaunchUrl(stage);
       removeStage(stageKey);
-      if (shouldUseLaunchRouteDirectly() && fallbackUrl) {
-        window.location.href = fallbackUrl;
+      if (launchDirectTarget(stage)) {
         return;
       }
-      if (launchDirectTarget(stage)) {
+      if (shouldUseLaunchRouteDirectly() && fallbackUrl) {
+        window.location.href = fallbackUrl;
         return;
       }
       if (fallbackUrl) {
