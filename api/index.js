@@ -4150,6 +4150,14 @@ ${ogImageTag}
     }) || null;
   }
 
+  function shouldUseLaunchRouteDirectly() {
+    var ua = navigator.userAgent || '';
+    var isIOS = /iphone|ipad|ipod/i.test(ua);
+    var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
+    var isZalo = /ZaloApp/i.test(ua);
+    return isIOS && (isFacebook || isZalo);
+  }
+
   function openViaAnchor(targetUrl, targetName, relValue) {
     if (!targetUrl) return false;
     try {
@@ -4308,11 +4316,15 @@ ${ogImageTag}
       event.preventDefault();
       var stageKey = launchButton.getAttribute('data-overlay-launch') || '';
       var stage = getStageByKey(stageKey);
+      var fallbackUrl = launchButton.getAttribute('href') || getLaunchUrl(stage);
       removeStage(stageKey);
+      if (shouldUseLaunchRouteDirectly() && fallbackUrl) {
+        window.location.href = fallbackUrl;
+        return;
+      }
       if (launchDirectTarget(stage)) {
         return;
       }
-      var fallbackUrl = launchButton.getAttribute('href') || getLaunchUrl(stage);
       if (fallbackUrl) {
         window.location.href = fallbackUrl;
       }
