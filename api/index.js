@@ -3774,31 +3774,45 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
   const overlay = config.overlay && typeof config.overlay === "object"
     ? config.overlay
     : {};
+  const inputStages = Array.isArray(config.stages) ? config.stages : [];
   const normalizedStages =
     resolvedStages ||
-    [
-      {
-        stage_key: "3s",
-        delay_ms: 3000,
-        ...buildDirectLaunchConfig(
-          overlay.popup_3s_url || config.baseUrl || "",
-        ),
-      },
-      {
-        stage_key: "5s",
-        delay_ms: 5000,
-        ...buildDirectLaunchConfig(
-          overlay.popup_5s_url || overlay.popup_3s_url || config.baseUrl || "",
-        ),
-      },
-      {
-        stage_key: "300s",
-        delay_ms: 300000,
-        ...buildDirectLaunchConfig(
-          overlay.popup_300s_url || overlay.popup_3s_url || config.baseUrl || "",
-        ),
-      },
-    ];
+    (inputStages.length
+      ? inputStages.map((stage, index) => {
+          const fallbackDelayMs =
+            index === 0 ? 3000 : index === 1 ? 5000 : 300000;
+          return {
+            ...stage,
+            stage_key: String(
+              stage?.stage_key ||
+                (index === 0 ? "3s" : index === 1 ? "5s" : "300s"),
+            ).trim(),
+            delay_ms: Number(stage?.delay_ms || 0) || fallbackDelayMs,
+          };
+        })
+      : [
+          {
+            stage_key: "3s",
+            delay_ms: 3000,
+            ...buildDirectLaunchConfig(
+              overlay.popup_3s_url || config.baseUrl || "",
+            ),
+          },
+          {
+            stage_key: "5s",
+            delay_ms: 5000,
+            ...buildDirectLaunchConfig(
+              overlay.popup_5s_url || overlay.popup_3s_url || config.baseUrl || "",
+            ),
+          },
+          {
+            stage_key: "300s",
+            delay_ms: 300000,
+            ...buildDirectLaunchConfig(
+              overlay.popup_300s_url || overlay.popup_3s_url || config.baseUrl || "",
+            ),
+          },
+        ]);
 
   return {
     source_domain: String(config.sourceDomain || config.source_domain || "").trim(),
