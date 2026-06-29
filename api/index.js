@@ -3914,12 +3914,39 @@ function handleArticleFunnelStageLaunch({
   const uaKind = getRedirectUaKind(ua);
   const info = detectPlatformDeep(targetUrl, platform);
   const isFacebookInApp = isFacebookInAppBrowser(ua);
+  const isZaloInApp = /ZaloApp/i.test(ua);
+  const isIosInApp = platform === "ios" && (isFacebookInApp || isZaloInApp);
   const launchLink = {
     original_url: targetUrl,
     og_title: config.title || "Article preview",
     og_desc: config.title || "Dang mo ung dung dich de tiep tuc xem noi dung.",
     og_image: config.share_image || config.overlay_image || "",
   };
+
+  if (isIosInApp) {
+    const iosInAppTarget = String(
+      stage.direct_ios_fb_url ||
+        stage.direct_web_url ||
+        stage.direct_ios_url ||
+        targetUrl,
+    ).trim();
+    setRedirectDebugHeaders(res, {
+      mode: "article-funnel-launch-ios-inapp-direct",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: 0,
+      code: `article-funnel:${normalizedStageKey}`,
+      mode: "article-funnel-launch-ios-inapp-direct",
+      platform: info.platform_name,
+      uaKind,
+      status: 302,
+      target: iosInAppTarget,
+      referer,
+    });
+    return res.redirect(302, iosInAppTarget);
+  }
 
   if (
     platform !== "desktop" &&
