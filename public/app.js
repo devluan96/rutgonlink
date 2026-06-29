@@ -7478,8 +7478,13 @@ function buildCloudinaryPlayableVideoUrl(url) {
   return parsed.toString();
 }
 
-async function fetchVideoUploadSignature() {
-  const response = await fetch("/api/upload-video/signature");
+async function fetchVideoUploadSignature(file) {
+  const query = new URLSearchParams();
+  if (file?.name) query.set("filename", file.name);
+  if (file?.type) query.set("content_type", file.type);
+  const response = await fetch(
+    `/api/upload-video/signature${query.toString() ? `?${query.toString()}` : ""}`,
+  );
   const data = await response.json();
   if (!response.ok) {
     const error = new Error(
@@ -7492,8 +7497,40 @@ async function fetchVideoUploadSignature() {
   return data;
 }
 
-async function uploadVideoDirectToCloudinary(file, onProgress) {
-  const signatureData = await fetchVideoUploadSignature();
+function uploadBinaryWithProgress(
+  url,
+  file,
+  { method = "PUT", headers = {}, onProgress } = {},
+) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    Object.entries(headers || {}).forEach(([key, value]) => {
+      if (value) xhr.setRequestHeader(key, value);
+    });
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || typeof onProgress !== "function") return;
+      onProgress(Math.round((event.loaded / event.total) * 100), event);
+    };
+    xhr.onerror = () => reject(new Error("Lỗi kết nối"));
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve({
+          status: xhr.status,
+          body: xhr.responseText,
+        });
+        return;
+      }
+      const error = new Error(`Upload thất bại (${xhr.status})`);
+      error.status = xhr.status;
+      reject(error);
+    };
+    xhr.send(file);
+  });
+}
+
+async function uploadVideoDirect(file, onProgress) {
+  const signatureData = await fetchVideoUploadSignature(file);
   if (
     signatureData.max_bytes &&
     Number.isFinite(signatureData.max_bytes) &&
@@ -7502,6 +7539,22 @@ async function uploadVideoDirectToCloudinary(file, onProgress) {
     throw new Error(
       `Video vuot gioi han ${Math.round(signatureData.max_bytes / (1024 * 1024))}MB`,
     );
+  }
+
+  if (signatureData.provider === "r2") {
+    await uploadBinaryWithProgress(signatureData.upload_url, file, {
+      method: "PUT",
+      headers: {
+        "Content-Type": signatureData.content_type || file.type || "video/mp4",
+      },
+      onProgress,
+    });
+    return {
+      url: signatureData.public_url,
+      thumb: null,
+      source: "r2-direct",
+      key: signatureData.key,
+    };
   }
 
   const formData = new FormData();
@@ -7544,7 +7597,7 @@ async function handleVideoUpload(event, cid) {
   try {
     let uploadData;
     try {
-      uploadData = await uploadVideoDirectToCloudinary(file, (progress) =>
+      uploadData = await uploadVideoDirect(file, (progress) =>
         setInlineUploadStatus(
           `${cid}_videoUploadStatus`,
           "Đang upload video...",
@@ -7555,7 +7608,9 @@ async function handleVideoUpload(event, cid) {
     } catch (directError) {
       const canFallback =
         directError?.status === 503 ||
-        /Cloudinary/i.test(String(directError?.message || ""));
+        /(Cloudinary|R2|upload trực tiếp|upload video trực tiếp)/i.test(
+          String(directError?.message || ""),
+        );
       if (!canFallback) throw directError;
 
       await handleVideoUploadLegacy(event, cid);

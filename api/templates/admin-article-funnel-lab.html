@@ -459,6 +459,14 @@
         font-weight: 400;
       }
 
+      .article-description {
+        margin: 14px 0 0;
+        color: #cbd5e1;
+        font-size: 18px;
+        line-height: 1.7;
+        white-space: pre-wrap;
+      }
+
       .article-blocks {
         margin-top: 26px;
         display: grid;
@@ -705,6 +713,11 @@
                 <textarea id="titleInput" style="min-height: 88px"></textarea>
               </div>
               <div class="field">
+                <label for="descriptionInput">Mô tả</label>
+                <textarea id="descriptionInput" style="min-height: 96px"></textarea>
+                <div class="hint">Nếu cần, mô tả sẽ hiển thị ngay dưới tiêu đề của bài viết.</div>
+              </div>
+              <div class="field">
                 <label>URL bai goc tham chieu</label>
                 <input id="articleUrlOutput" type="text" readonly />
                 <div class="hint">URL nay chi de doi chieu noi dung bai. Khi test comment Facebook, hay dung public preview route o tren.</div>
@@ -865,6 +878,7 @@
                 <div class="article">
                   <div class="article-inner">
                     <h2 class="article-title" id="previewTitle"></h2>
+                    <p class="article-description" id="previewDescription"></p>
                     <div class="article-blocks" id="previewBlocks"></div>
                     <div class="follow-box">
                       <div class="follow-row">
@@ -904,6 +918,8 @@
           sourceDomain: "honghot.site",
           slug: "2026/06/26/ha-noi-24",
           title: "Ha Noi: Vu viec buc xuc nhat luc nay",
+          description:
+            "Mô tả ngắn của bài viết sẽ hiện ngay dưới tiêu đề khi bạn cần thêm ngữ cảnh.",
           baseUrl:
             "https://shopee.vn/product/37251933/591989399?utm_source=admin-lab",
           popup5sUrl: "",
@@ -914,7 +930,7 @@
             "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=1200&q=80",
           groupLabel: "Group facebook",
           groupUrl: "https://www.facebook.com/groups/example-group",
-          backupLabel: "Page phu",
+          backupLabel: "Page phụ",
           backupUrl: "https://www.facebook.com/profile.php?id=61571239912820",
           blocks: [
             {
@@ -922,7 +938,7 @@
               type: "image",
               text: "",
               src: "https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1200&q=80",
-              caption: "Anh mo dau de neo tam ly va tao cam giac nhu mot bai viet that.",
+              caption: "Ảnh mở đầu để neo tâm lý và tạo cảm giác như một bài viết thật.",
             },
             {
               id: newId(),
@@ -960,6 +976,7 @@
           sourceDomainInput: document.getElementById("sourceDomainInput"),
           slugInput: document.getElementById("slugInput"),
           titleInput: document.getElementById("titleInput"),
+          descriptionInput: document.getElementById("descriptionInput"),
           articleUrlOutput: document.getElementById("articleUrlOutput"),
           publicPreviewUrlOutput: document.getElementById("publicPreviewUrlOutput"),
           publicPreviewMeta: document.getElementById("publicPreviewMeta"),
@@ -982,6 +999,7 @@
           commentTitlePreview: document.getElementById("commentTitlePreview"),
           commentShareImage: document.getElementById("commentShareImage"),
           previewTitle: document.getElementById("previewTitle"),
+          previewDescription: document.getElementById("previewDescription"),
           previewBlocks: document.getElementById("previewBlocks"),
           followGroupLabel: document.getElementById("followGroupLabel"),
           followGroupLink: document.getElementById("followGroupLink"),
@@ -992,6 +1010,125 @@
           overlayStack: document.getElementById("overlayStack"),
           toast: document.getElementById("toast"),
         };
+
+        function setText(selector, value) {
+          const node = document.querySelector(selector);
+          if (node) node.textContent = value;
+        }
+
+        function setLabel(forId, value) {
+          const node = document.querySelector(`label[for="${forId}"]`);
+          if (node) node.textContent = value;
+        }
+
+        function setHintNear(selector, value) {
+          const node = document.querySelector(selector);
+          if (!node) return;
+          const hint = node.parentElement?.querySelector(".hint");
+          if (hint) hint.textContent = value;
+        }
+
+        function applyLocalizedLabels() {
+          setText(".panel.editor .eyebrow", "Chỉ dành cho admin • Sandbox");
+          setText(
+            ".panel.editor > .subhead",
+            "Khu dựng thử riêng cho kiểu comment Facebook -> vào bài viết -> popup 3s / 5s / 300s -> nhảy app. Trang này chỉ dành cho admin và không chạm vào luồng rút gọn hiện tại.",
+          );
+
+          const sectionTitles = document.querySelectorAll(".panel.editor .section-card h2");
+          if (sectionTitles[0]) sectionTitles[0].textContent = "Không gian làm việc";
+          if (sectionTitles[1]) sectionTitles[1].textContent = "Thông tin bài viết";
+          if (sectionTitles[2]) sectionTitles[2].textContent = "Link funnel";
+          if (sectionTitles[3]) sectionTitles[3].textContent = "Thông tin follow cuối trang";
+          if (sectionTitles[4]) sectionTitles[4].textContent = "Khối nội dung";
+
+          const contentSubhead = document.querySelectorAll(".panel.editor .section-card .subhead")[0];
+          if (contentSubhead) {
+            contentSubhead.textContent =
+              'Bài viết kiểu này chủ yếu là ảnh và video xếp từ trên xuống. Phần preview bên phải có mô phỏng "hiện dần" từng block.';
+          }
+
+          setText("#saveDraftBtn", "Lưu nháp local");
+          setText("#loadPresetBtn", "Nạp preset");
+          setText("#resetDraftBtn", "Xóa nháp");
+          setText("#generatePreviewLinkBtn", "Tạo public preview link");
+          setText("#publishShortLinkBtn", "Publish link ngắn");
+          setText('a.ghost-btn[href="/admin"]', "Về admin");
+          setText(
+            ".panel.editor .muted-line",
+            "Gợi ý workflow: dựng bài trong lab, copy JSON config, chốt cấu trúc xong rồi mới nối tiếp sang DB hoặc link type riêng.",
+          );
+
+          setLabel("publicPreviewUrlOutput", "Public preview route để đặt vào comment");
+          setLabel("publishedUrlOutput", "Published link ngắn để đặt comment");
+          setLabel("sourceDomainInput", "Domain hiển thị");
+          setLabel("slugInput", "Slug bài viết");
+          setLabel("titleInput", "Tiêu đề");
+          setLabel("descriptionInput", "Mô tả");
+          setLabel("baseUrlInput", "Link gốc / popup 3s mặc định");
+          setLabel("overlayImageInput", "Ảnh popup");
+          setLabel("shareImageInput", "Ảnh share / hero đầu bài");
+          setLabel("groupLabelInput", "Nhãn dòng 1");
+          setLabel("groupUrlInput", "Link dòng 1");
+          setLabel("backupLabelInput", "Nhãn dòng 2");
+          setLabel("backupUrlInput", "Link dòng 2");
+          setLabel("importInput", "Dán JSON config để nạp lại");
+
+          setHintNear(
+            "#publicPreviewUrlOutput",
+            "Phải tạo link public này rồi mới test đúng OG và overlay trong comment Facebook.",
+          );
+          setHintNear(
+            "#publishedUrlOutput",
+            "Bấm Publish link ngắn để tạo URL gọn hơn, dùng cho comment Facebook thật.",
+          );
+          setHintNear(
+            "#descriptionInput",
+            "Nếu cần, mô tả sẽ hiển thị ngay dưới tiêu đề của bài viết.",
+          );
+          setHintNear(
+            "#articleUrlOutput",
+            "URL này chỉ để đối chiếu nội dung bài. Khi test comment Facebook, hãy dùng public preview route ở trên.",
+          );
+          setHintNear(
+            "#baseUrlInput",
+            "Đây là link đích mặc định của popup 3s. Nếu popup 5s và 300s để trống, chúng cũng sẽ dùng link này.",
+          );
+
+          setText('[data-add-block="image"]', "+ Ảnh thường");
+          setText('[data-add-block="sensitive-image"]', "+ Ảnh mờ");
+          setText("#applyImportBtn", "Áp JSON vào lab");
+          setText("#fillImportBtn", "Đổ JSON hiện tại");
+
+          setText(".preview-wrap .eyebrow", "Xem trước");
+          const previewSubhead = document.querySelector(".preview-wrap .preview-topbar .subhead");
+          if (previewSubhead) {
+            previewSubhead.textContent =
+              "Mô phỏng 2 lớp: comment Facebook dẫn vào bài viết, rồi trong bài mới bật popup deeplink theo mốc thời gian.";
+          }
+          setText("#startTimersBtn", "Chạy timer");
+          setText("#show3sBtn", "Hiện 3s");
+          setText("#show5sBtn", "Hiện 5s");
+          setText("#show300sBtn", "Hiện 300s");
+          setText("#closeOverlayBtn", "Ẩn popup");
+          setText(".comment-meta", "Bình luận mẫu để đặt link bài viết");
+          setText("#resetFeedBtn", "Reset feed");
+          setText("#showNextBlockBtn", "Hiện thêm 1 block");
+          setText("#showAllBlocksBtn", "Hiện tất cả");
+
+          els.blockList.querySelectorAll("[data-move-up]").forEach((button) => {
+            button.textContent = "↑";
+            button.title = "Đẩy lên";
+          });
+          els.blockList.querySelectorAll("[data-move-down]").forEach((button) => {
+            button.textContent = "↓";
+            button.title = "Đẩy xuống";
+          });
+          els.blockList.querySelectorAll("[data-remove-block]").forEach((button) => {
+            button.textContent = "×";
+            button.title = "Xóa";
+          });
+        }
 
         function loadState() {
           try {
@@ -1017,6 +1154,7 @@
             sourceDomain: String(source.sourceDomain || fromUrl.domain || base.sourceDomain),
             slug: String(source.slug || fromUrl.slug || base.slug),
             title: String(source.title || base.title),
+            description: String(source.description || source.desc || base.description),
             baseUrl: String(
               source.baseUrl ||
                 source.popup_3s_url ||
@@ -1092,6 +1230,7 @@
             slug: state.slug.trim(),
             article_url: getArticleUrl(),
             title: state.title.trim(),
+            description: state.description.trim(),
             share_image: state.shareImage.trim(),
             group_label: state.groupLabel.trim(),
             group_url: state.groupUrl.trim(),
@@ -1500,7 +1639,7 @@
           if (!response.ok) {
             const error = new Error(
               data.error ||
-                (isVideo ? "Upload video that bai" : "Upload anh that bai"),
+                (isVideo ? "Upload video thất bại" : "Upload ảnh thất bại"),
             );
             error.status = response.status;
             error.payload = data;
@@ -1522,11 +1661,11 @@
             setUploadBusy(blockId, true);
             setUploadStatus(
               blockId,
-              block.type === "video" ? "Dang upload video..." : "Dang upload anh...",
+              block.type === "video" ? "Đang upload video..." : "Đang upload ảnh...",
             );
             const uploaded = await uploadBlockAsset(file, block.type);
             if (!uploaded.url) {
-              throw new Error("Khong nhan duoc URL sau upload");
+              throw new Error("Không nhận được URL sau upload");
             }
             clearGeneratedPreviewLink();
             clearGeneratedPublishedLink();
@@ -1534,14 +1673,14 @@
             render();
             saveState();
             setUploadStatus(blockId, "Upload xong", "ok");
-            showToast(block.type === "video" ? "Da tai video len" : "Da tai anh len");
+            showToast(block.type === "video" ? "Đã tải video lên" : "Đã tải ảnh lên");
           } catch (error) {
             const message =
               error?.status === 401
-                ? "Can dang nhap lai de upload"
+                ? "Cần đăng nhập lại để upload"
                 : error?.status === 403
-                  ? error?.payload?.error || "Tai khoan hien tai khong duoc upload"
-                  : error?.message || "Upload that bai";
+                  ? error?.payload?.error || "Tài khoản hiện tại không được upload"
+                  : error?.message || "Upload thất bại";
             setUploadStatus(blockId, message, "err");
             showToast(message);
           } finally {
@@ -1562,11 +1701,11 @@
             .map((block, index) => {
               const typeLabel =
                 block.type === "paragraph"
-                  ? "Doan text"
+                  ? "Đoạn text"
                   : block.type === "image"
-                    ? "Anh thuong"
+                    ? "Ảnh thường"
                     : block.type === "sensitive-image"
-                      ? "Anh mo"
+                      ? "Ảnh mờ"
                       : "Video";
               return `
                 <div class="block-item">
@@ -1582,28 +1721,28 @@
                     block.type === "paragraph"
                       ? `
                         <div class="field">
-                          <label>Noi dung</label>
+                          <label>Nội dung</label>
                           <textarea data-field="text" data-block-id="${block.id}">${escapeHtml(block.text || "")}</textarea>
                         </div>
                       `
                       : `
                         <div class="field-grid">
                           <div class="field">
-                            <label>${block.type === "video" ? "URL video MP4" : "URL anh"}</label>
+                            <label>${block.type === "video" ? "URL video MP4" : "URL ảnh"}</label>
                             <input type="url" value="${escapeAttr(block.src || "")}" data-field="src" data-block-id="${block.id}" />
                             <div class="upload-row">
                               <button
                                 class="upload-btn"
                                 type="button"
                                 data-upload-trigger="${block.id}"
-                              >${block.type === "video" ? "Chon video tu may" : "Chon anh tu may"}</button>
+                              >${block.type === "video" ? "Chọn video từ máy" : "Chọn ảnh từ máy"}</button>
                               <input
                                 class="sr-only-input"
                                 type="file"
                                 ${block.type === "video" ? 'accept="video/mp4,video/webm,video/quicktime"' : 'accept="image/*"'}
                                 data-upload-input="${block.id}"
                               />
-                              <span class="upload-status" data-upload-status="${block.id}">Co the dan URL hoac chon file tu may.</span>
+                              <span class="upload-status" data-upload-status="${block.id}">Có thể dán URL hoặc chọn file từ máy.</span>
                             </div>
                           </div>
                           <div class="field">
@@ -1639,7 +1778,7 @@
                   <figure class="article-media">
                     <div class="sensitive-wrap" data-sensitive-wrap>
                       <img src="${escapeAttr(block.src || "")}" alt="" />
-                      <button class="reveal-btn" type="button" data-reveal-sensitive">Bam de hien anh</button>
+                      <button class="reveal-btn" type="button" data-reveal-sensitive">Bấm để hiện ảnh</button>
                     </div>
                     ${block.caption ? `<figcaption class="article-caption">${escapeHtml(block.caption)}</figcaption>` : ""}
                   </figure>
@@ -1661,7 +1800,7 @@
             });
           });
 
-          els.feedStateLabel.textContent = `Dang hien ${visibleBlocks.length}/${state.blocks.length} block`;
+          els.feedStateLabel.textContent = `Đang hiển thị ${visibleBlocks.length}/${state.blocks.length} block`;
         }
 
         function renderPreviewShell() {
@@ -1669,29 +1808,31 @@
           els.articleUrlOutput.value = articleUrl;
           els.publicPreviewUrlOutput.value = generatedPreviewUrl;
           els.publicPreviewMeta.textContent = generatedPreviewUrl
-            ? `Het han: ${generatedPreviewExpiresAt || "7 ngay"}`
-            : "Chua tao link public. Neu dat article URL goc vao comment, Facebook se lay OG cua trang nguon va khong co overlay cua lab.";
+            ? `Hết hạn: ${generatedPreviewExpiresAt || "7 ngày"}`
+            : "Chưa tạo link public. Nếu đặt article URL gốc vào comment, Facebook sẽ lấy OG của trang nguồn và không có overlay của lab.";
           els.publishedUrlOutput.value = generatedPublishedUrl;
           els.publishedUrlMeta.textContent = generatedPublishedUrl
-            ? `${generatedPublishedDomainNote ? `${generatedPublishedDomainNote} ` : ""}Cap nhat: ${generatedPublishedUpdatedAt || "vua xong"}`
-            : "Bam Publish link ngan de tao URL gon hon, dung cho comment Facebook that.";
+            ? `${generatedPublishedDomainNote ? `${generatedPublishedDomainNote} ` : ""}Cập nhật: ${generatedPublishedUpdatedAt || "vừa xong"}`
+            : "Bấm Publish link ngắn để tạo URL gọn hơn, dùng cho comment Facebook thật.";
           const commentTarget = generatedPublishedUrl || generatedPreviewUrl;
-          els.commentUrlPreview.textContent = commentTarget || "Bam 'Publish link ngan' hoac 'Tao public preview link' de lay URL dat vao comment Facebook";
+          els.commentUrlPreview.textContent = commentTarget || "Bấm 'Publish link ngắn' hoặc 'Tạo public preview link' để lấy URL đặt vào comment Facebook";
           els.commentUrlPreview.href = commentTarget || "#";
           els.commentDomainPreview.textContent = (
             commentTarget
               ? new URL(commentTarget).hostname
               : "public-preview"
           ).toUpperCase();
-          els.commentTitlePreview.textContent = state.title.trim() || "Tieu de bai viet";
+          els.commentTitlePreview.textContent = state.title.trim() || "Tiêu đề bài viết";
           els.commentShareImage.style.backgroundImage = state.shareImage.trim()
             ? `url("${escapeCssUrl(state.shareImage.trim())}")`
             : "none";
-          els.previewTitle.textContent = state.title.trim() || "Tieu de bai viet";
+          els.previewTitle.textContent = state.title.trim() || "Tiêu đề bài viết";
+          els.previewDescription.textContent = state.description.trim();
+          els.previewDescription.style.display = state.description.trim() ? "block" : "none";
           els.followGroupLabel.textContent = state.groupLabel.trim() || "Group facebook";
           els.followGroupLink.textContent = state.groupUrl.trim() || "https://facebook.com";
           els.followGroupLink.href = state.groupUrl.trim() || "#";
-          els.followBackupLabel.textContent = state.backupLabel.trim() || "Page phu";
+          els.followBackupLabel.textContent = state.backupLabel.trim() || "Page phụ";
           els.followBackupLink.textContent = state.backupUrl.trim() || "https://facebook.com";
           els.followBackupLink.href = state.backupUrl.trim() || "#";
         }
@@ -1704,6 +1845,7 @@
           els.sourceDomainInput.value = state.sourceDomain;
           els.slugInput.value = state.slug;
           els.titleInput.value = state.title;
+          els.descriptionInput.value = state.description;
           els.baseUrlInput.value = state.baseUrl;
           els.popup5sInput.value = state.popup5sUrl;
           els.popup300sInput.value = state.popup300sUrl;
@@ -1789,6 +1931,7 @@
           }
           syncFields();
           renderBlockEditor();
+          applyLocalizedLabels();
           renderPreviewBlocks();
           renderPreviewShell();
           renderJsonOutput();
@@ -1806,7 +1949,7 @@
             caption: "",
           });
           render();
-          saveState("Da them block moi");
+          saveState("Đã thêm block mới");
         }
 
         function moveBlock(blockId, direction) {
@@ -1830,7 +1973,7 @@
             state.blocks.push(normalizeBlock(defaultState.blocks[0]));
           }
           render();
-          saveState("Da xoa block");
+          saveState("Đã xóa block");
         }
 
         function openOverlay(stageKey) {
@@ -1860,7 +2003,7 @@
           resetTimers();
           closeOverlay();
           primeResolvedTargets();
-          showToast("Da bat dau mo phong timer 3s / 5s / 300s");
+          showToast("Đã bắt đầu mô phỏng timer 3s / 5s / 300s");
           timer3s = setTimeout(() => openOverlay("3s"), 3000);
           timer5s = setTimeout(() => openOverlay("5s"), 5000);
           timer300s = setTimeout(() => openOverlay("300s"), 300000);
@@ -1869,7 +2012,7 @@
         function applyImport() {
           const raw = els.importInput.value.trim();
           if (!raw) {
-            showToast("Chua co JSON de import");
+            showToast("Chưa có JSON để import");
             return;
           }
 
@@ -1885,7 +2028,7 @@
             closeOverlay();
             resetFeed();
             render();
-            saveState("Da ap JSON vao lab");
+            saveState("Đã áp JSON vào lab");
           } catch {
             showToast("JSON khong hop le");
           }
@@ -1893,7 +2036,7 @@
 
         function copyCurrentJsonToImport() {
           els.importInput.value = JSON.stringify(getExportPayload(), null, 2);
-          showToast("Da do JSON hien tai xuong o import");
+          showToast("Đã đổ JSON hiện tại xuống ô import");
         }
 
         async function createPublicPreviewLink() {
@@ -1910,9 +2053,9 @@
             generatedPreviewUrl = String(data.preview_url || "").trim();
             generatedPreviewExpiresAt = String(data.expires_at || "").trim();
             renderPreviewShell();
-            showToast("Da tao public preview link");
+            showToast("Đã tạo public preview link");
           } catch {
-            showToast("Khong tao duoc public preview link");
+            showToast("Không tạo được public preview link");
           }
         }
 
@@ -1931,9 +2074,9 @@
             generatedPublishedUpdatedAt = String(data.updated_at || "").trim();
             generatedPublishedDomainNote = String(data.domain_note || "").trim();
             renderPreviewShell();
-            showToast("Da publish link ngan");
+            showToast("Đã publish link ngắn");
           } catch {
-            showToast("Khong publish duoc link ngan");
+            showToast("Không publish được link ngắn");
           }
         }
 
@@ -1992,6 +2135,7 @@
           ["sourceDomainInput", "sourceDomain"],
           ["slugInput", "slug"],
           ["titleInput", "title"],
+          ["descriptionInput", "description"],
           ["baseUrlInput", "baseUrl"],
           ["popup5sInput", "popup5sUrl"],
           ["popup300sInput", "popup300sUrl"],
@@ -2021,7 +2165,7 @@
         });
 
         document.getElementById("saveDraftBtn").addEventListener("click", () => {
-          saveState("Da luu draft local");
+          saveState("Đã lưu nháp local");
         });
 
         document.getElementById("loadPresetBtn").addEventListener("click", () => {
@@ -2034,7 +2178,7 @@
           closeOverlay();
           resetFeed();
           render();
-          saveState("Da nap lai preset");
+          saveState("Đã nạp lại preset");
         });
 
         document.getElementById("resetDraftBtn").addEventListener("click", () => {
@@ -2048,15 +2192,15 @@
           closeOverlay();
           resetFeed();
           render();
-          showToast("Da xoa draft local va quay ve preset");
+          showToast("Đã xóa nháp local và quay về preset");
         });
 
         document.getElementById("copyJsonBtn").addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(JSON.stringify(getExportPayload(), null, 2));
-            showToast("Da copy JSON config");
+            showToast("Đã copy JSON config");
           } catch {
-            showToast("Khong copy duoc clipboard tren trinh duyet nay");
+            showToast("Không copy được clipboard trên trình duyệt này");
           }
         });
 
@@ -2068,14 +2212,14 @@
         document.getElementById("copyArticleUrlBtn").addEventListener("click", async () => {
           const articleUrl = generatedPublishedUrl || generatedPreviewUrl;
           if (!articleUrl) {
-            showToast("Chua co link comment de copy");
+            showToast("Chưa có link comment để copy");
             return;
           }
           try {
             await navigator.clipboard.writeText(articleUrl);
-            showToast("Da copy link comment");
+            showToast("Đã copy link comment");
           } catch {
-            showToast("Khong copy duoc link comment");
+            showToast("Không copy được link comment");
           }
         });
 

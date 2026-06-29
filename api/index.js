@@ -9,6 +9,11 @@ const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 const zlib = require("zlib");
+const {
+  S3Client,
+  PutObjectCommand,
+} = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { nanoid } = require("nanoid");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -79,6 +84,45 @@ const CLOUDINARY_OK = !!(
   process.env.CLOUDINARY_API_KEY &&
   process.env.CLOUDINARY_API_SECRET
 );
+const R2_VIDEO_ACCOUNT_ID = (process.env.R2_VIDEO_ACCOUNT_ID || "").trim();
+const R2_VIDEO_ACCESS_KEY_ID = (
+  process.env.R2_VIDEO_ACCESS_KEY_ID || ""
+).trim();
+const R2_VIDEO_SECRET_ACCESS_KEY = (
+  process.env.R2_VIDEO_SECRET_ACCESS_KEY || ""
+).trim();
+const R2_VIDEO_BUCKET = (process.env.R2_VIDEO_BUCKET || "").trim();
+const R2_VIDEO_PUBLIC_BASE_URL = (
+  process.env.R2_VIDEO_PUBLIC_BASE_URL || ""
+)
+  .trim()
+  .replace(/\/+$/, "");
+const R2_VIDEO_PREFIX = String(
+  process.env.R2_VIDEO_PREFIX || "rutgonlink/videos",
+)
+  .trim()
+  .replace(/^\/+|\/+$/g, "");
+const R2_VIDEO_OK = !!(
+  R2_VIDEO_ACCOUNT_ID &&
+  R2_VIDEO_ACCESS_KEY_ID &&
+  R2_VIDEO_SECRET_ACCESS_KEY &&
+  R2_VIDEO_BUCKET &&
+  R2_VIDEO_PUBLIC_BASE_URL
+);
+let r2VideoClient = null;
+if (R2_VIDEO_OK) {
+  r2VideoClient = new S3Client({
+    region: "auto",
+    endpoint: `https://${R2_VIDEO_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: R2_VIDEO_ACCESS_KEY_ID,
+      secretAccessKey: R2_VIDEO_SECRET_ACCESS_KEY,
+    },
+  });
+  console.log("[r2-video] configured ✅");
+} else {
+  console.warn("[r2-video] NOT configured – using Cloudinary/local fallback");
+}
 if (CLOUDINARY_OK) {
   cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -558,6 +602,7 @@ try {
 const memStorage = multer.memoryStorage();
 const CLOUDINARY_VIDEO_MAX_BYTES = 200 * 1024 * 1024;
 const CLOUDINARY_VIDEO_FOLDER = "rutgonlink/videos";
+const VIDEO_REMOTE_UPLOAD_OK = R2_VIDEO_OK || CLOUDINARY_OK;
 
 const upload = multer({
   storage: CLOUDINARY_OK
@@ -573,7 +618,7 @@ const upload = multer({
 });
 
 const videoUploadMw = multer({
-  storage: CLOUDINARY_OK
+  storage: VIDEO_REMOTE_UPLOAD_OK
     ? memStorage
     : multer.diskStorage({
         destination: (_, __, cb) => cb(null, uploadsDir),
@@ -618,6 +663,111 @@ async function uploadToCloudinary(
     readable.push(null);
     readable.pipe(stream);
   });
+}
+
+const VIDEO_EXT_TO_CONTENT_TYPE = {
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".avi": "video/x-msvideo",
+  ".mkv": "video/x-matroska",
+};
+
+const VIDEO_CONTENT_TYPE_TO_EXT = {
+  "video/mp4": ".mp4",
+  "video/webm": ".webm",
+  "video/quicktime": ".mov",
+  "video/x-msvideo": ".avi",
+  "video/x-matroska": ".mkv",
+};
+
+function normalizeVideoUploadExt(originalName = "", contentType = "") {
+  const inputExt = path.extname(String(originalName || "")).toLowerCase();
+  if (VIDEO_EXT_TO_CONTENT_TYPE[inputExt]) return inputExt;
+  const normalizedType = String(contentType || "")
+    .trim()
+    .toLowerCase()
+    .split(";")[0];
+  return VIDEO_CONTENT_TYPE_TO_EXT[normalizedType] || null;
+}
+
+function normalizeVideoUploadContentType(originalName = "", contentType = "") {
+  const normalizedType = String(contentType || "")
+    .trim()
+    .toLowerCase()
+    .split(";")[0];
+  if (VIDEO_CONTENT_TYPE_TO_EXT[normalizedType]) return normalizedType;
+  const ext = normalizeVideoUploadExt(originalName, contentType);
+  return VIDEO_EXT_TO_CONTENT_TYPE[ext] || "application/octet-stream";
+}
+
+function buildR2VideoObjectKey(originalName = "", contentType = "") {
+  const ext = normalizeVideoUploadExt(originalName, contentType);
+  if (!ext) {
+    throw new Error("VIDEO_TYPE_NOT_SUPPORTED");
+  }
+  return `${R2_VIDEO_PREFIX}/${nanoid(16)}${ext}`;
+}
+
+function buildR2VideoPublicUrl(key = "") {
+  return `${R2_VIDEO_PUBLIC_BASE_URL}/${String(key || "").replace(/^\/+/, "")}`;
+}
+
+async function createR2VideoUploadSignature({
+  originalName = "",
+  contentType = "",
+} = {}) {
+  if (!R2_VIDEO_OK || !r2VideoClient) {
+    throw new Error("R2_VIDEO_NOT_CONFIGURED");
+  }
+  const key = buildR2VideoObjectKey(originalName, contentType);
+  const normalizedContentType = normalizeVideoUploadContentType(
+    originalName,
+    contentType,
+  );
+  const command = new PutObjectCommand({
+    Bucket: R2_VIDEO_BUCKET,
+    Key: key,
+    ContentType: normalizedContentType,
+  });
+  const uploadUrl = await getSignedUrl(r2VideoClient, command, {
+    expiresIn: 15 * 60,
+  });
+  return {
+    provider: "r2",
+    key,
+    uploadUrl,
+    publicUrl: buildR2VideoPublicUrl(key),
+    contentType: normalizedContentType,
+  };
+}
+
+async function uploadVideoBufferToR2(
+  fileBuffer,
+  { originalName = "", contentType = "" } = {},
+) {
+  if (!R2_VIDEO_OK || !r2VideoClient) {
+    throw new Error("R2_VIDEO_NOT_CONFIGURED");
+  }
+  const key = buildR2VideoObjectKey(originalName, contentType);
+  const normalizedContentType = normalizeVideoUploadContentType(
+    originalName,
+    contentType,
+  );
+  await r2VideoClient.send(
+    new PutObjectCommand({
+      Bucket: R2_VIDEO_BUCKET,
+      Key: key,
+      Body: fileBuffer,
+      ContentType: normalizedContentType,
+    }),
+  );
+  return {
+    key,
+    url: buildR2VideoPublicUrl(key),
+    thumb: null,
+    source: "r2",
+  };
 }
 
 let db = null;
@@ -3654,6 +3804,7 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
     source_domain: String(config.sourceDomain || config.source_domain || "").trim(),
     slug: String(config.slug || "").trim(),
     title: String(config.title || "").trim() || "Article preview",
+    description: String(config.description || config.desc || "").trim(),
     share_image: String(config.share_image || config.shareImage || "").trim(),
     overlay_image: String(overlay.image || config.overlayImage || "").trim(),
     group_label: String(config.group_label || config.groupLabel || "Group facebook").trim(),
@@ -3867,6 +4018,7 @@ function handleArticleFunnelStageLaunch({
 
 function buildArticleFunnelPreviewPage(config, canonicalUrl, launchBasePath = "") {
   const title = esc(config.title || "Article preview");
+  const description = esc(String(config.description || "").trim());
   const shareImage = String(config.share_image || config.overlay_image || "").trim();
   const groupLabel = esc(config.group_label || "Group facebook");
   const groupUrl = esc(config.group_url || "");
@@ -3887,17 +4039,18 @@ function buildArticleFunnelPreviewPage(config, canonicalUrl, launchBasePath = ""
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>${title}</title>
-<meta name="description" content="${title}" />
+<meta name="description" content="${description || title}" />
 <meta name="robots" content="noindex, nofollow" />
 <link rel="canonical" href="${esc(canonicalUrl)}" />
 <meta property="og:type" content="article" />
 <meta property="og:title" content="${title}" />
-<meta property="og:description" content="${title}" />
+<meta property="og:description" content="${description || title}" />
 <meta property="og:url" content="${esc(canonicalUrl)}" />
 <meta property="og:site_name" content="BocLink Article Preview" />
 ${ogImageTag}
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="${title}" />
+<meta name="twitter:description" content="${description || title}" />
 <style>
   :root{color-scheme:dark}
   *{box-sizing:border-box}
@@ -3905,6 +4058,7 @@ ${ogImageTag}
   .article{min-height:100vh;padding:28px 0 60px;background:#181a1d}
   .article-inner{width:min(100%,652px);margin:0 auto;padding:0 18px}
   .article-title{margin:0;font-size:clamp(38px,4vw,62px);line-height:1.08;letter-spacing:-.04em;font-weight:400}
+  .article-description{margin:14px 0 0;color:#cbd5e1;font-size:18px;line-height:1.7;white-space:pre-wrap}
   .article-blocks{margin-top:26px;display:grid;gap:22px}
   .article-paragraph{margin:0;font-size:18px;line-height:1.8;color:#f8fafc;white-space:pre-wrap}
   .article-media{overflow:hidden;background:#050505}
@@ -3927,6 +4081,7 @@ ${ogImageTag}
   <div class="article">
     <div class="article-inner">
       <h1 class="article-title">${title}</h1>
+      ${description ? `<p class="article-description">${description}</p>` : ""}
       <div class="article-blocks" id="previewBlocks"></div>
       <div class="follow-box">
         <div class="follow-row"><strong>${groupLabel}</strong>: <a href="${groupUrl}" target="_blank" rel="noopener">${groupUrl}</a></div>
@@ -5577,14 +5732,29 @@ app.get("/api/upload-video/signature", requireAuth, async (req, res) => {
       .status(403)
       .json({ error: "Tính năng này yêu cầu gói Pro", upgrade: true });
   }
-  if (!CLOUDINARY_OK) {
-    return res.status(503).json({
-      error: "Cloudinary chưa được cấu hình cho upload trực tiếp",
-    });
-  }
   try {
+    if (R2_VIDEO_OK) {
+      const signed = await createR2VideoUploadSignature({
+        originalName: String(req.query?.filename || "").trim(),
+        contentType: String(req.query?.content_type || "").trim(),
+      });
+      return res.json({
+        provider: "r2",
+        upload_url: signed.uploadUrl,
+        public_url: signed.publicUrl,
+        key: signed.key,
+        content_type: signed.contentType,
+        max_bytes: CLOUDINARY_VIDEO_MAX_BYTES,
+      });
+    }
+    if (!CLOUDINARY_OK) {
+      return res.status(503).json({
+        error: "Chưa cấu hình upload video trực tiếp",
+      });
+    }
     const signed = createCloudinaryVideoUploadSignature();
     return res.json({
+      provider: "cloudinary",
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
       api_key: process.env.CLOUDINARY_API_KEY,
       folder: CLOUDINARY_VIDEO_FOLDER,
@@ -5595,8 +5765,13 @@ app.get("/api/upload-video/signature", requireAuth, async (req, res) => {
     });
   } catch (e) {
     console.error("[upload-video-signature]", e.message);
+    if (e.message === "VIDEO_TYPE_NOT_SUPPORTED") {
+      return res.status(400).json({
+        error: "Định dạng video chưa được hỗ trợ",
+      });
+    }
     return res.status(500).json({
-      error: "Không tạo được chữ ký upload video",
+      error: "Không tạo được cấu hình upload video",
     });
   }
 });
@@ -7781,6 +7956,13 @@ app.post(
       });
 
     try {
+      if (R2_VIDEO_OK && req.file.buffer) {
+        const result = await uploadVideoBufferToR2(req.file.buffer, {
+          originalName: req.file.originalname,
+          contentType: req.file.mimetype,
+        });
+        return res.json(result);
+      }
       if (CLOUDINARY_OK && req.file.buffer) {
         const result = await uploadToCloudinary(
           req.file.buffer,
@@ -7803,6 +7985,11 @@ app.post(
       }
     } catch (e) {
       console.error("[upload-video]", e.message);
+      if (e.message === "VIDEO_TYPE_NOT_SUPPORTED") {
+        return res.status(400).json({
+          error: "Định dạng video chưa được hỗ trợ",
+        });
+      }
       return res
         .status(500)
         .json({ error: "Upload video thất bại: " + e.message });

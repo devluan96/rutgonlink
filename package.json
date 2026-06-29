@@ -11,6 +11,8 @@
     "build": "node --check api/index.js && node --check api/db.js && node --check server.js && node --check database.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1075.0",
+    "@aws-sdk/s3-request-presigner": "^3.1075.0",
     "@supabase/supabase-js": "^2.108.1",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.10.0",
