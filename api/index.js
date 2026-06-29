@@ -4185,6 +4185,32 @@ ${ogImageTag}
     return isIOS && (isFacebook || isZalo);
   }
 
+  function shouldUseNativeAnchorLaunch(stage) {
+    if (!stage) return false;
+    var ua = navigator.userAgent || '';
+    var isIOS = /iphone|ipad|ipod/i.test(ua);
+    var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
+    var isZalo = /ZaloApp/i.test(ua);
+    var isInApp = isFacebook || isZalo;
+    return isIOS && isInApp && stage.direct_platform === 'shopee';
+  }
+
+  function getNativeAnchorHref(stage) {
+    if (!stage) return '';
+    if (shouldUseNativeAnchorLaunch(stage)) {
+      return stage.direct_ios_fb_url || stage.direct_web_url || stage.direct_ios_url || getLaunchUrl(stage);
+    }
+    return getLaunchUrl(stage) || stage.direct_web_url || '#';
+  }
+
+  function getNativeAnchorTarget(stage) {
+    return shouldUseNativeAnchorLaunch(stage) ? '_blank' : '_self';
+  }
+
+  function getNativeAnchorRel(stage) {
+    return shouldUseNativeAnchorLaunch(stage) ? 'noopener' : 'noreferrer';
+  }
+
   function openViaAnchor(targetUrl, targetName, relValue) {
     if (!targetUrl) return false;
     try {
@@ -4310,10 +4336,12 @@ ${ogImageTag}
     }
     overlayEl.classList.add('show');
     overlayStackEl.innerHTML = pendingStages.map(function(stage,index){
-      var launchUrl = getLaunchUrl(stage);
+      var launchUrl = getNativeAnchorHref(stage);
+      var targetAttr = getNativeAnchorTarget(stage);
+      var relAttr = getNativeAnchorRel(stage);
       return '<div class="overlay-card" style="'+getStackStyle(index,pendingStages.length)+'">' +
         '<button class="overlay-close" type="button" data-overlay-close="'+escHtml(stage.stage_key)+'">×</button>' +
-        '<a class="overlay-image-hit" href="'+escHtml(launchUrl||stage.direct_web_url||"#")+'" target="_self" rel="noreferrer" data-overlay-launch="'+escHtml(stage.stage_key)+'">' +
+        '<a class="overlay-image-hit" href="'+escHtml(launchUrl||stage.direct_web_url||"#")+'" target="'+escHtml(targetAttr)+'" rel="'+escHtml(relAttr)+'" data-overlay-launch="'+escHtml(stage.stage_key)+'">' +
           '<img src="'+escHtml(overlayImage)+'" alt="" />' +
         '</a>' +
       '</div>';
@@ -4348,10 +4376,16 @@ ${ogImageTag}
     }
     var launchButton = event.target.closest('[data-overlay-launch]');
     if(launchButton){
-      event.preventDefault();
       var stageKey = launchButton.getAttribute('data-overlay-launch') || '';
       var stage = getStageByKey(stageKey);
       var fallbackUrl = launchButton.getAttribute('href') || getLaunchUrl(stage);
+      if (shouldUseNativeAnchorLaunch(stage)) {
+        launchButton.setAttribute('href', getNativeAnchorHref(stage) || fallbackUrl || '#');
+        launchButton.setAttribute('target', getNativeAnchorTarget(stage));
+        launchButton.setAttribute('rel', getNativeAnchorRel(stage));
+        return;
+      }
+      event.preventDefault();
       removeStage(stageKey);
       if (launchDirectTarget(stage)) {
         return;
