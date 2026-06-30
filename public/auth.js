@@ -308,7 +308,21 @@
     if (next) {
       redirect.searchParams.set("next", next);
     }
-    return `${redirect.pathname}${redirect.search}${redirect.hash}`;
+    return redirect.toString();
+  };
+
+  const getCleanOAuthReturnPath = () => {
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete("code");
+    clean.searchParams.delete("error");
+    clean.searchParams.delete("error_description");
+    clean.searchParams.delete("state");
+    const next = clean.searchParams.get("next");
+    const nextUrl = new URL(clean.pathname, window.location.origin);
+    if (next) {
+      nextUrl.searchParams.set("next", next);
+    }
+    return `${nextUrl.pathname}${nextUrl.search}`;
   };
 
   const loadSupabaseClient = async () => {
@@ -391,24 +405,20 @@
 
   const handleOAuthCallback = async (supabase) => {
     const url = new URL(window.location.href);
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
     const code = url.searchParams.get("code");
-    const oauthError = url.searchParams.get("error_description") || url.searchParams.get("error");
+    const hashAccessToken = hashParams.get("access_token");
+    const oauthError =
+      url.searchParams.get("error_description") ||
+      url.searchParams.get("error") ||
+      hashParams.get("error_description") ||
+      hashParams.get("error");
     if (oauthError) {
       setError(oauthError);
-      const clean = new URL(window.location.href);
-      const next = clean.searchParams.get("next");
-      const nextUrl = new URL(clean.pathname, window.location.origin);
-      if (next) {
-        nextUrl.searchParams.set("next", next);
-      }
-      window.history.replaceState(
-        {},
-        document.title,
-        `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`,
-      );
+      window.history.replaceState({}, document.title, getCleanOAuthReturnPath());
       return false;
     }
-    if (!code) return false;
+    if (!code && !hashAccessToken) return false;
 
     authRedirecting = false;
     setBusy(true);
@@ -418,6 +428,10 @@
       subtitle: "Đang xác minh phiên Supabase và nối bạn vào workspace hiện tại.",
     });
     try {
+      if (hashAccessToken) {
+        await postSupabaseSession(hashAccessToken);
+        return true;
+      }
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) {
         throw error;
@@ -436,17 +450,7 @@
         setBusy(false);
         setAuthLoading(false);
       }
-      const clean = new URL(window.location.href);
-      const next = clean.searchParams.get("next");
-      const nextUrl = new URL(clean.pathname, window.location.origin);
-      if (next) {
-        nextUrl.searchParams.set("next", next);
-      }
-      window.history.replaceState(
-        {},
-        document.title,
-        `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`,
-      );
+      window.history.replaceState({}, document.title, getCleanOAuthReturnPath());
     }
   };
 
