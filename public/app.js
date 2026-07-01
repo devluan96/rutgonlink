@@ -154,6 +154,10 @@ let accountAffiliateHealth = {
 let activeAffiliatePresetTargetFieldId = "";
 const notificationSeenStorageKey = "rutgonlink-notification-seen";
 let seenNotificationKeys = {};
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+const rootStyles = () => getComputedStyle(document.documentElement);
+const themeColor = (name, fallback) =>
+  rootStyles().getPropertyValue(name).trim() || fallback;
 const landingIntroCopy = {
   vi: {
     "brandSubline": "Rút gọn link, QR, bio public và analytics",
@@ -1137,6 +1141,14 @@ function applyTheme(theme) {
   appTheme = theme === "light" ? "light" : "dark";
   localStorage.setItem("rutgonlink-theme", appTheme);
   document.documentElement.dataset.theme = appTheme;
+  if (themeMeta) {
+    themeMeta.setAttribute(
+      "content",
+      appTheme === "light"
+        ? themeColor("--theme-color-light", "#f4f7fb")
+        : themeColor("--theme-color-dark", "#0d1117"),
+    );
+  }
   const icons = [
     document.getElementById("themeToggleIcon"),
     document.getElementById("authThemeIcon"),
@@ -2714,6 +2726,57 @@ function resetAccountProfileForm() {
   renderAccountProfilePreview();
 }
 
+async function saveAccountProfile() {
+  if (!user?.id) {
+    redirectToAuth("login", "Cần đăng nhập để lưu hồ sơ.");
+    return;
+  }
+  const btn = document.getElementById("accountSaveProfileBtn");
+  const hint = document.getElementById("accountProfileHint");
+  const payload = {
+    name: document.getElementById("accountNameInput")?.value.trim() || "",
+    phone: document.getElementById("accountPhoneInput")?.value.trim() || "",
+    avatar_url:
+      document.getElementById("accountAvatarInput")?.value.trim() || "",
+  };
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Đang lưu...";
+  }
+  try {
+    const response = await fetch("/api/auth/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể lưu hồ sơ");
+    }
+    user = data.user;
+    updateTopbar();
+    renderForms();
+    resetAccountProfileForm();
+    if (hint) {
+      hint.className = "account-note ok";
+      hint.textContent = "Đã cập nhật hồ sơ tài khoản.";
+    }
+    toast("✅ Đã cập nhật hồ sơ", "ok");
+  } catch (error) {
+    if (hint) {
+      hint.className = "account-note err";
+      hint.textContent =
+        (error && error.message) || "Không thể lưu hồ sơ lúc này.";
+    }
+    toast(error.message || "Không thể lưu hồ sơ", "err");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Lưu hồ sơ";
+    }
+  }
+}
+
 function renderAccountTwoFactorQr(uri = "") {
   const wrap = document.getElementById("account2faQr");
   if (!wrap) return;
@@ -3469,7 +3532,7 @@ async function saveAccountAffiliateSettings() {
     btn.textContent = "Đang lưu...";
   }
   try {
-    const response = await fetch("/api/account/profile", {
+    const response = await fetch("/api/auth/me", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
