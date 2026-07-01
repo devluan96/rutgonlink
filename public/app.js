@@ -6578,7 +6578,7 @@ async function handleTeamTemplateMediaUpload(event) {
     if (statusEl) statusEl.textContent = `Đang tải media: ${file.name}`;
     let uploadData = null;
     if (String(file.type || "").startsWith("video/")) {
-      uploadData = await uploadVideoDirectToCloudinary(file);
+      uploadData = await uploadVideoDirect(file);
       uploadedTeamTemplateMedia = {
         kind: "video",
         url: uploadData?.url || "",
@@ -6611,6 +6611,14 @@ async function handleTeamTemplateMediaUpload(event) {
     }
     renderTeamWorkspaceSummary();
   } catch (error) {
+    if (error?.status === 401) {
+      redirectToAuth("login", "Cần đăng nhập để upload video.");
+      return;
+    }
+    if (error?.status === 403 && error?.payload?.upgrade) {
+      toast(error.payload.error || "Tính năng này yêu cầu gói Pro", "warn");
+      return;
+    }
     uploadedTeamTemplateMedia = null;
     if (statusEl) {
       statusEl.textContent = error.message || "Không thể tải media";
