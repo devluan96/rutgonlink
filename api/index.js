@@ -380,6 +380,132 @@ app.post("/api/admin/article-funnel-lab/resolve-target", requireAdmin, async (re
     return res.status(500).json({ error: "Resolve target thất bại" });
   }
 });
+app.get("/api/admin/article-funnel-labs", requireAdmin, async (req, res) => {
+  try {
+    const database = await getDb();
+    const rows = await database.listArticleFunnelLabs();
+    return res.json({
+      ok: true,
+      items: rows.map((item) => ({
+        id: item.id,
+        name: item.name || `Lab ${item.id}`,
+        title: item.title || "",
+        published_route_slug: item.published_route_slug || "",
+        created_by_user_id: item.created_by_user_id || null,
+        created_at: item.created_at || null,
+        updated_at: item.updated_at || item.created_at || null,
+      })),
+    });
+  } catch (error) {
+    console.error("[article-funnel-labs/list]", error);
+    return res.status(500).json({ error: "Khong the tai danh sach lab" });
+  }
+});
+app.get("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => {
+  try {
+    const database = await getDb();
+    const row = await database.getArticleFunnelLabById(req.params.id);
+    if (!row) {
+      return res.status(404).json({ error: "Khong tim thay lab" });
+    }
+    return res.json({
+      ok: true,
+      item: {
+        id: row.id,
+        name: row.name || `Lab ${row.id}`,
+        title: row.title || "",
+        published_route_slug: row.published_route_slug || "",
+        created_by_user_id: row.created_by_user_id || null,
+        created_at: row.created_at || null,
+        updated_at: row.updated_at || row.created_at || null,
+        config_json:
+          row.config_json && typeof row.config_json === "object"
+            ? row.config_json
+            : {},
+      },
+    });
+  } catch (error) {
+    console.error("[article-funnel-labs/get]", error);
+    return res.status(500).json({ error: "Khong the tai lab" });
+  }
+});
+app.post("/api/admin/article-funnel-labs", requireAdmin, async (req, res) => {
+  try {
+    const database = await getDb();
+    const rawConfig =
+      req.body?.config && typeof req.body.config === "object"
+        ? req.body.config
+        : req.body?.config_json && typeof req.body.config_json === "object"
+          ? req.body.config_json
+          : req.body?.sourceDomain || req.body?.source_domain
+            ? req.body
+            : {};
+    const normalizedConfig = normalizeArticleFunnelPreviewConfig(rawConfig);
+    const row = await database.createArticleFunnelLab({
+      name:
+        String(req.body?.name || "").trim() ||
+        normalizedConfig.title ||
+        "Lab mới",
+      title: normalizedConfig.title || null,
+      config_json: normalizedConfig,
+      created_by_user_id: req.currentUser?.id || null,
+    });
+    return res.json({
+      ok: true,
+      item: row,
+    });
+  } catch (error) {
+    console.error("[article-funnel-labs/create]", error);
+    return res.status(500).json({ error: "Khong the tao lab" });
+  }
+});
+app.put("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => {
+  try {
+    const database = await getDb();
+    const rawConfig =
+      req.body?.config && typeof req.body.config === "object"
+        ? req.body.config
+        : req.body?.config_json && typeof req.body.config_json === "object"
+          ? req.body.config_json
+          : req.body?.sourceDomain || req.body?.source_domain
+            ? req.body
+            : {};
+    const updatePayload = {};
+    if (Object.keys(rawConfig).length) {
+      const normalizedConfig = normalizeArticleFunnelPreviewConfig(rawConfig);
+      updatePayload.config_json = normalizedConfig;
+      updatePayload.title = normalizedConfig.title || null;
+      if (!req.body?.name) {
+        updatePayload.name = normalizedConfig.title || "Lab mới";
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "name")) {
+      updatePayload.name = String(req.body?.name || "").trim() || "Lab mới";
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "published_route_slug")) {
+      updatePayload.published_route_slug =
+        String(req.body?.published_route_slug || "").trim() || null;
+    }
+    const row = await database.updateArticleFunnelLab(req.params.id, updatePayload);
+    return res.json({
+      ok: true,
+      item: row,
+    });
+  } catch (error) {
+    console.error("[article-funnel-labs/update]", error);
+    return res.status(500).json({ error: "Khong the luu lab" });
+  }
+});
+app.delete("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => {
+  try {
+    const database = await getDb();
+    await database.deleteArticleFunnelLab(req.params.id);
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("[article-funnel-labs/delete]", error);
+    return res.status(500).json({ error: "Khong the xoa lab" });
+  }
+});
 app.post("/api/admin/article-funnel-lab/preview-link", requireAdmin, async (req, res) => {
   try {
     const rawConfig =
@@ -435,6 +561,19 @@ app.post("/api/admin/article-funnel-lab/publish", requireAdmin, async (req, res)
       config_json: publishedConfig,
       created_by_user_id: req.currentUser?.id || null,
     });
+    const draftLabId = Number(req.body?.lab_id || 0);
+    if (Number.isInteger(draftLabId) && draftLabId > 0) {
+      try {
+        await database.updateArticleFunnelLab(draftLabId, {
+          name: String(req.body?.lab_name || "").trim() || publishedConfig.title || "Lab mới",
+          title: publishedConfig.title || null,
+          config_json: publishedConfig,
+          published_route_slug: saved.route_slug,
+        });
+      } catch (labError) {
+        console.error("[article-funnel-lab/publish-sync-draft]", labError);
+      }
+    }
     const publishedUrl = buildArticleFunnelPublicUrl(
       saved.route_slug,
       saved.domain_hostname,
@@ -1520,7 +1659,12 @@ function detectPlatformDeep(originalUrl, platform) {
       play_store: `https://play.google.com/store/apps/details?id=${SHOPEE_ANDROID_PACKAGE}`,
     };
   }
-  if (hostname === "tiktok.com" || hostname.endsWith(".tiktok.com")) {
+  if (
+    hostname === "tiktok.com" ||
+    hostname.endsWith(".tiktok.com") ||
+    hostname === "vm.tiktok.com" ||
+    hostname === "vt.tiktok.com"
+  ) {
     const scheme = buildTikTokAppScheme(originalUrl);
     return {
       deeplink: scheme,
@@ -3774,40 +3918,75 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
   const overlay = config.overlay && typeof config.overlay === "object"
     ? config.overlay
     : {};
+  const shareImage = String(config.share_image || config.shareImage || "").trim();
+  const overlayImage = String(
+    overlay.image || overlay.popup_3s_image || config.overlayImage || "",
+  ).trim();
+  const overlay20sImage = String(
+    overlay.popup_20s_image ||
+      overlay.popup_5s_image ||
+      config.overlay20sImage ||
+      "",
+  ).trim();
+  const overlay300sImage = String(overlay.popup_300s_image || "").trim();
+  const getOverlayImageForStage = (stageKey) => {
+    if (stageKey === "20s") {
+      return overlay20sImage || overlayImage || shareImage;
+    }
+    if (stageKey === "300s") {
+      return overlay300sImage || overlayImage || shareImage;
+    }
+    return overlayImage || shareImage;
+  };
   const inputStages = Array.isArray(config.stages) ? config.stages : [];
   const normalizedStages =
     resolvedStages ||
     (inputStages.length
       ? inputStages.map((stage, index) => {
+          const rawStageKey = String(stage?.stage_key || "").trim();
+          const fallbackStageKey =
+            index === 0 ? "3s" : index === 1 ? "20s" : "300s";
+          const stageKey =
+            rawStageKey === "5s" ? "20s" : rawStageKey || fallbackStageKey;
           const fallbackDelayMs =
-            index === 0 ? 3000 : index === 1 ? 5000 : 300000;
+            stageKey === "3s" ? 3000 : stageKey === "20s" ? 20000 : 300000;
+          const parsedDelayMs = Number(stage?.delay_ms || 0) || 0;
+          const delayMs =
+            stageKey === "20s" && (rawStageKey === "5s" || parsedDelayMs === 5000)
+              ? 20000
+              : parsedDelayMs || fallbackDelayMs;
           return {
             ...stage,
-            stage_key: String(
-              stage?.stage_key ||
-                (index === 0 ? "3s" : index === 1 ? "5s" : "300s"),
-            ).trim(),
-            delay_ms: Number(stage?.delay_ms || 0) || fallbackDelayMs,
+            stage_key: stageKey,
+            delay_ms: delayMs,
+            overlay_image: String(stage?.overlay_image || "").trim() || getOverlayImageForStage(stageKey),
           };
         })
       : [
           {
             stage_key: "3s",
             delay_ms: 3000,
+            overlay_image: getOverlayImageForStage("3s"),
             ...buildDirectLaunchConfig(
               overlay.popup_3s_url || config.baseUrl || "",
             ),
           },
           {
-            stage_key: "5s",
-            delay_ms: 5000,
+            stage_key: "20s",
+            delay_ms: 20000,
+            overlay_image: getOverlayImageForStage("20s"),
             ...buildDirectLaunchConfig(
-              overlay.popup_5s_url || overlay.popup_3s_url || config.baseUrl || "",
+              overlay.popup_20s_url ||
+                overlay.popup_5s_url ||
+                overlay.popup_3s_url ||
+                config.baseUrl ||
+                "",
             ),
           },
           {
             stage_key: "300s",
             delay_ms: 300000,
+            overlay_image: getOverlayImageForStage("300s"),
             ...buildDirectLaunchConfig(
               overlay.popup_300s_url || overlay.popup_3s_url || config.baseUrl || "",
             ),
@@ -3819,17 +3998,29 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
     slug: String(config.slug || "").trim(),
     title: String(config.title || "").trim() || "Article preview",
     description: String(config.description || config.desc || "").trim(),
-    share_image: String(config.share_image || config.shareImage || "").trim(),
-    overlay_image: String(overlay.image || config.overlayImage || "").trim(),
+    share_image: shareImage,
+    overlay_image: overlayImage,
     group_label: String(config.group_label || config.groupLabel || "Group facebook").trim(),
     group_url: String(config.group_url || config.groupUrl || "").trim(),
     backup_label: String(config.backup_label || config.backupLabel || "Page phu").trim(),
     backup_url: String(config.backup_url || config.backupUrl || "").trim(),
     blocks: normalizeArticleFunnelBlocks(config.blocks),
     stages: normalizedStages.map((stage) => ({
-      stage_key: String(stage.stage_key || "").trim(),
-      delay_ms: Number(stage.delay_ms || 0) || 0,
+      stage_key: String(stage.stage_key || "").trim() === "5s"
+        ? "20s"
+        : String(stage.stage_key || "").trim(),
+      delay_ms:
+        String(stage.stage_key || "").trim() === "5s" && Number(stage.delay_ms || 0) === 5000
+          ? 20000
+          : Number(stage.delay_ms || 0) || 0,
       target_url: String(stage.target_url || "").trim(),
+      overlay_image:
+        String(stage.overlay_image || "").trim() ||
+        getOverlayImageForStage(
+          String(stage.stage_key || "").trim() === "5s"
+            ? "20s"
+            : String(stage.stage_key || "").trim(),
+        ),
       direct_platform: String(stage.direct_platform || "generic").trim(),
       direct_web_url: String(stage.direct_web_url || "").trim(),
       direct_app_url: String(stage.direct_app_url || "").trim(),
@@ -3893,7 +4084,9 @@ function handleArticleFunnelStageLaunch({
   stageKey,
   canonicalUrl,
 }) {
-  const normalizedStageKey = String(stageKey || "").trim();
+  const normalizedStageKey = String(stageKey || "").trim() === "5s"
+    ? "20s"
+    : String(stageKey || "").trim();
   const stage = (config.stages || []).find(
     (item) => String(item?.stage_key || "").trim() === normalizedStageKey,
   );
@@ -4071,7 +4264,7 @@ function buildArticleFunnelPreviewPage(config, canonicalUrl, launchBasePath = ""
     : "";
   const blocks = JSON.stringify(config.blocks || []);
   const stages = JSON.stringify(config.stages || []);
-  const overlayImage = JSON.stringify(config.overlay_image || shareImage || "");
+  const defaultOverlayImage = JSON.stringify(config.overlay_image || shareImage || "");
   const launchBasePathJson = JSON.stringify(String(launchBasePath || "").trim());
 
   return `<!DOCTYPE html>
@@ -4104,6 +4297,14 @@ ${ogImageTag}
   .article-paragraph{margin:0;font-size:18px;line-height:1.8;color:#f8fafc;white-space:pre-wrap}
   .article-media{overflow:hidden;background:#050505}
   .article-media img,.article-media video{display:block;width:100%;height:auto}
+  .sensitive-wrap{position:relative;overflow:hidden;background:#0b1220}
+  .sensitive-wrap img{filter:blur(40px) brightness(.22) saturate(.56);opacity:.42;transform:scale(1.22);transition:filter .26s,transform .26s,opacity .26s}
+  .sensitive-wrap::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,6,12,.34),rgba(3,6,12,.68)),repeating-linear-gradient(-45deg,rgba(255,255,255,.03) 0,rgba(255,255,255,.03) 12px,rgba(3,6,12,.04) 12px,rgba(3,6,12,.04) 24px);pointer-events:none;z-index:1;transition:opacity .26s}
+  .sensitive-wrap::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(7,11,20,.36),rgba(7,11,20,.78)),radial-gradient(circle at center,rgba(255,255,255,.1),rgba(7,11,20,.28) 42%,rgba(7,11,20,.42));backdrop-filter:blur(18px) saturate(.62);-webkit-backdrop-filter:blur(18px) saturate(.62);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),inset 0 -120px 140px rgba(4,8,15,.42);pointer-events:none;z-index:2;transition:opacity .26s}
+  .sensitive-wrap.revealed img{filter:none;opacity:1;transform:scale(1)}
+  .sensitive-wrap.revealed::before{opacity:0}
+  .sensitive-wrap.revealed::after{opacity:0}
+  .reveal-btn{position:absolute;inset:auto 14px 14px 14px;padding:12px 14px;border:0;border-radius:14px;background:rgba(13,19,32,.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(5,8,16,.32);color:#fff;font:inherit;font-weight:800;cursor:pointer;z-index:3}
   .article-caption{padding:10px 12px 0;color:#8ea0bc;font-size:13px}
   .follow-box{margin-top:28px;padding-top:20px;border-top:1px solid rgba(148,163,184,.18);display:grid;gap:16px}
   .follow-row{color:#f8fafc;font-size:18px;line-height:1.7}
@@ -4135,7 +4336,7 @@ ${ogImageTag}
 (function(){
   var blocks = ${blocks};
   var stages = ${stages};
-  var overlayImage = ${overlayImage};
+  var defaultOverlayImage = ${defaultOverlayImage};
   var launchBasePath = ${launchBasePathJson};
   var pendingStages = [];
   var overlayEl = document.getElementById('overlay');
@@ -4154,8 +4355,42 @@ ${ogImageTag}
       if (block.type === 'video') {
         return '<figure class="article-media"><video controls preload="metadata" src="'+escHtml(block.src||'')+'"></video>'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
       }
+      if (block.type === 'sensitive-image') {
+        return '<figure class="article-media"><div class="sensitive-wrap" data-sensitive-wrap><img src="'+escHtml(block.src||'')+'" alt="" /><button class="reveal-btn" type="button" data-reveal-sensitive>Bấm để hiện ảnh</button></div>'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
+      }
       return '<figure class="article-media"><img src="'+escHtml(block.src||'')+'" alt="" />'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
     }).join('');
+  }
+
+  function syncSensitiveWraps(){
+    Array.from(previewBlocksEl.querySelectorAll('[data-sensitive-wrap]')).forEach(function(wrap){
+      var image = wrap.querySelector('img');
+      if (!image) return;
+      var revealed = !wrap.querySelector('[data-reveal-sensitive]');
+      if (revealed) {
+        wrap.classList.add('revealed');
+        image.style.filter = 'none';
+        image.style.transform = 'scale(1)';
+        return;
+      }
+      wrap.classList.remove('revealed');
+      image.style.filter = '';
+      image.style.transform = '';
+    });
+  }
+
+  function revealSensitiveWrap(wrap){
+    if(!wrap) return;
+    wrap.classList.add('revealed');
+    var image = wrap.querySelector('img');
+    if (image) {
+      image.style.filter = 'none';
+      image.style.transform = 'scale(1)';
+    }
+    var button = wrap.querySelector('[data-reveal-sensitive]');
+    if (button) {
+      button.remove();
+    }
   }
 
   function getStackStyle(index,total){
@@ -4185,7 +4420,7 @@ ${ogImageTag}
     return isIOS && (isFacebook || isZalo);
   }
 
-  function shouldPreferLaunchRouteForStage(stage) {
+  function shouldUseNativeLaunchRoute(stage) {
     if (!stage) return false;
     return shouldUseLaunchRouteDirectly() && stage.direct_platform === 'tiktok';
   }
@@ -4344,6 +4579,7 @@ ${ogImageTag}
       var launchUrl = getNativeAnchorHref(stage);
       var targetAttr = getNativeAnchorTarget(stage);
       var relAttr = getNativeAnchorRel(stage);
+      var overlayImage = stage.overlay_image || defaultOverlayImage;
       return '<div class="overlay-card" style="'+getStackStyle(index,pendingStages.length)+'">' +
         '<button class="overlay-close" type="button" data-overlay-close="'+escHtml(stage.stage_key)+'">×</button>' +
         '<a class="overlay-image-hit" href="'+escHtml(launchUrl||stage.direct_web_url||"#")+'" target="'+escHtml(targetAttr)+'" rel="'+escHtml(relAttr)+'" data-overlay-launch="'+escHtml(stage.stage_key)+'">' +
@@ -4384,7 +4620,7 @@ ${ogImageTag}
       var stageKey = launchButton.getAttribute('data-overlay-launch') || '';
       var stage = getStageByKey(stageKey);
       var fallbackUrl = launchButton.getAttribute('href') || getLaunchUrl(stage);
-      if (shouldUseNativeAnchorLaunch(stage)) {
+      if (shouldUseNativeAnchorLaunch(stage) || shouldUseNativeLaunchRoute(stage)) {
         launchButton.setAttribute('href', getNativeAnchorHref(stage) || fallbackUrl || '#');
         launchButton.setAttribute('target', getNativeAnchorTarget(stage));
         launchButton.setAttribute('rel', getNativeAnchorRel(stage));
@@ -4392,10 +4628,6 @@ ${ogImageTag}
       }
       event.preventDefault();
       removeStage(stageKey);
-      if (shouldPreferLaunchRouteForStage(stage) && fallbackUrl) {
-        window.location.href = fallbackUrl;
-        return;
-      }
       if (launchDirectTarget(stage)) {
         return;
       }
@@ -4409,7 +4641,29 @@ ${ogImageTag}
     }
   });
 
+  previewBlocksEl.addEventListener('click', function(event){
+    var button = event.target.closest('[data-reveal-sensitive]');
+    if (!button) return;
+    var wrap =
+      button.parentElement && button.parentElement.hasAttribute('data-sensitive-wrap')
+        ? button.parentElement
+        : null;
+    revealSensitiveWrap(wrap);
+    queueMicrotask(syncSensitiveWraps);
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+
+  var sensitiveWrapObserver = new MutationObserver(function(){
+    syncSensitiveWraps();
+  });
+  sensitiveWrapObserver.observe(previewBlocksEl, {
+    childList: true,
+    subtree: true
+  });
+
   renderBlocks();
+  syncSensitiveWraps();
 })();
 </script>
 </body>
@@ -8671,6 +8925,9 @@ body{overflow-x:hidden}
 }
 
 module.exports = app;
+module.exports.__testUtils = {
+  detectPlatformDeep,
+};
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () =>

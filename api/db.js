@@ -663,6 +663,93 @@ async function init() {
       return data;
     },
 
+    async listArticleFunnelLabs() {
+      const { data, error } = await sb
+        .from('article_funnel_labs')
+        .select('*')
+        .order('updated_at', { ascending: false });
+      check(error, 'article_funnel_labs_list');
+      return data || [];
+    },
+
+    async getArticleFunnelLabById(labId) {
+      const normalizedId = Number(labId);
+      if (!Number.isInteger(normalizedId) || normalizedId <= 0) return null;
+      const { data, error } = await sb
+        .from('article_funnel_labs')
+        .select('*')
+        .eq('id', normalizedId)
+        .maybeSingle();
+      check(error, 'article_funnel_lab_get');
+      return data;
+    },
+
+    async createArticleFunnelLab(payload = {}) {
+      const name = String(payload.name || '').trim() || 'Lab mới';
+      const insertPayload = {
+        name,
+        title: payload.title || null,
+        config_json:
+          payload.config_json && typeof payload.config_json === 'object'
+            ? payload.config_json
+            : {},
+        published_route_slug: payload.published_route_slug || null,
+        created_by_user_id: payload.created_by_user_id || null,
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error } = await sb
+        .from('article_funnel_labs')
+        .insert(insertPayload)
+        .select('*')
+        .single();
+      check(error, 'article_funnel_lab_create');
+      return data;
+    },
+
+    async updateArticleFunnelLab(labId, payload = {}) {
+      const normalizedId = Number(labId);
+      if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+        throw new Error('ARTICLE_FUNNEL_LAB_ID_INVALID');
+      }
+      const updatePayload = {
+        updated_at: new Date().toISOString(),
+      };
+      if (Object.prototype.hasOwnProperty.call(payload, 'name')) {
+        updatePayload.name = String(payload.name || '').trim() || 'Lab mới';
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'title')) {
+        updatePayload.title = payload.title || null;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'config_json')) {
+        updatePayload.config_json =
+          payload.config_json && typeof payload.config_json === 'object'
+            ? payload.config_json
+            : {};
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'published_route_slug')) {
+        updatePayload.published_route_slug = payload.published_route_slug || null;
+      }
+      const { data, error } = await sb
+        .from('article_funnel_labs')
+        .update(updatePayload)
+        .eq('id', normalizedId)
+        .select('*')
+        .single();
+      check(error, 'article_funnel_lab_update');
+      return data;
+    },
+
+    async deleteArticleFunnelLab(labId) {
+      const normalizedId = Number(labId);
+      if (!Number.isInteger(normalizedId) || normalizedId <= 0) return false;
+      const { error } = await sb
+        .from('article_funnel_labs')
+        .delete()
+        .eq('id', normalizedId);
+      check(error, 'article_funnel_lab_delete');
+      return true;
+    },
+
     async countUsers() {
       const { count, error } = await sb.from('users').select('*', { count: 'exact', head: true });
       check(error);

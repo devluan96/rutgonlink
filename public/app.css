@@ -5,44 +5,105 @@
         padding: 0;
       }
       :root {
-        --bg: #0d1117;
-        --bg2: #161b27;
-        --bg3: #1e2535;
-        --bg4: #252d40;
-        --border: #2a3347;
-        --border2: #334155;
-        --text: #e2e8f0;
-        --text2: #94a3b8;
-        --text3: #4b5563;
-        --brand: #3b82f6;
-        --brand-d: #2563eb;
-        --brand-glow: rgba(59, 130, 246, 0.2);
-        --green: #22c55e;
-        --red: #ef4444;
-        --purple: #8b5cf6;
+        /* DESIGN.md token bridge */
+        --color-primary: #3b82f6;
+        --color-primary-strong: #2563eb;
+        --color-secondary: #6366f1;
+        --color-tertiary: #8b5cf6;
+        --color-success: #22c55e;
+        --color-danger: #ef4444;
+        --color-ink: #0f172a;
+        --color-app-bg: #0d1117;
+        --color-app-surface: #161b27;
+        --color-app-surface-2: #1e2535;
+        --color-app-surface-3: #252d40;
+        --color-app-border: #2a3347;
+        --color-app-border-soft: #334155;
+        --color-app-text: #e2e8f0;
+        --color-app-text-soft: #94a3b8;
+        --color-app-text-muted: #4b5563;
+        --font-display:
+          "Space Grotesk",
+          "Segoe UI",
+          sans-serif;
+        --font-body:
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+        --radius-xs: 8px;
+        --radius-sm: 10px;
+        --radius-md: 16px;
+        --radius-lg: 22px;
+        --radius-xl: 30px;
+        --radius-full: 999px;
+        --brand-gradient: linear-gradient(
+          135deg,
+          var(--color-primary),
+          var(--color-primary-strong)
+        );
+        --brand-gradient-accent: linear-gradient(
+          135deg,
+          var(--color-primary),
+          var(--color-tertiary)
+        );
+        --danger-gradient: linear-gradient(
+          135deg,
+          #fb7185,
+          var(--color-danger)
+        );
+        --brand-glow-soft: rgba(59, 130, 246, 0.2);
+        --surface-overlay-weak: rgba(255, 255, 255, 0.03);
+        --surface-overlay-subtle: rgba(255, 255, 255, 0.015);
+        --surface-overlay-strong: rgba(255, 255, 255, 0.05);
+        --accent-surface: rgba(59, 130, 246, 0.12);
+        --accent-surface-soft: rgba(59, 130, 246, 0.08);
+        --accent-surface-weak: rgba(59, 130, 246, 0.03);
+        --accent-border: rgba(59, 130, 246, 0.2);
+        --accent-border-strong: rgba(59, 130, 246, 0.35);
+        --theme-color-dark: var(--color-app-bg);
+        --theme-color-light: #f4f7fb;
+
+        /* Legacy aliases kept for the existing app stylesheet */
+        --bg: var(--color-app-bg);
+        --bg2: var(--color-app-surface);
+        --bg3: var(--color-app-surface-2);
+        --bg4: var(--color-app-surface-3);
+        --border: var(--color-app-border);
+        --border2: var(--color-app-border-soft);
+        --text: var(--color-app-text);
+        --text2: var(--color-app-text-soft);
+        --text3: var(--color-app-text-muted);
+        --brand: var(--color-primary);
+        --brand-d: var(--color-primary-strong);
+        --brand-glow: var(--brand-glow-soft);
+        --green: var(--color-success);
+        --red: var(--color-danger);
+        --purple: var(--color-tertiary);
         --shopee: #ee4d2d;
         --tiktok: #69c9d0;
-        --r: 10px;
+        --r: var(--radius-sm);
         --sidebar: 230px;
       }
       html[data-theme="light"] {
         color-scheme: light;
-        --bg: #f4f7fb;
-        --bg2: #ffffff;
-        --bg3: #eef2f8;
-        --bg4: #e2e8f0;
-        --border: #d6deea;
-        --border2: #c8d3e4;
-        --text: #0f172a;
-        --text2: #475569;
-        --text3: #94a3b8;
-        --brand-glow: rgba(37, 99, 235, 0.12);
+        --color-app-bg: #f4f7fb;
+        --color-app-surface: #ffffff;
+        --color-app-surface-2: #eef2f8;
+        --color-app-surface-3: #e2e8f0;
+        --color-app-border: #d6deea;
+        --color-app-border-soft: #c8d3e4;
+        --color-app-text: #0f172a;
+        --color-app-text-soft: #475569;
+        --color-app-text-muted: #94a3b8;
+        --brand-glow-soft: rgba(37, 99, 235, 0.12);
       }
       html,
       body {
         height: 100%;
         font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+          var(--font-body);
         background: var(--bg);
         color: var(--text);
         font-size: 14px;
@@ -96,7 +157,7 @@
       .auth-logo .al-icon {
         width: 52px;
         height: 52px;
-        background: linear-gradient(135deg, var(--brand), var(--purple));
+        background: var(--brand-gradient-accent);
         border-radius: 14px;
         display: inline-flex;
         align-items: center;
@@ -105,6 +166,7 @@
         margin-bottom: 10px;
       }
       .auth-logo h1 {
+        font-family: var(--font-display);
         font-size: 22px;
         font-weight: 800;
       }
@@ -180,7 +242,7 @@
       .btn-auth {
         width: 100%;
         padding: 12px;
-        background: linear-gradient(135deg, var(--brand), var(--brand-d));
+        background: var(--brand-gradient);
         color: #fff;
         border: none;
         border-radius: 8px;
@@ -277,7 +339,7 @@
         width: 40px;
         height: 40px;
         border-radius: 12px;
-        background: linear-gradient(135deg, var(--brand), var(--purple));
+        background: var(--brand-gradient-accent);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -305,7 +367,7 @@
       }
       .auth-nav a {
         padding: 8px 11px;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         color: var(--text2);
         border: 1px solid transparent;
         font-size: 12px;
@@ -314,16 +376,16 @@
       }
       .auth-nav a:hover {
         color: var(--text);
-        background: rgba(255, 255, 255, 0.03);
+        background: var(--surface-overlay-weak);
         border-color: var(--border);
       }
       .auth-nav .fill {
-        background: var(--brand);
+        background: var(--brand-gradient);
         color: #fff;
-        border-color: var(--brand);
+        border-color: transparent;
       }
       .auth-nav .fill:hover {
-        background: var(--brand-d);
+        background: var(--brand-gradient);
       }
       .auth-hero {
         position: relative;
@@ -331,9 +393,13 @@
         background:
           radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.18), transparent 28%),
           radial-gradient(circle at 80% 0%, rgba(139, 92, 246, 0.18), transparent 22%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+          linear-gradient(
+            180deg,
+            var(--surface-overlay-weak),
+            var(--surface-overlay-subtle)
+          );
         border: 1px solid var(--border);
-        border-radius: 28px;
+        border-radius: var(--radius-xl);
         padding: 28px;
         min-height: 100%;
         box-shadow: 0 18px 60px rgba(0, 0, 0, 0.2);
@@ -350,7 +416,7 @@
         inset: auto -12% -20% auto;
         width: 220px;
         height: 220px;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         background: radial-gradient(circle, rgba(59, 130, 246, 0.18), transparent 65%);
         filter: blur(4px);
         pointer-events: none;
@@ -367,9 +433,9 @@
         align-items: center;
         gap: 8px;
         padding: 7px 12px;
-        border-radius: 999px;
-        background: rgba(59, 130, 246, 0.12);
-        border: 1px solid rgba(59, 130, 246, 0.2);
+        border-radius: var(--radius-full);
+        background: var(--accent-surface);
+        border: 1px solid var(--accent-border);
         color: var(--brand);
         font-weight: 700;
         font-size: 12px;
@@ -396,15 +462,15 @@
       }
       .auth-hero-action {
         padding: 10px 15px;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.03);
+        background: var(--surface-overlay-weak);
         color: var(--text);
         font-size: 13px;
         font-weight: 700;
       }
       .auth-hero-action.primary {
-        background: linear-gradient(135deg, var(--brand), var(--brand-d));
+        background: var(--brand-gradient);
         border-color: transparent;
         color: #fff;
       }
@@ -417,7 +483,11 @@
         border-radius: 24px;
         border: 1px solid var(--border);
         background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
+          linear-gradient(
+            180deg,
+            var(--surface-overlay-weak),
+            var(--surface-overlay-subtle)
+          ),
           rgba(7, 11, 20, 0.8);
         padding: 16px;
       }
@@ -445,7 +515,7 @@
       .auth-surface-card {
         border-radius: 18px;
         border: 1px solid var(--border);
-        background: rgba(255, 255, 255, 0.035);
+        background: var(--surface-overlay-weak);
         padding: 12px;
       }
       .auth-surface-card .n {
@@ -466,7 +536,11 @@
         border-radius: 18px;
         border: 1px solid var(--border);
         overflow: hidden;
-        background: linear-gradient(180deg, rgba(59, 130, 246, 0.1), rgba(255, 255, 255, 0.03));
+        background: linear-gradient(
+          180deg,
+          var(--accent-surface),
+          var(--surface-overlay-weak)
+        );
       }
       .auth-surface-preview .row {
         display: flex;
@@ -495,7 +569,7 @@
         margin-top: 22px;
       }
       .auth-feature {
-        background: rgba(255, 255, 255, 0.03);
+        background: var(--surface-overlay-weak);
         border: 1px solid var(--border);
         border-radius: 18px;
         padding: 14px;
@@ -519,7 +593,7 @@
       .auth-stat {
         border-radius: 18px;
         padding: 14px;
-        background: rgba(255, 255, 255, 0.03);
+        background: var(--surface-overlay-weak);
         border: 1px solid var(--border);
       }
       .auth-stat .n {
@@ -721,7 +795,7 @@
         align-items: center;
         gap: 4px;
         padding: 3px;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         border: 1px solid var(--border);
         background: var(--bg3);
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -731,7 +805,7 @@
         height: 30px;
         padding: 0 12px;
         border: 0;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         background: transparent;
         color: var(--text2);
         font-size: 11px;
@@ -741,10 +815,10 @@
       }
       .tb-lang-btn:hover {
         color: var(--text);
-        background: rgba(255, 255, 255, 0.05);
+        background: var(--surface-overlay-strong);
       }
       .tb-lang-btn.active {
-        background: linear-gradient(135deg, var(--brand), var(--brand-d));
+        background: var(--brand-gradient);
         color: #fff;
         box-shadow: 0 10px 18px rgba(37, 99, 235, 0.26);
       }
@@ -752,7 +826,7 @@
         font-size: 11px;
         font-weight: 700;
         padding: 3px 9px;
-        border-radius: 20px;
+        border-radius: var(--radius-full);
       }
       .tb-plan-badge.free {
         background: rgba(100, 116, 139, 0.15);
@@ -783,7 +857,7 @@
       .tb-avatar {
         width: 26px;
         height: 26px;
-        background: linear-gradient(135deg, var(--brand), var(--purple));
+        background: var(--brand-gradient-accent);
         border-radius: 6px;
         display: flex;
         align-items: center;
@@ -815,7 +889,7 @@
         position: relative;
         width: 38px;
         height: 38px;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         border: 1px solid var(--border);
         background: var(--bg3);
         color: var(--text);
@@ -840,8 +914,8 @@
         min-width: 18px;
         height: 18px;
         padding: 0 5px;
-        border-radius: 999px;
-        background: linear-gradient(135deg, #fb7185, #ef4444);
+        border-radius: var(--radius-full);
+        background: var(--danger-gradient);
         color: #fff;
         font-size: 10px;
         font-weight: 800;
@@ -876,7 +950,7 @@
         gap: 12px;
         padding: 16px 16px 12px;
         border-bottom: 1px solid var(--border);
-        background: linear-gradient(180deg, rgba(59, 130, 246, 0.08), transparent);
+        background: linear-gradient(180deg, var(--accent-surface-soft), transparent);
       }
       .notification-title {
         font-size: 14px;
@@ -893,7 +967,7 @@
         border: 1px solid var(--border);
         background: var(--bg4);
         color: var(--text2);
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         padding: 7px 10px;
         font-size: 11px;
         font-weight: 700;
@@ -931,11 +1005,15 @@
         margin-bottom: 0;
       }
       .notification-item:hover {
-        border-color: rgba(59, 130, 246, 0.35);
+        border-color: var(--accent-border-strong);
         transform: translateY(-1px);
       }
       .notification-item.unread {
-        background: linear-gradient(180deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.03));
+        background: linear-gradient(
+          180deg,
+          var(--accent-surface-soft),
+          var(--accent-surface-weak)
+        );
       }
       .notification-icon {
         width: 36px;
@@ -977,7 +1055,7 @@
       .notification-dot {
         width: 8px;
         height: 8px;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         background: #38bdf8;
         flex-shrink: 0;
       }
@@ -1013,7 +1091,7 @@
         align-items: center;
         gap: 12px;
         padding: 16px;
-        background: linear-gradient(180deg, rgba(59, 130, 246, 0.08), transparent);
+        background: linear-gradient(180deg, var(--accent-surface-soft), transparent);
       }
       .user-menu-head .tb-avatar {
         width: 42px;
@@ -1027,8 +1105,8 @@
       }
       .user-menu-plan {
         padding: 6px 10px;
-        border-radius: 999px;
-        background: rgba(59, 130, 246, 0.12);
+        border-radius: var(--radius-full);
+        background: var(--accent-surface);
         color: var(--brand);
         font-size: 11px;
         font-weight: 800;
@@ -2683,7 +2761,7 @@
       .btn-up {
         width: 100%;
         padding: 7px;
-        background: var(--brand);
+        background: var(--brand-gradient);
         border: none;
         border-radius: 6px;
         color: #fff;
@@ -2692,7 +2770,7 @@
         transition: 0.15s;
       }
       .btn-up:hover {
-        background: var(--brand-d);
+        background: var(--brand-gradient);
       }
 
       /* CONTENT */
@@ -2844,7 +2922,7 @@
         border: 1px solid var(--border);
         border-radius: 14px;
         background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent),
           var(--bg3);
         padding: 14px;
       }
@@ -2948,8 +3026,8 @@
         justify-content: center;
         min-width: 22px;
         height: 22px;
-        border-radius: 999px;
-        background: rgba(59, 130, 246, 0.12);
+        border-radius: var(--radius-full);
+        background: var(--accent-surface);
         color: #93c5fd;
         font-size: 11px;
         font-weight: 800;
@@ -2960,16 +3038,16 @@
         align-items: center;
         gap: 6px;
         padding: 5px 9px;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         font-size: 11px;
         font-weight: 700;
-        background: rgba(255, 255, 255, 0.04);
+        background: var(--surface-overlay-strong);
         border: 1px solid var(--border);
       }
       .stats-pill-dot {
         width: 8px;
         height: 8px;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
       }
 
       /* ══ SHORTEN FORM ══ */
@@ -3024,8 +3102,8 @@
         justify-content: center;
         min-height: 30px;
         padding: 0 11px;
-        border-radius: 999px;
-        background: rgba(59, 130, 246, 0.12);
+        border-radius: var(--radius-full);
+        background: var(--accent-surface);
         color: var(--brand);
         font-size: 11px;
         font-weight: 800;
@@ -3080,7 +3158,7 @@
       }
       .btn-go {
         padding: 10px 18px;
-        background: var(--brand);
+        background: var(--brand-gradient);
         color: #fff;
         border: none;
         border-radius: 8px;
@@ -3093,7 +3171,7 @@
         gap: 6px;
       }
       .btn-go:hover {
-        background: var(--brand-d);
+        background: var(--brand-gradient);
         transform: translateY(-1px);
       }
       .btn-go:active {

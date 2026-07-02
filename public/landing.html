@@ -40,21 +40,75 @@
 
     <style>
       :root {
-        --brand-1: #3b82f6;
-        --brand-2: #8b5cf6;
-        --brand-3: #6366f1;
-        --ink: #0f172a;
-        --ink-soft: #334155;
-        --line: rgba(148, 163, 184, 0.26);
-        --surface: rgba(255, 255, 255, 0.74);
-        --surface-strong: #ffffff;
-        --surface-dark: #0f172a;
-        --shadow: 0 20px 60px rgba(15, 23, 42, 0.16);
-        --shadow-strong: 0 28px 80px rgba(59, 130, 246, 0.24);
-        --radius-xl: 30px;
-        --radius-lg: 22px;
+        /* DESIGN.md token bridge */
+        --color-primary: #3b82f6;
+        --color-secondary: #6366f1;
+        --color-tertiary: #8b5cf6;
+        --color-neutral: #f8fafc;
+        --color-neutral-strong: #ffffff;
+        --color-ink: #0f172a;
+        --color-ink-soft: #334155;
+        --color-line: rgba(148, 163, 184, 0.26);
+        --color-surface: rgba(255, 255, 255, 0.74);
+        --color-surface-strong: #ffffff;
+        --color-app-bg-dark: #0d1117;
+        --color-app-surface-dark: #161b27;
+        --font-display:
+          "Space Grotesk",
+          "Segoe UI",
+          sans-serif;
+        --font-body:
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+        --space-lg: 24px;
+        --space-xl: 32px;
         --radius-md: 16px;
-        --radius-sm: 12px;
+        --radius-lg: 22px;
+        --radius-xl: 30px;
+        --radius-full: 999px;
+        --shadow-soft: 0 20px 60px rgba(15, 23, 42, 0.16);
+        --shadow-strong: 0 28px 80px rgba(59, 130, 246, 0.24);
+        --brand-gradient: linear-gradient(
+          135deg,
+          var(--color-primary) 0%,
+          var(--color-tertiary) 100%
+        );
+        --brand-gradient-accent: linear-gradient(
+          135deg,
+          var(--color-primary) 0%,
+          var(--color-tertiary) 55%,
+          var(--color-secondary) 100%
+        );
+        --page-bg-light: linear-gradient(
+          145deg,
+          #f7fbff 0%,
+          #eef3ff 38%,
+          #f3f0ff 68%,
+          #edf4ff 100%
+        );
+        --page-bg-dark: linear-gradient(
+          145deg,
+          #070b14 0%,
+          #0b1020 40%,
+          #10172b 100%
+        );
+        --theme-color-light: var(--color-primary);
+        --theme-color-dark: var(--color-ink);
+
+        /* Legacy aliases kept for the existing landing stylesheet */
+        --brand-1: var(--color-primary);
+        --brand-2: var(--color-tertiary);
+        --brand-3: var(--color-secondary);
+        --ink: var(--color-ink);
+        --ink-soft: var(--color-ink-soft);
+        --line: var(--color-line);
+        --surface: var(--color-surface);
+        --surface-strong: var(--color-surface-strong);
+        --surface-dark: var(--color-app-bg-dark);
+        --shadow: var(--shadow-soft);
       }
 
       html {
@@ -64,11 +118,8 @@
       body {
         min-height: 100vh;
         font-family:
-          "Space Grotesk",
-          -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          sans-serif;
+          var(--font-display),
+          var(--font-body);
         color: var(--ink);
         background:
           radial-gradient(
@@ -86,13 +137,7 @@
             rgba(99, 102, 241, 0.16),
             transparent 34%
           ),
-          linear-gradient(
-            145deg,
-            #f7fbff 0%,
-            #eef3ff 38%,
-            #f3f0ff 68%,
-            #edf4ff 100%
-          );
+          var(--page-bg-light);
         overflow-x: hidden;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
@@ -169,7 +214,7 @@
 
       .btn-brand,
       .btn-brand-outline {
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         font-weight: 700;
         letter-spacing: -0.02em;
         transition:
@@ -181,11 +226,7 @@
       }
 
       .btn-brand {
-        background: linear-gradient(
-          135deg,
-          var(--brand-1) 0%,
-          var(--brand-2) 100%
-        );
+        background: var(--brand-gradient);
         border: 0;
         color: #fff;
         box-shadow: 0 16px 36px rgba(59, 130, 246, 0.26);
@@ -215,7 +256,7 @@
         height: 46px;
         display: inline-grid;
         place-items: center;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         border: 1px solid rgba(148, 163, 184, 0.2);
         background: rgba(255, 255, 255, 0.72);
         color: var(--ink);
@@ -260,7 +301,7 @@
         align-items: center;
         gap: 0.65rem;
         padding: 0.32rem 0.5rem 0.32rem 0.36rem;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         background: rgba(255, 255, 255, 0.72);
         border: 1px solid rgba(148, 163, 184, 0.22);
         box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
@@ -272,7 +313,7 @@
         border-radius: 50%;
         display: grid;
         place-items: center;
-        background: linear-gradient(135deg, var(--brand-1), var(--brand-2));
+        background: var(--brand-gradient);
         color: #fff;
         font-size: 0.78rem;
         font-weight: 800;
@@ -310,13 +351,13 @@
         bottom: 22px;
         z-index: 1200;
         border: 0;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         padding: 9px 14px 9px 9px;
         display: inline-flex;
         align-items: center;
         gap: 10px;
         color: #fff;
-        background: linear-gradient(135deg, var(--brand-1), var(--brand-2));
+        background: var(--brand-gradient);
         box-shadow:
           0 22px 46px rgba(59, 130, 246, 0.28),
           0 12px 26px rgba(15, 23, 42, 0.2);
@@ -460,7 +501,7 @@
         align-items: center;
         gap: 10px;
         padding: 0.7rem 1rem;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         background: rgba(255, 255, 255, 0.68);
         border: 1px solid rgba(148, 163, 184, 0.2);
         box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
@@ -482,12 +523,7 @@
       }
 
       .hero-title .accent {
-        background: linear-gradient(
-          135deg,
-          var(--brand-1) 0%,
-          var(--brand-2) 55%,
-          var(--brand-3) 100%
-        );
+        background: var(--brand-gradient-accent);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
@@ -497,12 +533,7 @@
         display: inline-block;
         position: relative;
         min-width: 8ch;
-        background: linear-gradient(
-          135deg,
-          var(--brand-1) 0%,
-          var(--brand-2) 55%,
-          var(--brand-3) 100%
-        );
+        background: var(--brand-gradient-accent);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
@@ -554,6 +585,14 @@
         flex-wrap: nowrap;
       }
 
+      .hero-form .btn {
+        flex: 0 0 auto;
+        min-width: 7.5rem;
+        padding: 0.95rem 1.35rem;
+        white-space: nowrap;
+        line-height: 1.1;
+      }
+
       .hero-actions {
         display: flex;
         flex-wrap: wrap;
@@ -574,7 +613,7 @@
         align-items: center;
         gap: 0.55rem;
         padding: 0.7rem 0.95rem;
-        border-radius: 999px;
+        border-radius: var(--radius-full);
         background: rgba(255, 255, 255, 0.66);
         border: 1px solid rgba(148, 163, 184, 0.18);
         color: var(--ink-soft);
@@ -2981,7 +3020,7 @@
             rgba(59, 130, 246, 0.12),
             transparent 34%
           ),
-          linear-gradient(145deg, #070b14 0%, #0b1020 40%, #10172b 100%);
+          var(--page-bg-dark);
       }
 
       html[data-theme="dark"] body::before {
@@ -5983,6 +6022,9 @@
         const themeMeta = document.querySelector('meta[name="theme-color"]');
         const themeToggle = document.getElementById("landingThemeToggle");
         const themeIcon = document.getElementById("landingThemeIcon");
+        const rootStyles = () => getComputedStyle(document.documentElement);
+        const themeColor = (name, fallback) =>
+          rootStyles().getPropertyValue(name).trim() || fallback;
 
         const applyTheme = (theme) => {
           const nextTheme = theme === "dark" ? "dark" : "light";
@@ -5993,7 +6035,9 @@
           if (themeMeta) {
             themeMeta.setAttribute(
               "content",
-              nextTheme === "dark" ? "#0f172a" : "#3b82f6",
+              nextTheme === "dark"
+                ? themeColor("--theme-color-dark", "#0f172a")
+                : themeColor("--theme-color-light", "#3b82f6"),
             );
           }
           if (themeIcon) {

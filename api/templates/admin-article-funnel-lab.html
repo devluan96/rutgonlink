@@ -3,17 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Article Funnel Lab</title>
+    <title>Phòng thử phễu bài viết</title>
     <style>
       :root {
         color-scheme: dark;
-        --bg: #0b1220;
-        --panel: #101827;
-        --line: rgba(148, 163, 184, 0.18);
-        --text: #f8fafc;
-        --muted: #95a3ba;
-        --brand: #f97316;
-        --brand-soft: rgba(249, 115, 22, 0.14);
+        --bg: #0d1117;
+        --panel: #161b27;
+        --panel-2: #1e2535;
+        --panel-3: #252d40;
+        --line: #2a3347;
+        --line-soft: rgba(51, 65, 85, 0.8);
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --brand: #3b82f6;
+        --brand-2: #6366f1;
+        --brand-3: #8b5cf6;
+        --brand-soft: rgba(59, 130, 246, 0.16);
+        --panel-glass: rgba(22, 27, 39, 0.86);
+        --panel-glass-2: rgba(30, 37, 53, 0.88);
+        --panel-highlight: rgba(255, 255, 255, 0.04);
+        --paper: #f3efe5;
+        --paper-2: #fbf8f2;
+        --ink-paper: #162132;
+        --ink-paper-soft: #4c5b71;
+        --editorial-serif: "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", serif;
+        --editorial-accent: #d6c4a1;
+        --glow: 0 18px 48px rgba(59, 130, 246, 0.12);
         --shadow: 0 26px 60px rgba(2, 6, 23, 0.4);
         --radius: 22px;
       }
@@ -32,10 +47,121 @@
           BlinkMacSystemFont,
           sans-serif;
         background:
-          radial-gradient(circle at top left, rgba(249, 115, 22, 0.14), transparent 28%),
-          radial-gradient(circle at top right, rgba(37, 99, 235, 0.16), transparent 26%),
-          var(--bg);
+          radial-gradient(circle at 8% 12%, rgba(59, 130, 246, 0.18), transparent 19%),
+          radial-gradient(circle at 82% 10%, rgba(99, 102, 241, 0.14), transparent 24%),
+          radial-gradient(circle at 92% 28%, rgba(139, 92, 246, 0.1), transparent 18%),
+          linear-gradient(180deg, #0b1020 0%, #0c1019 48%, #090d15 100%);
         color: var(--text);
+      }
+
+      body.lab-editor-open {
+        overflow: hidden;
+      }
+
+      .lab-home {
+        min-height: 100vh;
+        padding: 48px 28px;
+      }
+
+      .lab-home-shell {
+        position: relative;
+        overflow: hidden;
+        width: min(1160px, 100%);
+        margin: 0 auto;
+        padding: 40px;
+      }
+
+      .lab-home-shell::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at top right, rgba(214, 196, 161, 0.08), transparent 24%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0));
+        pointer-events: none;
+      }
+
+      .lab-home-header {
+        position: relative;
+        display: grid;
+        gap: 16px;
+        max-width: 760px;
+      }
+
+      .lab-home-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 18px;
+        margin-top: 30px;
+      }
+
+      .lab-home-card {
+        position: relative;
+        border: 1px solid rgba(96, 115, 145, 0.22);
+        border-radius: 24px;
+        background:
+          radial-gradient(circle at top right, rgba(214, 196, 161, 0.08), transparent 28%),
+          linear-gradient(180deg, rgba(26, 34, 48, 0.88), rgba(18, 23, 34, 0.94));
+        padding: 24px;
+        display: grid;
+        gap: 14px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      }
+
+      .lab-home-card::after {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(214, 196, 161, 0.44), transparent);
+        opacity: 0.7;
+      }
+
+      .lab-home-card h3 {
+        margin: 0;
+        font-size: 24px;
+        font-family: "Space Grotesk", "Segoe UI", sans-serif;
+        line-height: 1.02;
+        letter-spacing: -0.04em;
+      }
+
+      .lab-home-meta {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .lab-home-empty {
+        margin-top: 28px;
+        padding: 24px 20px;
+        border: 1px dashed rgba(96, 165, 250, 0.24);
+        border-radius: 22px;
+        background: rgba(10, 15, 26, 0.32);
+        color: var(--muted);
+      }
+
+      .lab-editor-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        padding: 18px;
+        overflow: auto;
+        background: rgba(2, 6, 23, 0.78);
+        backdrop-filter: blur(10px);
+      }
+
+      .lab-editor-dialog {
+        width: min(1540px, 100%);
+        margin: 0 auto;
+      }
+
+      .lab-editor-modal-bar {
+        display: flex;
+        justify-content: flex-end;
+        margin: 0 8px 12px;
+        position: sticky;
+        top: 12px;
+        z-index: 2;
       }
 
       a {
@@ -44,16 +170,19 @@
 
       .shell {
         display: grid;
-        grid-template-columns: minmax(380px, 500px) minmax(0, 1fr);
-        gap: 22px;
-        padding: 24px;
+        grid-template-columns: minmax(490px, 560px) minmax(0, 1fr);
+        gap: 20px;
+        padding: 10px 8px 24px;
       }
 
       .panel {
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        background: linear-gradient(180deg, rgba(16, 24, 39, 0.98), rgba(11, 18, 32, 0.96));
-        box-shadow: var(--shadow);
+        border: 1px solid rgba(96, 115, 145, 0.22);
+        border-radius: 28px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+          linear-gradient(180deg, rgba(22, 27, 39, 0.96), rgba(13, 17, 23, 0.98));
+        box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        backdrop-filter: blur(18px);
       }
 
       .editor {
@@ -61,25 +190,111 @@
         top: 24px;
         height: calc(100vh - 48px);
         overflow: auto;
-        padding: 20px;
+        padding: 24px;
       }
 
       .preview-wrap {
-        padding: 20px;
+        padding: 24px;
       }
 
       .eyebrow {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        padding: 8px 12px;
+        width: fit-content;
+        padding: 8px 14px;
         border-radius: 999px;
-        background: var(--brand-soft);
-        color: #ffd9bf;
-        font-size: 12px;
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(99, 102, 241, 0.14));
+        border: 1px solid rgba(96, 165, 250, 0.15);
+        color: #dbeafe;
+        font-size: 11px;
         font-weight: 800;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .page-header {
+        display: grid;
+        gap: 12px;
+        padding: 18px 18px 18px;
+        border: 1px solid rgba(96, 115, 145, 0.18);
+        border-radius: 24px;
+        background:
+          radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 32%),
+          linear-gradient(180deg, rgba(27, 35, 49, 0.94), rgba(18, 24, 35, 0.98));
+        overflow: hidden;
+        position: relative;
+      }
+
+      .page-header::after {
+        content: "";
+        position: absolute;
+        inset: auto 18px 0 18px;
+        height: 1px;
+        background: linear-gradient(90deg, rgba(214, 196, 161, 0), rgba(214, 196, 161, 0.4), rgba(214, 196, 161, 0));
+      }
+
+      .panel.editor .page-header h1 {
+        margin: 2px 0 0;
+        font-size: clamp(22px, 2vw, 28px);
+        line-height: 0.98;
+        max-width: none;
+        letter-spacing: -0.05em;
+        font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      }
+
+      .panel.editor .page-header .subhead {
+        max-width: 28ch;
+        font-size: 13px;
+        color: #9eb0c8;
+      }
+
+      .lab-home-header h1,
+      h2,
+      .comment-name,
+      .link-preview-title,
+      .article-title,
+      .comment-copy-btn,
+      .btn,
+      .ghost-btn,
+      .block-btn,
+      .feed-btn {
+        font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      }
+
+      .lab-home-header h1 {
+        margin: 2px 0 0;
+        max-width: 12ch;
+        font-size: clamp(36px, 4.8vw, 56px);
+        line-height: 0.96;
+        letter-spacing: -0.05em;
+      }
+
+      .step-grid {
+        display: none;
+      }
+
+      .step-pill {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(37, 45, 64, 0.56);
+        padding: 12px 14px;
+      }
+
+      .step-pill strong {
+        display: block;
+        font-size: 12px;
         letter-spacing: 0.04em;
         text-transform: uppercase;
+        color: #dbeafe;
+      }
+
+      .step-pill span {
+        display: block;
+        margin-top: 6px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--muted);
       }
 
       h1 {
@@ -90,7 +305,8 @@
 
       h2 {
         margin: 0 0 6px;
-        font-size: 16px;
+        font-size: 21px;
+        letter-spacing: -0.03em;
       }
 
       .subhead {
@@ -106,10 +322,89 @@
       }
 
       .section-card {
+        border: 1px solid rgba(96, 115, 145, 0.18);
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgba(27, 35, 49, 0.84), rgba(19, 24, 34, 0.88));
+        padding: 20px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      }
+
+      .section-details {
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .section-details[open] {
+        background: rgba(30, 37, 53, 0.72);
+      }
+
+      .section-summary {
+        list-style: none;
+        cursor: pointer;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 20px 18px;
+      }
+
+      .section-summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .section-summary-copy {
+        display: grid;
+        gap: 4px;
+      }
+
+      .section-kicker {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #8ab8ff;
+      }
+
+      .section-copy {
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+
+      .section-toggle {
+        flex: 0 0 auto;
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
         border: 1px solid var(--line);
-        border-radius: 18px;
-        background: rgba(15, 23, 42, 0.56);
-        padding: 16px;
+        background: rgba(148, 163, 184, 0.08);
+        color: var(--text);
+      }
+
+      .section-details[open] .section-toggle {
+        background: rgba(59, 130, 246, 0.14);
+        border-color: rgba(59, 130, 246, 0.3);
+      }
+
+      .section-toggle::before {
+        content: "+";
+        font-size: 18px;
+        line-height: 1;
+      }
+
+      .section-details[open] .section-toggle::before {
+        content: "−";
+      }
+
+      .section-body {
+        padding: 0 20px 22px;
+        border-top: 1px solid rgba(51, 65, 85, 0.56);
+      }
+
+      .section-body.tight {
+        padding-top: 14px;
       }
 
       .actions,
@@ -127,30 +422,51 @@
 
       .field-grid.two {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
       }
 
       .field {
         display: grid;
         gap: 8px;
+        align-content: start;
       }
 
       label {
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 800;
         color: #d8e2f0;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        line-height: 1.35;
+        text-transform: none;
       }
 
       input,
+      select,
       textarea {
         width: 100%;
         border: 1px solid var(--line);
-        border-radius: 14px;
-        background: rgba(15, 23, 42, 0.72);
+        border-radius: 16px;
+        background: rgba(14, 21, 35, 0.9);
         color: var(--text);
-        padding: 12px 13px;
+        padding: 13px 14px;
         font: inherit;
+        transition:
+          border-color 0.16s ease,
+          box-shadow 0.16s ease,
+          background 0.16s ease;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: rgba(125, 176, 255, 0.8);
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+        background: rgba(15, 23, 42, 0.96);
+      }
+
+      select {
+        appearance: none;
       }
 
       textarea {
@@ -192,10 +508,19 @@
       }
 
       .btn {
-        padding: 11px 14px;
-        background: linear-gradient(135deg, #fb923c, #f97316);
-        color: #fff7ed;
+        padding: 12px 14px;
+        background: linear-gradient(135deg, var(--brand), var(--brand-3));
+        color: #eff6ff;
         font-weight: 800;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.1),
+          0 12px 28px rgba(76, 102, 255, 0.18);
+      }
+
+      .btn.alt {
+        background: linear-gradient(180deg, rgba(44, 58, 82, 0.96), rgba(30, 41, 59, 0.96));
+        border-color: rgba(96, 165, 250, 0.24);
+        color: #dbeafe;
       }
 
       .ghost-btn,
@@ -207,9 +532,128 @@
         color: var(--text);
       }
 
+      #createDbLabBtn {
+        background: linear-gradient(180deg, rgba(30, 43, 67, 0.92), rgba(25, 34, 50, 0.92));
+        border-color: rgba(96, 165, 250, 0.22);
+      }
+
+      #saveDbLabBtn {
+        background: linear-gradient(135deg, #4378f1, #6d63f2);
+      }
+
+      #generatePreviewLinkBtn {
+        background: linear-gradient(135deg, #4a76e8, #5f9bff);
+      }
+
+      #publishShortLinkBtn {
+        background: linear-gradient(135deg, #5f6df3, #8b5cf6);
+      }
+
+      .danger-btn {
+        border-color: rgba(239, 68, 68, 0.28);
+        background: rgba(239, 68, 68, 0.12);
+        color: #fecaca;
+      }
+
+      .action-bar {
+        display: grid;
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .action-bar.compact {
+        gap: 10px;
+      }
+
+      .action-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .action-row.primary-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+        gap: 12px;
+      }
+
+      .action-row.primary-actions .btn,
+      .action-row.primary-actions .btn.alt,
+      .action-row.primary-actions .ghost-btn {
+        width: 100%;
+      }
+
+      .workspace-helper {
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--muted);
+        padding: 4px 4px 0;
+      }
+
+      .workspace-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      .workspace-grid .hint {
+        max-width: 42ch;
+      }
+
+      .mini-status {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .mini-status[hidden] {
+        display: none;
+      }
+
+      .status-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(12, 19, 32, 0.84);
+        padding: 12px 14px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .status-card.is-empty {
+        display: none;
+      }
+
+      .status-label {
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #93c5fd;
+      }
+
+      .status-copy {
+        margin-top: 0;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .advanced-stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .status-card input {
+        padding: 10px 12px;
+        border-radius: 14px;
+        font-size: 14px;
+        background: rgba(16, 24, 37, 0.94);
+      }
+
       .block-btn {
         padding: 10px 12px;
-        background: rgba(37, 99, 235, 0.12);
+        background: rgba(37, 99, 235, 0.14);
         border-color: rgba(37, 99, 235, 0.22);
         color: #dbeafe;
       }
@@ -222,8 +666,8 @@
 
       .block-item {
         border: 1px solid var(--line);
-        border-radius: 18px;
-        background: rgba(11, 18, 32, 0.85);
+        border-radius: 20px;
+        background: rgba(12, 18, 31, 0.9);
         padding: 14px;
       }
 
@@ -320,28 +764,114 @@
       }
 
       .preview-frame {
-        width: min(100%, 960px);
+        width: min(100%, 980px);
         margin: 0 auto;
       }
 
       .preview-topbar {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 250px;
+        align-items: start;
         gap: 14px;
-        margin-bottom: 18px;
+        margin-bottom: 14px;
+      }
+
+      .preview-topbar-main {
+        display: grid;
+        gap: 8px;
+        padding: 14px 16px 16px;
+        border-radius: 24px;
+        border: 1px solid rgba(96, 115, 145, 0.18);
+        background:
+          radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 34%),
+          linear-gradient(180deg, rgba(26, 34, 49, 0.96), rgba(18, 24, 35, 0.98));
+        position: relative;
+        overflow: hidden;
+      }
+
+      .preview-topbar-main::after {
+        content: "";
+        position: absolute;
+        inset: auto 16px 0 16px;
+        height: 1px;
+        background: linear-gradient(90deg, rgba(214, 196, 161, 0), rgba(214, 196, 161, 0.34), rgba(214, 196, 161, 0));
+      }
+
+      .preview-topbar-main .subhead {
+        max-width: 38ch;
+        font-size: 14px;
+      }
+
+      .preview-toolbar {
+        display: grid;
+        gap: 8px;
+        align-content: start;
+        padding: 14px;
+        border-radius: 24px;
+        border: 1px solid rgba(96, 115, 145, 0.18);
+        background:
+          radial-gradient(circle at top right, rgba(214, 196, 161, 0.08), transparent 28%),
+          linear-gradient(180deg, rgba(24, 32, 45, 0.96), rgba(18, 24, 35, 0.98));
+      }
+
+      .preview-toolbar::before {
+        content: "Điều khiển popup";
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #8ab8ff;
+      }
+
+      .stage-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .preview-debug {
+        width: min(100%, 320px);
+      }
+
+      .preview-toolbar .action-row {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+      .preview-toolbar .ghost-btn,
+      .preview-toolbar .btn {
+        width: 100%;
+        min-height: 48px;
+      }
+
+      #show300sBtn {
+        grid-column: 1 / -1;
       }
 
       .preview-stack {
         display: grid;
-        gap: 16px;
+        gap: 14px;
+      }
+
+      .preview-stack > .actions {
+        align-items: center;
+        gap: 10px;
+        padding: 0 2px;
+      }
+
+      .preview-stack > .actions .muted-line {
+        margin-left: auto;
+        white-space: nowrap;
       }
 
       .comment-card {
         border: 1px solid rgba(148, 163, 184, 0.18);
         border-radius: 22px;
-        background: #1d232f;
-        padding: 18px;
+        background:
+          radial-gradient(circle at top right, rgba(214, 196, 161, 0.08), transparent 28%),
+          linear-gradient(180deg, rgba(32, 40, 55, 0.96), rgba(23, 31, 43, 0.98));
+        overflow: hidden;
       }
 
       .comment-head {
@@ -349,6 +879,8 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid rgba(96, 115, 145, 0.16);
       }
 
       .comment-author {
@@ -369,6 +901,7 @@
 
       .comment-name {
         font-weight: 800;
+        letter-spacing: -0.02em;
       }
 
       .comment-meta {
@@ -378,10 +911,8 @@
       }
 
       .comment-bubble {
-        margin-top: 14px;
-        border-radius: 18px;
-        background: #242d3c;
-        padding: 14px;
+        background: linear-gradient(180deg, rgba(39, 49, 67, 0.92), rgba(30, 38, 52, 0.96));
+        padding: 14px 16px 16px;
       }
 
       .comment-link {
@@ -390,14 +921,24 @@
         font-weight: 700;
         text-decoration: none;
         word-break: break-word;
+        font-size: 14px;
+        line-height: 1.45;
       }
 
       .link-preview {
         margin-top: 12px;
         border: 1px solid rgba(148, 163, 184, 0.18);
-        border-radius: 18px;
+        border-radius: 20px;
         overflow: hidden;
-        background: #111827;
+        background: linear-gradient(180deg, #151c29, #101723);
+      }
+
+      .link-preview.compact {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 16px;
       }
 
       .link-preview-image {
@@ -405,8 +946,16 @@
         background: #0f172a center/cover no-repeat;
       }
 
+      .link-preview.compact .link-preview-image {
+        display: none;
+      }
+
       .link-preview-copy {
         padding: 12px 14px;
+      }
+
+      .link-preview.compact .link-preview-copy {
+        padding: 0;
       }
 
       .link-preview-domain {
@@ -418,53 +967,64 @@
 
       .link-preview-title {
         margin-top: 6px;
-        font-size: 26px;
-        line-height: 1.2;
+        font-size: 18px;
+        line-height: 1.14;
+        letter-spacing: -0.03em;
       }
 
       .phone {
-        background: #05070c;
+        background:
+          radial-gradient(circle at top, rgba(80, 120, 255, 0.14), transparent 24%),
+          linear-gradient(180deg, #09101a, #0b1018 58%, #070b11 100%);
         border: 1px solid rgba(148, 163, 184, 0.16);
-        border-radius: 32px;
+        border-radius: 36px;
         padding: 14px;
-        box-shadow: 0 32px 70px rgba(2, 6, 23, 0.48);
+        box-shadow: 0 40px 84px rgba(2, 6, 23, 0.52);
       }
 
       .phone-screen {
         position: relative;
         overflow: hidden;
-        border-radius: 24px;
+        border-radius: 28px;
         min-height: 760px;
-        background: #0f1115;
+        background: var(--paper-2);
       }
 
       .article {
         min-height: 760px;
-        padding: 28px 0 60px;
-        background: #181a1d;
-        color: #f8fafc;
+        padding: 36px 0 64px;
+        background:
+          radial-gradient(circle at top, rgba(255, 255, 255, 0.75), transparent 18%),
+          linear-gradient(180deg, var(--paper-2) 0%, var(--paper) 100%);
+        color: var(--ink-paper);
       }
 
       .article-inner {
         width: min(100%, 652px);
         margin: 0 auto;
-        padding: 0 18px;
+        padding: 0 30px;
       }
 
       .article-title {
         margin: 0;
-        font-size: clamp(38px, 4vw, 62px);
-        line-height: 1.08;
+        font-size: clamp(30px, 3.4vw, 48px);
+        line-height: 1;
         letter-spacing: -0.04em;
-        font-weight: 400;
+        font-weight: 700;
+        color: var(--ink-paper);
+        font-family: var(--editorial-serif);
+        max-width: 15ch;
+        text-wrap: balance;
       }
 
       .article-description {
         margin: 14px 0 0;
-        color: #cbd5e1;
-        font-size: 18px;
-        line-height: 1.7;
+        color: var(--ink-paper-soft);
+        font-size: 16px;
+        line-height: 1.68;
         white-space: pre-wrap;
+        max-width: 42ch;
+        font-family: var(--editorial-serif);
       }
 
       .article-blocks {
@@ -476,14 +1036,17 @@
       .article-paragraph {
         margin: 0;
         font-size: 18px;
-        line-height: 1.8;
-        color: #f8fafc;
+        line-height: 1.84;
+        color: #223047;
         white-space: pre-wrap;
+        font-family: var(--editorial-serif);
       }
 
       .article-media {
         overflow: hidden;
-        background: #050505;
+        background: #d9dde5;
+        border-radius: 24px;
+        border: 1px solid rgba(22, 33, 50, 0.1);
       }
 
       .article-media img,
@@ -495,26 +1058,94 @@
 
       .article-caption {
         padding: 10px 12px 0;
-        color: #8ea0bc;
+        color: #6b7890;
         font-size: 13px;
+        font-family: "Space Grotesk", "Segoe UI", sans-serif;
       }
 
       .sensitive-wrap {
         position: relative;
         overflow: hidden;
+        background: #0b1220;
       }
 
       .sensitive-wrap img {
-        filter: blur(22px);
-        transform: scale(1.08);
+        filter: blur(72px) brightness(0.12) saturate(0.24);
+        opacity: 0.18;
+        transform: scale(1.38);
         transition:
-          filter 0.2s ease,
-          transform 0.2s ease;
+          filter 0.26s ease,
+          transform 0.26s ease,
+          opacity 0.26s ease;
+      }
+
+      .sensitive-wrap::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(180deg, rgba(3, 6, 12, 0.52), rgba(3, 6, 12, 0.84)),
+          repeating-linear-gradient(
+            -45deg,
+            rgba(255, 255, 255, 0.04) 0,
+            rgba(255, 255, 255, 0.04) 10px,
+            rgba(3, 6, 12, 0.08) 10px,
+            rgba(3, 6, 12, 0.08) 20px
+          );
+        pointer-events: none;
+        z-index: 1;
+        transition: opacity 0.26s ease;
+      }
+
+      .sensitive-wrap::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(180deg, rgba(7, 11, 20, 0.48), rgba(7, 11, 20, 0.88)),
+          radial-gradient(circle at center, rgba(255, 255, 255, 0.06), rgba(7, 11, 20, 0.38) 42%, rgba(7, 11, 20, 0.52));
+        backdrop-filter: blur(26px) saturate(0.42);
+        -webkit-backdrop-filter: blur(26px) saturate(0.42);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+          inset 0 -120px 140px rgba(4, 8, 15, 0.62);
+        pointer-events: none;
+        z-index: 2;
+        transition: opacity 0.26s ease;
+      }
+
+      .sensitive-screen {
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(180deg, rgba(7, 11, 20, 0.42), rgba(7, 11, 20, 0.82)),
+          radial-gradient(circle at center, rgba(255, 255, 255, 0.04), rgba(7, 11, 20, 0.36) 38%, rgba(7, 11, 20, 0.58));
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+          inset 0 -120px 140px rgba(4, 8, 15, 0.62);
+        backdrop-filter: blur(18px) saturate(0.5);
+        -webkit-backdrop-filter: blur(18px) saturate(0.5);
+        pointer-events: none;
+        z-index: 2;
+        transition: opacity 0.26s ease;
       }
 
       .sensitive-wrap.revealed img {
         filter: none;
+        opacity: 1;
         transform: scale(1);
+      }
+
+      .sensitive-wrap.revealed::before {
+        opacity: 0;
+      }
+
+      .sensitive-wrap.revealed::after {
+        opacity: 0;
+      }
+
+      .sensitive-wrap.revealed .sensitive-screen {
+        opacity: 0;
       }
 
       .reveal-btn {
@@ -523,25 +1154,30 @@
         padding: 12px 14px;
         border: 0;
         border-radius: 14px;
-        background: rgba(15, 23, 42, 0.9);
+        background: rgba(13, 19, 32, 0.9);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 12px 30px rgba(5, 8, 16, 0.32);
         color: #fff;
         font: inherit;
         font-weight: 800;
         cursor: pointer;
+        z-index: 3;
       }
 
       .follow-box {
         margin-top: 28px;
         padding-top: 20px;
-        border-top: 1px solid rgba(148, 163, 184, 0.18);
+        border-top: 1px solid rgba(22, 33, 50, 0.12);
         display: grid;
         gap: 16px;
       }
 
       .follow-row {
-        color: #f8fafc;
+        color: #223047;
         font-size: 18px;
         line-height: 1.7;
+        font-family: var(--editorial-serif);
       }
 
       .follow-row strong {
@@ -549,7 +1185,7 @@
       }
 
       .follow-row a {
-        color: #ffffff;
+        color: #2038a3;
         text-decoration: underline;
         text-underline-offset: 3px;
       }
@@ -650,53 +1286,163 @@
         }
 
         .preview-topbar {
-          flex-direction: column;
+          grid-template-columns: 1fr;
+        }
+
+        .preview-toolbar,
+        .stage-row {
+          width: 100%;
+          justify-items: stretch;
+          justify-content: flex-start;
+        }
+
+        .mini-status {
+          grid-template-columns: 1fr;
+        }
+
+      }
+
+      @media (max-width: 760px) {
+        .lab-editor-modal {
+          padding: 12px;
+        }
+
+        .lab-home {
+          padding: 20px 14px;
+        }
+
+        .lab-home-shell,
+        .editor,
+        .preview-wrap {
+          padding: 20px;
+        }
+
+        .action-row.primary-actions,
+        .step-grid,
+        .field-grid.two {
+          grid-template-columns: 1fr;
         }
       }
     </style>
   </head>
   <body>
-    <div class="shell">
+    <section class="lab-home" id="labHomeView">
+      <div class="panel lab-home-shell">
+        <div class="lab-home-header">
+          <span class="eyebrow">Chỉ dành cho admin • Bản thử nghiệm</span>
+          <h1>Phòng thử phễu bài viết</h1>
+          <p class="subhead">
+            Trang này chỉ hiển thị danh sách lab. Bấm tạo mới hoặc sửa lab để mở trình biên tập
+            dưới dạng hộp thoại ngay trên màn hình này.
+          </p>
+          <div class="action-row">
+            <button class="btn" type="button" id="openCreateLabBtn">Tạo lab mới</button>
+            <a class="ghost-btn" href="/admin">Về admin</a>
+          </div>
+        </div>
+        <div class="lab-home-list" id="labHomeList"></div>
+        <div class="lab-home-empty" id="labHomeEmpty">
+          Chưa có lab nào. Bấm <strong>Tạo lab mới</strong> để bắt đầu.
+        </div>
+      </div>
+    </section>
+
+    <div class="lab-editor-modal" id="labEditorView" hidden>
+      <div class="lab-editor-dialog">
+        <div class="lab-editor-modal-bar">
+          <button class="ghost-btn" type="button" id="closeLabEditorBtn" aria-label="Đóng trình biên tập lab">
+            Đóng
+          </button>
+        </div>
+        <div class="shell">
       <section class="panel editor">
-        <span class="eyebrow">Admin only • Sandbox</span>
-        <h1>Article Funnel Lab</h1>
-        <p class="subhead">
-          Khu dung thu rieng cho kieu comment Facebook -> vao bai viet -> popup 3s / 5s / 300s
-          -> nhay app. Trang nay chi danh cho admin va khong cham vao luong rut gon hien tai.
-        </p>
+        <span class="eyebrow">Chỉ dành cho admin • Bản thử nghiệm</span>
+        <div class="page-header">
+          <div>
+            <h1>Phòng thử phễu bài viết</h1>
+            <p class="subhead">
+              Khối đầu này chỉ giữ các thao tác chính: chọn lab, lưu, tạo link xem trước và xuất bản.
+            </p>
+          </div>
+          <div class="step-grid">
+            <div class="step-pill">
+              <strong>Bước 1</strong>
+              <span>Chọn hoặc tạo một lab riêng cho bài đang làm.</span>
+            </div>
+            <div class="step-pill">
+              <strong>Bước 2</strong>
+              <span>Nhập thông tin bài, link funnel và các khối media.</span>
+            </div>
+            <div class="step-pill">
+              <strong>Bước 3</strong>
+              <span>Tạo link xem trước để kiểm tra, rồi xuất bản link ngắn để đem đi comment.</span>
+            </div>
+          </div>
+        </div>
 
         <div class="grid">
           <div class="section-card">
-            <h2>Workspace</h2>
-            <div class="actions" style="margin-top: 12px">
-              <button class="btn" type="button" id="saveDraftBtn">Luu draft local</button>
-              <button class="ghost-btn" type="button" id="loadPresetBtn">Nap preset</button>
-              <button class="ghost-btn" type="button" id="resetDraftBtn">Xoa draft</button>
-              <button class="ghost-btn" type="button" id="copyJsonBtn">Copy JSON</button>
-              <button class="ghost-btn" type="button" id="generatePreviewLinkBtn">Tao public preview link</button>
-              <button class="ghost-btn" type="button" id="publishShortLinkBtn">Publish link ngan</button>
-              <a class="ghost-btn" href="/admin">Ve admin</a>
+            <div class="section-summary-copy">
+              <div class="section-kicker">Không gian làm việc</div>
+              <h2>Quản lý lab hiện tại</h2>
+              <div class="section-copy">
+                Chọn lab đang làm và xử lý 4 thao tác chính ngay tại đây.
+              </div>
             </div>
-            <div class="muted-line" style="margin-top: 12px">
-              Goi y workflow: dung bai trong lab, copy JSON config, chot cau truc xong roi moi
-              noi tiep sang DB hoac link type rieng.
-            </div>
-            <div class="field-grid" style="margin-top: 14px">
+            <div class="field-grid workspace-grid" style="margin-top: 12px">
               <div class="field">
-                <label for="publicPreviewUrlOutput">Public preview route de dat vao comment</label>
-                <input id="publicPreviewUrlOutput" type="text" readonly />
-                <div class="hint" id="publicPreviewMeta">Phai tao link public nay roi moi test dung OG va overlay trong comment Facebook.</div>
+                <label for="labSelect">Lab nháp trong cơ sở dữ liệu</label>
+                <select id="labSelect">
+                  <option value="">Chưa chọn lab</option>
+                </select>
+                <div class="hint" id="labMeta">Tạo nhiều lab riêng để quản lý bài A, bài B, bài C.</div>
               </div>
               <div class="field">
-                <label for="publishedUrlOutput">Published link ngan de dat comment</label>
-                <input id="publishedUrlOutput" type="text" readonly />
-                <div class="hint" id="publishedUrlMeta">Bam Publish link ngan de tao URL gon hon, dung cho comment Facebook that.</div>
+                <label for="labNameInput">Tên lab hiện tại</label>
+                <input id="labNameInput" type="text" />
+              </div>
+            </div>
+            <div class="action-bar compact">
+              <div class="action-row primary-actions">
+                <button class="btn alt" type="button" id="createDbLabBtn">Tạo lab mới</button>
+                <button class="btn" type="button" id="saveDbLabBtn">Lưu lab</button>
+                <button class="btn" type="button" id="generatePreviewLinkBtn">Tạo link xem trước</button>
+                <button class="btn" type="button" id="publishShortLinkBtn">Xuất bản link ngắn</button>
+              </div>
+              <div class="workspace-helper">
+                Nút phụ như preset, nháp local và import/export nằm ở mục <strong>Công cụ nâng cao</strong>.
+              </div>
+            </div>
+            <div class="mini-status" id="workspaceStatusStrip" hidden>
+              <div class="status-card is-empty" id="previewStatusCard">
+                <div class="status-label">Đường dẫn xem trước</div>
+                <input id="publicPreviewUrlOutput" type="text" readonly style="margin-top: 10px" />
+                <div class="status-copy" id="publicPreviewMeta">
+                  Tạo link này trước khi kiểm tra OG và popup trong comment Facebook.
+                </div>
+              </div>
+              <div class="status-card is-empty" id="publishedStatusCard">
+                <div class="status-label">Link ngắn đã xuất bản</div>
+                <input id="publishedUrlOutput" type="text" readonly style="margin-top: 10px" />
+                <div class="status-copy" id="publishedUrlMeta">
+                  Khi mọi thứ ổn rồi, dùng link này để mang đi comment thật.
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="section-card">
-            <h2>Thong tin bai viet</h2>
+          <details class="section-card section-details" open>
+            <summary class="section-summary">
+              <div class="section-summary-copy">
+                <div class="section-kicker">Noi dung chinh</div>
+                <h2>Thong tin bai viet</h2>
+                <div class="section-copy">
+                  Tieu de, mo ta, slug va domain hien thi cua bai article funnel.
+                </div>
+              </div>
+              <div class="section-toggle" aria-hidden="true"></div>
+            </summary>
+            <div class="section-body tight">
             <div class="field-grid two" style="margin-top: 12px">
               <div class="field">
                 <label for="sourceDomainInput">Domain hien thi</label>
@@ -723,23 +1469,34 @@
                 <div class="hint">URL nay chi de doi chieu noi dung bai. Khi test comment Facebook, hay dung public preview route o tren.</div>
               </div>
             </div>
-          </div>
+            </div>
+          </details>
 
-          <div class="section-card">
-            <h2>Link funnel</h2>
+          <details class="section-card section-details" open>
+            <summary class="section-summary">
+              <div class="section-summary-copy">
+                <div class="section-kicker">Link dich</div>
+                <h2>Link funnel va hinh popup</h2>
+                <div class="section-copy">
+                  Dat link 3s mac dinh, tuy chon 20s va 300s neu muon tach luong.
+                </div>
+              </div>
+              <div class="section-toggle" aria-hidden="true"></div>
+            </summary>
+            <div class="section-body tight">
             <div class="field-grid" style="margin-top: 12px">
               <div class="field">
                 <label for="baseUrlInput">Link goc / popup 3s mac dinh</label>
                 <input id="baseUrlInput" type="url" />
                 <div class="hint">
-                  Day la link dich mac dinh cua popup 3s. Neu popup 5s va 300s de trong, chung
+                  Day la link dich mac dinh cua popup 3s. Neu popup 20s va 300s de trong, chung
                   cung se dung link nay.
                 </div>
               </div>
               <div class="field-grid two">
                 <div class="field">
-                  <label for="popup5sInput">Popup 5s override</label>
-                  <input id="popup5sInput" type="url" />
+                  <label for="popup20sInput">Popup 20s override</label>
+                  <input id="popup20sInput" type="url" />
                 </div>
                 <div class="field">
                   <label for="popup300sInput">Popup 300s override</label>
@@ -748,19 +1505,61 @@
               </div>
               <div class="field-grid two">
                 <div class="field">
-                  <label for="overlayImageInput">Anh popup</label>
+                  <label for="overlayImageInput">Anh popup 3s</label>
                   <input id="overlayImageInput" type="url" />
+                  <div class="upload-row">
+                    <button class="upload-btn" type="button" data-asset-upload-trigger="overlayImage">Chon anh tu may</button>
+                    <input class="sr-only-input" type="file" accept="image/*" data-asset-upload-input="overlayImage" />
+                    <span class="upload-status" data-asset-upload-status="overlayImage">Co the dan URL hoac chon anh tu may.</span>
+                  </div>
                 </div>
                 <div class="field">
-                  <label for="shareImageInput">Anh share / hero dau bai</label>
-                  <input id="shareImageInput" type="url" />
+                  <label for="overlay20sImageInput">Anh popup 20s</label>
+                  <input id="overlay20sImageInput" type="url" />
+                  <div class="upload-row">
+                    <button class="upload-btn" type="button" data-asset-upload-trigger="overlay20sImage">Chon anh tu may</button>
+                    <input class="sr-only-input" type="file" accept="image/*" data-asset-upload-input="overlay20sImage" />
+                    <span class="upload-status" data-asset-upload-status="overlay20sImage">De trong neu muon dung lai anh popup 3s.</span>
+                  </div>
                 </div>
               </div>
+              <div class="field">
+                <label for="shareImageInput">Anh share / hero dau bai</label>
+                <input id="shareImageInput" type="url" />
+                <div class="hint">Co the de trong neu ban muon card comment gon, khong co anh lon.</div>
+              </div>
             </div>
-          </div>
+            </div>
+          </details>
 
-          <div class="section-card">
-            <h2>Thong tin follow cuoi trang</h2>
+          <details class="section-card section-details">
+            <summary class="section-summary">
+              <div class="section-summary-copy">
+                <div class="section-kicker">Tuy chinh hien thi</div>
+                <h2>Anh popup, mo ta va link 300s</h2>
+                <div class="section-copy">
+                  Nhom nay gom cac truong it dung hon. Editor chinh se gon hon, nhung ban van co day du tuy chinh khi can.
+                </div>
+              </div>
+              <div class="section-toggle" aria-hidden="true"></div>
+            </summary>
+            <div class="section-body tight">
+              <div class="advanced-stack" id="advancedDisplayStack"></div>
+            </div>
+          </details>
+
+          <details class="section-card section-details">
+            <summary class="section-summary">
+              <div class="section-summary-copy">
+                <div class="section-kicker">Thong tin phu</div>
+                <h2>Follow cuoi trang</h2>
+                <div class="section-copy">
+                  It khi doi, nen duoc tach rieng de man hinh chinh gon hon.
+                </div>
+              </div>
+              <div class="section-toggle" aria-hidden="true"></div>
+            </summary>
+            <div class="section-body tight">
             <div class="field-grid two" style="margin-top: 12px">
               <div class="field">
                 <label for="groupLabelInput">Nhan dong 1</label>
@@ -781,61 +1580,94 @@
                 <input id="backupUrlInput" type="url" />
               </div>
             </div>
-          </div>
-
-          <div class="section-card">
-            <h2>Khoi noi dung</h2>
-            <p class="subhead">
-              Bai viet kieu nay chu yeu la anh va video xep tu tren xuong. Phan preview ben phai
-              con co mo phong "hien dan" tung block.
-            </p>
-            <div class="block-toolbar" style="margin-top: 12px">
-              <button class="block-btn" type="button" data-add-block="image">
-                + Anh thuong
-              </button>
-              <button class="block-btn" type="button" data-add-block="sensitive-image">
-                + Anh mo
-              </button>
-              <button class="block-btn" type="button" data-add-block="video">
-                + Video
-              </button>
             </div>
-            <div class="block-list" id="blockList"></div>
-          </div>
+          </details>
 
-          <div class="section-card">
-            <h2>Import / Export config</h2>
-            <div class="field-grid" style="margin-top: 12px">
-              <div class="field">
-                <label for="importInput">Dan JSON config de nap lai</label>
-                <textarea id="importInput" placeholder='{"type":"article_funnel_lab", ...}'></textarea>
+          <details class="section-card section-details" open>
+            <summary class="section-summary">
+              <div class="section-summary-copy">
+                <div class="section-kicker">Block bai viet</div>
+                <h2>Khoi noi dung</h2>
+                <div class="section-copy">
+                  Day la khu sua chinh nhat. Them anh, anh mo va video roi xem preview ben phai.
+                </div>
               </div>
+              <div class="section-toggle" aria-hidden="true"></div>
+            </summary>
+            <div class="section-body tight">
+              <div class="block-toolbar" style="margin-top: 12px">
+                <button class="block-btn" type="button" data-add-block="image">
+                  + Anh thuong
+                </button>
+                <button class="block-btn" type="button" data-add-block="sensitive-image">
+                  + Anh mo
+                </button>
+                <button class="block-btn" type="button" data-add-block="video">
+                  + Video
+                </button>
+              </div>
+              <div class="block-list" id="blockList"></div>
             </div>
-            <div class="actions" style="margin-top: 12px">
-              <button class="ghost-btn" type="button" id="applyImportBtn">Ap JSON vao lab</button>
-              <button class="ghost-btn" type="button" id="fillImportBtn">Do JSON hien tai</button>
+          </details>
+
+          <details class="section-card section-details">
+            <summary class="section-summary">
+              <div class="section-summary-copy">
+                <div class="section-kicker">Cong cu nang cao</div>
+                <h2>Import, export va thao tac phu</h2>
+                <div class="section-copy">
+                  Cac thao tac it dung hon duoc day xuong day de khong gay roi tren man hinh chinh.
+                </div>
+              </div>
+              <div class="section-toggle" aria-hidden="true"></div>
+            </summary>
+            <div class="section-body tight">
+              <div class="action-row" style="margin-top: 12px">
+                <button class="ghost-btn" type="button" id="loadPresetBtn">Nap preset</button>
+                <button class="ghost-btn danger-btn" type="button" id="resetDraftBtn">Xoa draft local</button>
+                <button class="ghost-btn danger-btn" type="button" id="deleteDbLabBtn">Xoa lab hien tai</button>
+                <button class="ghost-btn" type="button" id="copyJsonBtn">Copy JSON</button>
+              </div>
+              <div class="action-row" style="margin-top: 10px">
+                <button class="ghost-btn" type="button" id="refreshLabsBtn">Tai lai danh sach</button>
+                <button class="ghost-btn" type="button" id="saveDraftBtn">Luu draft local</button>
+                <a class="ghost-btn" href="/admin">Ve admin</a>
+              </div>
+              <div class="field-grid" style="margin-top: 16px">
+                <div class="field">
+                  <label for="importInput">Dan JSON config de nap lai</label>
+                  <textarea id="importInput" placeholder='{"type":"article_funnel_lab", ...}'></textarea>
+                </div>
+              </div>
+              <div class="actions" style="margin-top: 12px">
+                <button class="ghost-btn" type="button" id="applyImportBtn">Ap JSON vao lab</button>
+                <button class="ghost-btn" type="button" id="fillImportBtn">Do JSON hien tai</button>
+              </div>
+              <div class="json-box" id="jsonOutput"></div>
             </div>
-            <div class="json-box" id="jsonOutput"></div>
-          </div>
+          </details>
         </div>
       </section>
 
       <section class="panel preview-wrap">
         <div class="preview-frame">
           <div class="preview-topbar">
-            <div>
-              <span class="eyebrow">Preview</span>
+            <div class="preview-topbar-main">
+              <span class="eyebrow">Xem trước</span>
               <p class="subhead" style="margin-top: 10px">
-                Mo phong 2 lop: comment Facebook dan vao bai viet, roi trong bai moi bat popup
-                deeplink theo moc thoi gian.
+                Bên phải là khu kiểm tra. Bạn thường chỉ cần sao chép link comment, xem bài và kiểm tra popup.
               </p>
             </div>
-            <div class="preview-controls">
-              <button class="ghost-btn" type="button" id="startTimersBtn">Start timers</button>
-              <button class="ghost-btn" type="button" id="show3sBtn">Show 3s</button>
-              <button class="ghost-btn" type="button" id="show5sBtn">Show 5s</button>
-              <button class="ghost-btn" type="button" id="show300sBtn">Show 300s</button>
-              <button class="ghost-btn" type="button" id="closeOverlayBtn">An popup</button>
+            <div class="preview-toolbar">
+              <div class="action-row">
+                <button class="btn alt" type="button" id="startTimersBtn">Chạy hẹn giờ</button>
+                <button class="ghost-btn" type="button" id="closeOverlayBtn">Ẩn popup</button>
+              </div>
+              <div class="stage-row">
+                <button class="ghost-btn" type="button" id="show3sBtn">Hiện 3 giây</button>
+                <button class="ghost-btn" type="button" id="show20sBtn">Hiện 20 giây</button>
+                <button class="ghost-btn" type="button" id="show300sBtn">Hiện 300 giây</button>
+              </div>
             </div>
           </div>
 
@@ -845,18 +1677,18 @@
                 <div class="comment-author">
                   <div class="comment-avatar">H</div>
                   <div>
-                    <div class="comment-name">Hong Hot Duong Pho</div>
-                    <div class="comment-meta">Binh luan mau de dat link bai viet</div>
+                    <div class="comment-name">Hóng Hót Đường Phố</div>
+                    <div class="comment-meta">Bình luận mẫu để đặt link bài viết</div>
                   </div>
                 </div>
                 <button class="comment-copy-btn" type="button" id="copyArticleUrlBtn">
-                  Copy link comment
+                  Sao chép link comment
                 </button>
               </div>
 
               <div class="comment-bubble">
                 <a class="comment-link" id="commentUrlPreview" href="#" target="_blank" rel="noopener"></a>
-                <div class="link-preview">
+                <div class="link-preview" id="commentLinkPreview">
                   <div class="link-preview-image" id="commentShareImage"></div>
                   <div class="link-preview-copy">
                     <div class="link-preview-domain" id="commentDomainPreview"></div>
@@ -867,9 +1699,9 @@
             </section>
 
             <div class="actions">
-              <button class="feed-btn" type="button" id="resetFeedBtn">Reset feed</button>
-              <button class="feed-btn" type="button" id="showNextBlockBtn">Hien them 1 block</button>
-              <button class="feed-btn" type="button" id="showAllBlocksBtn">Hien tat ca</button>
+              <button class="feed-btn" type="button" id="resetFeedBtn">Đặt lại feed</button>
+              <button class="feed-btn" type="button" id="showNextBlockBtn">Hiện thêm 1 khối</button>
+              <button class="feed-btn" type="button" id="showAllBlocksBtn">Hiện tất cả</button>
               <div class="muted-line" id="feedStateLabel"></div>
             </div>
 
@@ -901,6 +1733,8 @@
           </div>
         </div>
       </section>
+        </div>
+      </div>
     </div>
 
     <div class="toast" id="toast"></div>
@@ -922,12 +1756,12 @@
             "Mô tả ngắn của bài viết sẽ hiện ngay dưới tiêu đề khi bạn cần thêm ngữ cảnh.",
           baseUrl:
             "https://shopee.vn/product/37251933/591989399?utm_source=admin-lab",
-          popup5sUrl: "",
+          popup20sUrl: "",
           popup300sUrl: "",
           overlayImage:
             "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80",
-          shareImage:
-            "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=1200&q=80",
+          overlay20sImage: "",
+          shareImage: "",
           groupLabel: "Group facebook",
           groupUrl: "https://www.facebook.com/groups/example-group",
           backupLabel: "Page phụ",
@@ -960,7 +1794,7 @@
         const state = loadState();
         let activeStage = "";
         let timer3s = null;
-        let timer5s = null;
+        let timer20s = null;
         let timer300s = null;
         let visibleBlockCount = Math.min(state.blocks.length, 2);
         let pendingStages = [];
@@ -969,11 +1803,27 @@
         let generatedPublishedUrl = "";
         let generatedPublishedUpdatedAt = "";
         let generatedPublishedDomainNote = "";
+        let selectedLabId = 0;
+        let labItems = [];
         const resolvedLaunchCache = new Map();
         const resolvingLaunchCache = new Map();
 
         const els = {
+          labHomeView: document.getElementById("labHomeView"),
+          labEditorView: document.getElementById("labEditorView"),
+          closeLabEditorBtn: document.getElementById("closeLabEditorBtn"),
+          labHomeList: document.getElementById("labHomeList"),
+          labHomeEmpty: document.getElementById("labHomeEmpty"),
+          openCreateLabBtn: document.getElementById("openCreateLabBtn"),
+          backToLabListBtn: document.getElementById("backToLabListBtn"),
+          advancedDisplayStack: document.getElementById("advancedDisplayStack"),
           sourceDomainInput: document.getElementById("sourceDomainInput"),
+          labSelect: document.getElementById("labSelect"),
+          labNameInput: document.getElementById("labNameInput"),
+          labMeta: document.getElementById("labMeta"),
+          workspaceStatusStrip: document.getElementById("workspaceStatusStrip"),
+          previewStatusCard: document.getElementById("previewStatusCard"),
+          publishedStatusCard: document.getElementById("publishedStatusCard"),
           slugInput: document.getElementById("slugInput"),
           titleInput: document.getElementById("titleInput"),
           descriptionInput: document.getElementById("descriptionInput"),
@@ -983,9 +1833,10 @@
           publishedUrlOutput: document.getElementById("publishedUrlOutput"),
           publishedUrlMeta: document.getElementById("publishedUrlMeta"),
           baseUrlInput: document.getElementById("baseUrlInput"),
-          popup5sInput: document.getElementById("popup5sInput"),
+          popup20sInput: document.getElementById("popup20sInput"),
           popup300sInput: document.getElementById("popup300sInput"),
           overlayImageInput: document.getElementById("overlayImageInput"),
+          overlay20sImageInput: document.getElementById("overlay20sImageInput"),
           shareImageInput: document.getElementById("shareImageInput"),
           groupLabelInput: document.getElementById("groupLabelInput"),
           groupUrlInput: document.getElementById("groupUrlInput"),
@@ -995,6 +1846,7 @@
           blockList: document.getElementById("blockList"),
           jsonOutput: document.getElementById("jsonOutput"),
           commentUrlPreview: document.getElementById("commentUrlPreview"),
+          commentLinkPreview: document.getElementById("commentLinkPreview"),
           commentDomainPreview: document.getElementById("commentDomainPreview"),
           commentTitlePreview: document.getElementById("commentTitlePreview"),
           commentShareImage: document.getElementById("commentShareImage"),
@@ -1028,11 +1880,11 @@
           if (hint) hint.textContent = value;
         }
 
-        function applyLocalizedLabels() {
+        function applyLocalizedLabelsLegacy() {
           setText(".panel.editor .eyebrow", "Chỉ dành cho admin • Sandbox");
           setText(
             ".panel.editor > .subhead",
-            "Khu dựng thử riêng cho kiểu comment Facebook -> vào bài viết -> popup 3s / 5s / 300s -> nhảy app. Trang này chỉ dành cho admin và không chạm vào luồng rút gọn hiện tại.",
+            "Khu dựng thử riêng cho kiểu comment Facebook -> vào bài viết -> popup 3s / 20s / 300s -> nhảy app. Trang này chỉ dành cho admin và không chạm vào luồng rút gọn hiện tại.",
           );
 
           const sectionTitles = document.querySelectorAll(".panel.editor .section-card h2");
@@ -1066,7 +1918,8 @@
           setLabel("titleInput", "Tiêu đề");
           setLabel("descriptionInput", "Mô tả");
           setLabel("baseUrlInput", "Link gốc / popup 3s mặc định");
-          setLabel("overlayImageInput", "Ảnh popup");
+          setLabel("overlayImageInput", "Ảnh popup 3s");
+          setLabel("overlay20sImageInput", "Ảnh popup 20s");
           setLabel("shareImageInput", "Ảnh share / hero đầu bài");
           setLabel("groupLabelInput", "Nhãn dòng 1");
           setLabel("groupUrlInput", "Link dòng 1");
@@ -1092,7 +1945,7 @@
           );
           setHintNear(
             "#baseUrlInput",
-            "Đây là link đích mặc định của popup 3s. Nếu popup 5s và 300s để trống, chúng cũng sẽ dùng link này.",
+            "Đây là link đích mặc định của popup 3s. Nếu popup 20s và 300s để trống, chúng cũng sẽ dùng link này.",
           );
 
           setText('[data-add-block="image"]', "+ Ảnh thường");
@@ -1108,7 +1961,7 @@
           }
           setText("#startTimersBtn", "Chạy timer");
           setText("#show3sBtn", "Hiện 3s");
-          setText("#show5sBtn", "Hiện 5s");
+          setText("#show20sBtn", "Hiện 20s");
           setText("#show300sBtn", "Hiện 300s");
           setText("#closeOverlayBtn", "Ẩn popup");
           setText(".comment-meta", "Bình luận mẫu để đặt link bài viết");
@@ -1147,7 +2000,38 @@
           const articleUrl = String(source.article_url || "").trim();
           const fromUrl = splitArticleUrl(articleUrl);
           const overlay = source.overlay && typeof source.overlay === "object" ? source.overlay : {};
+          const stages = Array.isArray(source.stages) ? source.stages : [];
+          const stage3s =
+            stages.find((stage) => String(stage?.stage_key || "").trim() === "3s") ||
+            stages[0] ||
+            {};
+          const stage20s =
+            stages.find((stage) => {
+              const stageKey = String(stage?.stage_key || "").trim();
+              return stageKey === "20s" || stageKey === "5s";
+            }) ||
+            stages[1] ||
+            {};
+          const stage300s =
+            stages.find((stage) => String(stage?.stage_key || "").trim() === "300s") ||
+            stages[2] ||
+            {};
+          const stage3sTarget = String(
+            stage3s.target_url || stage3s.direct_web_url || stage3s.direct_app_url || "",
+          ).trim();
+          const stage20sTarget = String(
+            stage20s.target_url || stage20s.direct_web_url || stage20s.direct_app_url || "",
+          ).trim();
+          const stage300sTarget = String(
+            stage300s.target_url || stage300s.direct_web_url || stage300s.direct_app_url || "",
+          ).trim();
           const blockSource = Array.isArray(source.blocks) ? source.blocks : source.blocks || [];
+          const rawShareImage = String(source.shareImage || source.share_image || base.shareImage);
+          const normalizedShareImage =
+            rawShareImage ===
+            "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=1200&q=80"
+              ? ""
+              : rawShareImage;
 
           return {
             ...base,
@@ -1159,22 +2043,45 @@
               source.baseUrl ||
                 source.popup_3s_url ||
                 overlay.popup_3s_url ||
+                stage3sTarget ||
                 base.baseUrl,
             ),
-            popup5sUrl: String(
-              source.popup5sUrl ||
+            popup20sUrl: String(
+              source.popup20sUrl ||
+                source.popup5sUrl ||
+                source.popup_20s_url ||
                 source.popup_5s_url ||
+                overlay.popup_20s_url ||
                 overlay.popup_5s_url ||
-                base.popup5sUrl,
+                (stage20sTarget && stage20sTarget !== stage3sTarget ? stage20sTarget : "") ||
+                base.popup20sUrl,
             ),
             popup300sUrl: String(
               source.popup300sUrl ||
                 source.popup_300s_url ||
                 overlay.popup_300s_url ||
+                (stage300sTarget && stage300sTarget !== stage3sTarget ? stage300sTarget : "") ||
                 base.popup300sUrl,
             ),
-            overlayImage: String(source.overlayImage || overlay.image || base.overlayImage),
-            shareImage: String(source.shareImage || source.share_image || base.shareImage),
+            overlayImage: String(
+              source.overlayImage ||
+                source.popup3sImage ||
+                source.popup_3s_image ||
+                overlay.image ||
+                overlay.popup_3s_image ||
+                stage3s.overlay_image ||
+                base.overlayImage,
+            ),
+            overlay20sImage: String(
+              source.overlay20sImage ||
+                source.popup20sImage ||
+                source.popup_20s_image ||
+                overlay.popup_20s_image ||
+                overlay.popup_5s_image ||
+                stage20s.overlay_image ||
+                base.overlay20sImage,
+            ),
+            shareImage: normalizedShareImage,
             groupLabel: String(source.groupLabel || source.group_label || base.groupLabel),
             groupUrl: String(source.groupUrl || source.group_url || base.groupUrl),
             backupLabel: String(source.backupLabel || source.backup_label || base.backupLabel),
@@ -1218,9 +2125,18 @@
         }
 
         function getEffectiveTarget(stageKey) {
-          if (stageKey === "5s" && state.popup5sUrl.trim()) return state.popup5sUrl.trim();
+          if ((stageKey === "20s" || stageKey === "5s") && state.popup20sUrl.trim()) {
+            return state.popup20sUrl.trim();
+          }
           if (stageKey === "300s" && state.popup300sUrl.trim()) return state.popup300sUrl.trim();
           return state.baseUrl.trim();
+        }
+
+        function getOverlayImageForStage(stageKey) {
+          if ((stageKey === "20s" || stageKey === "5s") && state.overlay20sImage.trim()) {
+            return state.overlay20sImage.trim();
+          }
+          return state.overlayImage.trim() || state.shareImage.trim();
         }
 
         function getExportPayload() {
@@ -1238,8 +2154,9 @@
             backup_url: state.backupUrl.trim(),
             overlay: {
               image: state.overlayImage.trim(),
+              popup_20s_image: state.overlay20sImage.trim() || state.overlayImage.trim(),
               popup_3s_url: state.baseUrl.trim(),
-              popup_5s_url: state.popup5sUrl.trim() || state.baseUrl.trim(),
+              popup_20s_url: state.popup20sUrl.trim() || state.baseUrl.trim(),
               popup_300s_url: state.popup300sUrl.trim() || state.baseUrl.trim(),
             },
             blocks: state.blocks.map((block) => ({
@@ -1256,6 +2173,243 @@
           if (message) showToast(message);
         }
 
+        function formatLabMeta(item) {
+          if (!item) {
+            return "Tạo nhiều lab riêng để quản lý bài A, bài B, bài C.";
+          }
+          const updatedAt = item.updated_at
+            ? new Date(item.updated_at).toLocaleString("vi-VN")
+            : "vừa xong";
+          const publishedText = item.published_route_slug
+            ? ` • đã xuất bản: ${item.published_route_slug}`
+            : "";
+          return `Cập nhật: ${updatedAt}${publishedText}`;
+        }
+
+        function openLabHome() {
+          els.labEditorView.hidden = true;
+          document.body.classList.remove("lab-editor-open");
+          closeOverlay();
+        }
+
+        function openLabEditor() {
+          els.labEditorView.hidden = false;
+          document.body.classList.add("lab-editor-open");
+          requestAnimationFrame(() => {
+            els.labNameInput.focus();
+          });
+        }
+
+        function renderLabHomeList() {
+          const items = Array.isArray(labItems) ? labItems : [];
+          els.labHomeList.innerHTML = items
+            .map((item) => {
+              const updatedAt = item.updated_at
+                ? new Date(item.updated_at).toLocaleString("vi-VN")
+                : "vừa xong";
+              const publishedText = item.published_route_slug
+                ? `Đang xuất bản: /af/${escapeHtml(item.published_route_slug)}`
+                : "Chưa xuất bản";
+              return `
+                <article class="lab-home-card">
+                  <div>
+                    <div class="section-kicker">Lab ${escapeHtml(String(item.id))}</div>
+                    <h3>${escapeHtml(item.name || item.title || `Lab ${item.id}`)}</h3>
+                  </div>
+                  <div class="lab-home-meta">
+                    <div>${publishedText}</div>
+                    <div>Cập nhật: ${escapeHtml(updatedAt)}</div>
+                  </div>
+                  <div class="action-row">
+                    <button class="btn alt" type="button" data-open-lab="${item.id}">Sửa lab</button>
+                  </div>
+                </article>
+              `;
+            })
+            .join("");
+          els.labHomeEmpty.hidden = items.length > 0;
+        }
+
+        function moveFieldToAdvanced(selector) {
+          const node = document.querySelector(selector);
+          if (!node || !els.advancedDisplayStack) return;
+          if (els.advancedDisplayStack.contains(node)) return;
+          els.advancedDisplayStack.appendChild(node);
+        }
+
+        function simplifyEditorLayout() {
+          const descriptionField = els.descriptionInput?.closest('.field');
+          if (descriptionField && !els.advancedDisplayStack.contains(descriptionField)) {
+            els.advancedDisplayStack.appendChild(descriptionField);
+          }
+
+          const articleUrlField = els.articleUrlOutput?.closest('.field');
+          if (articleUrlField && !els.advancedDisplayStack.contains(articleUrlField)) {
+            els.advancedDisplayStack.appendChild(articleUrlField);
+          }
+
+          const popup300Field = els.popup300sInput?.closest('.field');
+          if (popup300Field && !els.advancedDisplayStack.contains(popup300Field)) {
+            els.advancedDisplayStack.appendChild(popup300Field);
+          }
+
+          const overlayGrid = els.overlayImageInput?.closest('.field-grid.two');
+          if (overlayGrid && !els.advancedDisplayStack.contains(overlayGrid)) {
+            els.advancedDisplayStack.appendChild(overlayGrid);
+          }
+
+          const shareField = els.shareImageInput?.closest('.field');
+          if (shareField && !els.advancedDisplayStack.contains(shareField)) {
+            els.advancedDisplayStack.appendChild(shareField);
+          }
+        }
+
+        function renderLabOptions() {
+          const currentValue = String(selectedLabId || "");
+          els.labSelect.innerHTML =
+            '<option value="">Chưa chọn lab</option>' +
+            labItems
+              .map((item) => {
+                const label = `${item.name || `Lab ${item.id}`}${
+                  item.published_route_slug ? " • đã xuất bản" : ""
+                }`;
+                return `<option value="${item.id}" ${
+                  String(item.id) === currentValue ? "selected" : ""
+                }>${escapeHtml(label)}</option>`;
+              })
+              .join("");
+          const activeLab = labItems.find((item) => Number(item.id) === Number(selectedLabId)) || null;
+          els.labMeta.textContent = formatLabMeta(activeLab);
+          renderLabHomeList();
+          if (!selectedLabId) {
+            els.labNameInput.value = els.labNameInput.value || "";
+          }
+        }
+
+        async function refreshDbLabs(options = {}) {
+          const preserveSelected = options.preserveSelected !== false;
+          try {
+            const response = await fetch("/api/admin/article-funnel-labs");
+            if (!response.ok) throw new Error("lab_list_failed");
+            const data = await response.json();
+            labItems = Array.isArray(data.items) ? data.items : [];
+            if (
+              !preserveSelected ||
+              !labItems.some((item) => Number(item.id) === Number(selectedLabId))
+            ) {
+              selectedLabId = 0;
+            }
+            renderLabOptions();
+          } catch {
+            els.labMeta.textContent = "Không tải được danh sách lab trong cơ sở dữ liệu.";
+            renderLabHomeList();
+          }
+        }
+
+        async function loadDbLab(labId) {
+          const normalizedId = Number(labId || 0);
+          if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+            selectedLabId = 0;
+            renderLabOptions();
+            return;
+          }
+          try {
+            const response = await fetch(`/api/admin/article-funnel-labs/${normalizedId}`);
+            if (!response.ok) throw new Error("lab_load_failed");
+            const data = await response.json();
+            const item = data.item || null;
+            if (!item) throw new Error("lab_missing");
+            const nextState = normalizeImportedState(item.config_json || {});
+            Object.keys(state).forEach((key) => delete state[key]);
+            Object.assign(state, nextState);
+            selectedLabId = Number(item.id) || 0;
+            els.labNameInput.value = item.name || item.title || "";
+            resetTimers();
+            clearResolvedCache();
+            clearGeneratedPreviewLink();
+            clearGeneratedPublishedLink();
+            if (item.published_route_slug) {
+              generatedPublishedUrl = `${window.location.origin}/af/${item.published_route_slug}`;
+            }
+            closeOverlay();
+            resetFeed();
+            renderLabOptions();
+            render();
+            openLabEditor();
+            saveState();
+            showToast("Đã nạp lab từ cơ sở dữ liệu");
+          } catch {
+            showToast("Không tải được lab này");
+          }
+        }
+
+        async function createDbLab() {
+          Object.keys(state).forEach((key) => delete state[key]);
+          Object.assign(state, clone(defaultState));
+          selectedLabId = 0;
+          els.labNameInput.value = "";
+          resetTimers();
+          clearResolvedCache();
+          clearGeneratedPreviewLink();
+          clearGeneratedPublishedLink();
+          closeOverlay();
+          resetFeed();
+          renderLabOptions();
+          render();
+          openLabEditor();
+          saveState();
+          showToast("Đã mở lab mới");
+        }
+
+        async function saveDbLab() {
+          try {
+            const name = els.labNameInput.value.trim() || state.title.trim() || "Lab mới";
+            const endpoint = selectedLabId
+              ? `/api/admin/article-funnel-labs/${selectedLabId}`
+              : "/api/admin/article-funnel-labs";
+            const method = selectedLabId ? "PUT" : "POST";
+            const response = await fetch(endpoint, {
+              method,
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name,
+                config: getExportPayload(),
+              }),
+            });
+            if (!response.ok) throw new Error("lab_save_failed");
+            const data = await response.json();
+            selectedLabId = Number(data?.item?.id || selectedLabId || 0);
+            await refreshDbLabs();
+            if (selectedLabId) {
+              const activeLab = labItems.find((item) => Number(item.id) === Number(selectedLabId));
+              els.labNameInput.value = activeLab?.name || name;
+            }
+            showToast(selectedLabId ? "Đã lưu lab vào cơ sở dữ liệu" : "Đã tạo lab mới");
+          } catch {
+            showToast("Không lưu được lab vào cơ sở dữ liệu");
+          }
+        }
+
+        async function deleteDbLab() {
+          if (!selectedLabId) {
+            showToast("Chưa chọn lab để xóa");
+            return;
+          }
+          try {
+            const response = await fetch(`/api/admin/article-funnel-labs/${selectedLabId}`, {
+              method: "DELETE",
+            });
+            if (!response.ok) throw new Error("lab_delete_failed");
+            selectedLabId = 0;
+            els.labNameInput.value = "";
+            await refreshDbLabs({ preserveSelected: false });
+            openLabHome();
+            showToast("Đã xóa lab");
+          } catch {
+            showToast("Không xóa được lab");
+          }
+        }
+
         function showToast(message) {
           els.toast.textContent = message;
           els.toast.classList.add("show");
@@ -1266,10 +2420,10 @@
         }
 
         function resetTimers() {
-          [timer3s, timer5s, timer300s].forEach((timer) => {
+          [timer3s, timer20s, timer300s].forEach((timer) => {
             if (timer) clearTimeout(timer);
           });
-          timer3s = timer5s = timer300s = null;
+          timer3s = timer20s = timer300s = null;
         }
 
         function clearResolvedCache() {
@@ -1372,7 +2526,7 @@
         }
 
         function primeResolvedTargets() {
-          [getEffectiveTarget("3s"), getEffectiveTarget("5s"), getEffectiveTarget("300s")]
+          [getEffectiveTarget("3s"), getEffectiveTarget("20s"), getEffectiveTarget("300s")]
             .filter(Boolean)
             .forEach((targetUrl) => primeResolvedTarget(targetUrl));
         }
@@ -1688,6 +2842,81 @@
           }
         }
 
+        function setAssetUploadStatus(assetKey, message, tone = "") {
+          const status = document.querySelector(
+            `[data-asset-upload-status="${assetKey}"]`,
+          );
+          if (!status) return;
+          status.textContent = message || "";
+          if (tone) {
+            status.dataset.tone = tone;
+          } else {
+            delete status.dataset.tone;
+          }
+        }
+
+        function setAssetUploadBusy(assetKey, busy) {
+          const trigger = document.querySelector(
+            `[data-asset-upload-trigger="${assetKey}"]`,
+          );
+          const input = document.querySelector(
+            `[data-asset-upload-input="${assetKey}"]`,
+          );
+          if (trigger) trigger.disabled = !!busy;
+          if (input) input.disabled = !!busy;
+        }
+
+        async function handleAssetFileSelection(assetKey, file) {
+          if (!file) return;
+
+          const config = {
+            overlayImage: {
+              stateKey: "overlayImage",
+              elementKey: "overlayImageInput",
+              pendingMessage: "Đang upload ảnh popup 3s...",
+              successMessage: "Đã tải ảnh popup 3 giây lên",
+            },
+            overlay20sImage: {
+              stateKey: "overlay20sImage",
+              elementKey: "overlay20sImageInput",
+              pendingMessage: "Đang upload ảnh popup 20s...",
+              successMessage: "Đã tải ảnh popup 20 giây lên",
+            },
+          }[assetKey];
+
+          if (!config) return;
+
+          try {
+            setAssetUploadBusy(assetKey, true);
+            setAssetUploadStatus(assetKey, config.pendingMessage);
+            const uploaded = await uploadBlockAsset(file, "image");
+            if (!uploaded.url) {
+              throw new Error("Không nhận được URL sau upload");
+            }
+            clearGeneratedPreviewLink();
+            clearGeneratedPublishedLink();
+            state[config.stateKey] = uploaded.url;
+            if (els[config.elementKey]) {
+              els[config.elementKey].value = uploaded.url;
+            }
+            render();
+            saveState();
+            setAssetUploadStatus(assetKey, "Upload xong", "ok");
+            showToast(config.successMessage);
+          } catch (error) {
+            const message =
+              error?.status === 401
+                ? "Cần đăng nhập lại để upload"
+                : error?.status === 403
+                  ? error?.payload?.error || "Tài khoản hiện tại không được upload"
+                  : error?.message || "Upload ảnh thất bại";
+            setAssetUploadStatus(assetKey, message, "err");
+            showToast(message);
+          } finally {
+            setAssetUploadBusy(assetKey, false);
+          }
+        }
+
         function getStackStyle(index, total) {
           const depthFromTop = total - index - 1;
           const offset = depthFromTop * 16;
@@ -1696,7 +2925,7 @@
           return `transform: translateY(${offset}px) scale(${scale}); opacity: ${opacity}; z-index: ${index + 1};`;
         }
 
-        function renderBlockEditor() {
+        function renderBlockEditorLegacy() {
           els.blockList.innerHTML = state.blocks
             .map((block, index) => {
               const typeLabel =
@@ -1758,6 +2987,25 @@
             .join("");
         }
 
+        function syncSensitivePreviewBlocks() {
+          els.previewBlocks.querySelectorAll("[data-sensitive-wrap]").forEach((wrap) => {
+            const image = wrap.querySelector("img");
+            if (!image) return;
+            const revealed = wrap.dataset.revealed === "true";
+            if (revealed) {
+              wrap.classList.add("revealed");
+              image.style.filter = "none";
+              image.style.opacity = "1";
+              image.style.transform = "scale(1)";
+              return;
+            }
+            wrap.classList.remove("revealed");
+            image.style.filter = "blur(72px) brightness(0.12) saturate(0.24)";
+            image.style.opacity = "0.18";
+            image.style.transform = "scale(1.38)";
+          });
+        }
+
         function renderPreviewBlocks() {
           const visibleBlocks = state.blocks.slice(0, Math.max(0, visibleBlockCount));
           els.previewBlocks.innerHTML = visibleBlocks
@@ -1776,8 +3024,13 @@
               if (block.type === "sensitive-image") {
                 return `
                   <figure class="article-media">
-                    <div class="sensitive-wrap" data-sensitive-wrap>
-                      <img src="${escapeAttr(block.src || "")}" alt="" />
+                    <div class="sensitive-wrap" data-sensitive-wrap data-revealed="false">
+                      <img
+                        src="${escapeAttr(block.src || "")}"
+                        alt=""
+                        style="filter: blur(72px) brightness(0.12) saturate(0.24); opacity: 0.18; transform: scale(1.38);"
+                      />
+                      <div class="sensitive-screen" aria-hidden="true"></div>
                       <button class="reveal-btn" type="button" data-reveal-sensitive">Bấm để hiện ảnh</button>
                     </div>
                     ${block.caption ? `<figcaption class="article-caption">${escapeHtml(block.caption)}</figcaption>` : ""}
@@ -1793,17 +3046,33 @@
             })
             .join("");
 
+          const revealSensitiveWrap = (wrap) => {
+            if (!wrap) return;
+            wrap.dataset.revealed = "true";
+            wrap.classList.add("revealed");
+            const image = wrap.querySelector("img");
+            if (image) {
+              image.style.filter = "none";
+              image.style.opacity = "1";
+              image.style.transform = "scale(1)";
+            }
+            wrap.querySelector("[data-reveal-sensitive]")?.remove();
+          };
+
           els.previewBlocks.querySelectorAll("[data-reveal-sensitive]").forEach((btn) => {
             btn.addEventListener("click", () => {
-              btn.closest("[data-sensitive-wrap]")?.classList.add("revealed");
-              btn.remove();
+              const wrap =
+                btn.parentElement && btn.parentElement.hasAttribute("data-sensitive-wrap")
+                  ? btn.parentElement
+                  : btn.closest("[data-sensitive-wrap]");
+              revealSensitiveWrap(wrap);
             });
           });
 
           els.feedStateLabel.textContent = `Đang hiển thị ${visibleBlocks.length}/${state.blocks.length} block`;
         }
 
-        function renderPreviewShell() {
+        function renderPreviewShellLegacy() {
           const articleUrl = getArticleUrl();
           els.articleUrlOutput.value = articleUrl;
           els.publicPreviewUrlOutput.value = generatedPreviewUrl;
@@ -1817,13 +3086,25 @@
           const commentTarget = generatedPublishedUrl || generatedPreviewUrl;
           els.commentUrlPreview.textContent = commentTarget || "Bấm 'Publish link ngắn' hoặc 'Tạo public preview link' để lấy URL đặt vào comment Facebook";
           els.commentUrlPreview.href = commentTarget || "#";
+          if (!generatedPreviewUrl) {
+            els.publicPreviewMeta.textContent = "Chua tao preview link.";
+          }
+          if (!generatedPublishedUrl) {
+            els.publishedUrlMeta.textContent = "Chua publish link ngan.";
+          }
+          if (!commentTarget) {
+            els.commentUrlPreview.textContent = "Chua co link comment";
+          }
           els.commentDomainPreview.textContent = (
             commentTarget
               ? new URL(commentTarget).hostname
               : "public-preview"
           ).toUpperCase();
           els.commentTitlePreview.textContent = state.title.trim() || "Tiêu đề bài viết";
-          els.commentShareImage.style.backgroundImage = state.shareImage.trim()
+          const hasShareImage = Boolean(state.shareImage.trim());
+          const shouldShowCommentImage = Boolean(commentTarget && hasShareImage);
+          els.commentLinkPreview.classList.toggle("compact", !shouldShowCommentImage);
+          els.commentShareImage.style.backgroundImage = shouldShowCommentImage
             ? `url("${escapeCssUrl(state.shareImage.trim())}")`
             : "none";
           els.previewTitle.textContent = state.title.trim() || "Tiêu đề bài viết";
@@ -1841,15 +3122,236 @@
           els.jsonOutput.textContent = JSON.stringify(getExportPayload(), null, 2);
         }
 
+        function applyLocalizedLabels() {
+          document.title = "Phòng thử phễu bài viết";
+          setText(".lab-home .eyebrow", "Chỉ dành cho admin • Bản thử nghiệm");
+          setText(".lab-home h1", "Phòng thử phễu bài viết");
+          setText(".lab-home .subhead", "Trang này chỉ hiển thị danh sách lab. Bấm tạo mới hoặc sửa lab để mở trình biên tập dưới dạng hộp thoại ngay trên màn hình này.");
+          setText("#openCreateLabBtn", "Tạo lab mới");
+          setText("#labHomeEmpty", "Chưa có lab nào. Bấm Tạo lab mới để bắt đầu.");
+          setText(".panel.editor .eyebrow", "Chỉ dành cho admin • Bản thử nghiệm");
+          setText("#closeLabEditorBtn", "Đóng");
+          setText(".panel.editor .page-header h1", "Phòng thử phễu bài viết");
+          setText(".panel.editor .page-header .subhead", "Khối đầu này chỉ giữ các thao tác chính: chọn lab, lưu, tạo link xem trước và xuất bản.");
+          setText("#createDbLabBtn", "Tạo lab mới");
+          setText("#saveDbLabBtn", "Lưu lab");
+          setText("#generatePreviewLinkBtn", "Tạo link xem trước");
+          setText("#publishShortLinkBtn", "Xuất bản link ngắn");
+          setText("#saveDraftBtn", "Lưu nháp local");
+          setText("#loadPresetBtn", "Nạp preset");
+          setText("#resetDraftBtn", "Xóa nháp local");
+          setText("#copyJsonBtn", "Sao chép JSON");
+          setText("#refreshLabsBtn", "Tải lại danh sách");
+          setText("#applyImportBtn", "Áp JSON vào lab");
+          setText("#fillImportBtn", "Đổ JSON hiện tại");
+          setText(".preview-wrap .eyebrow", "Xem trước");
+          setText("#startTimersBtn", "Chạy hẹn giờ");
+          setText("#closeOverlayBtn", "Ẩn popup");
+          setText("#show3sBtn", "Hiện 3 giây");
+          setText("#show20sBtn", "Hiện 20 giây");
+          setText("#show300sBtn", "Hiện 300 giây");
+          setText("#copyArticleUrlBtn", "Sao chép link comment");
+          setText("#resetFeedBtn", "Đặt lại feed");
+          setText("#showNextBlockBtn", "Hiện thêm 1 khối");
+          setText("#showAllBlocksBtn", "Hiện tất cả");
+          setText('[data-add-block="image"]', "+ Ảnh thường");
+          setText('[data-add-block="sensitive-image"]', "+ Ảnh mờ");
+          setText('[data-add-block="video"]', "+ Video");
+
+          setLabel("labSelect", "Lab nháp trong cơ sở dữ liệu");
+          setLabel("labNameInput", "Tên lab hiện tại");
+          setLabel("publicPreviewUrlOutput", "Đường dẫn xem trước để đặt vào comment");
+          setLabel("publishedUrlOutput", "Link ngắn đã xuất bản để đặt comment");
+          setLabel("sourceDomainInput", "Tên miền hiển thị");
+          setLabel("slugInput", "Slug bài viết");
+          setLabel("titleInput", "Tiêu đề");
+          setLabel("descriptionInput", "Mô tả");
+          setLabel("baseUrlInput", "Link gốc / popup 3 giây mặc định");
+          setLabel("overlayImageInput", "Ảnh popup 3 giây");
+          setLabel("overlay20sImageInput", "Ảnh popup 20 giây");
+          setLabel("shareImageInput", "Ảnh chia sẻ / ảnh đầu bài");
+          setLabel("groupLabelInput", "Nhãn dòng 1");
+          setLabel("groupUrlInput", "Link dòng 1");
+          setLabel("backupLabelInput", "Nhãn dòng 2");
+          setLabel("backupUrlInput", "Link dòng 2");
+          setLabel("importInput", "Dán cấu hình JSON để nạp lại");
+
+          setHintNear("#descriptionInput", "Nếu cần, mô tả sẽ hiển thị ngay dưới tiêu đề của bài viết.");
+          setHintNear("#articleUrlOutput", "URL này chỉ để đối chiếu nội dung bài. Khi kiểm tra comment Facebook, hãy dùng đường dẫn xem trước ở trên.");
+          setHintNear("#baseUrlInput", "Đây là link đích mặc định của popup 3 giây. Nếu popup 20 giây và 300 giây để trống, chúng cũng sẽ dùng link này.");
+          setHintNear("#shareImageInput", "Có thể để trống nếu bạn muốn thẻ xem trước trong comment gọn hơn, không có ảnh lớn.");
+
+          const previewSubhead = document.querySelector(".preview-wrap .preview-topbar .subhead");
+          if (previewSubhead) {
+            previewSubhead.textContent = "Mô phỏng 2 lớp: comment Facebook dẫn vào bài viết, rồi trong bài mới bật popup deeplink theo mốc thời gian.";
+          }
+          const commentMeta = document.querySelector(".comment-meta");
+          if (commentMeta) {
+            commentMeta.textContent = "Bình luận mẫu để đặt link bài viết";
+          }
+        }
+
+        function applyVisualCopyOverrides() {
+          const homeTitle = document.querySelector(".lab-home h1");
+          if (homeTitle) {
+            homeTitle.textContent = "Danh sách lab bài viết";
+          }
+
+          const homeSubhead = document.querySelector(".lab-home .subhead");
+          if (homeSubhead) {
+            homeSubhead.textContent =
+              "Mỗi lab là một bộ cấu hình cho một bài article funnel. Bấm tạo mới hoặc sửa để mở trình biên tập ngay trên màn hình này.";
+          }
+
+          const editorTitle = document.querySelector(".panel.editor .page-header h1");
+          if (editorTitle) {
+            editorTitle.textContent = "Biên tập lab";
+          }
+
+          const editorSubhead = document.querySelector(".panel.editor .page-header .subhead");
+          if (editorSubhead) {
+            editorSubhead.textContent =
+              "Giữ phần đầu này cho 4 thao tác chính: chọn lab, lưu, tạo link xem trước và xuất bản.";
+          }
+
+          const previewSubhead = document.querySelector(".preview-wrap .preview-topbar .subhead");
+          if (previewSubhead) {
+            previewSubhead.textContent =
+              "Mô phỏng luồng người dùng: comment Facebook, bài viết và popup deeplink theo mốc thời gian.";
+          }
+        }
+
+        function renderBlockEditor() {
+          els.blockList.innerHTML = state.blocks
+            .map((block, index) => {
+              const typeLabel =
+                block.type === "paragraph"
+                  ? "Đoạn chữ"
+                  : block.type === "image"
+                    ? "Ảnh thường"
+                    : block.type === "sensitive-image"
+                      ? "Ảnh mờ"
+                      : "Video";
+              return `
+                <div class="block-item">
+                  <div class="block-head">
+                    <span class="block-chip">${index + 1}. ${typeLabel}</span>
+                    <div class="block-head-actions">
+                      <button class="icon-btn" type="button" data-move-up="${block.id}" title="Đẩy lên">↑</button>
+                      <button class="icon-btn" type="button" data-move-down="${block.id}" title="Đẩy xuống">↓</button>
+                      <button class="icon-btn danger" type="button" data-remove-block="${block.id}" title="Xóa">✕</button>
+                    </div>
+                  </div>
+                  ${
+                    block.type === "paragraph"
+                      ? `
+                        <div class="field">
+                          <label>Nội dung</label>
+                          <textarea data-field="text" data-block-id="${block.id}">${escapeHtml(block.text || "")}</textarea>
+                        </div>
+                      `
+                      : `
+                        <div class="field-grid">
+                          <div class="field">
+                            <label>${block.type === "video" ? "URL video MP4" : "URL ảnh"}</label>
+                            <input type="url" value="${escapeAttr(block.src || "")}" data-field="src" data-block-id="${block.id}" />
+                            <div class="upload-row">
+                              <button
+                                class="upload-btn"
+                                type="button"
+                                data-upload-trigger="${block.id}"
+                              >${block.type === "video" ? "Chọn video từ máy" : "Chọn ảnh từ máy"}</button>
+                              <input
+                                class="sr-only-input"
+                                type="file"
+                                ${block.type === "video" ? 'accept="video/mp4,video/webm,video/quicktime"' : 'accept="image/*"'}
+                                data-upload-input="${block.id}"
+                              />
+                              <span class="upload-status" data-upload-status="${block.id}">Có thể dán URL hoặc chọn tệp từ máy.</span>
+                            </div>
+                          </div>
+                          <div class="field">
+                            <label>Chú thích</label>
+                            <input type="text" value="${escapeAttr(block.caption || "")}" data-field="caption" data-block-id="${block.id}" />
+                          </div>
+                        </div>
+                      `
+                  }
+                </div>
+              `;
+            })
+            .join("");
+        }
+
+        function renderPreviewShell() {
+          const articleUrl = getArticleUrl();
+          const hasPreviewLink = Boolean(generatedPreviewUrl);
+          const hasPublishedLink = Boolean(generatedPublishedUrl);
+          els.articleUrlOutput.value = articleUrl;
+          els.publicPreviewUrlOutput.value = generatedPreviewUrl;
+          els.publicPreviewMeta.textContent = hasPreviewLink
+            ? `Hết hạn: ${generatedPreviewExpiresAt || "7 ngày"}`
+            : "Chưa tạo link xem trước. Nếu đặt URL bài gốc vào comment, Facebook sẽ lấy OG của trang nguồn và không có popup của lab.";
+          els.publishedUrlOutput.value = generatedPublishedUrl;
+          els.publishedUrlMeta.textContent = hasPublishedLink
+            ? `${generatedPublishedDomainNote ? `${generatedPublishedDomainNote} ` : ""}Cập nhật: ${generatedPublishedUpdatedAt || "vừa xong"}`
+            : "Bấm Xuất bản link ngắn để tạo URL gọn hơn, dùng cho comment Facebook thật.";
+          els.previewStatusCard?.classList.toggle("is-empty", !hasPreviewLink);
+          els.publishedStatusCard?.classList.toggle("is-empty", !hasPublishedLink);
+          if (els.workspaceStatusStrip) {
+            els.workspaceStatusStrip.hidden = !hasPreviewLink && !hasPublishedLink;
+          }
+          const commentTarget = generatedPublishedUrl || generatedPreviewUrl;
+          els.commentUrlPreview.textContent =
+            commentTarget || "Bấm 'Xuất bản link ngắn' hoặc 'Tạo link xem trước' để lấy URL đặt vào comment Facebook";
+          els.commentUrlPreview.href = commentTarget || "#";
+          if (!generatedPreviewUrl) {
+            els.publicPreviewMeta.textContent = "Chưa tạo link xem trước.";
+          }
+          if (!generatedPublishedUrl) {
+            els.publishedUrlMeta.textContent = "Chưa xuất bản link ngắn.";
+          }
+          if (!commentTarget) {
+            els.commentUrlPreview.textContent = "Chưa có link comment";
+          }
+          els.commentDomainPreview.textContent = (
+            commentTarget
+              ? new URL(commentTarget).hostname
+              : "xem-trước-công-khai"
+          ).toUpperCase();
+          els.commentTitlePreview.textContent = state.title.trim() || "Tiêu đề bài viết";
+          const hasShareImage = Boolean(state.shareImage.trim());
+          const shouldShowCommentImage = Boolean(commentTarget && hasShareImage);
+          els.commentLinkPreview.classList.toggle("compact", !shouldShowCommentImage);
+          els.commentShareImage.style.backgroundImage = shouldShowCommentImage
+            ? `url("${escapeCssUrl(state.shareImage.trim())}")`
+            : "none";
+          els.previewTitle.textContent = state.title.trim() || "Tiêu đề bài viết";
+          els.previewDescription.textContent = state.description.trim();
+          els.previewDescription.style.display = state.description.trim() ? "block" : "none";
+          els.followGroupLabel.textContent = state.groupLabel.trim() || "Nhóm Facebook";
+          els.followGroupLink.textContent = state.groupUrl.trim() || "https://facebook.com";
+          els.followGroupLink.href = state.groupUrl.trim() || "#";
+          els.followBackupLabel.textContent = state.backupLabel.trim() || "Trang phụ";
+          els.followBackupLink.textContent = state.backupUrl.trim() || "https://facebook.com";
+          els.followBackupLink.href = state.backupUrl.trim() || "#";
+          els.jsonOutput.textContent = JSON.stringify(getExportPayload(), null, 2);
+        }
+
         function syncFields() {
+          if (!els.labNameInput.value) {
+            const activeLab = labItems.find((item) => Number(item.id) === Number(selectedLabId));
+            els.labNameInput.value = activeLab?.name || state.title || "";
+          }
           els.sourceDomainInput.value = state.sourceDomain;
           els.slugInput.value = state.slug;
           els.titleInput.value = state.title;
           els.descriptionInput.value = state.description;
           els.baseUrlInput.value = state.baseUrl;
-          els.popup5sInput.value = state.popup5sUrl;
+          els.popup20sInput.value = state.popup20sUrl;
           els.popup300sInput.value = state.popup300sUrl;
           els.overlayImageInput.value = state.overlayImage;
+          els.overlay20sImageInput.value = state.overlay20sImage;
           els.shareImageInput.value = state.shareImage;
           els.groupLabelInput.value = state.groupLabel;
           els.groupUrlInput.value = state.groupUrl;
@@ -1878,9 +3380,10 @@
                     href="${escapeAttr(launchUrl || "#")}"
                     target="_self"
                     rel="noreferrer"
+                    data-overlay-launch="${escapeAttr(stageKey)}"
                     ${isTop ? "" : 'tabindex="-1"'}
                   >
-                    <img src="${escapeAttr(state.overlayImage.trim() || state.shareImage.trim())}" alt="" />
+                    <img src="${escapeAttr(getOverlayImageForStage(stageKey))}" alt="" />
                   </a>
                 </div>
               `;
@@ -1932,6 +3435,7 @@
           syncFields();
           renderBlockEditor();
           applyLocalizedLabels();
+          applyVisualCopyOverrides();
           renderPreviewBlocks();
           renderPreviewShell();
           renderJsonOutput();
@@ -2003,9 +3507,9 @@
           resetTimers();
           closeOverlay();
           primeResolvedTargets();
-          showToast("Đã bắt đầu mô phỏng timer 3s / 5s / 300s");
+          showToast("Đã bắt đầu mô phỏng timer 3s / 20s / 300s");
           timer3s = setTimeout(() => openOverlay("3s"), 3000);
-          timer5s = setTimeout(() => openOverlay("5s"), 5000);
+          timer20s = setTimeout(() => openOverlay("20s"), 20000);
           timer300s = setTimeout(() => openOverlay("300s"), 300000);
         }
 
@@ -2021,12 +3525,15 @@
             const nextState = normalizeImportedState(parsed);
             Object.keys(state).forEach((key) => delete state[key]);
             Object.assign(state, nextState);
+            selectedLabId = 0;
+            els.labNameInput.value = "";
             resetTimers();
             clearResolvedCache();
             clearGeneratedPreviewLink();
             clearGeneratedPublishedLink();
             closeOverlay();
             resetFeed();
+            renderLabOptions();
             render();
             saveState("Đã áp JSON vào lab");
           } catch {
@@ -2053,9 +3560,9 @@
             generatedPreviewUrl = String(data.preview_url || "").trim();
             generatedPreviewExpiresAt = String(data.expires_at || "").trim();
             renderPreviewShell();
-            showToast("Đã tạo public preview link");
+            showToast("Đã tạo link xem trước công khai");
           } catch {
-            showToast("Không tạo được public preview link");
+            showToast("Không tạo được link xem trước công khai");
           }
         }
 
@@ -2064,7 +3571,11 @@
             const response = await fetch("/api/admin/article-funnel-lab/publish", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ config: getExportPayload() }),
+              body: JSON.stringify({
+                config: getExportPayload(),
+                lab_id: selectedLabId || null,
+                lab_name: els.labNameInput.value.trim() || state.title.trim() || "Lab mới",
+              }),
             });
             if (!response.ok) {
               throw new Error("publish_short_link_failed");
@@ -2074,9 +3585,9 @@
             generatedPublishedUpdatedAt = String(data.updated_at || "").trim();
             generatedPublishedDomainNote = String(data.domain_note || "").trim();
             renderPreviewShell();
-            showToast("Đã publish link ngắn");
+            showToast("Đã xuất bản link ngắn");
           } catch {
-            showToast("Không publish được link ngắn");
+            showToast("Không xuất bản được link ngắn");
           }
         }
 
@@ -2131,15 +3642,73 @@
           input.value = "";
         });
 
+        els.previewBlocks.addEventListener(
+          "click",
+          (event) => {
+            const button = event.target.closest("[data-reveal-sensitive]");
+            if (!button) return;
+            const wrap =
+              button.parentElement && button.parentElement.hasAttribute("data-sensitive-wrap")
+                ? button.parentElement
+                : null;
+            if (wrap) {
+              wrap.dataset.revealed = "true";
+              wrap.classList.add("revealed");
+              const image = wrap.querySelector("img");
+              if (image) {
+                image.style.filter = "none";
+                image.style.opacity = "1";
+                image.style.transform = "scale(1)";
+              }
+            }
+            button.remove();
+            queueMicrotask(syncSensitivePreviewBlocks);
+            event.preventDefault();
+            event.stopPropagation();
+          },
+          true,
+        );
+
+        const sensitivePreviewObserver = new MutationObserver(() => {
+          syncSensitivePreviewBlocks();
+        });
+        sensitivePreviewObserver.observe(els.previewBlocks, {
+          childList: true,
+          subtree: true,
+        });
+        syncSensitivePreviewBlocks();
+
+        els.labEditorView.addEventListener("click", (event) => {
+          const uploadTrigger = event.target.closest("[data-asset-upload-trigger]");
+          if (!uploadTrigger) return;
+          const assetKey = uploadTrigger.dataset.assetUploadTrigger || "";
+          const input = document.querySelector(
+            `[data-asset-upload-input="${assetKey}"]`,
+          );
+          if (input && !input.disabled) {
+            input.click();
+          }
+        });
+
+        els.labEditorView.addEventListener("change", async (event) => {
+          const input = event.target.closest("[data-asset-upload-input]");
+          if (!input) return;
+          const assetKey = input.dataset.assetUploadInput || "";
+          const file = input.files?.[0];
+          await handleAssetFileSelection(assetKey, file);
+          input.value = "";
+        });
+
         [
           ["sourceDomainInput", "sourceDomain"],
           ["slugInput", "slug"],
           ["titleInput", "title"],
           ["descriptionInput", "description"],
           ["baseUrlInput", "baseUrl"],
-          ["popup5sInput", "popup5sUrl"],
+          ["popup20sInput", "popup20sUrl"],
           ["popup300sInput", "popup300sUrl"],
           ["overlayImageInput", "overlayImage"],
+          ["overlay20sImageInput", "overlay20sImage"],
           ["shareImageInput", "shareImage"],
           ["groupLabelInput", "groupLabel"],
           ["groupUrlInput", "groupUrl"],
@@ -2153,7 +3722,7 @@
             clearGeneratedPublishedLink();
             if (
               stateKey === "baseUrl" ||
-              stateKey === "popup5sUrl" ||
+              stateKey === "popup20sUrl" ||
               stateKey === "popup300sUrl"
             ) {
               clearResolvedCache();
@@ -2168,15 +3737,45 @@
           saveState("Đã lưu nháp local");
         });
 
+        els.openCreateLabBtn.addEventListener("click", createDbLab);
+        els.closeLabEditorBtn.addEventListener("click", openLabHome);
+        els.backToLabListBtn?.addEventListener("click", openLabHome);
+        els.labHomeList.addEventListener("click", (event) => {
+          const button = event.target.closest("[data-open-lab]");
+          if (!button) return;
+          loadDbLab(button.dataset.openLab || "");
+        });
+        document.getElementById("createDbLabBtn").addEventListener("click", createDbLab);
+        document.getElementById("saveDbLabBtn").addEventListener("click", saveDbLab);
+        document.getElementById("deleteDbLabBtn").addEventListener("click", deleteDbLab);
+        document.getElementById("refreshLabsBtn").addEventListener("click", async () => {
+          await refreshDbLabs();
+          showToast("Đã tải lại danh sách lab");
+        });
+        els.labSelect.addEventListener("change", () => {
+          loadDbLab(els.labSelect.value);
+        });
+        els.labNameInput.addEventListener("input", () => {
+          const activeLab = labItems.find((item) => Number(item.id) === Number(selectedLabId));
+          if (activeLab) {
+            activeLab.name =
+              els.labNameInput.value.trim() || activeLab.name || `Lab ${activeLab.id}`;
+          }
+          renderLabOptions();
+        });
+
         document.getElementById("loadPresetBtn").addEventListener("click", () => {
           Object.keys(state).forEach((key) => delete state[key]);
           Object.assign(state, clone(defaultState));
+          selectedLabId = 0;
+          els.labNameInput.value = "";
           resetTimers();
           clearResolvedCache();
           clearGeneratedPreviewLink();
           clearGeneratedPublishedLink();
           closeOverlay();
           resetFeed();
+          renderLabOptions();
           render();
           saveState("Đã nạp lại preset");
         });
@@ -2185,12 +3784,15 @@
           localStorage.removeItem(STORAGE_KEY);
           Object.keys(state).forEach((key) => delete state[key]);
           Object.assign(state, clone(defaultState));
+          selectedLabId = 0;
+          els.labNameInput.value = "";
           resetTimers();
           clearResolvedCache();
           clearGeneratedPreviewLink();
           clearGeneratedPublishedLink();
           closeOverlay();
           resetFeed();
+          renderLabOptions();
           render();
           showToast("Đã xóa nháp local và quay về preset");
         });
@@ -2225,7 +3827,7 @@
 
         document.getElementById("startTimersBtn").addEventListener("click", startTimers);
         document.getElementById("show3sBtn").addEventListener("click", () => openOverlay("3s"));
-        document.getElementById("show5sBtn").addEventListener("click", () => openOverlay("5s"));
+        document.getElementById("show20sBtn").addEventListener("click", () => openOverlay("20s"));
         document.getElementById("show300sBtn").addEventListener("click", () => openOverlay("300s"));
         document.getElementById("closeOverlayBtn").addEventListener("click", closeOverlay);
         document.getElementById("resetFeedBtn").addEventListener("click", () => resetFeed());
@@ -2236,15 +3838,65 @@
           if (event.target === els.overlay) closeOverlay();
         });
 
+        els.labEditorView.addEventListener("click", (event) => {
+          if (event.target === els.labEditorView) {
+            openLabHome();
+          }
+        });
+
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" && !els.labEditorView.hidden) {
+            if (els.overlay.classList.contains("show")) {
+              closeOverlay();
+              return;
+            }
+            openLabHome();
+          }
+        });
+
         els.overlayStack.addEventListener("click", (event) => {
           const closeButton = event.target.closest("[data-overlay-close]");
           if (closeButton) {
             const stageKey = closeButton.dataset.overlayClose || "";
             closeOverlay(stageKey);
+            return;
+          }
+
+          const launchButton = event.target.closest("[data-overlay-launch]");
+          if (launchButton) {
+            event.preventDefault();
+            const stageKey = launchButton.dataset.overlayLaunch || "";
+            const targetUrl = getEffectiveTarget(stageKey);
+            const fallbackUrl =
+              launchButton.getAttribute("href") || getOverlayLaunchUrl(stageKey) || targetUrl;
+
+            Promise.resolve(
+              targetUrl
+                ? resolveLaunchConfig(targetUrl).catch(() => buildFallbackLaunchConfig(targetUrl))
+                : null,
+            )
+              .then((launchConfig) => {
+                closeOverlay(stageKey);
+                if (launchLabTarget(launchConfig || buildFallbackLaunchConfig(targetUrl))) {
+                  return;
+                }
+                if (fallbackUrl) {
+                  window.location.href = fallbackUrl;
+                }
+              })
+              .catch(() => {
+                closeOverlay(stageKey);
+                if (fallbackUrl) {
+                  window.location.href = fallbackUrl;
+                }
+              });
           }
         });
 
+        simplifyEditorLayout();
         render();
+        openLabHome();
+        refreshDbLabs({ preserveSelected: false });
       })();
     </script>
   </body>
