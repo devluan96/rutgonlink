@@ -1433,13 +1433,14 @@
         color: #fff;
         box-shadow: 0 16px 26px rgba(37, 99, 235, 0.24);
       }
-      .modal-payment {
-        width: min(920px, calc(100vw - 26px));
+      .modal.modal-payment {
+        width: min(1040px, calc(100vw - 32px));
+        max-width: none;
       }
       .payment-modal-body {
         display: grid;
-        grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
-        gap: 18px;
+        grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+        gap: 22px;
       }
       .payment-modal-copy,
       .payment-qr-panel {
@@ -1452,7 +1453,7 @@
         background: var(--bg2);
         border: 1px solid var(--border);
         border-radius: 18px;
-        padding: 16px;
+        padding: 18px;
       }
       .payment-summary-row {
         display: flex;
@@ -1513,7 +1514,7 @@
           var(--bg2);
       }
       .payment-qr-box {
-        width: min(100%, 268px);
+        width: min(100%, 296px);
         aspect-ratio: 1;
         background: #fff;
         border-radius: 20px;

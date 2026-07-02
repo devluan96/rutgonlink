@@ -1,4 +1,4 @@
-﻿// ══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════════
 const sharedClient = window.RGLShared || {};
@@ -8883,13 +8883,6 @@ function updatePricingUI() {
   });
 }
 
-function contactUpgrade(plan) {
-  toast(
-    `📩 Liên hệ Zalo 0969.361.607 để nâng cấp gói ${plan.toUpperCase()}`,
-    "warn",
-  );
-}
-
 // ══════════════════════════════════════════════════
 //  SEARCH (topbar)
 // ══════════════════════════════════════════════════
@@ -11551,6 +11544,5 @@ window.addEventListener("hashchange", () => {
     showAuthScreen(getAuthRouteMode());
   }
 })();
-
 
 
