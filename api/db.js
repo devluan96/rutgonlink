@@ -20,6 +20,43 @@ function getDayWindowUtc(date = new Date(), offsetMinutes = APP_TIME_ZONE_OFFSET
   };
 }
 
+function getRollingWindowStartUtc(
+  days = 7,
+  date = new Date(),
+  offsetMinutes = APP_TIME_ZONE_OFFSET_MINUTES,
+) {
+  const normalizedDays = Math.max(Number(days) || 0, 1);
+  const shifted = new Date(date.getTime() + offsetMinutes * 60 * 1000);
+  const todayStartUtcMs = Date.UTC(
+    shifted.getUTCFullYear(),
+    shifted.getUTCMonth(),
+    shifted.getUTCDate(),
+    0, 0, 0, 0,
+  ) - offsetMinutes * 60 * 1000;
+  const startUtcMs =
+    todayStartUtcMs - (normalizedDays - 1) * 24 * 60 * 60 * 1000;
+  return new Date(startUtcMs).toISOString();
+}
+
+function normalizeClickAnalyticsOptions(input, fallbackLimit = 5000) {
+  if (typeof input === 'number') {
+    return {
+      limit: Math.max(Number(input) || 0, 0) || fallbackLimit,
+      days: 0,
+    };
+  }
+  if (input && typeof input === 'object') {
+    return {
+      limit: Math.max(Number(input.limit) || 0, 0) || fallbackLimit,
+      days: Math.max(Number(input.days) || 0, 0),
+    };
+  }
+  return {
+    limit: fallbackLimit,
+    days: 0,
+  };
+}
+
 function getClient() {
   if (_client) return _client;
   const url = process.env.SUPABASE_URL || '';
@@ -1249,13 +1286,16 @@ async function init() {
       };
     },
 
-    async getClickAnalytics(userId, guestSessionId, limit = 5000) {
+    async getClickAnalytics(userId, guestSessionId, options = 5000) {
+      const { limit, days } = normalizeClickAnalyticsOptions(options, 5000);
+      const sinceIso = days > 0 ? getRollingWindowStartUtc(days) : null;
       const buildQuery = (selectExpr, from, to) => {
         let q = sb
           .from('clicks')
           .select(selectExpr)
           .order('clicked_at', { ascending: false })
           .range(from, to);
+        if (sinceIso) q = q.gte('clicked_at', sinceIso);
         if (userId) q = q.eq('links.user_id', userId);
         else if (guestSessionId) q = q.eq('links.guest_session_id', guestSessionId);
         else q = q.is('links.user_id', null).is('links.guest_session_id', null);
@@ -1287,11 +1327,18 @@ async function init() {
       }));
     },
 
-    async getAdminClickAnalytics(limit = 5000) {
+    async getAdminClickAnalytics(options = 5000) {
+      const { limit, days } = normalizeClickAnalyticsOptions(options, 5000);
+      const sinceIso = days > 0 ? getRollingWindowStartUtc(days) : null;
       const buildQuery = (selectExpr, from, to) =>
-        sb
+        (sinceIso
+          ? sb
+            .from('clicks')
+            .select(selectExpr)
+            .gte('clicked_at', sinceIso)
+          : sb
           .from('clicks')
-          .select(selectExpr)
+          .select(selectExpr))
           .order('clicked_at', { ascending: false })
           .range(from, to);
 

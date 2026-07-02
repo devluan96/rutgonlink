@@ -21,6 +21,7 @@ const getUserInitials =
 const getUserAvatarUrl = (currentUser) =>
   String(currentUser?.avatar_url || "").trim() || "";
 const AUTO_ALIAS_MAX_LENGTH = 90;
+const RECENT_STATS_WINDOW_DAYS = 7;
 
 function stripVietnameseMarks(value) {
   return String(value || "")
@@ -95,7 +96,7 @@ function looksLikeSlugTitle(value) {
 let user = null; // { id, email, name, plan }
 let links = [];
 let chart = null;
-let chartDays = 7;
+let chartDays = RECENT_STATS_WINDOW_DAYS;
 let adminOverviewChartInst = null;
 let adminOverviewRangeDays = 7;
 let adminOverviewTrendPayload = null;
@@ -260,7 +261,9 @@ const appUiTextTranslations = {
       "Quick overview, next actions, and key signals",
     "Tổng lượt nhấp": "Total clicks",
     "Click unique": "Unique clicks",
+    "Click unique 7 ngày": "7-day unique clicks",
     "Tất cả thời gian": "All time",
+    "7 ngày gần nhất": "Last 7 days",
     "Click hôm nay": "Clicks today",
     "Click unique hôm nay": "Unique clicks today",
     "Trong ngày": "Today",
@@ -486,6 +489,8 @@ const appUiTextTranslations = {
     "User mới, click unique và yêu cầu thanh toán theo ngày":
       "New users, unique clicks, and payment requests by day",
     "7 ngày": "7 days",
+    "Lượt nhấp 7 ngày gần nhất": "Clicks over the last 7 days",
+    "Lượt click 7 ngày gần nhất": "Clicks over the last 7 days",
     "30 ngày": "30 days",
     "Tất cả gói": "All plans",
     "Tìm email...": "Search email...",
@@ -8309,6 +8314,11 @@ async function loadData(prefetched = null) {
     rememberStatsPayloadCache(d);
     statsAnalytics = d.analytics || null;
     links = d.recent || [];
+    const recentWindowDays = Math.max(
+      Number(d.recentWindowDays) || RECENT_STATS_WINDOW_DAYS,
+      1,
+    );
+    const recentWindowLabel = `${recentWindowDays} ngày`;
     const displayTotalClicks = Number(
       d.uniqueTotalClicks ?? d.totalClicks ?? 0,
     );
@@ -8320,6 +8330,10 @@ async function loadData(prefetched = null) {
         links.some((link) => Number(link.id) === Number(id)),
       ),
     );
+    const dashboardClicksLabel = document.getElementById("dClicksLabel");
+    if (dashboardClicksLabel) {
+      dashboardClicksLabel.textContent = `Click unique ${recentWindowLabel}`;
+    }
     document.getElementById("dClicks").textContent =
       displayTotalClicks.toLocaleString();
     document.getElementById("dLinks").textContent = (
@@ -8350,7 +8364,7 @@ async function loadData(prefetched = null) {
     document.getElementById("navCount").textContent = d.totalLinks || 0;
     document.getElementById("linkCountLabel").textContent = d.totalLinks || 0;
     const dashboardPlatformMetrics = getDashboardPlatformMetrics();
-    document.getElementById("dClicksSub").textContent = `Raw clicks: ${Number(
+    document.getElementById("dClicksSub").textContent = `Raw clicks ${recentWindowLabel}: ${Number(
       d.rawTotalClicks ?? statsAnalytics?.total_clicks ?? 0,
     ).toLocaleString()}`;
     document.getElementById("dShopee").textContent = Number(
@@ -8796,9 +8810,14 @@ function applyLinkFilters() {
 //  CHART
 // ══════════════════════════════════════════════════
 function setChartDays(n, btn) {
-  chartDays = n;
-  document.querySelectorAll(".cf").forEach((b) => b.classList.remove("active"));
-  btn.classList.add("active");
+  chartDays = RECENT_STATS_WINDOW_DAYS;
+  document.querySelectorAll(".cf").forEach((button) => {
+    const buttonDays = Number(
+      button.dataset.days || String(button.textContent || "").replace(/\D/g, ""),
+    );
+    button.classList.toggle("active", buttonDays === chartDays);
+  });
+  if (btn) btn.classList.add("active");
   renderChart();
 }
 
@@ -8846,7 +8865,12 @@ function renderChart() {
         },
         y: {
           grid: { color: "rgba(255,255,255,.03)" },
-          ticks: { color: "#4b5563", font: { size: 11 }, stepSize: 1 },
+          ticks: {
+            color: "#4b5563",
+            font: { size: 11 },
+            precision: 0,
+            maxTicksLimit: 8,
+          },
           beginAtZero: true,
         },
       },
@@ -9291,7 +9315,12 @@ function renderStatsPage() {
           },
           y: {
             grid: { color: "rgba(255,255,255,.03)" },
-            ticks: { color: "#4b5563", font: { size: 11 }, stepSize: 1 },
+            ticks: {
+              color: "#4b5563",
+              font: { size: 11 },
+              precision: 0,
+              maxTicksLimit: 8,
+            },
             beginAtZero: true,
           },
         },

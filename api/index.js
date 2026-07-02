@@ -77,6 +77,7 @@ const STATS_RESPONSE_CACHE_TTL_MS = Math.max(
 );
 const statsResponseCache = new Map();
 const statsResponseInFlight = new Map();
+const USER_STATS_RECENT_DAYS = 7;
 
 // ── Cloudinary config ────────────────────────────────────────────────────────
 const CLOUDINARY_OK = !!(
@@ -7158,7 +7159,10 @@ app.get("/api/stats", async (req, res) => {
       ] = await Promise.all([
         database.getTotals(userId, guestSessionId),
         database.getTodayStats(userId, guestSessionId),
-        database.getClickAnalytics(userId, guestSessionId),
+        database.getClickAnalytics(userId, guestSessionId, {
+          limit: 5000,
+          days: USER_STATS_RECENT_DAYS,
+        }),
         user ? database.getLatestLoginEvent(user.id) : Promise.resolve(null),
         user
           ? resolveWorkspaceSelection(database, user, {
@@ -7197,10 +7201,11 @@ app.get("/api/stats", async (req, res) => {
         ...today,
         totalClicks: analytics.unique_clicks || 0,
         uniqueTotalClicks: analytics.unique_clicks || 0,
-        rawTotalClicks: totals.totalClicks || 0,
+        rawTotalClicks: analytics.total_clicks || 0,
         clicksToday: uniqueClicksToday,
         uniqueClicksToday,
         rawClicksToday: today.clicksToday || 0,
+        recentWindowDays: USER_STATS_RECENT_DAYS,
         recent,
         analytics,
         alerts,
