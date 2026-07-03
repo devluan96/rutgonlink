@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Hướng dẫn rút gọn link Shopee và TikTok hiệu quả hơn với short link, QR code, bio link và cách đọc click cho social commerce."
+    />
+    <meta
+      name="robots"
+      content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+    />
+    <meta name="theme-color" content="#3b82f6" />
+    <link rel="canonical" href="__PAGE_URL__" />
+    <meta property="og:locale" content="vi_VN" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="BocLink.click" />
+    <meta property="og:title" content="__PAGE_TITLE__" />
+    <meta property="og:description" content="__PAGE_DESCRIPTION__" />
+    <meta property="og:url" content="__PAGE_URL__" />
+    <meta property="og:image" content="__OG_IMAGE_URL__" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="BocLink.click - hướng dẫn rút gọn link Shopee và TikTok"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="__PAGE_TITLE__" />
+    <meta name="twitter:description" content="__PAGE_DESCRIPTION__" />
+    <meta name="twitter:image" content="__OG_IMAGE_URL__" />
+    <title>__PAGE_TITLE__</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+    <link rel="apple-touch-icon" href="/favicon.svg?v=2" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "__PAGE_TITLE__",
+        "description": "__PAGE_DESCRIPTION__",
+        "inLanguage": "vi-VN",
+        "mainEntityOfPage": "__PAGE_URL__",
+        "image": ["__OG_IMAGE_URL__"],
+        "publisher": {
+          "@type": "Organization",
+          "name": "BocLink.click",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "__BASE_URL__/favicon.svg?v=2"
+          }
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Trang chủ",
+            "item": "__BASE_URL__/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Tài nguyên",
+            "item": "__BASE_URL__/resources/rut-gon-link-shopee-tiktok"
+          }
+        ]
+      }
+    </script>
+    <style>
+      :root {
+        --brand-1: #3b82f6;
+        --brand-2: #8b5cf6;
+        --brand-3: #6366f1;
+        --ink: #0f172a;
+        --ink-soft: #334155;
+        --line: rgba(148, 163, 184, 0.22);
+        --surface: rgba(255, 255, 255, 0.82);
+        --bg:
+          radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 24%),
+          radial-gradient(circle at top right, rgba(139, 92, 246, 0.14), transparent 22%),
+          linear-gradient(180deg, #f7fbff 0%, #eff4ff 42%, #f8fafc 100%);
+        --brand-gradient: linear-gradient(135deg, var(--brand-1), var(--brand-2));
+        --font-display: "Space Grotesk", "Segoe UI", sans-serif;
+        --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: var(--font-body);
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .page-shell {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 28px 0 72px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 28px;
+        padding: 16px 18px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        backdrop-filter: blur(16px);
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .brand img {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+      }
+
+      .brand strong {
+        display: block;
+        font-family: var(--font-display);
+        font-size: 1rem;
+        letter-spacing: -0.04em;
+      }
+
+      .brand span {
+        display: block;
+        color: var(--ink-soft);
+        font-size: 0.84rem;
+      }
+
+      .topbar-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+
+      .btn,
+      .btn-ghost {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: 0.8rem 1.15rem;
+        border-radius: 999px;
+        font-weight: 700;
+      }
+
+      .btn {
+        background: var(--brand-gradient);
+        color: #fff;
+        box-shadow: 0 16px 36px rgba(59, 130, 246, 0.22);
+      }
+
+      .btn-ghost {
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        color: var(--ink);
+      }
+
+      .hero {
+        padding: 28px 0 20px;
+      }
+
+      .kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        margin-bottom: 1rem;
+        padding: 0.58rem 0.92rem;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.12);
+        color: #1d4ed8;
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0 0 1rem;
+        max-width: 14ch;
+        font-family: var(--font-display);
+        font-size: clamp(2.8rem, 6vw, 5rem);
+        line-height: 0.94;
+        letter-spacing: -0.07em;
+      }
+
+      .hero-copy {
+        max-width: 68ch;
+        color: var(--ink-soft);
+        font-size: 1.05rem;
+        line-height: 1.8;
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.35fr 0.9fr;
+        gap: 1rem;
+        margin-top: 1.5rem;
+      }
+
+      .hero-card,
+      .toc,
+      .article,
+      .cta-card {
+        border-radius: 28px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: var(--surface);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+      }
+
+      .hero-card {
+        padding: 1.35rem;
+      }
+
+      .hero-card h2,
+      .toc h2,
+      .article h2,
+      .cta-card h2 {
+        margin: 0 0 0.8rem;
+        font-family: var(--font-display);
+        font-size: 1.28rem;
+        letter-spacing: -0.03em;
+      }
+
+      .hero-list,
+      .toc-list,
+      .check-list {
+        display: grid;
+        gap: 0.8rem;
+      }
+
+      .hero-item,
+      .check-item {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.75rem;
+        align-items: start;
+      }
+
+      .hero-mark,
+      .check-mark {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.16), rgba(139, 92, 246, 0.16));
+        color: #2563eb;
+        font-weight: 800;
+      }
+
+      .hero-item strong,
+      .check-item strong {
+        display: block;
+        margin-bottom: 0.2rem;
+      }
+
+      .hero-item span,
+      .check-item span {
+        color: var(--ink-soft);
+        line-height: 1.65;
+      }
+
+      .toc {
+        padding: 1.35rem;
+      }
+
+      .toc-list a {
+        display: block;
+        padding: 0.85rem 0.95rem;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.76);
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        color: var(--ink-soft);
+        font-weight: 600;
+      }
+
+      .content-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+
+      .article {
+        padding: clamp(1.5rem, 4vw, 2.2rem);
+      }
+
+      .article section + section {
+        margin-top: 2rem;
+      }
+
+      .article h2 {
+        font-size: clamp(1.55rem, 3vw, 2.1rem);
+      }
+
+      .article p {
+        margin: 0.85rem 0 0;
+        color: var(--ink-soft);
+        line-height: 1.85;
+      }
+
+      .article ul {
+        margin: 1rem 0 0;
+        padding-left: 1.15rem;
+        color: var(--ink-soft);
+        line-height: 1.85;
+      }
+
+      .article li + li {
+        margin-top: 0.45rem;
+      }
+
+      .inline-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.7rem;
+        margin-top: 1rem;
+      }
+
+      .inline-chip {
+        padding: 0.55rem 0.8rem;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.1);
+        color: #1d4ed8;
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+
+      .cta-card {
+        padding: 1.4rem;
+      }
+
+      .cta-card p {
+        margin: 0 0 1rem;
+        color: var(--ink-soft);
+        line-height: 1.72;
+      }
+
+      .cta-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+
+      .footer-note {
+        margin-top: 1rem;
+        color: var(--ink-soft);
+        font-size: 0.92rem;
+      }
+
+      @media (max-width: 860px) {
+        .page-shell {
+          width: min(100% - 20px, 1120px);
+          padding-bottom: 44px;
+        }
+
+        .topbar {
+          padding: 14px;
+        }
+
+        .hero-grid {
+          grid-template-columns: 1fr;
+        }
+
+        h1 {
+          max-width: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a href="/" class="brand">
+          <img src="/favicon.svg?v=2" alt="BocLink" />
+          <span>
+            <strong>BocLink.click</strong>
+            <span>Rút gọn link, QR code và bio link</span>
+          </span>
+        </a>
+        <div class="topbar-actions">
+          <a href="/resources" class="btn-ghost">Hub tài nguyên</a>
+          <a href="/register" class="btn">Bắt đầu miễn phí</a>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero">
+          <span class="kicker">Tài nguyên SEO & social commerce</span>
+          <h1>Hướng dẫn rút gọn link Shopee và TikTok hiệu quả hơn</h1>
+          <p class="hero-copy">
+            Nếu bạn đang bán hàng, chạy affiliate hoặc kéo traffic social về
+            một sản phẩm, short link không chỉ là để làm URL đẹp hơn. Nó còn là
+            điểm nối giữa bài đăng, bio link, QR code và cách bạn đọc tín hiệu
+            click để biết nội dung nào đang ra đơn tốt hơn.
+          </p>
+
+          <div class="hero-grid">
+            <div class="hero-card">
+              <h2>Trong bài này có gì</h2>
+              <div class="hero-list">
+                <div class="hero-item">
+                  <div class="hero-mark">1</div>
+                  <div>
+                    <strong>Khi nào nên dùng short link</strong>
+                    <span>Không phải link nào cũng cần rút gọn theo cùng một cách.</span>
+                  </div>
+                </div>
+                <div class="hero-item">
+                  <div class="hero-mark">2</div>
+                  <div>
+                    <strong>Khi nào nên thêm QR code hoặc bio link</strong>
+                    <span>Tùy vào kênh chia sẻ, hành vi người xem và mục tiêu chiến dịch.</span>
+                  </div>
+                </div>
+                <div class="hero-item">
+                  <div class="hero-mark">3</div>
+                  <div>
+                    <strong>Nên đọc click như thế nào</strong>
+                    <span>Tập trung vào tín hiệu đủ để ra quyết định, thay vì chỉ nhìn số lớn.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="toc" aria-labelledby="tocTitle">
+              <h2 id="tocTitle">Mục lục nhanh</h2>
+              <div class="toc-list">
+                <a href="#why-short-link">Vì sao cần short link cho Shopee, TikTok</a>
+                <a href="#qr-vs-bio">Khi nào dùng QR code, khi nào dùng bio link</a>
+                <a href="#click-metrics">Cách đọc click để tối ưu chiến dịch</a>
+                <a href="#workflow">Workflow gọn cho seller và creator</a>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <div class="content-grid">
+          <article class="article">
+            <section id="why-short-link">
+              <h2>Vì sao short link quan trọng với link Shopee và TikTok</h2>
+              <p>
+                Link sản phẩm trên Shopee hoặc TikTok thường dài, nhiều tham số
+                và khó kiểm soát khi được dán qua nhiều kênh như Facebook,
+                Zalo, Instagram, livestream hoặc bình luận. Khi bạn dùng short
+                link, bạn giải quyết đồng thời ba việc: nhìn gọn hơn, dễ gắn vào
+                nội dung hơn và dễ theo dõi hơn sau khi chia sẻ.
+              </p>
+              <p>
+                Với social commerce, vấn đề không chỉ là “đã có link”. Vấn đề là
+                bạn có biết link nào đang được nhấp nhiều hơn, kênh nào đang
+                kéo traffic tốt hơn, và chiến dịch nào đang cần thay đổi call to
+                action hay không.
+              </p>
+              <div class="inline-chip-row">
+                <span class="inline-chip">Short link cho Shopee</span>
+                <span class="inline-chip">Short link cho TikTok</span>
+                <span class="inline-chip">Link affiliate</span>
+                <span class="inline-chip">Tracking click</span>
+              </div>
+            </section>
+
+            <section id="qr-vs-bio">
+              <h2>Khi nào nên dùng QR code, khi nào nên dùng bio link</h2>
+              <p>
+                Nếu bạn đang đẩy traffic từ poster, booth, card visit, sticker,
+                bao bì hoặc livestream offline-to-online, QR code là lựa chọn
+                hợp lý vì người xem chỉ cần quét là vào ngay link đích.
+              </p>
+              <p>
+                Nếu bạn có nhiều điểm đến như nhiều sản phẩm, nhiều sàn, nhiều
+                nhóm nội dung hoặc nhiều CTA cho một creator profile, bio link
+                sẽ hợp lý hơn một short link đơn lẻ vì bạn gom được mọi hướng đi
+                về cùng một trang điều hướng.
+              </p>
+              <ul>
+                <li>Dùng short link khi chỉ có một điểm đến rõ ràng.</li>
+                <li>Dùng QR code khi traffic đến từ bề mặt cần quét.</li>
+                <li>Dùng bio link khi một hồ sơ cần nhiều CTA khác nhau.</li>
+              </ul>
+            </section>
+
+            <section id="click-metrics">
+              <h2>Cách đọc click để tối ưu chiến dịch social commerce</h2>
+              <p>
+                Nhiều người chỉ nhìn tổng click, nhưng với seller hoặc affiliate
+                thì chỉ số hữu ích hơn thường là: click theo ngày, click unique,
+                chênh lệch giữa các kênh, và link nào tăng đột biến sau một bài
+                post hoặc buổi livestream.
+              </p>
+              <p>
+                Khi bạn nhìn được click theo từng link, bạn sẽ dễ trả lời các
+                câu hỏi như: caption nào đang kéo tốt hơn, bio link có đang
+                làm loãng traffic không, hay QR code trên bề mặt offline có thật
+                sự đang được quét hay chỉ là trang trí.
+              </p>
+            </section>
+
+            <section id="workflow">
+              <h2>Workflow gọn cho seller, creator và team marketing</h2>
+              <div class="check-list">
+                <div class="check-item">
+                  <div class="check-mark">A</div>
+                  <div>
+                    <strong>Tạo một short link riêng cho từng chiến dịch</strong>
+                    <span>Không gom mọi traffic về cùng một link nếu bạn còn muốn đo hiệu quả.</span>
+                  </div>
+                </div>
+                <div class="check-item">
+                  <div class="check-mark">B</div>
+                  <div>
+                    <strong>Dùng bio link cho hồ sơ mạng xã hội chính</strong>
+                    <span>Giúp bạn đổi ưu tiên CTA mà không phải sửa lại toàn bộ nội dung cũ.</span>
+                  </div>
+                </div>
+                <div class="check-item">
+                  <div class="check-mark">C</div>
+                  <div>
+                    <strong>Đặt QR code cho bề mặt offline hoặc visual post</strong>
+                    <span>Phù hợp với poster, in ấn, booth hoặc card quà tặng.</span>
+                  </div>
+                </div>
+                <div class="check-item">
+                  <div class="check-mark">D</div>
+                  <div>
+                    <strong>Xem click sau từng đợt nội dung</strong>
+                    <span>Đủ để quyết định nên tăng bài nào, đổi CTA nào và giữ alias nào.</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </article>
+
+          <aside class="cta-card">
+            <h2>Bài liên quan</h2>
+            <p>
+              Nếu bạn đang xây workflow đầy đủ hơn, hãy đọc thêm bio link và QR
+              code để ghép thành một cụm điều hướng hoàn chỉnh.
+            </p>
+            <div class="cta-actions">
+              <a href="/resources/bio-link-social-commerce" class="btn-ghost"
+                >Bio link</a
+              >
+              <a
+                href="/resources/qr-code-ban-hang-social-commerce"
+                class="btn-ghost"
+                >QR code</a
+              >
+            </div>
+            <p class="footer-note">
+              Hoặc quay về <a href="/resources">hub tài nguyên</a> để xem toàn bộ
+              cụm bài viết.
+            </p>
+
+            <h2>Muốn áp dụng ngay cho link Shopee hoặc TikTok?</h2>
+            <p>
+              BocLink gom short link, QR code, bio link và dashboard click vào
+              cùng một nơi để bạn không phải nhảy qua nhiều công cụ khác nhau.
+            </p>
+            <div class="cta-actions">
+              <a href="/register" class="btn">Tạo tài khoản</a>
+              <a href="/" class="btn-ghost">Xem landing</a>
+            </div>
+            <p class="footer-note">
+              URL tài nguyên này được tạo để tăng khả năng crawl, internal link
+              và bao phủ truy vấn dài hạn cho social commerce.
+            </p>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

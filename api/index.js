@@ -206,6 +206,7 @@ const VIDEO_LINK_DOMAIN = (
   process.env.VIDEO_LINK_DOMAIN || "goc8.click"
 ).trim();
 const AFFILIATE_PRESET_MAX_LENGTH = 6000;
+const DEFAULT_OG_IMAGE_URL = `${BASE_URL}/og-card.png`;
 
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
@@ -235,13 +236,46 @@ app.use((req, res, next) => {
   next();
 });
 
+function renderHtmlTemplate(templatePath, replacements = {}) {
+  let html = fs.readFileSync(templatePath, "utf8");
+  for (const [token, value] of Object.entries(replacements)) {
+    html = html.replaceAll(token, String(value ?? ""));
+  }
+  return html;
+}
+
+function escapeXml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 function serveLanding(_req, res) {
   res.set("Cache-Control", "no-store");
-  res.sendFile(path.join(__dirname, "..", "public", "landing.html"));
+  const html = renderHtmlTemplate(
+    path.join(__dirname, "..", "public", "landing.html"),
+    {
+      "__BASE_URL__": BASE_URL,
+      "__OG_IMAGE_URL__": DEFAULT_OG_IMAGE_URL,
+    },
+  );
+  res.type("html").send(html);
+}
+
+function servePublicTemplate(templatePath, replacements = {}, options = {}) {
+  return (_req, res) => {
+    res.set("Cache-Control", options.cacheControl || "no-store");
+    const html = renderHtmlTemplate(templatePath, replacements);
+    res.type("html").send(html);
+  };
 }
 
 function serveAppShell(_req, res) {
   res.set("Cache-Control", "no-store");
+  res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   res.sendFile(path.join(__dirname, "..", "public", "index.html"));
 }
 
@@ -301,17 +335,98 @@ const appShellRoutes = [
   "/app/:page/",
   "/index.html",
 ];
+const publicResourcePages = [
+  {
+    pathname: "/resources",
+    templatePath: path.join(
+      __dirname,
+      "..",
+      "public",
+      "resources-index.html",
+    ),
+    title:
+      "Tài nguyên BocLink cho short link, bio link và QR code | BocLink.click",
+    description:
+      "Trung tâm tài nguyên của BocLink về rút gọn link, bio link, QR code và tracking cho Shopee, TikTok, creator và social commerce.",
+    changefreq: "weekly",
+    priority: "0.9",
+  },
+  {
+    pathname: "/resources/rut-gon-link-shopee-tiktok",
+    templatePath: path.join(
+      __dirname,
+      "..",
+      "public",
+      "resource-shopee-tiktok-guide.html",
+    ),
+    title:
+      "Hướng dẫn rút gọn link Shopee và TikTok hiệu quả hơn | BocLink.click",
+    description:
+      "Hướng dẫn rút gọn link Shopee và TikTok hiệu quả hơn với short link, QR code, bio link và cách đọc click cho social commerce.",
+    changefreq: "monthly",
+    priority: "0.8",
+  },
+  {
+    pathname: "/resources/bio-link-social-commerce",
+    templatePath: path.join(
+      __dirname,
+      "..",
+      "public",
+      "resource-bio-link-social-commerce.html",
+    ),
+    title:
+      "Bio link là gì và khi nào nên dùng cho social commerce? | BocLink.click",
+    description:
+      "Tìm hiểu bio link là gì, khi nào nên dùng bio link cho social commerce, creator, affiliate và cách gom nhiều CTA về một trang gọn hơn.",
+    changefreq: "monthly",
+    priority: "0.8",
+  },
+  {
+    pathname: "/resources/qr-code-ban-hang-social-commerce",
+    templatePath: path.join(
+      __dirname,
+      "..",
+      "public",
+      "resource-qr-code-social-commerce.html",
+    ),
+    title:
+      "Cách dùng QR code cho bán hàng và social post hiệu quả hơn | BocLink.click",
+    description:
+      "Cách dùng QR code cho bán hàng, social post, livestream và bề mặt offline để kéo traffic về Shopee, TikTok hoặc bio link hiệu quả hơn.",
+    changefreq: "monthly",
+    priority: "0.8",
+  },
+];
 
 app.get("/", serveLanding);
 app.get(["/landing", "/landing/"], redirectToCanonical("/"));
+app.get("/landing.html", redirectToCanonical("/"));
+for (const page of publicResourcePages) {
+  app.get(
+    [page.pathname, `${page.pathname}/`],
+    servePublicTemplate(
+      page.templatePath,
+      {
+        "__BASE_URL__": BASE_URL,
+        "__PAGE_URL__": `${BASE_URL}${page.pathname}`,
+        "__PAGE_TITLE__": page.title,
+        "__PAGE_DESCRIPTION__": page.description,
+        "__OG_IMAGE_URL__": DEFAULT_OG_IMAGE_URL,
+      },
+      { cacheControl: "public, max-age=300" },
+    ),
+  );
+}
 app.get(appShellRoutes, requireAppShellSession, serveAppShell);
 const serveAuthHtml = (templatePath) => (_req, res) => {
   res.set("Cache-Control", "no-store");
-  const html = fs
-    .readFileSync(templatePath, "utf8")
-    .replaceAll("__GOOGLE_CLIENT_ID__", GOOGLE_CLIENT_ID)
-    .replaceAll("__SUPABASE_URL__", SUPABASE_URL)
-    .replaceAll("__SUPABASE_ANON_KEY__", SUPABASE_ANON_KEY);
+  res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+  const html = renderHtmlTemplate(templatePath, {
+    "__GOOGLE_CLIENT_ID__": GOOGLE_CLIENT_ID,
+    "__SUPABASE_URL__": SUPABASE_URL,
+    "__SUPABASE_ANON_KEY__": SUPABASE_ANON_KEY,
+    "__BASE_URL__": BASE_URL,
+  });
   res.type("html").send(html);
 };
 app.get(
@@ -327,10 +442,12 @@ app.get(
   ),
 );
 app.get(["/user/login", "/user/login/"], redirectToCanonical("/login"));
+app.get("/user/login/index.html", redirectToCanonical("/login"));
 app.get(
   ["/user/register", "/user/register/"],
   redirectToCanonical("/register"),
 );
+app.get("/user/register/index.html", redirectToCanonical("/register"));
 app.get(
   ["/admin/article-funnel-lab", "/admin/article-funnel-lab/"],
   requireAdmin,
@@ -726,11 +843,64 @@ app.use(
   }),
 );
 
-// ── FIX 1: Thêm /robots.txt để tránh 404 và ngăn bot crawl ──────────────────
 app.get("/robots.txt", (_, res) => {
   res.set("Content-Type", "text/plain");
   res.set("Cache-Control", "public, max-age=86400");
-  res.send("User-agent: *\nDisallow: /api/\nAllow: /\n");
+  res.send(
+    [
+      "User-agent: *",
+      "Allow: /",
+      "Disallow: /api/",
+      "Disallow: /dashboard",
+      "Disallow: /links",
+      "Disallow: /create",
+      "Disallow: /qr",
+      "Disallow: /bio",
+      "Disallow: /integrations",
+      "Disallow: /team",
+      "Disallow: /pricing",
+      "Disallow: /stats",
+      "Disallow: /account",
+      "Disallow: /admin",
+      "Disallow: /app",
+      "Disallow: /index.html",
+      `Sitemap: ${BASE_URL}/sitemap.xml`,
+      "",
+    ].join("\n"),
+  );
+});
+
+app.get("/sitemap.xml", (_req, res) => {
+  const sitemapEntries = [
+    {
+      loc: `${BASE_URL}/`,
+      lastmod: fs
+        .statSync(path.join(__dirname, "..", "public", "landing.html"))
+        .mtime.toISOString(),
+      changefreq: "weekly",
+      priority: "1.0",
+    },
+    ...publicResourcePages.map((page) => ({
+      loc: `${BASE_URL}${page.pathname}`,
+      lastmod: fs.statSync(page.templatePath).mtime.toISOString(),
+      changefreq: page.changefreq || "monthly",
+      priority: page.priority || "0.8",
+    })),
+  ];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${sitemapEntries
+  .map(
+    (entry) => `  <url>
+    <loc>${escapeXml(entry.loc)}</loc>
+    <lastmod>${entry.lastmod}</lastmod>
+    <changefreq>${entry.changefreq}</changefreq>
+    <priority>${entry.priority}</priority>
+  </url>`,
+  )
+  .join("\n")}
+</urlset>`;
+  res.type("application/xml").send(xml);
 });
 
 // ── Multer ───────────────────────────────────────────────────────────────────

@@ -8,12 +8,92 @@
     />
     <meta
       name="description"
-      content="BocLink.click - trang giới thiệu 3D tối giản để rút gọn link, tạo QR và bio page cho chiến dịch bán hàng."
+      content="Rút gọn link, tạo QR code, bio link và theo dõi click theo thời gian thực cho Shopee, TikTok và chiến dịch social commerce với BocLink.click."
+    />
+    <meta
+      name="robots"
+      content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
     />
     <meta name="theme-color" content="#3b82f6" />
-    <title>BocLink.click - Rút Gọn Link</title>
+    <link rel="canonical" href="__BASE_URL__/" />
+    <meta property="og:locale" content="vi_VN" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="BocLink.click" />
+    <meta
+      property="og:title"
+      content="BocLink.click | Rút gọn link, tạo QR code và bio link"
+    />
+    <meta
+      property="og:description"
+      content="Rút gọn link, tạo QR code, bio link và theo dõi click theo thời gian thực cho Shopee, TikTok và social commerce."
+    />
+    <meta property="og:url" content="__BASE_URL__/" />
+    <meta property="og:image" content="__OG_IMAGE_URL__" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="BocLink.click - nền tảng rút gọn link, QR code và bio link"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="BocLink.click | Rút gọn link, tạo QR code và bio link"
+    />
+    <meta
+      name="twitter:description"
+      content="Rút gọn link, tạo QR code, bio link và theo dõi click theo thời gian thực cho Shopee, TikTok và social commerce."
+    />
+    <meta name="twitter:image" content="__OG_IMAGE_URL__" />
+    <meta
+      name="twitter:image:alt"
+      content="BocLink.click - nền tảng rút gọn link, QR code và bio link"
+    />
+    <title>
+      BocLink.click | Rút gọn link, tạo QR code và bio link cho Shopee, TikTok
+    </title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
     <link rel="apple-touch-icon" href="/favicon.svg?v=2" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "BocLink.click",
+        "url": "__BASE_URL__/",
+        "inLanguage": "vi-VN",
+        "description": "Rút gọn link, tạo QR code, bio link và theo dõi click theo thời gian thực cho Shopee, TikTok và social commerce với BocLink.click."
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "BocLink.click",
+        "url": "__BASE_URL__/",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "inLanguage": "vi-VN",
+        "description": "Nền tảng rút gọn link, tạo QR code, bio link và theo dõi click theo thời gian thực cho social commerce.",
+        "featureList": [
+          "Rút gọn link tùy chỉnh",
+          "Tạo mã QR động",
+          "Bio link / trang tiểu sử",
+          "Theo dõi click theo thời gian thực",
+          "Hỗ trợ chiến dịch Shopee và TikTok"
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "BocLink.click",
+        "url": "__BASE_URL__/",
+        "logo": "__BASE_URL__/favicon.svg?v=2",
+        "image": "__OG_IMAGE_URL__",
+        "description": "Nền tảng rút gọn link, QR code, bio link và analytics cho social commerce."
+      }
+    </script>
     <script>
       (() => {
         try {
@@ -522,11 +602,42 @@
         text-wrap: balance;
       }
 
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
       .hero-title .accent {
         background: var(--brand-gradient-accent);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
+      }
+
+      .hero-typed-note {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        margin: -0.2rem 0 1rem;
+        padding: 0.45rem 0.8rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.62);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        color: var(--ink-soft);
+        font-size: 0.92rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .hero-typed-note strong {
+        color: var(--brand-1);
       }
 
       .typed {
@@ -2242,6 +2353,156 @@
         box-shadow: 0 16px 28px rgba(79, 124, 255, 0.2);
       }
 
+      .faq-section {
+        padding: 0 0 7rem;
+      }
+
+      .faq-shell {
+        position: relative;
+        overflow: hidden;
+        padding: clamp(2rem, 4vw, 3rem);
+        border-radius: 34px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background:
+          radial-gradient(
+            circle at top right,
+            rgba(99, 102, 241, 0.14),
+            transparent 28%
+          ),
+          linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.9),
+            rgba(248, 250, 252, 0.84)
+          );
+        box-shadow: 0 28px 70px rgba(15, 23, 42, 0.12);
+      }
+
+      .faq-shell::before {
+        content: "";
+        position: absolute;
+        inset: auto -120px -120px auto;
+        width: 260px;
+        height: 260px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          rgba(59, 130, 246, 0.16),
+          transparent 68%
+        );
+        pointer-events: none;
+      }
+
+      .faq-copy {
+        position: relative;
+        z-index: 1;
+        max-width: 760px;
+        margin-bottom: 1.5rem;
+      }
+
+      .faq-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding: 0.55rem 0.95rem;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.1);
+        color: #1d4ed8;
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .faq-copy h2 {
+        margin: 0 0 0.85rem;
+        font-size: clamp(2rem, 4vw, 3rem);
+        line-height: 1.02;
+        letter-spacing: -0.05em;
+      }
+
+      .faq-copy p {
+        margin: 0;
+        max-width: 62ch;
+        color: var(--ink-soft);
+        font-size: 1.02rem;
+        line-height: 1.75;
+      }
+
+      .faq-grid {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+      }
+
+      .faq-item {
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.82);
+        backdrop-filter: blur(12px);
+        transition:
+          border-color 0.22s ease,
+          transform 0.22s ease,
+          box-shadow 0.22s ease;
+      }
+
+      .faq-item[open] {
+        border-color: rgba(59, 130, 246, 0.28);
+        transform: translateY(-1px);
+        box-shadow: 0 18px 36px rgba(59, 130, 246, 0.08);
+      }
+
+      .faq-question {
+        list-style: none;
+        cursor: pointer;
+        padding: 1.1rem 1.25rem;
+        font-family: var(--font-display);
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1.4;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .faq-question::-webkit-details-marker {
+        display: none;
+      }
+
+      .faq-question::after {
+        content: "+";
+        flex: 0 0 auto;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: inline-grid;
+        place-items: center;
+        background: rgba(59, 130, 246, 0.1);
+        color: #2563eb;
+        font-size: 1.2rem;
+        font-weight: 700;
+      }
+
+      .faq-item[open] .faq-question::after {
+        content: "−";
+      }
+
+      .faq-answer {
+        padding: 0 1.25rem 1.2rem;
+        color: var(--ink-soft);
+        line-height: 1.72;
+        font-size: 0.98rem;
+      }
+
+      .faq-answer strong {
+        color: var(--ink);
+      }
+
       .integration-item {
         display: flex;
         flex-direction: column;
@@ -3074,6 +3335,16 @@
         color: #e5eefc;
       }
 
+      html[data-theme="dark"] .hero-typed-note {
+        background: rgba(15, 23, 42, 0.62);
+        border-color: rgba(148, 163, 184, 0.14);
+        color: rgba(226, 232, 240, 0.76);
+      }
+
+      html[data-theme="dark"] .hero-typed-note strong {
+        color: #93c5fd;
+      }
+
       html[data-theme="dark"] .footer-card {
         background:
           radial-gradient(
@@ -3451,6 +3722,56 @@
 
       html[data-theme="dark"] .integrations-cta {
         box-shadow: 0 16px 28px rgba(79, 124, 255, 0.18);
+      }
+
+      html[data-theme="dark"] .faq-shell {
+        border-color: rgba(96, 165, 250, 0.14);
+        background:
+          radial-gradient(
+            circle at top right,
+            rgba(59, 130, 246, 0.18),
+            transparent 28%
+          ),
+          linear-gradient(
+            180deg,
+            rgba(15, 23, 42, 0.94),
+            rgba(15, 23, 42, 0.9)
+          );
+        box-shadow: 0 30px 72px rgba(2, 6, 23, 0.35);
+      }
+
+      html[data-theme="dark"] .faq-badge {
+        background: rgba(59, 130, 246, 0.16);
+        color: #93c5fd;
+      }
+
+      html[data-theme="dark"] .faq-copy h2 {
+        color: #f8fafc;
+      }
+
+      html[data-theme="dark"] .faq-copy p,
+      html[data-theme="dark"] .faq-answer {
+        color: rgba(226, 232, 240, 0.76);
+      }
+
+      html[data-theme="dark"] .faq-item {
+        border-color: rgba(96, 165, 250, 0.12);
+        background: rgba(15, 23, 42, 0.62);
+      }
+
+      html[data-theme="dark"] .faq-item[open] {
+        border-color: rgba(96, 165, 250, 0.24);
+        box-shadow: 0 22px 42px rgba(2, 6, 23, 0.34);
+      }
+
+      html[data-theme="dark"] .faq-question,
+      html[data-theme="dark"] .faq-answer strong {
+        color: #f8fafc;
+      }
+
+      html[data-theme="dark"] .faq-question::after {
+        background: rgba(59, 130, 246, 0.18);
+        color: #bfdbfe;
       }
 
       html[data-theme="dark"] .integration-icon {
@@ -4159,7 +4480,8 @@
         .icon-strip,
         .insight-section,
         .apps-section,
-        .team-section {
+        .team-section,
+        .faq-section {
           padding: 0.75rem 0 1.8rem;
         }
 
@@ -4218,6 +4540,10 @@
 
         .footer-links-list {
           gap: 0.5rem;
+        }
+
+        .faq-grid {
+          grid-template-columns: 1fr;
         }
 
         .footer-bottom {
@@ -4622,18 +4948,26 @@
             <div class="col-lg-7">
               <span class="hero-kicker fade-up">
                 <i class="fa-solid fa-sparkles"></i>
-                Đăng nhập nhanh, tiếp tục đúng chổ
+                Rút gọn link cho social commerce
               </span>
 
-              <h4 class="hero-title fade-up delay-1">
-                <span>Trực quan</span>, An toàn<br />
-                &amp; Năng động
-                <span class="typed" id="typed-word">Liên kết.</span>
-              </h4>
+              <h1 class="hero-title fade-up delay-1">
+                <span>Rút gọn link</span>, tạo mã QR<br />
+                &amp; bio link cho Shopee, TikTok
+              </h1>
+
+              <p class="hero-typed-note fade-up delay-1" aria-hidden="true">
+                Phù hợp cho <strong class="typed" id="typed-word">Shopee.</strong>
+              </p>
+
+              <span class="visually-hidden">
+                Phù hợp cho Shopee, TikTok và bio link.
+              </span>
 
               <p class="hero-lead fade-up delay-2">
-                Tăng cường chiến dịch bằng cách tạo liên kết động, mã QR và
-                trang tiểu sử và nhận phân tích tức thì.
+                BocLink giúp bạn rút gọn URL, tạo QR code, dựng bio link và
+                theo dõi click theo thời gian thực cho chiến dịch bán hàng,
+                affiliate và social commerce.
               </p>
 
               <form
@@ -5780,6 +6114,63 @@
           </div>
         </div>
       </section>
+
+      <section class="faq-section" id="faq">
+        <div class="container">
+          <div class="faq-shell fade-up delay-1">
+            <div class="faq-copy">
+              <span class="faq-badge">
+                <i class="fa-solid fa-circle-question"></i>
+                Câu hỏi thường gặp
+              </span>
+              <h2>Giải đáp nhanh trước khi bạn bắt đầu với BocLink</h2>
+              <p>
+                Phần này gom những câu hỏi phổ biến trước khi dùng nền tảng rút
+                gọn link, QR code và bio link cho social commerce, affiliate và
+                chiến dịch bán hàng.
+              </p>
+            </div>
+
+            <div class="faq-grid">
+              <details class="faq-item" open>
+                <summary class="faq-question">
+                  BocLink dùng để làm gì?
+                </summary>
+                <div class="faq-answer">
+                  BocLink giúp bạn <strong>rút gọn link</strong>, tạo
+                  <strong>QR code</strong>, dựng <strong>bio link</strong> và
+                  theo dõi click theo thời gian thực trong cùng một dashboard,
+                  thay vì dùng nhiều công cụ rời nhau.
+                </div>
+              </details>
+
+              <details class="faq-item">
+                <summary class="faq-question">
+                  Có hỗ trợ link Shopee và TikTok không?
+                </summary>
+                <div class="faq-answer">
+                  Có. Luồng nội dung hiện bám khá rõ các tình huống chia sẻ link
+                  cho <strong>Shopee</strong>, <strong>TikTok</strong> và social
+                  commerce để bạn tối ưu URL, preview và hành trình click tốt
+                  hơn.
+                </div>
+              </details>
+
+              <details class="faq-item">
+                <summary class="faq-question">
+                  Có theo dõi click và hỗ trợ làm việc nhóm không?
+                </summary>
+                <div class="faq-answer">
+                  Có. Dashboard tập trung vào các tín hiệu như click unique, raw
+                  clicks, link đã tạo và hiệu suất gần đây. BocLink cũng đã có
+                  khu vực làm việc nhóm để mời thành viên và phối hợp quản lý
+                  link, QR, bio trong cùng một workspace.
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
 
     <button
@@ -5982,6 +6373,9 @@
               <div class="footer-links-list">
                 <a href="/login">Đăng nhập</a>
                 <a href="#apps-section">Tích hợp</a>
+                <a href="/resources">Tài nguyên</a>
+                <a href="/resources/rut-gon-link-shopee-tiktok">Hướng dẫn Shopee & TikTok</a>
+                <a href="#faq">FAQ</a>
                 <a href="#team-section">Cộng tác</a>
                 <a href="#footer">Liên hệ</a>
               </div>
@@ -6609,7 +7003,7 @@
 
         startTypingLoop(
           typedTarget,
-          ["Liên kết.", "Mã QR.", "Trang tiểu sử."],
+          ["Shopee.", "TikTok.", "Bio link."],
           {
             startDelay: 250,
             holdDelay: 1250,
