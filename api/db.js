@@ -2,6 +2,37 @@ const { createClient } = require('@supabase/supabase-js');
 const rawTimeZoneOffset = Number(process.env.APP_TIME_ZONE_OFFSET_MINUTES);
 const APP_TIME_ZONE_OFFSET_MINUTES = Number.isFinite(rawTimeZoneOffset) ? rawTimeZoneOffset : 420;
 const CLICK_DEDUP_WINDOW_MS = 30000;
+const ANALYTICS_TIME_ZONE = (process.env.APP_TIME_ZONE || 'Asia/Ho_Chi_Minh').trim();
+const regionNamesVi =
+  typeof Intl.DisplayNames === 'function'
+    ? new Intl.DisplayNames(['vi'], { type: 'region' })
+    : null;
+const regionNamesEn =
+  typeof Intl.DisplayNames === 'function'
+    ? new Intl.DisplayNames(['en'], { type: 'region' })
+    : null;
+const PLATFORM_ANALYTICS_META = {
+  video: {
+    key: 'video',
+    label: 'Video Overlay',
+    color: '#f59e0b',
+  },
+  shopee: {
+    key: 'shopee',
+    label: 'Shopee',
+    color: '#ee4d2d',
+  },
+  tiktok: {
+    key: 'tiktok',
+    label: 'TikTok',
+    color: '#69c9d0',
+  },
+  generic: {
+    key: 'generic',
+    label: 'Khác',
+    color: '#6366f1',
+  },
+};
 
 let _client = null;
 
@@ -106,6 +137,182 @@ async function fetchPaginatedRows(fetchPage, limit = 1000, pageSize = 1000) {
   }
 
   return { data: rows, error: null };
+}
+
+function normalizeAnalyticsCountryCode(input) {
+  const value = String(input || '')
+    .trim()
+    .toUpperCase();
+  if (!/^[A-Z]{2}$/.test(value)) return null;
+  if (value === 'XX' || value === 'T1') return null;
+  return value;
+}
+
+function getCountryNameFromCode(code) {
+  if (!code) return null;
+  return regionNamesVi?.of(code) || regionNamesEn?.of(code) || code;
+}
+
+function getCountryEnglishNameFromCode(code) {
+  if (!code) return null;
+  return regionNamesEn?.of(code) || code;
+}
+
+function getAnalyticsPlatformMeta(platformKey) {
+  const normalizedKey = String(platformKey || '')
+    .trim()
+    .toLowerCase();
+  return PLATFORM_ANALYTICS_META[normalizedKey] || PLATFORM_ANALYTICS_META.generic;
+}
+
+function normalizeRecentBuckets(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const bucketStartedAt = String(row?.bucket_started_at || '').trim();
+      const bucketMs = bucketStartedAt ? Date.parse(bucketStartedAt) : NaN;
+      if (!Number.isFinite(bucketMs)) return null;
+      return {
+        bucket_started_at: new Date(bucketMs).toISOString(),
+        clicks: Math.max(Number(row?.clicks) || 0, 0),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.bucket_started_at.localeCompare(b.bucket_started_at));
+}
+
+function finalizePlatformDistributionRows(
+  rows = [],
+  totalClicks = 0,
+  { unique = false } = {},
+) {
+  const merged = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const meta = getAnalyticsPlatformMeta(row?.key);
+    const entry = merged.get(meta.key) || {
+      key: meta.key,
+      label: meta.label,
+      color: meta.color,
+      clicks: 0,
+      unique,
+    };
+    entry.clicks += Math.max(Number(row?.clicks) || 0, 0);
+    if (Object.prototype.hasOwnProperty.call(row || {}, 'clicks_today')) {
+      entry.clicks_today =
+        Math.max(Number(entry.clicks_today) || 0, 0) +
+        Math.max(Number(row?.clicks_today) || 0, 0);
+    }
+    merged.set(meta.key, entry);
+  }
+  return [...merged.values()]
+    .sort((a, b) => b.clicks - a.clicks)
+    .map((platform) => ({
+      ...platform,
+      percent: totalClicks
+        ? Math.round((platform.clicks / totalClicks) * 1000) / 10
+        : 0,
+    }));
+}
+
+function finalizeGeoCountryRows(rows = [], { detailed = false } = {}) {
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const countryCode = normalizeAnalyticsCountryCode(row?.country_code);
+    const countryName =
+      String(row?.country_name || '').trim() ||
+      getCountryNameFromCode(countryCode) ||
+      'Không rõ';
+    const normalized = {
+      country_code: countryCode,
+      country_name: countryName,
+      country_name_en: getCountryEnglishNameFromCode(countryCode),
+      clicks: Math.max(Number(row?.clicks) || 0, 0),
+    };
+    if (!detailed) {
+      return normalized;
+    }
+    return {
+      ...normalized,
+      city: String(row?.city || '').trim() || 'Không rõ',
+      city_clicks: Math.max(Number(row?.city_clicks) || 0, 0),
+    };
+  });
+}
+
+function finalizeClickAnalyticsSummaryPayload(summary = {}) {
+  let payload = {};
+  if (typeof summary === 'string') {
+    try {
+      payload = JSON.parse(summary);
+    } catch {
+      payload = {};
+    }
+  } else if (summary && typeof summary === 'object' && !Array.isArray(summary)) {
+    payload = summary;
+  }
+  const totalClicks = Math.max(Number(payload.total_clicks) || 0, 0);
+  const uniqueClicks = Math.max(Number(payload.unique_clicks) || 0, 0);
+  const rawDistribution = finalizePlatformDistributionRows(
+    payload?.platforms?.distribution || [],
+    totalClicks,
+    { unique: false },
+  );
+  const rawTodayDistribution = finalizePlatformDistributionRows(
+    payload?.platforms?.today_distribution || [],
+    totalClicks,
+    { unique: false },
+  );
+  const uniqueDistribution = finalizePlatformDistributionRows(
+    payload?.platforms?.unique_distribution || [],
+    uniqueClicks,
+    { unique: true },
+  );
+  const uniqueTodayDistribution = finalizePlatformDistributionRows(
+    payload?.platforms?.unique_today_distribution || [],
+    uniqueClicks,
+    { unique: true },
+  );
+
+  return {
+    total_clicks: totalClicks,
+    unique_clicks: uniqueClicks,
+    timeline: Array.isArray(payload.timeline) ? payload.timeline : [],
+    unique_timeline: Array.isArray(payload.unique_timeline)
+      ? payload.unique_timeline
+      : [],
+    recent_buckets: normalizeRecentBuckets(payload.recent_buckets),
+    geo: {
+      tracked_clicks: Math.max(Number(payload?.geo?.tracked_clicks) || 0, 0),
+      unknown_clicks: Math.max(Number(payload?.geo?.unknown_clicks) || 0, 0),
+      countries: finalizeGeoCountryRows(payload?.geo?.countries || []),
+      top_countries: finalizeGeoCountryRows(payload?.geo?.top_countries || [], {
+        detailed: true,
+      }),
+      unique_tracked_clicks: Math.max(
+        Number(payload?.geo?.unique_tracked_clicks) || 0,
+        0,
+      ),
+      unique_unknown_clicks: Math.max(
+        Number(payload?.geo?.unique_unknown_clicks) || 0,
+        0,
+      ),
+      unique_countries: finalizeGeoCountryRows(
+        payload?.geo?.unique_countries || [],
+      ),
+      unique_top_countries: finalizeGeoCountryRows(
+        payload?.geo?.unique_top_countries || [],
+        { detailed: true },
+      ),
+    },
+    platforms: {
+      distribution: rawDistribution,
+      top_platforms: rawDistribution.slice(0, 8),
+      today_distribution: rawTodayDistribution,
+      today_top_platforms: rawTodayDistribution.slice(0, 8),
+      unique_distribution: uniqueDistribution,
+      unique_top_platforms: uniqueDistribution.slice(0, 8),
+      unique_today_distribution: uniqueTodayDistribution,
+      unique_today_top_platforms: uniqueTodayDistribution.slice(0, 8),
+    },
+  };
 }
 
 async function init() {
@@ -1367,6 +1574,60 @@ async function init() {
       }));
     },
 
+    async getClickAnalyticsSummary(userId, guestSessionId, options = {}) {
+      const limit =
+        typeof options === 'number'
+          ? Math.max(Number(options) || 0, 0)
+          : Math.max(Number(options?.limit) || 0, 0);
+      const days =
+        options && typeof options === 'object'
+          ? Math.max(Number(options.days) || 0, 0)
+          : 0;
+      const result = await sb.rpc('get_click_analytics_summary', {
+        p_user_id: userId || null,
+        p_guest_session_id: guestSessionId || null,
+        p_days: days,
+        p_timezone: ANALYTICS_TIME_ZONE,
+        p_limit: limit || null,
+        p_include_all: false,
+      });
+      if (result.error) {
+        console.warn(
+          '[db] getClickAnalyticsSummary fallback:',
+          result.error.message || result.error,
+        );
+        return null;
+      }
+      return finalizeClickAnalyticsSummaryPayload(result.data || {});
+    },
+
+    async getAdminClickAnalyticsSummary(options = 5000) {
+      const limit =
+        typeof options === 'number'
+          ? Math.max(Number(options) || 0, 0)
+          : Math.max(Number(options?.limit) || 0, 0);
+      const days =
+        options && typeof options === 'object'
+          ? Math.max(Number(options.days) || 0, 0)
+          : 0;
+      const result = await sb.rpc('get_click_analytics_summary', {
+        p_user_id: null,
+        p_guest_session_id: null,
+        p_days: days,
+        p_timezone: ANALYTICS_TIME_ZONE,
+        p_limit: limit || null,
+        p_include_all: true,
+      });
+      if (result.error) {
+        console.warn(
+          '[db] getAdminClickAnalyticsSummary fallback:',
+          result.error.message || result.error,
+        );
+        return null;
+      }
+      return finalizeClickAnalyticsSummaryPayload(result.data || {});
+    },
+
     async claimGuestLinks(guestSessionId, userId) {
       if (!guestSessionId || !userId) return;
       const { error } = await sb
@@ -1525,5 +1786,6 @@ module.exports = {
   init,
   __testUtils: {
     fetchPaginatedRows,
+    finalizeClickAnalyticsSummaryPayload,
   },
 };

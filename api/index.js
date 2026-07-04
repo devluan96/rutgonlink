@@ -77,6 +77,13 @@ const STATS_RESPONSE_CACHE_TTL_MS = Math.max(
 );
 const statsResponseCache = new Map();
 const statsResponseInFlight = new Map();
+const ADMIN_STATS_RESPONSE_CACHE_TTL_MS = Math.max(
+  Number(process.env.ADMIN_STATS_RESPONSE_CACHE_TTL_MS) ||
+    STATS_RESPONSE_CACHE_TTL_MS,
+  0,
+);
+const adminStatsResponseCache = new Map();
+const adminStatsResponseInFlight = new Map();
 const USER_STATS_RECENT_DAYS = 7;
 
 // ── Cloudinary config ────────────────────────────────────────────────────────
@@ -2384,6 +2391,22 @@ function buildStatsCacheKey(userId, guestSessionId) {
   return "guest:anonymous";
 }
 
+function formatServerTimingHeader(timings = {}) {
+  return Object.entries(timings)
+    .filter(([, duration]) => Number.isFinite(duration))
+    .map(([label, duration]) => `${label};dur=${Math.max(0, duration)}`)
+    .join(", ");
+}
+
+async function measureAsyncTiming(label, run, timings) {
+  const startedAt = Date.now();
+  try {
+    return await run();
+  } finally {
+    timings[label] = Date.now() - startedAt;
+  }
+}
+
 function normalizeDomainVerificationStatus(input) {
   const value = String(input || "")
     .trim()
@@ -2535,6 +2558,22 @@ function buildClickSpikeAlert(clickRows = [], currentTime = Date.now()) {
   const countsByBucket = new Map();
 
   for (const row of clickRows) {
+    if (row && Object.prototype.hasOwnProperty.call(row, "bucket_started_at")) {
+      const bucketStartMs = new Date(row.bucket_started_at || 0).getTime();
+      if (
+        !Number.isFinite(bucketStartMs) ||
+        bucketStartMs < oldestBucketStart ||
+        bucketStartMs > currentBucketStart
+      ) {
+        continue;
+      }
+      countsByBucket.set(
+        bucketStartMs,
+        (countsByBucket.get(bucketStartMs) || 0) +
+          Math.max(Number(row.clicks) || 0, 0),
+      );
+      continue;
+    }
     const clickedAtMs = new Date(row?.clicked_at || 0).getTime();
     if (!Number.isFinite(clickedAtMs) || clickedAtMs < oldestBucketStart)
       continue;
@@ -6689,33 +6728,118 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
-    const [totals, today, domains, users, links, payments, clickRows] =
-      await Promise.all([
-        database.getAdminTotals(),
-        database.getAdminTodayStats(),
-        database.getDomains(),
-        database.getAllUsers(),
-        database.getAllLinks(),
-        database.listPaymentRequests(300),
-        database.getAdminClickAnalytics(5000),
-      ]);
-    const analytics = buildStatsAnalytics(clickRows);
-    res.json({
-      ...totals,
-      ...today,
-      analytics,
-      overview: buildAdminOverviewPayload({
+    const cacheKey = "admin";
+    const cachedEntry = adminStatsResponseCache.get(cacheKey);
+    if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
+      res.setHeader("Server-Timing", "cache;dur=0");
+      return res.json(cachedEntry.payload);
+    }
+    if (adminStatsResponseInFlight.has(cacheKey)) {
+      const payload = await adminStatsResponseInFlight.get(cacheKey);
+      res.setHeader("Server-Timing", "shared;dur=0");
+      return res.json(payload);
+    }
+
+    const requestPromise = (async () => {
+      const timings = {};
+      const startedAt = Date.now();
+      const [
         totals,
         today,
-        analytics,
+        domains,
         users,
         links,
         payments,
-        domains,
-        currentTime: new Date(),
-      }),
-      alerts: buildAdminAlertPayload(domains),
-    });
+        analyticsSummary,
+      ] = await Promise.all([
+        measureAsyncTiming(
+          "adminTotals",
+          () => database.getAdminTotals(),
+          timings,
+        ),
+        measureAsyncTiming(
+          "adminToday",
+          () => database.getAdminTodayStats(),
+          timings,
+        ),
+        measureAsyncTiming("domains", () => database.getDomains(), timings),
+        measureAsyncTiming("users", () => database.getAllUsers(), timings),
+        measureAsyncTiming("links", () => database.getAllLinks(), timings),
+        measureAsyncTiming(
+          "payments",
+          () => database.listPaymentRequests(300),
+          timings,
+        ),
+        measureAsyncTiming(
+          "adminAnalyticsSummary",
+          () => database.getAdminClickAnalyticsSummary(5000),
+          timings,
+        ),
+      ]);
+      let analytics = analyticsSummary;
+      let clickRows = [];
+      let analyticsSource = "rpc";
+      if (!analytics) {
+        clickRows = await measureAsyncTiming(
+          "adminClicksFallback",
+          () => database.getAdminClickAnalytics(5000),
+          timings,
+        );
+        analytics = await measureAsyncTiming(
+          "analyticsFallback",
+          () => Promise.resolve(buildStatsAnalytics(clickRows)),
+          timings,
+        );
+        analyticsSource = "node-fallback";
+      }
+      const payload = {
+        ...totals,
+        ...today,
+        analytics,
+        overview: buildAdminOverviewPayload({
+          totals,
+          today,
+          analytics,
+          users,
+          links,
+          payments,
+          domains,
+          currentTime: new Date(),
+        }),
+        alerts: buildAdminAlertPayload(domains),
+      };
+      timings.total = Date.now() - startedAt;
+      if (timings.total >= 1500) {
+        console.log("[admin-stats] slow request", {
+          ...timings,
+          analyticsSource,
+          clickRows: clickRows.length,
+          totalClicks: analytics?.total_clicks || 0,
+          users: users.length,
+          links: links.length,
+          payments: payments.length,
+        });
+      }
+      return { payload, timings };
+    })();
+
+    adminStatsResponseInFlight.set(cacheKey, requestPromise);
+    try {
+      const { payload, timings } = await requestPromise;
+      const serverTimingHeader = formatServerTimingHeader(timings);
+      if (serverTimingHeader) {
+        res.setHeader("Server-Timing", serverTimingHeader);
+      }
+      if (ADMIN_STATS_RESPONSE_CACHE_TTL_MS > 0) {
+        adminStatsResponseCache.set(cacheKey, {
+          payload,
+          expiresAt: Date.now() + ADMIN_STATS_RESPONSE_CACHE_TTL_MS,
+        });
+      }
+      return res.json(payload);
+    } finally {
+      adminStatsResponseInFlight.delete(cacheKey);
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -7317,34 +7441,77 @@ app.get("/api/stats", async (req, res) => {
     }
 
     const requestPromise = (async () => {
+      const timings = {};
       const startedAt = Date.now();
-      const dataStartedAt = Date.now();
       const [
         totals,
         today,
-        clickRows,
+        analyticsSummary,
         latestLoginEvent,
         workspaceSelection,
         recentLinks,
       ] = await Promise.all([
-        database.getTotals(userId, guestSessionId),
-        database.getTodayStats(userId, guestSessionId),
-        database.getClickAnalytics(userId, guestSessionId, {
-          limit: 5000,
-          days: USER_STATS_RECENT_DAYS,
-        }),
-        user ? database.getLatestLoginEvent(user.id) : Promise.resolve(null),
+        measureAsyncTiming(
+          "totals",
+          () => database.getTotals(userId, guestSessionId),
+          timings,
+        ),
+        measureAsyncTiming(
+          "today",
+          () => database.getTodayStats(userId, guestSessionId),
+          timings,
+        ),
+        measureAsyncTiming(
+          "analyticsSummary",
+          () =>
+            database.getClickAnalyticsSummary(userId, guestSessionId, {
+              days: USER_STATS_RECENT_DAYS,
+            }),
+          timings,
+        ),
         user
-          ? resolveWorkspaceSelection(database, user, {
-              ensureOwnerWorkspace: false,
-            })
+          ? measureAsyncTiming(
+              "latestLogin",
+              () => database.getLatestLoginEvent(user.id),
+              timings,
+            )
           : Promise.resolve(null),
-        database.getRecentLinks(userId, guestSessionId),
+        user
+          ? measureAsyncTiming(
+              "workspace",
+              () =>
+                resolveWorkspaceSelection(database, user, {
+                  ensureOwnerWorkspace: false,
+                }),
+              timings,
+            )
+          : Promise.resolve(null),
+        measureAsyncTiming(
+          "recentLinks",
+          () => database.getRecentLinks(userId, guestSessionId),
+          timings,
+        ),
       ]);
-      const dataFetchMs = Date.now() - dataStartedAt;
-      const analyticsStartedAt = Date.now();
-      const analytics = buildStatsAnalytics(clickRows);
-      const analyticsMs = Date.now() - analyticsStartedAt;
+      let analytics = analyticsSummary;
+      let clickRows = [];
+      let analyticsSource = "rpc";
+      if (!analytics) {
+        clickRows = await measureAsyncTiming(
+          "clicksFallback",
+          () =>
+            database.getClickAnalytics(userId, guestSessionId, {
+              limit: 5000,
+              days: USER_STATS_RECENT_DAYS,
+            }),
+          timings,
+        );
+        analytics = await measureAsyncTiming(
+          "analyticsFallback",
+          () => Promise.resolve(buildStatsAnalytics(clickRows)),
+          timings,
+        );
+        analyticsSource = "node-fallback";
+      }
       const todayKey = getAnalyticsDayKey(new Date());
       const uniqueClicksToday =
         (analytics.unique_timeline || []).find((item) => item.date === todayKey)
@@ -7353,7 +7520,10 @@ app.get("/api/stats", async (req, res) => {
         planName: user?.plan || "guest",
         linksToday: today.linksToday || 0,
         hasAccount: !!user,
-        clickRows,
+        clickRows:
+          analyticsSource === "rpc"
+            ? analytics?.recent_buckets || []
+            : clickRows,
         latestLoginEvent,
       });
       const workspaceInviteAlert =
@@ -7381,13 +7551,16 @@ app.get("/api/stats", async (req, res) => {
         alerts,
         plan: user?.plan || "guest",
       };
-      const totalMs = Date.now() - startedAt;
-      if (totalMs >= 1500) {
+      timings.total = Date.now() - startedAt;
+      if (timings.total >= 1500) {
         console.log("[stats] slow request", {
-          totalMs,
-          dataFetchMs,
-          analyticsMs,
+          ...timings,
+          analyticsSource,
           clickRows: clickRows.length,
+          recentBuckets: Array.isArray(analytics?.recent_buckets)
+            ? analytics.recent_buckets.length
+            : 0,
+          totalClicks: analytics?.total_clicks || 0,
           recentLinks: recentLinks.length,
           hasUser: !!user,
         });
@@ -7400,11 +7573,15 @@ app.get("/api/stats", async (req, res) => {
           plan: user?.plan || "guest",
         });
       }
-      return payload;
+      return { payload, timings };
     })();
     statsResponseInFlight.set(cacheKey, requestPromise);
     try {
-      const payload = await requestPromise;
+      const { payload, timings } = await requestPromise;
+      const serverTimingHeader = formatServerTimingHeader(timings);
+      if (serverTimingHeader) {
+        res.setHeader("Server-Timing", serverTimingHeader);
+      }
       return res.json(payload);
     } finally {
       statsResponseInFlight.delete(cacheKey);

@@ -1952,7 +1952,7 @@ function showApp() {
   void syncBioProfileFromServer();
   syncRouteFromLocation();
   loadData();
-  startRealtimeNotificationLoop();
+  startRealtimeNotificationLoop({ immediate: false });
 }
 function showAuth(mode = "landing") {
   if (mode === "landing") {
@@ -1995,7 +1995,7 @@ function continueAsGuest() {
   updateIntegrationUI();
   syncRouteFromLocation();
   loadData();
-  startRealtimeNotificationLoop();
+  startRealtimeNotificationLoop({ immediate: false });
   if (landingQuickUrl) {
     prefillCreateUrl(landingQuickUrl);
     landingQuickUrl = "";
@@ -2467,11 +2467,13 @@ function stopRealtimeNotificationLoop() {
   }
 }
 
-function startRealtimeNotificationLoop() {
+function startRealtimeNotificationLoop({ immediate = true } = {}) {
   stopRealtimeNotificationLoop();
   loadSeenNotificationKeys();
   renderNotificationCenter();
-  void pollRealtimeNotifications();
+  if (immediate) {
+    void pollRealtimeNotifications();
+  }
   notificationPollTimer = setInterval(() => {
     if (document.hidden) return;
     void pollRealtimeNotifications();
@@ -4642,7 +4644,7 @@ async function showApp() {
   void syncBioProfileFromServer();
   syncRouteFromLocation();
   loadData();
-  startRealtimeNotificationLoop();
+  startRealtimeNotificationLoop({ immediate: false });
   startSupportSyncLoops();
 }
 
