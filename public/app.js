@@ -3369,6 +3369,7 @@ function openSupportWidget() {
   }
   supportWidgetOpen = true;
   renderSupportConversation();
+  startSupportSyncLoops();
   if (!supportLoaded && !supportLoading) {
     void loadSupportMessages();
   }
@@ -3377,6 +3378,7 @@ function openSupportWidget() {
 function closeSupportWidget() {
   supportWidgetOpen = false;
   renderSupportConversation();
+  startSupportSyncLoops();
 }
 
 function toggleSupportWidget() {
@@ -3458,6 +3460,23 @@ function startAdminSupportPollingFallback() {
   }, SUPPORT_POLL_INTERVAL_MS);
 }
 
+function isAdminSupportPageActive() {
+  return (
+    !!user?.id &&
+    isSupportAgentUser() &&
+    adminSection === "support" &&
+    !!document.getElementById("page-admin")?.classList.contains("active")
+  );
+}
+
+function shouldUseUserSupportRealtime() {
+  return !!user?.id && !isSupportAgentUser() && supportWidgetOpen && !document.hidden;
+}
+
+function shouldUseAdminSupportRealtime() {
+  return isAdminSupportPageActive() && !document.hidden;
+}
+
 function connectUserSupportStream() {
   if (!window.EventSource) {
     startSupportPollingFallback();
@@ -3530,13 +3549,19 @@ function connectAdminSupportStream() {
 
 function startSupportSyncLoops() {
   stopSupportSyncLoops();
-  if (!user?.id) return;
-  if (isSupportAgentUser()) {
+  if (shouldUseAdminSupportRealtime()) {
     connectAdminSupportStream();
     return;
   }
-  connectUserSupportStream();
+  if (shouldUseUserSupportRealtime()) {
+    connectUserSupportStream();
+  }
 }
+
+document.addEventListener("visibilitychange", () => {
+  startSupportSyncLoops();
+});
+
 async function saveAccountAffiliateSettings() {
   if (!user?.id) {
     redirectToAuth("login", "Cần đăng nhập để lưu preset affiliate.");
@@ -4326,6 +4351,7 @@ function syncAdminSectionUI() {
 function setAdminSection(section) {
   adminSection = section || "overview";
   syncAdminSectionUI();
+  startSupportSyncLoops();
 }
 
 function renderAdminOverview(payload = {}) {
@@ -4915,6 +4941,7 @@ function navigate(page, el) {
     history.replaceState(null, "", nextUrl);
   }
   renderSupportConversation();
+  startSupportSyncLoops();
 }
 
 function toggleSidebar() {
@@ -9781,6 +9808,7 @@ function syncAdminSectionUI() {
 function setAdminSection(section) {
   adminSection = section || "overview";
   syncAdminSectionUI();
+  startSupportSyncLoops();
 }
 
 function paginateAdminRows(rows, page = 1, pageSize = ADMIN_PAGE_SIZE) {
