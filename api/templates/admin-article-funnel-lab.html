@@ -4066,12 +4066,21 @@
               );
             }
             const imported = data.item || {};
+            const previousSourceUrl = String(
+              state.referenceSourceUrl || "",
+            ).trim();
             state.referenceSourceUrl = String(
               imported.reference_source_url || rawUrl,
             ).trim();
             els.sourceImportUrlInput.value = state.referenceSourceUrl;
             state.title = String(imported.title || state.title || "").trim();
             state.description = String(imported.description || "").trim();
+            if (
+              state.referenceSourceUrl !== previousSourceUrl ||
+              !String(imported.share_image || "").trim()
+            ) {
+              state.shareImage = "";
+            }
             const blocks = Array.isArray(imported.blocks)
               ? imported.blocks
               : [];

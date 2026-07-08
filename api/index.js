@@ -4431,15 +4431,10 @@ function extractArticleFunnelImportPayload(html = "", baseUrl = "") {
     );
   }
 
-  const shareImage = images[0] || "";
-  const overlayImage = shareImage;
-
   return {
     reference_source_url: baseUrl,
     title,
     description,
-    share_image: shareImage,
-    overlay_image: overlayImage,
     blocks,
     image_count: images.length,
     video_count: videos.length,
