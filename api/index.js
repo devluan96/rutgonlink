@@ -4809,6 +4809,42 @@ function handleArticleFunnelStageLaunch({
     return res.redirect(302, iosInAppTarget);
   }
 
+  if (isIosInApp && info.platform_name === "tiktok") {
+    const inAppTikTokTarget = String(
+      stage.direct_web_url ||
+        stage.target_url ||
+        targetUrl,
+    ).trim();
+    setRedirectDebugHeaders(res, {
+      mode: "article-funnel-launch-tiktok-ios-inapp-bridge",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: 0,
+      code: `article-funnel:${normalizedStageKey}`,
+      mode: "article-funnel-launch-tiktok-ios-inapp-bridge",
+      platform: info.platform_name,
+      uaKind,
+      status: 200,
+      target: inAppTikTokTarget,
+      referer,
+    });
+    res.set({
+      "Cache-Control": "no-cache,no-store,must-revalidate",
+      Pragma: "no-cache",
+      "Content-Type": "text/html;charset=utf-8",
+      "X-Frame-Options": "SAMEORIGIN",
+    });
+    return res.send(
+      buildArticleFunnelTikTokInAppBridgePage(
+        launchLink,
+        canonicalUrl,
+        inAppTikTokTarget,
+      ),
+    );
+  }
+
   if (
     platform !== "desktop" &&
     info.platform_name === "shopee" &&
@@ -9091,6 +9127,107 @@ ${ogImageTag}
   }
 
   // ── Desktop fallback ────────────────────────────────────────────────────
+  window.location.replace(webUrl);
+})();
+</script>
+</body>
+</html>`;
+}
+
+function buildArticleFunnelTikTokInAppBridgePage(link, canonicalUrl, targetUrl) {
+  const title = link.og_title?.trim() || "BocLink";
+  const desc =
+    link.og_desc?.trim() || "Dang mo ung dung goc de tiep tuc xem noi dung.";
+  const image = link.og_image || "";
+  const dest = String(targetUrl || link.original_url || "").trim();
+
+  const escJs = (s) =>
+    (s || "")
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/'/g, "\\'")
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r");
+
+  const ogImageTag = image
+    ? `<meta property="og:image" content="${esc(image)}" />`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}" />
+<meta name="robots" content="noindex, nofollow" />
+<link rel="canonical" href="${esc(canonicalUrl)}" />
+<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
+<meta property="og:locale" content="vi_VN" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="${esc(title)}" />
+<meta property="og:description" content="${esc(desc)}" />
+<meta property="og:url" content="${esc(canonicalUrl)}" />
+<meta property="og:site_name" content="BocLink" />
+${ogImageTag}
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${esc(title)}" />
+<meta name="twitter:description" content="${esc(desc)}" />
+${ogImageTag}
+</head>
+<body>
+<script>
+(function() {
+  var webUrl = "${escJs(dest)}";
+  var ua = navigator.userAgent || '';
+  var isIOS = /iphone|ipad|ipod/i.test(ua);
+  var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
+  var isZalo = /ZaloApp/i.test(ua);
+  var isInApp = isFacebook || isZalo;
+  var escapedKey = 'rgl_lab_tiktok_inapp_' + location.pathname;
+
+  function setFlag(key) {
+    try { localStorage.setItem(key, Date.now().toString()); } catch(_) {}
+  }
+  function hasFlag(key) {
+    try {
+      var val = localStorage.getItem(key);
+      if (!val) return false;
+      return (Date.now() - parseInt(val, 10)) < 30000;
+    } catch(_) { return false; }
+  }
+  function clearFlag(key) {
+    try { localStorage.removeItem(key); } catch(_) {}
+  }
+
+  function openViaAnchor(targetUrl) {
+    if (!targetUrl) return;
+    var anchor = document.createElement('a');
+    anchor.href = targetUrl;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  }
+
+  if (isIOS && isInApp) {
+    if (hasFlag(escapedKey)) {
+      clearFlag(escapedKey);
+      window.location.replace(webUrl);
+      return;
+    }
+    setFlag(escapedKey);
+    openViaAnchor(webUrl);
+    setTimeout(function() {
+      if (!document.hidden) {
+        window.location.replace(webUrl);
+      }
+    }, 1500);
+    return;
+  }
+
   window.location.replace(webUrl);
 })();
 </script>
