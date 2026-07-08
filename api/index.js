@@ -4921,7 +4921,7 @@ function handleArticleFunnelStageLaunch({
 function buildArticleFunnelPreviewPage(config, canonicalUrl, launchBasePath = "") {
   const title = esc(config.title || "Article preview");
   const description = esc(String(config.description || "").trim());
-  const shareImage = String(config.share_image || config.overlay_image || "").trim();
+  const shareImage = String(config.share_image || "").trim();
   const groupLabel = esc(config.group_label || "Group facebook");
   const groupUrl = esc(config.group_url || "");
   const backupLabel = esc(config.backup_label || "Page phu");
@@ -5197,7 +5197,7 @@ ${ogImageTag}
 
   function shouldUseNativeLaunchRoute(stage) {
     if (!stage) return false;
-    return shouldUseLaunchRouteDirectly() && stage.direct_platform === 'tiktok';
+    return stage.direct_platform === 'tiktok';
   }
 
   function shouldUseNativeAnchorLaunch(stage) {

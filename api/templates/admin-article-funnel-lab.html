@@ -4084,9 +4084,6 @@
                   caption: String(block.caption || ""),
                 }))
               : state.blocks;
-            if (imported.share_image) {
-              state.shareImage = String(imported.share_image || "").trim();
-            }
             sourceManagedDeepMode = false;
             slugEditedManually = false;
             syncAutoSlugFromTitle();
