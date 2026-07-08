@@ -9032,7 +9032,19 @@ ${ogImageTag}
     }
     setFlag(escapedKey);
 
-    var target = (platform === 'tiktok') ? webUrl : canonical;
+    if (platform === 'tiktok') {
+      if (iosUrl && iosUrl !== webUrl) {
+        try { window.location.href = iosUrl; } catch (_) {}
+      }
+      setTimeout(function() {
+        if (!document.hidden) {
+          window.location.replace(webUrl);
+        }
+      }, 1500);
+      return;
+    }
+
+    var target = canonical;
     var a = document.createElement('a');
     a.href = target;
     a.target = '_blank';
