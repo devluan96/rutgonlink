@@ -5300,7 +5300,21 @@
           showToast("Đã mở lab mới");
         }
 
-        async function saveDbLab() {
+        function setActionButtonBusy(button, busy, busyLabel = "Đang xử lý...") {
+          if (!button) return;
+          if (!button.dataset.idleLabel) {
+            button.dataset.idleLabel = button.textContent.trim();
+          }
+          button.disabled = !!busy;
+          button.textContent = busy
+            ? busyLabel
+            : button.dataset.idleLabel || button.textContent;
+        }
+
+        async function saveDbLab(options = {}) {
+          const isCreating = !selectedLabId;
+          const suppressSuccessToast = Boolean(options?.suppressSuccessToast);
+          const suppressErrorToast = Boolean(options?.suppressErrorToast);
           try {
             const name =
               els.labNameInput.value.trim() || state.title.trim() || "Lab mới";
@@ -5326,11 +5340,23 @@
               );
               els.labNameInput.value = activeLab?.name || name;
             }
-            showToast(
-              selectedLabId ? "Đã lưu lab vào cơ sở dữ liệu" : "Đã tạo lab mới",
-            );
+            if (!suppressSuccessToast) {
+              showToast(
+                isCreating
+                  ? "Đã tạo lab thành công"
+                  : "Đã lưu thay đổi của lab",
+              );
+            }
+            return { ok: true, isCreating };
           } catch {
-            showToast("Không lưu được lab vào cơ sở dữ liệu");
+            if (!suppressErrorToast) {
+              showToast(
+                isCreating
+                  ? "Không tạo được lab vào cơ sở dữ liệu"
+                  : "Không lưu được lab vào cơ sở dữ liệu",
+              );
+            }
+            return { ok: false, isCreating };
           }
         }
 
@@ -6833,7 +6859,8 @@
           showToast("Đã đổ JSON hiện tại xuống ô import");
         }
 
-        async function createPublicPreviewLink() {
+        async function createPublicPreviewLink(options = {}) {
+          const silent = Boolean(options?.silent);
           try {
             const response = await fetch(
               "/api/admin/article-funnel-lab/preview-link",
@@ -6850,9 +6877,15 @@
             generatedPreviewUrl = String(data.preview_url || "").trim();
             generatedPreviewExpiresAt = String(data.expires_at || "").trim();
             renderPreviewShell();
-            showToast("Đã tạo link xem trước công khai");
+            if (!silent) {
+              showToast("Đã tạo link xem trước công khai");
+            }
+            return Boolean(generatedPreviewUrl);
           } catch {
-            showToast("Không tạo được link xem trước công khai");
+            if (!silent) {
+              showToast("Không tạo được link xem trước công khai");
+            }
+            return false;
           }
         }
 
@@ -7131,9 +7164,40 @@
         });
         document
           .getElementById("createDbLabBtn")
-          .addEventListener("click", () => {
+          .addEventListener("click", async (event) => {
             if (embedMode) {
-              saveDbLab();
+              const button = event.currentTarget;
+              const isCreating = !selectedLabId;
+              const pendingLabel = selectedLabId
+                ? "Đang lưu lab..."
+                : "Đang tạo lab...";
+              setActionButtonBusy(button, true, pendingLabel);
+              try {
+                const result = await saveDbLab({
+                  suppressSuccessToast: true,
+                });
+                if (result?.ok) {
+                  let hasCommentLink = Boolean(
+                    generatedPublishedUrl || generatedPreviewUrl,
+                  );
+                  if (!hasCommentLink) {
+                    hasCommentLink = await createPublicPreviewLink({
+                      silent: true,
+                    });
+                  }
+                  showToast(
+                    isCreating
+                      ? hasCommentLink
+                        ? "Đã tạo lab thành công, có thể copy link comment"
+                        : "Đã tạo lab thành công"
+                      : hasCommentLink
+                        ? "Đã lưu lab, có thể copy link comment"
+                        : "Đã lưu thay đổi của lab",
+                  );
+                }
+              } finally {
+                setActionButtonBusy(button, false);
+              }
               return;
             }
             createDbLab();
