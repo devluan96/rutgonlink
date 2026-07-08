@@ -2716,17 +2716,6 @@
                 type="button"
                 role="tab"
                 aria-selected="false"
-                aria-controls="adminPanelSupport"
-                data-admin-section="support"
-                onclick="setAdminSection('support')"
-              >
-                Tin nhắn
-              </button>
-              <button
-                class="admin-tab-btn"
-                type="button"
-                role="tab"
-                aria-selected="false"
                 aria-controls="adminPanelSystem"
                 data-admin-section="system"
                 onclick="setAdminSection('system')"
@@ -3045,73 +3034,6 @@
 
             <section
               class="admin-panel"
-              id="adminPanelSupport"
-              data-admin-panel="support"
-              role="tabpanel"
-              hidden
-            >
-              <div class="tbl-card">
-                <div class="tbl-head">
-                  <div>
-                    <h3>
-                      💬 Hộp thư hỗ trợ (<span id="adminSupportThreadCount">0</span>)
-                    </h3>
-                    <p style="margin: 6px 0 0; font-size: 12px; color: var(--text3)">
-                      User có thể nhắn trực tiếp cho đội hỗ trợ từ app.
-                    </p>
-                  </div>
-                  <button
-                    class="user-btn secondary"
-                    type="button"
-                    onclick="refreshAdminSupport()"
-                  >
-                    Tải lại
-                  </button>
-                </div>
-                <div class="support-admin-grid">
-                  <div class="support-thread-list" id="adminSupportThreadList">
-                    <div class="support-empty">
-                      Chưa có cuộc trò chuyện nào từ người dùng.
-                    </div>
-                  </div>
-                  <div class="support-admin-panel">
-                    <div class="support-admin-panel-head" id="adminSupportThreadMeta">
-                      Chọn một hội thoại để xem chi tiết.
-                    </div>
-                    <div class="support-timeline support-timeline--admin" id="adminSupportConversationList">
-                      <div class="support-empty">
-                        Chưa có tin nhắn nào trong hội thoại này.
-                      </div>
-                    </div>
-                    <div class="support-compose">
-                        <label class="fl" for="adminSupportMessageInput">Phản hồi của đội hỗ trợ</label>
-                      <textarea
-                        class="fi support-textarea"
-                        id="adminSupportMessageInput"
-                        rows="4"
-                        placeholder="Nhập phản hồi để gửi lại cho user..."
-                      ></textarea>
-                      <div class="support-compose-actions">
-                        <div class="support-compose-note" id="adminSupportComposerNote">
-                          Chọn thread ở cột trái rồi gửi phản hồi.
-                        </div>
-                        <button
-                          class="user-btn primary"
-                          type="button"
-                          id="adminSupportSendBtn"
-                          onclick="sendAdminSupportMessage()"
-                        >
-                          Gửi phản hồi
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section
-              class="admin-panel"
               id="adminPanelSystem"
               data-admin-panel="system"
               role="tabpanel"
@@ -3279,8 +3201,8 @@
         class="support-fab"
         type="button"
         id="supportWidgetLauncher"
-        onclick="toggleSupportWidget()"
-        aria-label="Mở hỗ trợ trực tiếp"
+        onclick="openZaloSupport()"
+        aria-label="Liên hệ Zalo hỗ trợ"
         hidden
       >
         <span class="support-fab-core" aria-hidden="true">
@@ -3292,60 +3214,7 @@
             />
           </svg>
         </span>
-        <span class="support-fab-dot" id="supportFabDot" hidden></span>
-        <span class="support-fab-badge" id="supportFabBadge" hidden>0</span>
       </button>
-
-      <div
-        class="support-widget"
-        id="supportWidget"
-        aria-hidden="true"
-        hidden
-      >
-        <div class="support-widget-head">
-          <div>
-            <strong>Hỗ trợ trực tiếp</strong>
-            <span id="supportWidgetStatus">Nhấn để mở hội thoại với đội hỗ trợ.</span>
-          </div>
-          <button
-            class="support-widget-close"
-            type="button"
-            onclick="closeSupportWidget()"
-            aria-label="Đóng chat"
-          >
-            ✕
-          </button>
-        </div>
-        <div class="support-widget-body">
-          <div class="support-timeline" id="supportConversationList">
-            <div class="support-empty">
-              Chưa có cuộc trò chuyện nào. Hãy gửi tin nhắn đầu tiên cho đội hỗ trợ.
-            </div>
-          </div>
-          <div class="support-compose">
-            <label class="fl" for="supportMessageInput">Nội dung tin nhắn</label>
-            <textarea
-              class="fi support-textarea"
-              id="supportMessageInput"
-              rows="4"
-              placeholder="Ví dụ: Em đã chuyển khoản rồi nhưng chưa thấy duyệt, đội hỗ trợ kiểm tra giúp em với."
-            ></textarea>
-            <div class="support-compose-actions">
-              <div class="support-compose-note" id="supportComposerNote">
-                Đội hỗ trợ sẽ thấy tin nhắn này trong tab Tin nhắn.
-              </div>
-              <button
-                class="user-btn primary"
-                type="button"
-                id="supportSendBtn"
-                onclick="sendSupportMessage()"
-              >
-                Gửi hỗ trợ
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
     <!-- /appScreen -->
 

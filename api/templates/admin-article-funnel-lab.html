@@ -4894,7 +4894,7 @@
             ? new Date(item.updated_at).toLocaleString("vi-VN")
             : "vừa xong";
           const publishedText = item.published_route_slug
-            ? ` • đã xuất bản: ${item.published_route_slug}`
+            ? ` • đã xuất bản: /${item.published_route_slug}`
             : "";
           return `Cập nhật: ${updatedAt}${publishedText}`;
         }
@@ -5057,7 +5057,7 @@
                 ? new Date(item.updated_at).toLocaleString("vi-VN")
                 : "vừa xong";
               const publishedText = item.published_route_slug
-                ? `Đang xuất bản: /af/${escapeHtml(item.published_route_slug)}`
+                ? `Đang xuất bản: /${escapeHtml(item.published_route_slug)}`
                 : "Chưa xuất bản";
               const cardTitle = escapeHtml(
                 item.name || item.title || `Lab ${item.id}`,
@@ -5113,7 +5113,7 @@
                 ? new Date(item.updated_at).toLocaleString("vi-VN")
                 : "vừa xong";
               const publishedText = item.published_route_slug
-                ? `Đang xuất bản: /af/${escapeHtml(item.published_route_slug)}`
+                ? `Đang xuất bản: /${escapeHtml(item.published_route_slug)}`
                 : "Chưa xuất bản";
               const cardTitle = escapeHtml(
                 item.name || item.title || `Lab ${item.id}`,
@@ -5266,7 +5266,10 @@
             clearGeneratedPreviewLink();
             clearGeneratedPublishedLink();
             if (item.published_route_slug) {
-              generatedPublishedUrl = `${window.location.origin}/af/${item.published_route_slug}`;
+              generatedPublishedUrl = buildPublishedLabUrl(
+                item.published_route_slug,
+                nextState.sourceDomain,
+              );
             }
             closeOverlay();
             visibleBlockCount = state.blocks.length;
@@ -5475,6 +5478,16 @@
           generatedPublishedUrl = "";
           generatedPublishedUpdatedAt = "";
           generatedPublishedDomainNote = "";
+        }
+
+        function buildPublishedLabUrl(routeSlug, domainHostname) {
+          const normalizedSlug = String(routeSlug || "").trim();
+          if (!normalizedSlug) return "";
+          const normalizedDomain = normalizeDomainHost(domainHostname);
+          const origin = normalizedDomain
+            ? `https://${normalizedDomain}`
+            : window.location.origin;
+          return `${origin.replace(/\/+$/, "")}/${encodeURIComponent(normalizedSlug)}`;
         }
 
         function resetFeed(count) {
@@ -6692,9 +6705,10 @@
               );
               const slug = published.pathname
                 .replace(/^\/+|\/+$/g, "")
-                .replace(/^af\//, "");
+                .replace(/^af\//, "")
+                .split("/")[0];
               if (slug) {
-                return `${published.origin}/af-launch/${slug}/${normalizedStageKey}`;
+                return `${published.origin}/${slug}/launch/${normalizedStageKey}`;
               }
             } catch (_) {}
           }
@@ -6889,7 +6903,8 @@
           }
         }
 
-        async function publishShortLink() {
+        async function publishShortLink(options = {}) {
+          const silent = Boolean(options?.silent);
           try {
             const response = await fetch(
               "/api/admin/article-funnel-lab/publish",
@@ -6907,7 +6922,13 @@
               },
             );
             if (!response.ok) {
-              throw new Error("publish_short_link_failed");
+              const errorPayload = await response
+                .json()
+                .catch(() => null);
+              throw new Error(
+                String(errorPayload?.error || "").trim() ||
+                  "Không xuất bản được link ngắn",
+              );
             }
             const data = await response.json();
             generatedPublishedUrl = String(data.published_url || "").trim();
@@ -6916,9 +6937,65 @@
               data.domain_note || "",
             ).trim();
             renderPreviewShell();
-            showToast("Đã xuất bản link ngắn");
-          } catch {
-            showToast("Không xuất bản được link ngắn");
+            if (!silent) {
+              showToast("Đã xuất bản link ngắn");
+            }
+            return Boolean(generatedPublishedUrl);
+          } catch (error) {
+            if (!silent) {
+              showToast(
+                String(error?.message || "").trim() ||
+                  "Không xuất bản được link ngắn",
+              );
+            }
+            return false;
+          }
+        }
+
+        async function publishShortLinkSilently() {
+          try {
+            const response = await fetch(
+              "/api/admin/article-funnel-lab/publish",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  config: getExportPayload(),
+                  lab_id: selectedLabId || null,
+                  lab_name:
+                    els.labNameInput.value.trim() ||
+                    state.title.trim() ||
+                    "Lab má»›i",
+                }),
+              },
+            );
+            if (!response.ok) {
+              const errorPayload = await response
+                .json()
+                .catch(() => null);
+              throw new Error(
+                String(errorPayload?.error || "").trim() ||
+                  "Không xuất bản được link ngắn",
+              );
+            }
+            const data = await response.json();
+            generatedPublishedUrl = String(data.published_url || "").trim();
+            generatedPublishedUpdatedAt = String(data.updated_at || "").trim();
+            generatedPublishedDomainNote = String(
+              data.domain_note || "",
+            ).trim();
+            renderPreviewShell();
+            return {
+              ok: Boolean(generatedPublishedUrl),
+              error: "",
+            };
+          } catch (error) {
+            return {
+              ok: false,
+              error:
+                String(error?.message || "").trim() ||
+                "Không xuất bản được link ngắn",
+            };
           }
         }
 
@@ -7177,22 +7254,22 @@
                   suppressSuccessToast: true,
                 });
                 if (result?.ok) {
-                  let hasCommentLink = Boolean(
-                    generatedPublishedUrl || generatedPreviewUrl,
-                  );
-                  if (!hasCommentLink) {
-                    hasCommentLink = await createPublicPreviewLink({
-                      silent: true,
-                    });
-                  }
+                  const publishResult = await publishShortLinkSilently();
+                  const hasCommentLink =
+                    publishResult?.ok ||
+                    Boolean(generatedPublishedUrl || generatedPreviewUrl);
                   showToast(
                     isCreating
                       ? hasCommentLink
                         ? "Đã tạo lab thành công, có thể copy link comment"
-                        : "Đã tạo lab thành công"
+                        : publishResult?.error
+                          ? `Đã tạo lab nhưng chưa publish được: ${publishResult.error}`
+                          : "Đã tạo lab thành công"
                       : hasCommentLink
                         ? "Đã lưu lab, có thể copy link comment"
-                        : "Đã lưu thay đổi của lab",
+                        : publishResult?.error
+                          ? `Đã lưu lab nhưng chưa publish được: ${publishResult.error}`
+                          : "Đã lưu thay đổi của lab",
                   );
                 }
               } finally {

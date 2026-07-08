@@ -715,6 +715,17 @@ app.post("/api/admin/article-funnel-lab/publish", requireAdmin, async (req, res)
     const routeSlug = normalizeArticleFunnelPreviewSlug(
       publishedConfig.slug || publishedConfig.title,
     );
+    if (isReservedPublishedArticleSlug(routeSlug)) {
+      return res.status(400).json({
+        error: "Slug này đang thuộc nhóm route hệ thống, hãy đổi slug khác.",
+      });
+    }
+    const conflictingLink = await findShortLinkSlugConflict(database, routeSlug);
+    if (conflictingLink) {
+      return res.status(409).json({
+        error: `Slug /${routeSlug} đang được dùng bởi link rút gọn thường. Hãy đổi slug khác để tránh đè deeplink thường.`,
+      });
+    }
     const requestedDomainHostname = normalizeDomainHost(
       publishedConfig.source_domain,
     );
@@ -846,7 +857,7 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
       buildArticleFunnelPreviewPage(
         config,
         canonicalUrl,
-        `/af-launch/${encodeURIComponent(articleFunnel.route_slug)}`,
+        buildArticleFunnelLaunchBasePath(articleFunnel.route_slug),
       ),
     );
   } catch (error) {
@@ -882,6 +893,92 @@ app.get(["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"], async (re
   } catch (error) {
     console.error("[article-funnel/published-launch]", error);
     return res.status(500).send("Khong the launch article funnel");
+  }
+});
+app.get(["/:slug/launch/:stageKey", "/:slug/launch/:stageKey/"], async (req, res, next) => {
+  try {
+    const routeSlug = String(req.params.slug || "").trim();
+    if (isReservedPublishedArticleSlug(routeSlug)) {
+      return next();
+    }
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const conflictingLink = await findShortLinkSlugConflict(database, routeSlug);
+    if (conflictingLink) {
+      return next();
+    }
+    const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
+    if (
+      !articleFunnel ||
+      !canServePublishedArticleFunnelOnHost(
+        articleFunnel,
+        getRequestHostname(req),
+        publicBaseUrl,
+      )
+    ) {
+      return next();
+    }
+    const config = normalizeArticleFunnelPreviewConfig(
+      articleFunnel.config_json || {},
+    );
+    const canonicalUrl = `${buildArticleFunnelPublicUrl(
+      articleFunnel.route_slug,
+      articleFunnel.domain_hostname,
+      publicBaseUrl,
+    ).replace(/\/+$/, "")}/launch/${encodeURIComponent(req.params.stageKey || "")}`;
+    return handleArticleFunnelStageLaunch({
+      req,
+      res,
+      config,
+      stageKey: String(req.params.stageKey || "").trim(),
+      canonicalUrl,
+    });
+  } catch (error) {
+    console.error("[article-funnel/published-launch-direct]", error);
+    return res.status(500).send("Khong the launch article funnel");
+  }
+});
+app.get("/:slug", async (req, res, next) => {
+  try {
+    const routeSlug = String(req.params.slug || "").trim();
+    if (isReservedPublishedArticleSlug(routeSlug)) {
+      return next();
+    }
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
+    if (
+      !articleFunnel ||
+      !canServePublishedArticleFunnelOnHost(
+        articleFunnel,
+        getRequestHostname(req),
+        publicBaseUrl,
+      )
+    ) {
+      return next();
+    }
+    const config = normalizeArticleFunnelPreviewConfig(
+      articleFunnel.config_json || {},
+    );
+    const canonicalUrl = buildArticleFunnelPublicUrl(
+      articleFunnel.route_slug,
+      articleFunnel.domain_hostname,
+      publicBaseUrl,
+    );
+    res.set({
+      "Cache-Control": "no-store",
+      "Content-Type": "text/html;charset=utf-8",
+    });
+    return res.send(
+      buildArticleFunnelPreviewPage(
+        config,
+        canonicalUrl,
+        buildArticleFunnelLaunchBasePath(articleFunnel.route_slug),
+      ),
+    );
+  } catch (error) {
+    console.error("[article-funnel/published-direct]", error);
+    return res.status(500).send("Khong the mo article funnel");
   }
 });
 app.get("/favicon.ico", (_req, res) => {
@@ -1755,7 +1852,11 @@ function persistRedirectLogEntry(entry) {
       await database.createRedirectLogEntry(entry);
     })
     .catch((error) => {
-      console.error(`[redirect-log] ${error.message}`);
+      const message = String(error?.message || error || "").trim();
+      if (/fetch failed/i.test(message)) {
+        return;
+      }
+      console.error(`[redirect-log] ${message || "unknown error"}`);
     });
 }
 
@@ -4599,7 +4700,49 @@ function buildArticleFunnelPublicUrl(
   fallbackBaseUrl = BASE_URL,
 ) {
   const baseUrl = domainHostname ? `https://${domainHostname}` : fallbackBaseUrl;
-  return buildShortUrl(baseUrl, `af/${encodeURIComponent(routeSlug || "")}`);
+  return buildShortUrl(baseUrl, encodeURIComponent(routeSlug || ""));
+}
+
+function buildArticleFunnelLaunchBasePath(routeSlug) {
+  const normalizedSlug = encodeURIComponent(String(routeSlug || "").trim());
+  return normalizedSlug ? `/${normalizedSlug}/launch` : "/launch";
+}
+
+function getRequestHostname(req) {
+  return normalizeDomainHost(
+    req.headers["x-forwarded-host"] ||
+      req.headers["host"] ||
+      req.hostname ||
+      "",
+  );
+}
+
+function canServePublishedArticleFunnelOnHost(
+  articleFunnel,
+  requestHostname,
+  fallbackBaseUrl = BASE_URL,
+) {
+  const targetHostname = normalizeDomainHost(articleFunnel?.domain_hostname);
+  if (targetHostname) {
+    return !requestHostname || requestHostname === targetHostname;
+  }
+  const fallbackHostname = normalizeDomainHost(fallbackBaseUrl);
+  return !requestHostname || !fallbackHostname || requestHostname === fallbackHostname;
+}
+
+function isReservedPublishedArticleSlug(slug) {
+  const value = String(slug || "").trim();
+  return !value || value.includes(".") || /^(api|uploads|admin|go|_lab)$/i.test(value);
+}
+
+async function findShortLinkSlugConflict(database, slug) {
+  const normalizedSlug = String(slug || "").trim();
+  if (!normalizedSlug) return null;
+  return (
+    (await database.getLinkByAlias(normalizedSlug)) ||
+    (await database.getLinkByCode(normalizedSlug)) ||
+    null
+  );
 }
 
 function handleArticleFunnelStageLaunch({
@@ -6068,27 +6211,6 @@ app.get("/api/support/messages", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/support/stream", requireAuth, async (req, res) => {
-  try {
-    const user = await resolveUser(req);
-    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
-    initSupportStream(res);
-    const cleanup = registerSupportUserStreamClient(user.id, res);
-    req.on("close", cleanup);
-    writeSupportStreamEvent(res, "ready", {
-      role: "user",
-      user_id: user.id,
-      connected_at: new Date().toISOString(),
-    });
-  } catch (e) {
-    if (!res.headersSent) {
-      res.status(500).json({ error: e.message });
-    } else {
-      res.end();
-    }
-  }
-});
-
 app.post("/api/support/messages", requireAuth, async (req, res) => {
   try {
     const user = await resolveUser(req);
@@ -6872,27 +6994,6 @@ app.get("/api/admin/support", requireSupportInbox, async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
-  }
-});
-
-app.get("/api/admin/support/stream", requireSupportInbox, async (req, res) => {
-  const supportUser = await checkSupportInboxAccess(req, res);
-  if (!supportUser) return;
-  try {
-    initSupportStream(res);
-    const cleanup = registerSupportAdminStreamClient(res);
-    req.on("close", cleanup);
-    writeSupportStreamEvent(res, "ready", {
-      role: isSupportRole(supportUser.role) ? "support" : "admin",
-      user_id: supportUser.id,
-      connected_at: new Date().toISOString(),
-    });
-  } catch (e) {
-    if (!res.headersSent) {
-      res.status(500).json({ error: e.message });
-    } else {
-      res.end();
-    }
   }
 });
 

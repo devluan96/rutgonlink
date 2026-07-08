@@ -996,15 +996,11 @@ function isSupportAgentUser() {
 
 function guardAdminRoute() {
   if (isAdminUser()) return "admin";
-  if (isSupportAgentUser()) {
-    adminSection = "support";
-    return "admin";
-  }
   if (!user) {
     redirectToAuth("login", "Cần đăng nhập để vào trang quản trị.");
     return null;
   }
-  toast("Bạn không có quyền truy cập khu vực hỗ trợ.", "warn");
+  toast("Bạn không có quyền truy cập khu vực quản trị.", "warn");
   return "dashboard";
 }
 
@@ -3156,6 +3152,14 @@ function triggerSupportReplyAlert() {
   playSupportReplySound();
 }
 
+function getZaloSupportUrl() {
+  return "https://zalo.me/84969361607";
+}
+
+function openZaloSupport() {
+  window.open(getZaloSupportUrl(), "_blank", "noopener");
+}
+
 function renderSupportConversation() {
   const launcher = document.getElementById("supportWidgetLauncher");
   const widget = document.getElementById("supportWidget");
@@ -3173,6 +3177,10 @@ function renderSupportConversation() {
     canShowSupport && !(window.innerWidth <= 768 && adminPageActive);
 
   if (launcher) launcher.hidden = !showLauncher;
+  if (widget) widget.hidden = true;
+  supportWidgetOpen = false;
+  launcher?.classList.remove("has-unread");
+  return;
   if (widget) {
     widget.hidden = !canOpenSupportPopup;
     widget.classList.toggle("show", canOpenSupportPopup && supportWidgetOpen);
@@ -3361,6 +3369,8 @@ async function sendSupportMessage() {
 
 function openSupportWidget() {
   if (!user) return;
+  openZaloSupport();
+  return;
   if (isSupportAgentUser()) {
     navigate("admin", document.getElementById("adminNavItem"));
     setAdminSection("support");
@@ -3549,6 +3559,7 @@ function connectAdminSupportStream() {
 
 function startSupportSyncLoops() {
   stopSupportSyncLoops();
+  return;
   if (shouldUseAdminSupportRealtime()) {
     connectAdminSupportStream();
     return;
@@ -4326,12 +4337,10 @@ async function reviewAdminPayment(requestId, status) {
 
 function syncAdminSectionUI() {
   const availableSections = isAdminUser()
-    ? new Set(["overview", "users", "payments", "support", "system", "logs"])
-    : isSupportAgentUser()
-      ? new Set(["support"])
-      : new Set();
+    ? new Set(["overview", "users", "payments", "system", "logs"])
+    : new Set();
   if (!availableSections.has(adminSection)) {
-    adminSection = availableSections.has("overview") ? "overview" : "support";
+    adminSection = availableSections.has("overview") ? "overview" : "";
   }
   document.querySelectorAll(".admin-tab-btn").forEach((btn) => {
     const isAllowed = availableSections.has(btn.dataset.adminSection);
@@ -4599,15 +4608,7 @@ function renderAdminOverviewTrend() {
 }
 
 async function loadAdminData() {
-  if (!isSupportAgentUser()) {
-    return;
-  }
-  void refreshAdminSupport();
-  if (!isAdminUser()) {
-    adminSection = "support";
-    syncAdminSectionUI();
-    return;
-  }
+  if (!isAdminUser()) return;
   try {
     const [sr, dr, ur, rr, pr] = await Promise.all([
       fetch("/api/admin/stats"),
@@ -9783,12 +9784,10 @@ const SUPPORT_POLL_INTERVAL_MS = 7000;
 
 function syncAdminSectionUI() {
   const availableSections = isAdminUser()
-    ? new Set(["overview", "users", "payments", "support", "system", "logs"])
-    : isSupportAgentUser()
-      ? new Set(["support"])
-      : new Set();
+    ? new Set(["overview", "users", "payments", "system", "logs"])
+    : new Set();
   if (!availableSections.has(adminSection)) {
-    adminSection = availableSections.has("overview") ? "overview" : "support";
+    adminSection = availableSections.has("overview") ? "overview" : "";
   }
   document.querySelectorAll(".admin-tab-btn").forEach((btn) => {
     const isAllowed = availableSections.has(btn.dataset.adminSection);
@@ -10204,15 +10203,7 @@ function syncAdminUserSelectionUI(filteredUsers, pageRows) {
 }
 
 async function loadAdminData() {
-  if (!isSupportAgentUser()) {
-    return;
-  }
-  void refreshAdminSupport();
-  if (!isAdminUser()) {
-    adminSection = "support";
-    syncAdminSectionUI();
-    return;
-  }
+  if (!isAdminUser()) return;
   try {
     const [sr, dr, ur, rr, pr] = await Promise.all([
       fetch("/api/admin/stats"),
