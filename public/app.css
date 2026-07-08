@@ -3078,6 +3078,141 @@
         gap: 16px;
         align-items: start;
       }
+      .page-subtabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 0 0 18px;
+      }
+      .page-subtab-btn {
+        padding: 10px 14px;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--border);
+        background: var(--bg2);
+        color: var(--text2);
+        font-size: 13px;
+        font-weight: 700;
+        transition: 0.15s;
+      }
+      .page-subtab-btn:hover {
+        border-color: var(--accent-border-strong);
+        background: var(--bg3);
+        color: var(--text);
+      }
+      .page-subtab-btn.active {
+        border-color: rgba(59, 130, 246, 0.24);
+        background: linear-gradient(180deg, var(--accent-surface), rgba(59, 130, 246, 0.08));
+        color: var(--brand);
+        box-shadow: 0 10px 24px rgba(59, 130, 246, 0.12);
+      }
+      .page-subpanel[hidden] {
+        display: none !important;
+      }
+      .lab-embed-shell {
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        box-shadow: none;
+      }
+      .lab-embed-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 12px;
+      }
+      .lab-embed-head h3 {
+        margin: 0;
+        font-size: 16px;
+        color: var(--text);
+      }
+      .lab-embed-head p {
+        margin: 4px 0 0;
+        max-width: 62ch;
+        color: var(--text3);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .lab-embed-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .lab-embed-frame {
+        width: 100%;
+        min-height: 980px;
+        border: 0;
+        border-radius: 18px;
+        display: block;
+        background: transparent;
+      }
+      .lab-shared-settings-modal {
+        max-width: 880px;
+      }
+      .lab-shared-settings-copy {
+        color: var(--text2);
+        font-size: 13px;
+        line-height: 1.65;
+        margin-bottom: 16px;
+      }
+      .lab-shared-settings-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .lab-shared-settings-span-2 {
+        grid-column: 1 / -1;
+      }
+      .lab-shared-settings-note {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--bg3);
+        color: var(--text2);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .lab-shared-upload-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .lab-shared-upload-btn {
+        min-width: 0;
+        padding: 10px 14px;
+      }
+      .lab-shared-file-input {
+        display: none;
+      }
+      .lab-shared-upload-status {
+        font-size: 12px;
+        line-height: 1.55;
+        color: var(--text3);
+      }
+      .lab-shared-upload-status[data-tone="ok"] {
+        color: var(--green);
+      }
+      .lab-shared-upload-status[data-tone="err"] {
+        color: var(--red);
+      }
+      .lab-shared-upload-status[data-tone="warn"] {
+        color: var(--orange);
+      }
+      @media (max-width: 860px) {
+        .lab-shared-settings-grid {
+          grid-template-columns: 1fr;
+        }
+        .lab-shared-settings-span-2 {
+          grid-column: auto;
+        }
+      }
+      .lab-embed-shell[data-surface="links"] .lab-embed-frame {
+        min-height: 760px;
+      }
       .create-preview {
         position: sticky;
         top: 18px;
@@ -3111,6 +3246,43 @@
         text-transform: uppercase;
         letter-spacing: 0.04em;
         white-space: nowrap;
+      }
+      @media (max-width: 1180px) {
+        .create-grid {
+          grid-template-columns: 1fr;
+        }
+        .create-side-stack {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          align-self: stretch;
+        }
+        .create-preview,
+        .tool-preview {
+          position: static;
+          top: auto;
+        }
+      }
+      @media (max-width: 1024px) {
+        .sidebar {
+          position: fixed;
+          left: -100%;
+          top: 0;
+          bottom: 0;
+          z-index: 200;
+          transition: 0.25s;
+          width: min(82vw, 290px) !important;
+          box-shadow: 18px 0 40px rgba(0, 0, 0, 0.35);
+        }
+        .sidebar.mob-open {
+          left: 0;
+        }
+        .content {
+          padding: 16px;
+        }
+      }
+      @media (max-width: 920px) {
+        .create-side-stack {
+          grid-template-columns: 1fr;
+        }
       }
       .sf-card h3 {
         font-size: 14px;
@@ -4358,6 +4530,28 @@
         margin-top: 18px;
         align-items: start;
       }
+      .tool-grid.create-grid {
+        gap: 16px;
+      }
+      @media (max-width: 1180px) {
+        .tool-grid.create-grid {
+          grid-template-columns: 1fr;
+        }
+        .tool-grid.create-grid .create-side-stack {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          align-self: stretch;
+        }
+        .tool-grid.create-grid .tool-preview,
+        .tool-grid.create-grid .create-preview {
+          position: static;
+          top: auto;
+        }
+      }
+      @media (max-width: 920px) {
+        .tool-grid.create-grid .create-side-stack {
+          grid-template-columns: 1fr;
+        }
+      }
       .tool-card,
       .tool-preview {
         background: var(--bg2);
@@ -5524,6 +5718,26 @@
         }
         .tool-grid {
           grid-template-columns: 1fr;
+        }
+        .page-subtabs {
+          gap: 8px;
+        }
+        .page-subtab-btn {
+          flex: 1 1 180px;
+          justify-content: center;
+        }
+        .lab-embed-head {
+          flex-direction: column;
+        }
+        .lab-embed-actions {
+          width: 100%;
+        }
+        .lab-embed-actions .btn-cp {
+          flex: 1;
+          justify-content: center;
+        }
+        .lab-embed-frame {
+          min-height: 860px;
         }
         .admin-tabs {
           flex-wrap: nowrap;

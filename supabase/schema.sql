@@ -143,6 +143,29 @@ CREATE INDEX IF NOT EXISTS idx_article_funnels_domain_hostname ON article_funnel
 CREATE INDEX IF NOT EXISTS idx_article_funnels_created_by_user_id ON article_funnels(created_by_user_id);
 CREATE INDEX IF NOT EXISTS idx_article_funnels_created_at ON article_funnels(created_at DESC);
 
+-- Redirect logs
+CREATE TABLE IF NOT EXISTS redirect_logs (
+  id           BIGSERIAL PRIMARY KEY,
+  event        TEXT NOT NULL DEFAULT 'shortlink_redirect',
+  request_id   TEXT,
+  link_id      BIGINT REFERENCES links(id) ON DELETE SET NULL,
+  code         TEXT,
+  mode         TEXT,
+  platform     TEXT,
+  ua_kind      TEXT,
+  status       INTEGER,
+  target       TEXT,
+  referer_host TEXT,
+  meta_json    JSONB NOT NULL DEFAULT '{}'::jsonb,
+  occurred_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_redirect_logs_occurred_at ON redirect_logs(occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_redirect_logs_code ON redirect_logs(code);
+CREATE INDEX IF NOT EXISTS idx_redirect_logs_status ON redirect_logs(status);
+CREATE INDEX IF NOT EXISTS idx_redirect_logs_link_id ON redirect_logs(link_id);
+
 -- Clicks
 CREATE TABLE IF NOT EXISTS clicks (
   id           BIGSERIAL PRIMARY KEY,
@@ -687,6 +710,7 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE links DISABLE ROW LEVEL SECURITY;
 ALTER TABLE clicks DISABLE ROW LEVEL SECURITY;
 ALTER TABLE domains DISABLE ROW LEVEL SECURITY;
+ALTER TABLE redirect_logs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE login_events DISABLE ROW LEVEL SECURITY;
 ALTER TABLE uploads DISABLE ROW LEVEL SECURITY;
 ALTER TABLE bio_profiles DISABLE ROW LEVEL SECURITY;

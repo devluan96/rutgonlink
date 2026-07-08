@@ -111,6 +111,15 @@ function check(error, context='') {
   throw new Error(error.message || JSON.stringify(error));
 }
 
+function isMissingRelationError(error, relationName) {
+  return Boolean(
+    error &&
+      new RegExp(`${relationName}|relation .*${relationName}|schema cache`, 'i').test(
+        error.message || '',
+      ),
+  );
+}
+
 async function fetchPaginatedRows(fetchPage, limit = 1000, pageSize = 1000) {
   const safeLimit = Math.max(Number(limit) || 0, 0);
   if (!safeLimit) return { data: [], error: null };
@@ -992,6 +1001,61 @@ async function init() {
         .eq('id', normalizedId);
       check(error, 'article_funnel_lab_delete');
       return true;
+    },
+
+    async createRedirectLogEntry(payload = {}) {
+      const insertPayload = {
+        event: String(payload.event || 'shortlink_redirect').trim() || 'shortlink_redirect',
+        request_id: payload.requestId || null,
+        link_id: Number.isInteger(Number(payload.linkId)) ? Number(payload.linkId) : null,
+        code: payload.code || null,
+        mode: payload.mode || null,
+        platform: payload.platform || null,
+        ua_kind: payload.uaKind || null,
+        status: payload.status || null,
+        target: payload.target || null,
+        referer_host: payload.refererHost || null,
+        meta_json: payload && typeof payload === 'object' ? payload : {},
+        occurred_at: payload.timestamp || new Date().toISOString(),
+      };
+      const { data, error } = await sb
+        .from('redirect_logs')
+        .insert(insertPayload)
+        .select('*')
+        .single();
+      if (isMissingRelationError(error, 'redirect_logs')) {
+        return null;
+      }
+      check(error, 'redirect_log_create');
+      return data;
+    },
+
+    async listRedirectLogEntries(limit = 20) {
+      const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 500);
+      const { data, error } = await sb
+        .from('redirect_logs')
+        .select('*')
+        .order('occurred_at', { ascending: false })
+        .limit(safeLimit);
+      if (isMissingRelationError(error, 'redirect_logs')) {
+        return [];
+      }
+      check(error, 'redirect_log_list');
+      return (data || []).map((row) => ({
+        id: row.id,
+        event: row.event || 'shortlink_redirect',
+        timestamp: row.occurred_at || row.created_at || null,
+        requestId: row.request_id || null,
+        linkId: row.link_id || null,
+        code: row.code || null,
+        mode: row.mode || null,
+        platform: row.platform || null,
+        uaKind: row.ua_kind || null,
+        status: row.status || null,
+        target: row.target || null,
+        refererHost: row.referer_host || null,
+        meta: row.meta_json && typeof row.meta_json === 'object' ? row.meta_json : {},
+      }));
     },
 
     async countUsers() {

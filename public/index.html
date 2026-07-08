@@ -1417,27 +1417,66 @@
               <h1>Tạo liên kết</h1>
               <p>Rút gọn với deeplink tự động & custom preview</p>
             </div>
-            <div class="tool-grid create-grid">
-              <div id="createFormArea"></div>
-              <div class="create-side-stack">
-                <div class="tool-preview create-preview">
-                  <div class="tool-head" style="margin-bottom: 12px">
-                    <div>
-                      <h3>Link mới tạo</h3>
-                      <p>Link vừa rút gọn xong để copy nhanh hoặc mở ngay.</p>
+            <div class="page-subtabs" role="tablist" aria-label="Tạo liên kết">
+              <button
+                class="page-subtab-btn active"
+                type="button"
+                data-create-subtab="standard"
+                onclick="setCreateSubtab('standard', this)"
+              >
+                Deeplink thường
+              </button>
+              <button
+                class="page-subtab-btn"
+                type="button"
+                data-create-subtab="lab"
+                data-lab-tab-only
+                onclick="setCreateSubtab('lab', this)"
+              >
+                Deeplink lab
+              </button>
+            </div>
+            <div class="page-subpanel active" data-create-panel="standard">
+              <div class="tool-grid create-grid">
+                <div id="createFormArea"></div>
+                <div class="create-side-stack">
+                  <div class="tool-preview create-preview">
+                    <div class="tool-head" style="margin-bottom: 12px">
+                      <div>
+                        <h3>Link mới tạo</h3>
+                        <p>Link vừa rút gọn xong để copy nhanh hoặc mở ngay.</p>
+                      </div>
                     </div>
+                    <div id="createLatestResultMount"></div>
                   </div>
-                  <div id="createLatestResultMount"></div>
-                </div>
-                <div class="tool-preview create-preview">
-                  <div class="tool-head" style="margin-bottom: 12px">
-                    <div>
-                      <h3>Vừa tạo</h3>
-                      <p>Link mới nhất để copy, mở QR hoặc ghim vào bio.</p>
+                  <div class="tool-preview create-preview">
+                    <div class="tool-head" style="margin-bottom: 12px">
+                      <div>
+                        <h3>Vừa tạo</h3>
+                        <p>Link mới nhất để copy, mở QR hoặc ghim vào bio.</p>
+                      </div>
                     </div>
+                    <div id="createActivity"></div>
                   </div>
-                  <div id="createActivity"></div>
                 </div>
+              </div>
+            </div>
+            <div class="page-subpanel" data-create-panel="lab" hidden>
+              <div class="lab-embed-shell" data-surface="create" data-lab-tab-only>
+                <div class="lab-embed-head">
+                  <div class="lab-embed-actions">
+                    <button class="btn-cp" type="button" onclick="refreshLabEmbed('createLabIframe')">Tải lại</button>
+                    <button class="btn-cp" type="button" aria-label="Mở cài đặt mặc định lab" title="Cài đặt mặc định cho lab mới" onclick="openLabSharedSettingsModal('createLabIframe')">Cài đặt mặc định</button>
+                  </div>
+                </div>
+                <iframe
+                  id="createLabIframe"
+                  class="lab-embed-frame"
+                  title="Deeplink lab"
+                  loading="lazy"
+                  data-lab-view="editor"
+                  data-lab-embed-id="create"
+                ></iframe>
               </div>
             </div>
           </div>
@@ -1718,113 +1757,151 @@
               <h1>Quản lý liên kết</h1>
               <p>Tất cả link đã tạo</p>
             </div>
-            <div class="tbl-card">
-              <div class="tbl-head">
-                <h3>Danh sách liên kết (<span id="linkCountLabel">0</span>)</h3>
-                <input
-                  type="text"
-                  class="tbl-search"
-                  id="tblSearch"
-                  placeholder="Tìm kiếm..."
-                  oninput="filterTable(this.value)"
-                />
-              </div>
-              <div class="link-filters">
-                <button
-                  class="chip active"
-                  type="button"
-                  data-filter="all"
-                  onclick="setLinkFilter('all', this)"
-                >
-                  Tất cả
-                </button>
-                <button
-                  class="chip"
-                  type="button"
-                  data-filter="shopee"
-                  onclick="setLinkFilter('shopee', this)"
-                >
-                  Shopee
-                </button>
-                <button
-                  class="chip"
-                  type="button"
-                  data-filter="tiktok"
-                  onclick="setLinkFilter('tiktok', this)"
-                >
-                  TikTok
-                </button>
-                <button
-                  class="chip"
-                  type="button"
-                  data-filter="video"
-                  onclick="setLinkFilter('video', this)"
-                >
-                  Video
-                </button>
-                <button
-                  class="chip"
-                  type="button"
-                  data-filter="generic"
-                  onclick="setLinkFilter('generic', this)"
-                >
-                  Khác
-                </button>
-              </div>
-              <div class="link-bulkbar" id="linkBulkBar">
-                <div class="link-bulk-status" id="linkBulkStatus">
-                  Đang hiển thị 0 link
+            <div class="page-subtabs" role="tablist" aria-label="Quản lý liên kết">
+              <button
+                class="page-subtab-btn active"
+                type="button"
+                data-links-subtab="standard"
+                onclick="setLinksSubtab('standard', this)"
+              >
+                Danh sách liên kết
+              </button>
+              <button
+                class="page-subtab-btn"
+                type="button"
+                data-links-subtab="lab"
+                data-lab-tab-only
+                onclick="setLinksSubtab('lab', this)"
+              >
+                Danh sách liên kết lab
+              </button>
+            </div>
+            <div class="page-subpanel active" data-links-panel="standard">
+              <div class="tbl-card">
+                <div class="tbl-head">
+                  <h3>Danh sách liên kết (<span id="linkCountLabel">0</span>)</h3>
+                  <input
+                    type="text"
+                    class="tbl-search"
+                    id="tblSearch"
+                    placeholder="Tìm kiếm..."
+                    oninput="filterTable(this.value)"
+                  />
                 </div>
-                <div class="link-bulk-actions">
+                <div class="link-filters">
                   <button
-                    class="btn-cp"
-                    id="linkClearSelectionBtn"
+                    class="chip active"
                     type="button"
-                    onclick="clearSelectedLinks()"
-                    disabled
+                    data-filter="all"
+                    onclick="setLinkFilter('all', this)"
                   >
-                    Bỏ chọn
+                    Tất cả
                   </button>
                   <button
-                    class="btn-del"
-                    id="linkBulkDeleteBtn"
+                    class="chip"
                     type="button"
-                    onclick="bulkDeleteSelectedLinks()"
-                    disabled
+                    data-filter="shopee"
+                    onclick="setLinkFilter('shopee', this)"
                   >
-                    Xóa đã chọn
+                    Shopee
+                  </button>
+                  <button
+                    class="chip"
+                    type="button"
+                    data-filter="tiktok"
+                    onclick="setLinkFilter('tiktok', this)"
+                  >
+                    TikTok
+                  </button>
+                  <button
+                    class="chip"
+                    type="button"
+                    data-filter="video"
+                    onclick="setLinkFilter('video', this)"
+                  >
+                    Video
+                  </button>
+                  <button
+                    class="chip"
+                    type="button"
+                    data-filter="generic"
+                    onclick="setLinkFilter('generic', this)"
+                  >
+                    Khác
                   </button>
                 </div>
+                <div class="link-bulkbar" id="linkBulkBar">
+                  <div class="link-bulk-status" id="linkBulkStatus">
+                    Đang hiển thị 0 link
+                  </div>
+                  <div class="link-bulk-actions">
+                    <button
+                      class="btn-cp"
+                      id="linkClearSelectionBtn"
+                      type="button"
+                      onclick="clearSelectedLinks()"
+                      disabled
+                    >
+                      Bỏ chọn
+                    </button>
+                    <button
+                      class="btn-del"
+                      id="linkBulkDeleteBtn"
+                      type="button"
+                      onclick="bulkDeleteSelectedLinks()"
+                      disabled
+                    >
+                      Xóa đã chọn
+                    </button>
+                  </div>
+                </div>
+                <div style="overflow-x: auto">
+                  <table class="mobile-card-table">
+                    <thead>
+                      <tr>
+                        <th>
+                          <label class="tbl-check">
+                            <input
+                              type="checkbox"
+                              id="tblSelectAll"
+                              onchange="toggleSelectAllVisibleLinks(this.checked)"
+                            />
+                            <span></span>
+                          </label>
+                        </th>
+                        <th>Link rút gọn</th>
+                        <th>Link gốc</th>
+                        <th>Nền tảng</th>
+                        <th>OG Meta</th>
+                        <th>Clicks</th>
+                        <th>Ngày tạo</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="tblBody">
+                      <tr>
+                        <td colspan="8" class="tbl-empty">⏳ Đang tải...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div style="overflow-x: auto">
-                <table class="mobile-card-table">
-                  <thead>
-                    <tr>
-                      <th>
-                        <label class="tbl-check">
-                          <input
-                            type="checkbox"
-                            id="tblSelectAll"
-                            onchange="toggleSelectAllVisibleLinks(this.checked)"
-                          />
-                          <span></span>
-                        </label>
-                      </th>
-                      <th>Link rút gọn</th>
-                      <th>Link gốc</th>
-                      <th>Nền tảng</th>
-                      <th>OG Meta</th>
-                      <th>Clicks</th>
-                      <th>Ngày tạo</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody id="tblBody">
-                    <tr>
-                      <td colspan="8" class="tbl-empty">⏳ Đang tải...</td>
-                    </tr>
-                  </tbody>
-                </table>
+            </div>
+            <div class="page-subpanel" data-links-panel="lab" hidden>
+              <div class="lab-embed-shell" data-surface="links" data-lab-tab-only>
+                <div class="lab-embed-head">
+                  <div class="lab-embed-actions">
+                    <button class="btn-cp" type="button" onclick="refreshLabEmbed('linksLabIframe')">Tải lại danh sách</button>
+                  </div>
+                </div>
+                <iframe
+                  id="linksLabIframe"
+                  class="lab-embed-frame"
+                  title="Danh sách liên kết lab"
+                  loading="lazy"
+                  data-lab-view="list"
+                  data-lab-embed-id="links"
+                ></iframe>
               </div>
             </div>
           </div>
@@ -2595,15 +2672,6 @@
                 Quản lý người dùng, liên kết, domain và nhật ký vận hành toàn hệ
                 thống.
               </p>
-              <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap">
-                <a
-                  href="/admin/article-funnel-lab"
-                  class="btn-cp"
-                  style="display: inline-flex; align-items: center; gap: 8px"
-                >
-                  🧪 Mở Article Funnel Lab
-                </a>
-              </div>
             </div>
             <div
               class="admin-tabs"
@@ -3436,6 +3504,92 @@
       </div>
     </div>
 
+    <div
+      class="modal-backdrop hidden"
+      id="labSharedSettingsModal"
+      onclick="if (event.target === this) closeLabSharedSettingsModal();"
+    >
+      <div class="modal lab-shared-settings-modal">
+        <div class="modal-head">
+          <h3>Cài đặt mặc định cho lab mới</h3>
+          <div class="modal-close" onclick="closeLabSharedSettingsModal()">✕</div>
+        </div>
+        <div class="lab-shared-settings-copy">
+          Bộ này áp dụng cho các lab bạn tạo tiếp theo trong tab này. Nó không mở bên trong từng lab nữa.
+        </div>
+        <div class="lab-shared-settings-grid">
+          <div class="lab-shared-settings-span-2">
+            <label class="fl" for="labSharedShareImageInput">Ảnh chia sẻ / ảnh đầu bài</label>
+            <input class="fi" id="labSharedShareImageInput" type="url" placeholder="https://..." />
+          </div>
+          <div>
+            <label class="fl" for="labSharedOverlayImageInput">Ảnh popup 3 giây</label>
+            <input class="fi" id="labSharedOverlayImageInput" type="url" placeholder="https://..." />
+            <div class="lab-shared-upload-row">
+              <button id="labSharedOverlayImagePickerBtn" class="btn-cancel lab-shared-upload-btn" type="button" onclick="triggerLabSharedImagePicker('overlayImage')">
+                Chọn ảnh từ máy
+              </button>
+              <input id="labSharedOverlayImageFileInput" class="lab-shared-file-input" type="file" accept="image/*" onchange="handleLabSharedImagePicked('overlayImage', this)" />
+              <span class="lab-shared-upload-status" id="labSharedOverlayImageStatus">Có thể dán URL hoặc chọn ảnh từ máy.</span>
+            </div>
+          </div>
+          <div>
+            <label class="fl" for="labSharedOverlay20ImageInput">Ảnh popup 20 giây</label>
+            <input class="fi" id="labSharedOverlay20ImageInput" type="url" placeholder="https://..." />
+            <div class="lab-shared-upload-row">
+              <button id="labSharedOverlay20ImagePickerBtn" class="btn-cancel lab-shared-upload-btn" type="button" onclick="triggerLabSharedImagePicker('overlay20sImage')">
+                Chọn ảnh từ máy
+              </button>
+              <input id="labSharedOverlay20ImageFileInput" class="lab-shared-file-input" type="file" accept="image/*" onchange="handleLabSharedImagePicked('overlay20sImage', this)" />
+              <span class="lab-shared-upload-status" id="labSharedOverlay20ImageStatus">Để trống nếu muốn dùng lại ảnh popup 3 giây.</span>
+            </div>
+          </div>
+          <div class="lab-shared-settings-span-2">
+            <label class="fl" for="labSharedOverlay300ImageInput">Ảnh popup 300 giây</label>
+            <input class="fi" id="labSharedOverlay300ImageInput" type="url" placeholder="https://..." />
+            <div class="lab-shared-upload-row">
+              <button id="labSharedOverlay300ImagePickerBtn" class="btn-cancel lab-shared-upload-btn" type="button" onclick="triggerLabSharedImagePicker('overlay300sImage')">
+                Chọn ảnh từ máy
+              </button>
+              <input id="labSharedOverlay300ImageFileInput" class="lab-shared-file-input" type="file" accept="image/*" onchange="handleLabSharedImagePicked('overlay300sImage', this)" />
+              <span class="lab-shared-upload-status" id="labSharedOverlay300ImageStatus">Để trống nếu muốn dùng lại ảnh popup 3 giây.</span>
+            </div>
+          </div>
+          <div class="lab-shared-settings-span-2">
+            <label class="fl" for="labSharedPopup300UrlInput">Link popup 300 giây</label>
+            <input class="fi" id="labSharedPopup300UrlInput" type="url" placeholder="https://..." />
+          </div>
+          <div>
+            <label class="fl" for="labSharedGroupLabelInput">Nhãn dòng 1</label>
+            <input class="fi" id="labSharedGroupLabelInput" type="text" placeholder="Group facebook" />
+          </div>
+          <div>
+            <label class="fl" for="labSharedGroupUrlInput">Link dòng 1</label>
+            <input class="fi" id="labSharedGroupUrlInput" type="url" placeholder="https://..." />
+          </div>
+          <div>
+            <label class="fl" for="labSharedBackupLabelInput">Nhãn dòng 2</label>
+            <input class="fi" id="labSharedBackupLabelInput" type="text" placeholder="Page phụ" />
+          </div>
+          <div>
+            <label class="fl" for="labSharedBackupUrlInput">Link dòng 2</label>
+            <input class="fi" id="labSharedBackupUrlInput" type="url" placeholder="https://..." />
+          </div>
+        </div>
+        <div class="lab-shared-settings-note" id="labSharedSettingsNote">
+          Lưu xong, lab mới trong tab tạo sẽ nhận ngay bộ mặc định này.
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" type="button" onclick="closeLabSharedSettingsModal()">
+            Đóng
+          </button>
+          <button class="btn-save" type="button" onclick="saveLabSharedSettingsModal()">
+            Lưu mặc định
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ══ EDIT LINK MODAL ══ -->
     <div
       class="modal-backdrop hidden"
@@ -3686,6 +3840,7 @@
     <div class="toast" id="toast"></div>
 
     <script src="/shared-client.js"></script>
+    <script src="/article-funnel-lab-srcdoc.js?v=20260707b"></script>
     <script src="/app.js?v=20260620a"></script>
   </body>
 </html>

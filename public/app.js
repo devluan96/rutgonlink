@@ -103,6 +103,12 @@ let adminOverviewTrendPayload = null;
 let statsAnalytics = null;
 let linkSearchQuery = "";
 let linkTypeFilter = "all";
+const createSubtabStorageKey = "rutgonlink-create-subtab";
+const linksSubtabStorageKey = "rutgonlink-links-subtab";
+let createSubtab =
+  localStorage.getItem(createSubtabStorageKey) === "lab" ? "lab" : "standard";
+let linksSubtab =
+  localStorage.getItem(linksSubtabStorageKey) === "lab" ? "lab" : "standard";
 let currentFilteredLinks = [];
 let selectedLinkIds = new Set();
 let expandedOriginalLinkIds = new Set();
@@ -141,6 +147,8 @@ const STATS_PAYLOAD_CACHE_TTL_MS = 2000;
 let statsPayloadPromise = null;
 let statsPayloadCache = null;
 let statsPayloadCacheAt = 0;
+const labEmbedCacheBust = Date.now().toString(36);
+const labSharedSettingsStorageKey = "rutgonlink-lab-shared-settings-v1";
 let confirmModalResolver = null;
 let accountLoginEvents = [];
 let accountLoginEventsLoading = false;
@@ -1948,6 +1956,7 @@ function showApp() {
   updateTopbar();
   loadBioConfig();
   renderForms();
+  syncLabTabAvailability();
   updateIntegrationUI();
   void syncBioProfileFromServer();
   syncRouteFromLocation();
@@ -1992,6 +2001,7 @@ function continueAsGuest() {
   updateTopbar();
   loadBioConfig();
   renderForms();
+  syncLabTabAvailability();
   updateIntegrationUI();
   syncRouteFromLocation();
   loadData();
@@ -4793,6 +4803,24 @@ window.addEventListener("resize", () => {
   syncTopbarSearchPlaceholder();
 });
 
+window.addEventListener("message", (event) => {
+  if (event.origin !== window.location.origin) return;
+  const data = event.data || {};
+  if (data.type !== "article-funnel-lab:height") return;
+  const embedId = String(data.embedId || "").trim();
+  const frameId =
+    embedId === "create"
+      ? "createLabIframe"
+      : embedId === "links"
+        ? "linksLabIframe"
+        : "";
+  if (!frameId) return;
+  const frame = document.getElementById(frameId);
+  if (!frame) return;
+  const nextHeight = Math.max(Number(data.height || 0), frameId === "createLabIframe" ? 980 : 760);
+  frame.style.height = `${nextHeight}px`;
+});
+
 function showConfirmDialog(options = {}) {
   const modal = document.getElementById("confirmModal");
   const titleEl = document.getElementById("confirmTitle");
@@ -4867,6 +4895,8 @@ function navigate(page, el) {
   document.getElementById("page-" + page)?.classList.add("active");
   if (el) el.classList.add("active");
   if (page === "links") applyLinkFilters();
+  if (page === "create") syncCreateSubtabUI();
+  if (page === "links") syncLinksSubtabUI();
   if (page === "qr") renderQrPage();
   if (page === "bio") renderBioPage();
   if (page === "team") renderTeamPage();
@@ -5087,6 +5117,320 @@ function setCreateAiHint(cid, message = "", tone = "") {
 function renderForms() {
   renderForm("createFormArea");
   applyPendingTeamTemplateDraft("createFormArea");
+}
+
+function canUseLabTabs() {
+  return isAdminUser();
+}
+
+function normalizeLabSharedSettings(input = {}) {
+  const source = input && typeof input === "object" ? input : {};
+  return {
+    shareImage: String(source.shareImage || "").trim(),
+    overlayImage: String(source.overlayImage || "").trim(),
+    overlay20sImage: String(source.overlay20sImage || "").trim(),
+    overlay300sImage: String(source.overlay300sImage || "").trim(),
+    popup300sUrl: String(source.popup300sUrl || "").trim(),
+    groupLabel: String(source.groupLabel || "").trim(),
+    groupUrl: String(source.groupUrl || "").trim(),
+    backupLabel: String(source.backupLabel || "").trim(),
+    backupUrl: String(source.backupUrl || "").trim(),
+  };
+}
+
+function getLabSharedSettings() {
+  try {
+    const raw = localStorage.getItem(labSharedSettingsStorageKey);
+    if (!raw) return normalizeLabSharedSettings();
+    return normalizeLabSharedSettings(JSON.parse(raw));
+  } catch {
+    return normalizeLabSharedSettings();
+  }
+}
+
+function setLabSharedSettings(value) {
+  const normalized = normalizeLabSharedSettings(value);
+  localStorage.setItem(labSharedSettingsStorageKey, JSON.stringify(normalized));
+  return normalized;
+}
+
+function getLabSharedSettingsFormValueMap() {
+  return {
+    shareImage: document.getElementById("labSharedShareImageInput"),
+    overlayImage: document.getElementById("labSharedOverlayImageInput"),
+    overlay20sImage: document.getElementById("labSharedOverlay20ImageInput"),
+    overlay300sImage: document.getElementById("labSharedOverlay300ImageInput"),
+    popup300sUrl: document.getElementById("labSharedPopup300UrlInput"),
+    groupLabel: document.getElementById("labSharedGroupLabelInput"),
+    groupUrl: document.getElementById("labSharedGroupUrlInput"),
+    backupLabel: document.getElementById("labSharedBackupLabelInput"),
+    backupUrl: document.getElementById("labSharedBackupUrlInput"),
+  };
+}
+
+const labSharedImageFieldConfig = {
+  overlayImage: {
+    inputId: "labSharedOverlayImageInput",
+    fileInputId: "labSharedOverlayImageFileInput",
+    statusId: "labSharedOverlayImageStatus",
+    buttonId: "labSharedOverlayImagePickerBtn",
+    pendingMessage: "Đang upload ảnh popup 3 giây...",
+    successMessage: "Đã tải ảnh popup 3 giây lên",
+  },
+  overlay20sImage: {
+    inputId: "labSharedOverlay20ImageInput",
+    fileInputId: "labSharedOverlay20ImageFileInput",
+    statusId: "labSharedOverlay20ImageStatus",
+    buttonId: "labSharedOverlay20ImagePickerBtn",
+    pendingMessage: "Đang upload ảnh popup 20 giây...",
+    successMessage: "Đã tải ảnh popup 20 giây lên",
+  },
+  overlay300sImage: {
+    inputId: "labSharedOverlay300ImageInput",
+    fileInputId: "labSharedOverlay300ImageFileInput",
+    statusId: "labSharedOverlay300ImageStatus",
+    buttonId: "labSharedOverlay300ImagePickerBtn",
+    pendingMessage: "Đang upload ảnh popup 300 giây...",
+    successMessage: "Đã tải ảnh popup 300 giây lên",
+  },
+};
+
+function setLabSharedImageStatus(assetKey, message, tone = "") {
+  const config = labSharedImageFieldConfig[assetKey];
+  const status = config ? document.getElementById(config.statusId) : null;
+  if (!status) return;
+  status.textContent = message || "";
+  if (tone) {
+    status.dataset.tone = tone;
+  } else {
+    delete status.dataset.tone;
+  }
+}
+
+function setLabSharedImageBusy(assetKey, busy) {
+  const config = labSharedImageFieldConfig[assetKey];
+  if (!config) return;
+  const pickerButton = document.getElementById(config.buttonId);
+  const fileInput = document.getElementById(config.fileInputId);
+  if (pickerButton) pickerButton.disabled = !!busy;
+  if (fileInput) fileInput.disabled = !!busy;
+}
+
+function triggerLabSharedImagePicker(assetKey) {
+  const config = labSharedImageFieldConfig[assetKey];
+  if (!config) return;
+  const fileInput = document.getElementById(config.fileInputId);
+  if (fileInput && !fileInput.disabled) {
+    fileInput.click();
+  }
+}
+
+async function handleLabSharedImagePicked(assetKey, input) {
+  const config = labSharedImageFieldConfig[assetKey];
+  const file = input?.files?.[0];
+  if (!config || !file) return;
+  try {
+    setLabSharedImageBusy(assetKey, true);
+    setLabSharedImageStatus(assetKey, config.pendingMessage, "warn");
+    const fd = new FormData();
+    fd.append("image", file);
+    const response = await fetch("/api/upload-image", {
+      method: "POST",
+      body: fd,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.url) {
+      throw new Error(payload?.error || "Upload ảnh thất bại");
+    }
+    const absoluteUrl = String(payload.url || "").startsWith("/")
+      ? window.location.origin + payload.url
+      : String(payload.url || "");
+    const targetInput = document.getElementById(config.inputId);
+    if (targetInput) {
+      targetInput.value = absoluteUrl;
+    }
+    setLabSharedImageStatus(assetKey, "Upload ảnh xong", "ok");
+    toast(config.successMessage);
+  } catch (error) {
+    const message = error?.message || "Upload ảnh thất bại";
+    setLabSharedImageStatus(assetKey, message, "err");
+    toast(message);
+  } finally {
+    if (input) input.value = "";
+    setLabSharedImageBusy(assetKey, false);
+  }
+}
+
+function buildLabEmbedSrcdoc(frameId, forceRefresh = false) {
+  const frame = document.getElementById(frameId);
+  const rawTemplate = window.__ARTICLE_FUNNEL_LAB_TEMPLATE_HTML__;
+  const template = typeof rawTemplate === "string"
+    ? rawTemplate.trim()
+    : String(rawTemplate?.value || "").trim();
+  if (!frame || !template) return "";
+  const view = String(frame.dataset.labView || "").trim().toLowerCase() || "editor";
+  const embedId = String(frame.dataset.labEmbedId || "").trim() || frameId;
+  const embedConfigScript = `<script>window.__ARTICLE_FUNNEL_LAB_EMBED__ = ${JSON.stringify({
+    embed: true,
+    view,
+    embedId,
+    refreshToken: forceRefresh ? Date.now().toString(36) : labEmbedCacheBust,
+  })};<\/script>`;
+  const baseTag = `<base href="${window.location.origin}/">`;
+  return template.replace("<head>", `<head>${baseTag}${embedConfigScript}`);
+}
+
+function ensureLabEmbedLoaded(frameId) {
+  const frame = document.getElementById(frameId);
+  if (!frame || frame.dataset.loaded === "true") return;
+  const nextSrcdoc = buildLabEmbedSrcdoc(frameId);
+  if (!nextSrcdoc) return;
+  frame.srcdoc = nextSrcdoc;
+  frame.dataset.loaded = "true";
+}
+
+function refreshLabEmbed(frameId) {
+  const frame = document.getElementById(frameId);
+  if (!frame) return;
+  const nextSrcdoc = buildLabEmbedSrcdoc(frameId, true);
+  if (!nextSrcdoc) return;
+  frame.srcdoc = nextSrcdoc;
+  frame.dataset.loaded = "true";
+}
+
+function postLabSharedSettingsToFrame(frameId, settings) {
+  const frame = document.getElementById(frameId);
+  if (!frame) return;
+  ensureLabEmbedLoaded(frameId);
+  const payload = normalizeLabSharedSettings(settings);
+  const sendSettings = () => {
+    try {
+      frame.contentWindow?.postMessage(
+        { type: "article-funnel-lab:apply-shared-settings", settings: payload },
+        window.location.origin,
+      );
+    } catch (_) {}
+  };
+  if (frame.contentWindow) {
+    sendSettings();
+    setTimeout(sendSettings, 180);
+    return;
+  }
+  frame.addEventListener("load", sendSettings, { once: true });
+}
+
+function openLabSharedSettingsModal(frameId = "createLabIframe") {
+  const modal = document.getElementById("labSharedSettingsModal");
+  if (!modal) return;
+  modal.dataset.frameId = frameId;
+  const settings = getLabSharedSettings();
+  const fields = getLabSharedSettingsFormValueMap();
+  Object.entries(fields).forEach(([key, input]) => {
+    if (input) {
+      input.value = settings[key] || "";
+    }
+  });
+  Object.keys(labSharedImageFieldConfig).forEach((assetKey) => {
+    const statusDefaults = {
+      overlayImage: "Có thể dán URL hoặc chọn ảnh từ máy.",
+      overlay20sImage: "Để trống nếu muốn dùng lại ảnh popup 3 giây.",
+      overlay300sImage: "Để trống nếu muốn dùng lại ảnh popup 3 giây.",
+    };
+    setLabSharedImageStatus(assetKey, statusDefaults[assetKey] || "");
+  });
+  modal.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    document.getElementById("labSharedShareImageInput")?.focus();
+  });
+}
+
+function closeLabSharedSettingsModal() {
+  document.getElementById("labSharedSettingsModal")?.classList.add("hidden");
+}
+
+function saveLabSharedSettingsModal() {
+  const modal = document.getElementById("labSharedSettingsModal");
+  if (!modal) return;
+  const fields = getLabSharedSettingsFormValueMap();
+  const nextSettings = normalizeLabSharedSettings(
+    Object.fromEntries(
+      Object.entries(fields).map(([key, input]) => [key, input?.value || ""]),
+    ),
+  );
+  const savedSettings = setLabSharedSettings(nextSettings);
+  const frameId = modal.dataset.frameId || "createLabIframe";
+  postLabSharedSettingsToFrame(frameId, savedSettings);
+  closeLabSharedSettingsModal();
+  toast("Đã lưu cài đặt mặc định cho lab mới");
+}
+
+function syncCreateSubtabUI() {
+  const allowLab = canUseLabTabs();
+  const activeTab = allowLab && createSubtab === "lab" ? "lab" : "standard";
+  if (activeTab !== createSubtab) {
+    createSubtab = activeTab;
+    localStorage.setItem(createSubtabStorageKey, createSubtab);
+  }
+  document.querySelectorAll("[data-create-subtab]").forEach((button) => {
+    const isActive = button.dataset.createSubtab === activeTab;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+  document.querySelectorAll("[data-create-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.createPanel !== activeTab;
+  });
+  if (activeTab === "lab") {
+    ensureLabEmbedLoaded("createLabIframe");
+  }
+}
+
+function syncLinksSubtabUI() {
+  const allowLab = canUseLabTabs();
+  const activeTab = allowLab && linksSubtab === "lab" ? "lab" : "standard";
+  if (activeTab !== linksSubtab) {
+    linksSubtab = activeTab;
+    localStorage.setItem(linksSubtabStorageKey, linksSubtab);
+  }
+  document.querySelectorAll("[data-links-subtab]").forEach((button) => {
+    const isActive = button.dataset.linksSubtab === activeTab;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+  document.querySelectorAll("[data-links-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.linksPanel !== activeTab;
+  });
+  if (activeTab === "lab") {
+    ensureLabEmbedLoaded("linksLabIframe");
+  }
+}
+
+function syncLabTabAvailability() {
+  const allowLab = canUseLabTabs();
+  document.querySelectorAll("[data-lab-tab-only]").forEach((node) => {
+    node.hidden = !allowLab;
+  });
+  if (!allowLab) {
+    createSubtab = "standard";
+    linksSubtab = "standard";
+    localStorage.setItem(createSubtabStorageKey, createSubtab);
+    localStorage.setItem(linksSubtabStorageKey, linksSubtab);
+  }
+  syncCreateSubtabUI();
+  syncLinksSubtabUI();
+}
+
+function setCreateSubtab(tab, el) {
+  createSubtab = tab === "lab" && canUseLabTabs() ? "lab" : "standard";
+  localStorage.setItem(createSubtabStorageKey, createSubtab);
+  syncCreateSubtabUI();
+  if (el) el.blur();
+}
+
+function setLinksSubtab(tab, el) {
+  linksSubtab = tab === "lab" && canUseLabTabs() ? "lab" : "standard";
+  localStorage.setItem(linksSubtabStorageKey, linksSubtab);
+  syncLinksSubtabUI();
+  if (el) el.blur();
 }
 
 function renderQrPage() {

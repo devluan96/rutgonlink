@@ -24,6 +24,19 @@ const { init: initDb } = require("./db");
 const { isAffiliateShortenUrl } = require("../affiliate");
 
 const app = express();
+function syncArticleFunnelLabSrcdocAsset() {
+  const templatePath = path.join(__dirname, "templates", "admin-article-funnel-lab.html");
+  const assetPath = path.join(__dirname, "..", "public", "article-funnel-lab-srcdoc.js");
+  try {
+    const templateHtml = fs.readFileSync(templatePath, "utf8");
+    const assetContent =
+      `window.__ARTICLE_FUNNEL_LAB_TEMPLATE_HTML__ = ${JSON.stringify(templateHtml)};\n`;
+    fs.writeFileSync(assetPath, assetContent, "utf8");
+  } catch (error) {
+    console.error("[article-funnel-lab/srcdoc-sync] Failed to sync lab template asset", error);
+  }
+}
+syncArticleFunnelLabSrcdocAsset();
 const BASE_URL =
   (process.env.BASE_URL || "").replace(/\/$/, "") ||
   (process.env.VERCEL_URL
@@ -56,8 +69,6 @@ const SUPABASE_SERVICE_ROLE_KEY = (
 const SUPABASE_ANON_KEY = (process.env.SUPABASE_ANON_KEY || "").trim();
 const GUEST_SESSION_COOKIE = "guest_session";
 const GUEST_SESSION_MAX_AGE = 30 * 24 * 3600 * 1000;
-const REDIRECT_LOG_DIR = path.join(__dirname, "..", "logs");
-const REDIRECT_LOG_FILE = path.join(REDIRECT_LOG_DIR, "redirect.log");
 const ANALYTICS_TIME_ZONE = (
   process.env.APP_TIME_ZONE || "Asia/Ho_Chi_Minh"
 ).trim();
@@ -69,7 +80,6 @@ const regionNamesEn =
   typeof Intl.DisplayNames === "function"
     ? new Intl.DisplayNames(["en"], { type: "region" })
     : null;
-let redirectLogDirReady = null;
 let redirectLogWriteQueue = Promise.resolve();
 const STATS_RESPONSE_CACHE_TTL_MS = Math.max(
   Number(process.env.STATS_RESPONSE_CACHE_TTL_MS) || 10000,
@@ -404,7 +414,6 @@ const publicResourcePages = [
     priority: "0.8",
   },
 ];
-
 app.get("/", serveLanding);
 app.get(["/landing", "/landing/"], redirectToCanonical("/"));
 app.get("/landing.html", redirectToCanonical("/"));
@@ -455,20 +464,6 @@ app.get(
   redirectToCanonical("/register"),
 );
 app.get("/user/register/index.html", redirectToCanonical("/register"));
-app.get(
-  ["/admin/article-funnel-lab", "/admin/article-funnel-lab/"],
-  requireAdmin,
-  (_req, res) => {
-    res.set("Cache-Control", "no-store");
-    res.sendFile(
-      path.join(
-        __dirname,
-        "templates",
-        "admin-article-funnel-lab.html",
-      ),
-    );
-  },
-);
 app.post("/api/admin/article-funnel-lab/resolve-target", requireAdmin, async (req, res) => {
   try {
     const inputUrl = String(req.body?.url || "").trim();
@@ -486,7 +481,7 @@ app.post("/api/admin/article-funnel-lab/resolve-target", requireAdmin, async (re
       inputUrl;
     const health = await fetchAffiliateHealth(normalizedUrl);
     const finalUrl = String(health?.final_url || normalizedUrl || "").trim();
-    const launchConfig = buildDirectLaunchConfig(finalUrl);
+    const launchConfig = buildOverlayLaunchConfig(finalUrl);
 
     return res.json({
       ok: true,
@@ -503,6 +498,56 @@ app.post("/api/admin/article-funnel-lab/resolve-target", requireAdmin, async (re
   } catch (error) {
     console.error("[article-funnel-lab/resolve-target]", error);
     return res.status(500).json({ error: "Resolve target thất bại" });
+  }
+});
+app.post("/api/admin/article-funnel-lab/import-url", requireAdmin, async (req, res) => {
+  try {
+    const sourceUrl = normalizeImportSourceUrl(req.body?.url || "");
+    if (!sourceUrl) {
+      return res.status(400).json({ error: "URL nguon khong hop le" });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let response;
+    try {
+      response = await fetch(sourceUrl, {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          "user-agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0 Safari/537.36",
+          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "accept-language": "vi,en-US;q=0.9,en;q=0.8",
+        },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response || !response.ok) {
+      return res.status(400).json({
+        error: `Khong tai duoc URL nguon (${Number(response?.status || 0) || "no-response"})`,
+      });
+    }
+
+    const finalUrl = normalizeImportSourceUrl(response.url || sourceUrl) || sourceUrl;
+    const html = await response.text();
+    const item = extractArticleFunnelImportPayload(html, finalUrl);
+    if (!item.title && !item.description && !item.blocks.length) {
+      return res.status(400).json({
+        error: "Khong tim thay title, mo ta hoac media hop le tren URL nguon",
+      });
+    }
+
+    return res.json({
+      ok: true,
+      item,
+    });
+  } catch (error) {
+    console.error("[article-funnel-lab/import-url]", error);
+    return res.status(500).json({ error: "Khong the lay nhanh du lieu tu URL nguon" });
   }
 });
 app.get("/api/admin/article-funnel-labs", requireAdmin, async (req, res) => {
@@ -1703,20 +1748,12 @@ function logRedirectDecision(meta) {
   persistRedirectLogEntry(entry);
 }
 
-function ensureRedirectLogDir() {
-  if (!redirectLogDirReady) {
-    redirectLogDirReady = fs.promises.mkdir(REDIRECT_LOG_DIR, {
-      recursive: true,
-    });
-  }
-  return redirectLogDirReady;
-}
-
 function persistRedirectLogEntry(entry) {
-  const line = `${JSON.stringify(entry)}\n`;
   redirectLogWriteQueue = redirectLogWriteQueue
-    .then(() => ensureRedirectLogDir())
-    .then(() => fs.promises.appendFile(REDIRECT_LOG_FILE, line, "utf8"))
+    .then(async () => {
+      const database = await getDb();
+      await database.createRedirectLogEntry(entry);
+    })
     .catch((error) => {
       console.error(`[redirect-log] ${error.message}`);
     });
@@ -1724,24 +1761,8 @@ function persistRedirectLogEntry(entry) {
 
 async function readRecentRedirectLogEntries(limit = 20) {
   await redirectLogWriteQueue;
-  try {
-    const raw = await fs.promises.readFile(REDIRECT_LOG_FILE, "utf8");
-    const lines = raw.split(/\r?\n/).filter(Boolean);
-    return lines
-      .slice(-limit)
-      .reverse()
-      .map((line) => {
-        try {
-          return JSON.parse(line);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
-  } catch (error) {
-    if (error.code === "ENOENT") return [];
-    throw error;
-  }
+  const database = await getDb();
+  return database.listRedirectLogEntries(limit);
 }
 
 const TIKTOK_ANDROID_PACKAGE = "com.ss.android.ugc.trill";
@@ -4003,16 +4024,18 @@ function buildDirectLaunchConfig(targetUrl) {
   const normalizedTargetUrl = String(targetUrl || "").trim();
   const launchInfo = detectPlatformDeep(normalizedTargetUrl, "ios");
   const directWebUrl = launchInfo.fallback || normalizedTargetUrl || "";
+  const isShopee = launchInfo.platform_name === "shopee";
+  const isTikTok = launchInfo.platform_name === "tiktok";
   const directAppUrl =
-    launchInfo.platform_name === "shopee"
+    isShopee
       ? buildShopeeAppLinkUrl(directWebUrl)
       : launchInfo.deeplink || directWebUrl;
   const directIosUrl =
-    launchInfo.platform_name === "shopee"
+    isShopee
       ? directWebUrl
       : launchInfo.deeplink_ios || directAppUrl || directWebUrl;
   const directAndroidUrl =
-    launchInfo.platform_name === "shopee"
+    isShopee
       ? directWebUrl
       : launchInfo.deeplink_android || directAppUrl || directWebUrl;
 
@@ -4026,15 +4049,299 @@ function buildDirectLaunchConfig(targetUrl) {
     direct_ios_browser_url: directWebUrl,
     direct_android_url: directAndroidUrl,
     direct_android_intent_url:
-      launchInfo.platform_name === "shopee"
+      isShopee
         ? buildShopeeAndroidIntentUrl(directWebUrl)
         : "",
     direct_android_package:
-      launchInfo.platform_name === "shopee"
+      isShopee
         ? SHOPEE_ANDROID_PACKAGE
-        : launchInfo.platform_name === "tiktok"
+        : isTikTok
           ? TIKTOK_ANDROID_PACKAGE
           : "",
+  };
+}
+
+function buildOverlayLaunchConfig(targetUrl) {
+  const config = buildDirectLaunchConfig(targetUrl);
+  if (config.direct_platform === "tiktok") {
+    const preferredIosUrl =
+      config.direct_ios_url || config.direct_app_url || config.direct_web_url;
+    return {
+      ...config,
+      direct_ios_fb_url: preferredIosUrl,
+      direct_ios_browser_url: config.direct_web_url,
+    };
+  }
+  return config;
+}
+
+function decodeHtmlEntities(input = "") {
+  return String(input || "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&nbsp;/gi, " ");
+}
+
+function collapseWhitespace(input = "") {
+  return String(input || "").replace(/\s+/g, " ").trim();
+}
+
+function stripHtmlTags(input = "") {
+  return collapseWhitespace(
+    decodeHtmlEntities(String(input || "").replace(/<[^>]+>/g, " ")),
+  );
+}
+
+function normalizeImportSourceUrl(input = "") {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  try {
+    const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const parsed = new URL(normalized);
+    if (!/^https?:$/i.test(parsed.protocol)) return "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+function absolutizeImportedUrl(candidate = "", baseUrl = "") {
+  const raw = decodeHtmlEntities(String(candidate || "").trim());
+  if (!raw || raw.startsWith("data:") || raw.startsWith("blob:")) return "";
+  try {
+    return new URL(raw, baseUrl).toString();
+  } catch {
+    return "";
+  }
+}
+
+function extractAttributeValue(fragment = "", attributeName = "") {
+  if (!fragment || !attributeName) return "";
+  const pattern = new RegExp(
+    `${attributeName}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'=<>` + "`" + `]+))`,
+    "i",
+  );
+  const match = String(fragment || "").match(pattern);
+  return decodeHtmlEntities(
+    (match && (match[2] || match[3] || match[4] || "")) || "",
+  ).trim();
+}
+
+function extractMetaContents(html = "", keys = []) {
+  const normalizedKeys = new Set(
+    (Array.isArray(keys) ? keys : []).map((key) =>
+      String(key || "").trim().toLowerCase(),
+    ),
+  );
+  if (!normalizedKeys.size) return [];
+  const matches = [];
+  const metaRegex = /<meta\b[^>]*>/gi;
+  for (const tag of String(html || "").match(metaRegex) || []) {
+    const property = extractAttributeValue(tag, "property").toLowerCase();
+    const name = extractAttributeValue(tag, "name").toLowerCase();
+    if (!normalizedKeys.has(property) && !normalizedKeys.has(name)) continue;
+    const content = extractAttributeValue(tag, "content");
+    if (content) matches.push(content);
+  }
+  return matches;
+}
+
+function dedupeUrls(values = []) {
+  const seen = new Set();
+  const items = [];
+  for (const value of Array.isArray(values) ? values : []) {
+    const normalized = String(value || "").trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    items.push(normalized);
+  }
+  return items;
+}
+
+function pickImportedAttributeValue(fragment = "", attributeNames = []) {
+  for (const attributeName of Array.isArray(attributeNames) ? attributeNames : []) {
+    const candidate = extractAttributeValue(fragment, attributeName);
+    const normalized = String(candidate || "").trim();
+    if (!normalized || normalized.startsWith("data:") || normalized.startsWith("blob:")) {
+      continue;
+    }
+    return normalized;
+  }
+  return "";
+}
+
+function extractLikelyArticleContentHtml(html = "") {
+  const safeHtml = String(html || "");
+  const patterns = [
+    /<div[^>]+class="[^"]*entry-content[^"]*wp-block-post-content[^"]*"[^>]*>([\s\S]*?)(?=<div[^>]+class="[^"]*wp-block-template-part[^"]*"|<\/main>)/i,
+    /<div[^>]+class="[^"]*wp-block-post-content[^"]*"[^>]*>([\s\S]*?)(?=<div[^>]+class="[^"]*wp-block-template-part[^"]*"|<\/main>)/i,
+    /<article\b[^>]*>([\s\S]*?)<\/article>/i,
+    /<main\b[^>]*>([\s\S]*?)<\/main>/i,
+  ];
+  for (const pattern of patterns) {
+    const match = safeHtml.match(pattern);
+    const snippet = String(match?.[1] || "").trim();
+    if (snippet) return snippet;
+  }
+  return "";
+}
+
+function extractArticleParagraphs(html = "") {
+  const paragraphs = [];
+  const paragraphRegex = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
+  for (const match of String(html || "").matchAll(paragraphRegex)) {
+    const text = collapseWhitespace(stripHtmlTags(match[1] || ""));
+    if (text) paragraphs.push(text);
+  }
+  return paragraphs;
+}
+
+function isWeakImportDescription(input = "") {
+  const normalized = collapseWhitespace(String(input || "").trim()).toLowerCase();
+  if (!normalized) return true;
+  if (normalized.length < 24) return true;
+  return /^(c[aậ]p nh[aậ]t|update|tin m[oớ]i)$/i.test(normalized);
+}
+
+function extractOrderedArticleMedia(html = "", baseUrl = "") {
+  const items = [];
+  const pushItem = (type, src, caption = "") => {
+    const absoluteSrc = absolutizeImportedUrl(src, baseUrl);
+    if (!absoluteSrc) return;
+    items.push({
+      type,
+      src: absoluteSrc,
+      caption: stripHtmlTags(caption),
+    });
+  };
+
+  const videoBlockRegex = /<video\b[\s\S]*?<\/video>/gi;
+  for (const block of String(html || "").match(videoBlockRegex) || []) {
+    const directSrc = pickImportedAttributeValue(block, ["src", "data-src"]);
+    const sourceSrc = extractAttributeValue(block, "poster");
+    const nestedSourceMatch = block.match(/<source\b[^>]*>/i);
+    const nestedSrc = nestedSourceMatch
+      ? pickImportedAttributeValue(nestedSourceMatch[0], ["src", "data-src"])
+      : "";
+    pushItem("video", directSrc || nestedSrc, sourceSrc);
+  }
+
+  const imgRegex = /<img\b[^>]*>/gi;
+  for (const tag of String(html || "").match(imgRegex) || []) {
+    const width = Number.parseInt(extractAttributeValue(tag, "width"), 10) || 0;
+    const height = Number.parseInt(extractAttributeValue(tag, "height"), 10) || 0;
+    const rawClass = String(extractAttributeValue(tag, "class") || "").toLowerCase();
+    const rawAlt = String(extractAttributeValue(tag, "alt") || "").toLowerCase();
+    const src = pickImportedAttributeValue(tag, ["data-src", "data-original", "src"]);
+    const normalizedSrc = String(src || "").toLowerCase();
+    if (
+      (width > 0 && width < 120) ||
+      (height > 0 && height < 120) ||
+      /(?:logo|avatar|emoji|gravatar|icon|site-icon|favicon)/.test(
+        `${rawClass} ${rawAlt} ${normalizedSrc}`,
+      )
+    ) {
+      continue;
+    }
+    const alt = extractAttributeValue(tag, "alt");
+    pushItem("image", src, alt);
+  }
+
+  return dedupeUrls(
+    items
+      .map((item) => JSON.stringify(item))
+      .map((serialized) => serialized),
+  ).map((serialized) => JSON.parse(serialized));
+}
+
+function extractArticleFunnelImportPayload(html = "", baseUrl = "") {
+  const safeHtml = String(html || "");
+  const contentHtml = extractLikelyArticleContentHtml(safeHtml) || safeHtml;
+  const titleMatch = safeHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title =
+    collapseWhitespace(
+      decodeHtmlEntities(
+        extractMetaContents(safeHtml, ["og:title", "twitter:title"])[0] ||
+          (titleMatch ? titleMatch[1] : ""),
+      ),
+    ) || "Article preview";
+  const rawDescription =
+    collapseWhitespace(
+      decodeHtmlEntities(
+        extractMetaContents(safeHtml, [
+          "description",
+          "og:description",
+          "twitter:description",
+        ])[0] || "",
+      ),
+    ) || "";
+  const contentParagraphs = extractArticleParagraphs(contentHtml);
+  const description = isWeakImportDescription(rawDescription)
+    ? String(contentParagraphs[0] || rawDescription || "").trim()
+    : rawDescription;
+
+  const metaImages = extractMetaContents(safeHtml, [
+    "og:image",
+    "twitter:image",
+    "og:image:url",
+  ]).map((value) => absolutizeImportedUrl(value, baseUrl));
+  const metaVideos = extractMetaContents(safeHtml, [
+    "og:video",
+    "og:video:url",
+    "twitter:player:stream",
+  ]).map((value) => absolutizeImportedUrl(value, baseUrl));
+  const orderedMedia = extractOrderedArticleMedia(contentHtml, baseUrl);
+  const fallbackOrderedMedia =
+    contentHtml === safeHtml ? [] : extractOrderedArticleMedia(safeHtml, baseUrl);
+  const videos = dedupeUrls([
+    ...orderedMedia.filter((item) => item.type === "video").map((item) => item.src),
+    ...fallbackOrderedMedia.filter((item) => item.type === "video").map((item) => item.src),
+    ...metaVideos,
+  ]);
+  const images = dedupeUrls([
+    ...orderedMedia.filter((item) => item.type === "image").map((item) => item.src),
+    ...fallbackOrderedMedia.filter((item) => item.type === "image").map((item) => item.src),
+    ...metaImages,
+  ]);
+
+  const blocks = [];
+  const seen = new Set();
+  for (const media of orderedMedia) {
+    const key = `${media.type}:${media.src}`;
+    if (!media.src || seen.has(key)) continue;
+    seen.add(key);
+    blocks.push({
+      type: media.type,
+      src: media.src,
+      caption: media.caption || "",
+      text: "",
+    });
+    if (blocks.length >= 8) break;
+  }
+  if (!blocks.length) {
+    videos.slice(0, 2).forEach((src) =>
+      blocks.push({ type: "video", src, caption: "", text: "" }),
+    );
+    images.slice(0, 6 - blocks.length).forEach((src) =>
+      blocks.push({ type: "image", src, caption: "", text: "" }),
+    );
+  }
+
+  const shareImage = images[0] || "";
+  const overlayImage = shareImage;
+
+  return {
+    reference_source_url: baseUrl,
+    title,
+    description,
+    share_image: shareImage,
+    overlay_image: overlayImage,
+    blocks,
+    image_count: images.length,
+    video_count: videos.length,
   };
 }
 
@@ -4096,12 +4403,17 @@ function decodeArticleFunnelPreviewToken(token) {
 }
 
 function normalizeArticleFunnelBlocks(blocks) {
+  const allowedTypes = new Set([
+    "image",
+    "video",
+    "sensitive-image",
+    "sensitive-video",
+    "paragraph",
+  ]);
   if (!Array.isArray(blocks)) return [];
   return blocks
     .map((block) => ({
-      type: ["image", "video", "sensitive-image", "paragraph"].includes(
-        String(block?.type || ""),
-      )
+      type: allowedTypes.has(String(block?.type || ""))
         ? String(block.type)
         : "image",
       text: String(block?.text || ""),
@@ -4159,11 +4471,11 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
           const stageKey =
             rawStageKey === "5s" ? "20s" : rawStageKey || fallbackStageKey;
           const fallbackDelayMs =
-            stageKey === "3s" ? 3000 : stageKey === "20s" ? 20000 : 300000;
+            stageKey === "3s" ? 3000 : stageKey === "20s" ? 15000 : 300000;
           const parsedDelayMs = Number(stage?.delay_ms || 0) || 0;
           const delayMs =
             stageKey === "20s" && (rawStageKey === "5s" || parsedDelayMs === 5000)
-              ? 20000
+              ? 15000
               : parsedDelayMs || fallbackDelayMs;
           return {
             ...stage,
@@ -4177,15 +4489,15 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
             stage_key: "3s",
             delay_ms: 3000,
             overlay_image: getOverlayImageForStage("3s"),
-            ...buildDirectLaunchConfig(
+            ...buildOverlayLaunchConfig(
               overlay.popup_3s_url || config.baseUrl || "",
             ),
           },
           {
             stage_key: "20s",
-            delay_ms: 20000,
+            delay_ms: 15000,
             overlay_image: getOverlayImageForStage("20s"),
-            ...buildDirectLaunchConfig(
+            ...buildOverlayLaunchConfig(
               overlay.popup_20s_url ||
                 overlay.popup_5s_url ||
                 overlay.popup_3s_url ||
@@ -4197,7 +4509,7 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
             stage_key: "300s",
             delay_ms: 300000,
             overlay_image: getOverlayImageForStage("300s"),
-            ...buildDirectLaunchConfig(
+            ...buildOverlayLaunchConfig(
               overlay.popup_300s_url || overlay.popup_3s_url || config.baseUrl || "",
             ),
           },
@@ -4206,6 +4518,9 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
   return {
     source_domain: String(config.sourceDomain || config.source_domain || "").trim(),
     slug: String(config.slug || "").trim(),
+    reference_source_url: String(
+      config.reference_source_url || config.referenceSourceUrl || config.original_url || "",
+    ).trim(),
     title: String(config.title || "").trim() || "Article preview",
     description: String(config.description || config.desc || "").trim(),
     share_image: shareImage,
@@ -4221,7 +4536,7 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
         : String(stage.stage_key || "").trim(),
       delay_ms:
         String(stage.stage_key || "").trim() === "5s" && Number(stage.delay_ms || 0) === 5000
-          ? 20000
+          ? 15000
           : Number(stage.delay_ms || 0) || 0,
       target_url: String(stage.target_url || "").trim(),
       overlay_image:
@@ -4271,7 +4586,7 @@ async function resolveArticleFunnelConfig(rawConfig) {
       return {
         stage_key: stage.stage_key,
         delay_ms: stage.delay_ms,
-        ...buildDirectLaunchConfig(finalUrl),
+        ...buildOverlayLaunchConfig(finalUrl),
       };
     }),
   );
@@ -4496,30 +4811,35 @@ ${ogImageTag}
 <meta name="twitter:title" content="${title}" />
 <meta name="twitter:description" content="${description || title}" />
 <style>
-  :root{color-scheme:dark}
+  :root{color-scheme:light;--page-gutter:clamp(18px,5vw,120px);--content-width:650px}
   *{box-sizing:border-box}
-  body{margin:0;background:#181a1d;color:#f8fafc;font-family:"Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,sans-serif}
-  .article{min-height:100vh;padding:28px 0 60px;background:#181a1d}
-  .article-inner{width:min(100%,652px);margin:0 auto;padding:0 18px}
-  .article-title{margin:0;font-size:clamp(38px,4vw,62px);line-height:1.08;letter-spacing:-.04em;font-weight:400}
-  .article-description{margin:14px 0 0;color:#cbd5e1;font-size:18px;line-height:1.7;white-space:pre-wrap}
-  .article-blocks{margin-top:26px;display:grid;gap:22px}
-  .article-paragraph{margin:0;font-size:18px;line-height:1.8;color:#f8fafc;white-space:pre-wrap}
-  .article-media{overflow:hidden;background:#050505}
-  .article-media img,.article-media video{display:block;width:100%;height:auto}
-  .sensitive-wrap{position:relative;overflow:hidden;background:#0b1220}
-  .sensitive-wrap img{filter:blur(40px) brightness(.22) saturate(.56);opacity:.42;transform:scale(1.22);transition:filter .26s,transform .26s,opacity .26s}
-  .sensitive-wrap::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,6,12,.34),rgba(3,6,12,.68)),repeating-linear-gradient(-45deg,rgba(255,255,255,.03) 0,rgba(255,255,255,.03) 12px,rgba(3,6,12,.04) 12px,rgba(3,6,12,.04) 24px);pointer-events:none;z-index:1;transition:opacity .26s}
-  .sensitive-wrap::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(7,11,20,.36),rgba(7,11,20,.78)),radial-gradient(circle at center,rgba(255,255,255,.1),rgba(7,11,20,.28) 42%,rgba(7,11,20,.42));backdrop-filter:blur(18px) saturate(.62);-webkit-backdrop-filter:blur(18px) saturate(.62);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),inset 0 -120px 140px rgba(4,8,15,.42);pointer-events:none;z-index:2;transition:opacity .26s}
-  .sensitive-wrap.revealed img{filter:none;opacity:1;transform:scale(1)}
-  .sensitive-wrap.revealed::before{opacity:0}
-  .sensitive-wrap.revealed::after{opacity:0}
-  .reveal-btn{position:absolute;inset:auto 14px 14px 14px;padding:12px 14px;border:0;border-radius:14px;background:rgba(13,19,32,.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(5,8,16,.32);color:#fff;font:inherit;font-weight:800;cursor:pointer;z-index:3}
-  .article-caption{padding:10px 12px 0;color:#8ea0bc;font-size:13px}
-  .follow-box{margin-top:28px;padding-top:20px;border-top:1px solid rgba(148,163,184,.18);display:grid;gap:16px}
-  .follow-row{color:#f8fafc;font-size:18px;line-height:1.7}
-  .follow-row strong{font-weight:400}
-  .follow-row a{color:#fff;text-decoration:underline;text-underline-offset:3px}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:#fff;color:#000;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+  a{color:inherit}
+  .article{min-height:100vh;padding:48px var(--page-gutter) 60px;background:#fff}
+  .article-inner{width:min(100%,1440px);margin:0 auto}
+  .article-column{width:min(100%,var(--content-width));margin:0 auto}
+  .article-title{margin:0;font-size:clamp(42px,7vw,58px);line-height:1.2;letter-spacing:-.045em;font-weight:400;text-wrap:balance}
+  .article-description{margin:34px 0 0;font-size:18px;line-height:1.6;color:#000;white-space:pre-wrap}
+  .article-blocks{margin-top:24px;display:grid;gap:24px}
+  .article-paragraph{margin:0;font-size:18px;line-height:1.6;color:#000;white-space:pre-wrap}
+  .article-media{margin:0}
+  .article-media img,.article-media video{display:block;width:100%;height:auto;background:#111}
+  .article-caption{padding:10px 0 0;color:rgba(0,0,0,.66);font-size:13px;line-height:1.5}
+  .sensitive-wrap{position:relative;overflow:hidden;background:#101010}
+  .sensitive-wrap[data-sensitive-kind="video"]{background:#000;aspect-ratio:var(--sensitive-ratio,auto)}
+  .sensitive-wrap img,.sensitive-wrap video{filter:blur(10px);transform:scale(1);transform-origin:center;transition:filter .5s ease,transform .5s ease}
+  .sensitive-wrap[data-sensitive-kind="video"] video{width:100%;min-height:220px;object-fit:contain;background:#000}
+  .sensitive-wrap.revealed img,.sensitive-wrap.revealed video{filter:none;transform:scale(1)}
+  .sensitive-wrap::after{display:none}
+  .reveal-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);min-width:min(60%,294px);max-width:calc(100% - 32px);padding:15px 30px;border:0;border-radius:8px;background:rgba(0,0,0,.8);box-shadow:0 4px 6px rgba(0,0,0,.1);color:#fff;font:inherit;font-weight:700;line-height:1.08;text-align:center;cursor:pointer;z-index:2}
+  .reveal-btn:hover{background:rgba(0,0,0,1)}
+  .sensitive-wrap[data-sensitive-kind="video"] .reveal-btn{width:min(calc(100% - 40px),340px);min-width:0;padding:14px 24px 13px;border-radius:10px;font-size:clamp(17px,1.55vw,20px);font-weight:700;letter-spacing:-.02em}
+  .follow-box{margin-top:72px;padding-top:28px;border-top:1px solid rgba(0,0,0,.22);display:grid;gap:18px}
+  .follow-row{font-size:18px;line-height:1.6;color:#000;word-break:break-word}
+  .follow-row.is-centered{text-align:center}
+  .follow-row strong{font-weight:700}
+  .follow-row a{text-decoration:underline;text-underline-offset:3px}
   .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.6);z-index:30}
   .overlay.show{display:flex}
   .overlay-stack{position:relative;width:min(100%,352px);min-height:320px}
@@ -4527,17 +4847,28 @@ ${ogImageTag}
   .overlay-image-hit{display:block;cursor:pointer}
   .overlay-card img{display:block;width:100%;height:auto}
   .overlay-close{position:absolute;top:10px;right:10px;width:36px;height:36px;border:0;border-radius:999px;background:rgba(15,23,42,.82);color:#fff;font:inherit;font-weight:800;cursor:pointer;z-index:2}
+  @media (max-width: 900px){
+    .article{padding-top:28px}
+    .article-description{margin-top:26px}
+    .follow-box{margin-top:56px}
+  }
+  @media (max-width: 640px){
+    .article{padding-inline:18px}
+    .reveal-btn{width:calc(100% - 32px);min-width:0}
+  }
 </style>
 </head>
 <body>
   <div class="article">
     <div class="article-inner">
-      <h1 class="article-title">${title}</h1>
-      ${description ? `<p class="article-description">${description}</p>` : ""}
-      <div class="article-blocks" id="previewBlocks"></div>
-      <div class="follow-box">
-        <div class="follow-row"><strong>${groupLabel}</strong>: <a href="${groupUrl}" target="_blank" rel="noopener">${groupUrl}</a></div>
-        <div class="follow-row"><strong>${backupLabel}</strong>: <a href="${backupUrl}" target="_blank" rel="noopener">${backupUrl}</a></div>
+      <div class="article-column">
+        <h1 class="article-title">${title}</h1>
+        ${description ? `<p class="article-description">${description}</p>` : ""}
+        <div class="article-blocks" id="previewBlocks"></div>
+        <div class="follow-box">
+          <div class="follow-row"><strong>${groupLabel}</strong>: <a href="${groupUrl}" target="_blank" rel="noopener">${groupUrl}</a></div>
+          <div class="follow-row"><strong>${backupLabel}</strong>: <a href="${backupUrl}" target="_blank" rel="noopener">${backupUrl}</a></div>
+        </div>
       </div>
     </div>
   </div>
@@ -4553,6 +4884,49 @@ ${ogImageTag}
   var overlayStackEl = document.getElementById('overlayStack');
   var previewBlocksEl = document.getElementById('previewBlocks');
 
+  function getUserAgent() {
+    return navigator.userAgent || '';
+  }
+
+  function isIOSDevice() {
+    return /iphone|ipad|ipod/i.test(getUserAgent());
+  }
+
+  function isAndroidDevice() {
+    return /android/i.test(getUserAgent());
+  }
+
+  function isSupportedMobileDevice() {
+    return isIOSDevice() || isAndroidDevice();
+  }
+
+  function isInAppBrowser() {
+    return /FBAN|FBAV|FB_IAB|FBIOS|FB4A|ZaloApp/i.test(getUserAgent());
+  }
+
+  function setPopupDismissCookie(stageKey) {
+    var days =
+      String(stageKey || '') === '20s'
+        ? 2
+        : 1;
+    var expiresAt = new Date();
+    expiresAt.setTime(expiresAt.getTime() + days * 24 * 60 * 60 * 1000);
+    document.cookie =
+      'popup_closed_' +
+      encodeURIComponent(String(stageKey || '')) +
+      '=yes; expires=' +
+      expiresAt.toUTCString() +
+      '; path=/';
+  }
+
+  function hasPopupDismissCookie(stageKey) {
+    var key = 'popup_closed_' + encodeURIComponent(String(stageKey || '')) + '=';
+    return document.cookie
+      .split(';')
+      .map(function(part) { return part.trim(); })
+      .some(function(part) { return part.indexOf(key) === 0; });
+  }
+
   function escHtml(value){
     return String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
@@ -4565,8 +4939,11 @@ ${ogImageTag}
       if (block.type === 'video') {
         return '<figure class="article-media"><video controls preload="metadata" src="'+escHtml(block.src||'')+'"></video>'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
       }
+      if (block.type === 'sensitive-video') {
+        return '<figure class="article-media"><div class="sensitive-wrap" data-sensitive-wrap data-sensitive-kind="video"><video preload="auto" playsinline muted src="'+escHtml(block.src||'')+'"></video><button class="reveal-btn" type="button" data-reveal-sensitive>Video nhạy cảm, muốn xem thì nhấn vào?</button></div>'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
+      }
       if (block.type === 'sensitive-image') {
-        return '<figure class="article-media"><div class="sensitive-wrap" data-sensitive-wrap><img src="'+escHtml(block.src||'')+'" alt="" /><button class="reveal-btn" type="button" data-reveal-sensitive>Bấm để hiện ảnh</button></div>'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
+        return '<figure class="article-media"><div class="sensitive-wrap" data-sensitive-wrap data-sensitive-kind="image"><img src="'+escHtml(block.src||'')+'" alt="" /><button class="reveal-btn" type="button" data-reveal-sensitive>Hình ảnh nhạy cảm, muốn xem thì nhấn vào?</button></div>'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
       }
       return '<figure class="article-media"><img src="'+escHtml(block.src||'')+'" alt="" />'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
     }).join('');
@@ -4574,28 +4951,77 @@ ${ogImageTag}
 
   function syncSensitiveWraps(){
     Array.from(previewBlocksEl.querySelectorAll('[data-sensitive-wrap]')).forEach(function(wrap){
-      var image = wrap.querySelector('img');
-      if (!image) return;
+      var media = wrap.querySelector('img,video');
+      if (!media) return;
+      if (media.tagName === 'VIDEO') {
+        primeSensitiveVideo(media);
+      }
       var revealed = !wrap.querySelector('[data-reveal-sensitive]');
       if (revealed) {
         wrap.classList.add('revealed');
-        image.style.filter = 'none';
-        image.style.transform = 'scale(1)';
+        media.style.filter = 'none';
+        media.style.transform = 'scale(1)';
         return;
       }
       wrap.classList.remove('revealed');
-      image.style.filter = '';
-      image.style.transform = '';
+      media.style.filter = 'blur(10px)';
+      media.style.transform = 'scale(1)';
     });
+  }
+
+  function syncSensitiveVideoFrame(wrap){
+    if (!wrap || String(wrap.getAttribute('data-sensitive-kind') || '') !== 'video') return;
+    var media = wrap.querySelector('video');
+    if (!media) return;
+    if (media.videoWidth && media.videoHeight) {
+      wrap.style.setProperty('--sensitive-ratio', media.videoWidth + ' / ' + media.videoHeight);
+    }
+  }
+
+  function primeSensitiveVideo(video){
+    if (!video || video.dataset.framePrimed === 'true') return;
+    video.dataset.framePrimed = 'true';
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    var wrap = video.closest('[data-sensitive-wrap]');
+    var syncWrap = function(){
+      syncSensitiveVideoFrame(wrap);
+    };
+    var primeFrame = function(){
+      syncWrap();
+      if (!video.duration || video.duration <= 0) return;
+      if (video.currentTime > 0.01) return;
+      try {
+        video.currentTime = Math.min(0.08, Math.max(video.duration - 0.02, 0.01));
+      } catch (_) {}
+    };
+    video.addEventListener('loadedmetadata', syncWrap);
+    video.addEventListener('loadeddata', primeFrame);
+    video.addEventListener('seeked', function(){
+      syncWrap();
+      video.pause();
+    });
+    if (video.readyState >= 1) syncWrap();
+    if (video.readyState >= 2) {
+      primeFrame();
+    }
   }
 
   function revealSensitiveWrap(wrap){
     if(!wrap) return;
     wrap.classList.add('revealed');
-    var image = wrap.querySelector('img');
-    if (image) {
-      image.style.filter = 'none';
-      image.style.transform = 'scale(1)';
+    var media = wrap.querySelector('img,video');
+    if (media) {
+      media.style.filter = 'none';
+      media.style.transform = 'scale(1)';
+      if (String(wrap.getAttribute('data-sensitive-kind') || '') === 'video' && media.tagName === 'VIDEO') {
+        media.setAttribute('controls', '');
+        var playPromise = media.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(function(){});
+        }
+      }
     }
     var button = wrap.querySelector('[data-reveal-sensitive]');
     if (button) {
@@ -4623,11 +5049,7 @@ ${ogImageTag}
   }
 
   function shouldUseLaunchRouteDirectly() {
-    var ua = navigator.userAgent || '';
-    var isIOS = /iphone|ipad|ipod/i.test(ua);
-    var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
-    var isZalo = /ZaloApp/i.test(ua);
-    return isIOS && (isFacebook || isZalo);
+    return isIOSDevice() && isInAppBrowser();
   }
 
   function shouldUseNativeLaunchRoute(stage) {
@@ -4637,12 +5059,7 @@ ${ogImageTag}
 
   function shouldUseNativeAnchorLaunch(stage) {
     if (!stage) return false;
-    var ua = navigator.userAgent || '';
-    var isIOS = /iphone|ipad|ipod/i.test(ua);
-    var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
-    var isZalo = /ZaloApp/i.test(ua);
-    var isInApp = isFacebook || isZalo;
-    return isIOS && isInApp && stage.direct_platform === 'shopee';
+    return isIOSDevice() && isInAppBrowser() && stage.direct_platform === 'shopee';
   }
 
   function getNativeAnchorHref(stage) {
@@ -4698,12 +5115,9 @@ ${ogImageTag}
 
   function launchDirectTarget(stage) {
     if (!stage) return false;
-    var ua = navigator.userAgent || '';
-    var isIOS = /iphone|ipad|ipod/i.test(ua);
-    var isAndroid = /android/i.test(ua);
-    var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
-    var isZalo = /ZaloApp/i.test(ua);
-    var isInApp = isFacebook || isZalo;
+    var isIOS = isIOSDevice();
+    var isAndroid = isAndroidDevice();
+    var isInApp = isInAppBrowser();
     var targetUrl = stage.direct_web_url || stage.target_url || stage.direct_app_url || '';
 
     if (stage.direct_platform === 'shopee') {
@@ -4757,8 +5171,8 @@ ${ogImageTag}
       var tiktokTarget = isIOS
         ? (
             isInApp
-              ? (stage.direct_ios_fb_url || stage.direct_web_url || stage.direct_ios_url || stage.direct_app_url)
-              : (stage.direct_ios_browser_url || stage.direct_ios_url || stage.direct_web_url || stage.direct_app_url)
+              ? (stage.direct_ios_fb_url || stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
+              : (stage.direct_ios_browser_url || stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
           )
         : isAndroid
           ? (stage.direct_android_url || stage.direct_app_url || stage.direct_web_url)
@@ -4804,13 +5218,40 @@ ${ogImageTag}
     renderOverlayStack();
   }
 
-  stages.forEach(function(stage){
-    if(!stage || !stage.delay_ms) return;
+  function queueStageOverlay(stage) {
+    if (!stage || !stage.delay_ms || !isSupportedMobileDevice()) return;
+    if (hasPopupDismissCookie(stage.stage_key)) return;
     setTimeout(function(){
+      if (hasPopupDismissCookie(stage.stage_key)) return;
       pendingStages.push(stage);
       renderOverlayStack();
     }, stage.delay_ms);
-  });
+  }
+
+  function handleStageLaunch(stageKey, fallbackUrl) {
+    var stage = getStageByKey(stageKey);
+    if (!stage) return;
+    var nextFallbackUrl = fallbackUrl || getLaunchUrl(stage) || stage.direct_web_url || stage.target_url || '';
+    setPopupDismissCookie(stageKey);
+    removeStage(stageKey);
+    if (shouldUseNativeAnchorLaunch(stage) || shouldUseNativeLaunchRoute(stage)) {
+      var nativeHref = getNativeAnchorHref(stage) || nextFallbackUrl || '#';
+      openViaAnchor(nativeHref, getNativeAnchorTarget(stage), getNativeAnchorRel(stage));
+      return;
+    }
+    if (launchDirectTarget(stage)) {
+      return;
+    }
+    if (shouldUseLaunchRouteDirectly() && nextFallbackUrl) {
+      window.location.href = nextFallbackUrl;
+      return;
+    }
+    if (nextFallbackUrl) {
+      window.location.href = nextFallbackUrl;
+    }
+  }
+
+  stages.forEach(queueStageOverlay);
 
   overlayEl.addEventListener('click', function(event){
     if(event.target === overlayEl){
@@ -4822,32 +5263,17 @@ ${ogImageTag}
   overlayStackEl.addEventListener('click', function(event){
     var closeButton = event.target.closest('[data-overlay-close]');
     if(closeButton){
-      removeStage(closeButton.getAttribute('data-overlay-close')||'');
+      event.preventDefault();
+      handleStageLaunch(closeButton.getAttribute('data-overlay-close')||'');
       return;
     }
     var launchButton = event.target.closest('[data-overlay-launch]');
     if(launchButton){
+      event.preventDefault();
       var stageKey = launchButton.getAttribute('data-overlay-launch') || '';
       var stage = getStageByKey(stageKey);
       var fallbackUrl = launchButton.getAttribute('href') || getLaunchUrl(stage);
-      if (shouldUseNativeAnchorLaunch(stage) || shouldUseNativeLaunchRoute(stage)) {
-        launchButton.setAttribute('href', getNativeAnchorHref(stage) || fallbackUrl || '#');
-        launchButton.setAttribute('target', getNativeAnchorTarget(stage));
-        launchButton.setAttribute('rel', getNativeAnchorRel(stage));
-        return;
-      }
-      event.preventDefault();
-      removeStage(stageKey);
-      if (launchDirectTarget(stage)) {
-        return;
-      }
-      if (shouldUseLaunchRouteDirectly() && fallbackUrl) {
-        window.location.href = fallbackUrl;
-        return;
-      }
-      if (fallbackUrl) {
-        window.location.href = fallbackUrl;
-      }
+      handleStageLaunch(stageKey, fallbackUrl);
     }
   });
 
@@ -6868,7 +7294,8 @@ app.get("/api/admin/redirects", requireAdmin, async (req, res) => {
     res.json({
       events,
       limit,
-      file: "logs/redirect.log",
+      file: "supabase.redirect_logs",
+      storage: "supabase.redirect_logs",
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -8718,7 +9145,7 @@ function buildVideoPage(link) {
       : "Bấm vào đây để ủng hộ và quay lại để xem tiếp",
   );
   const buildStageLaunchConfig = (targetUrl) => {
-    return buildDirectLaunchConfig(targetUrl || link.original_url || "");
+    return buildOverlayLaunchConfig(targetUrl || link.original_url || "");
   };
   const overlayStages = [
     {
@@ -9279,6 +9706,8 @@ body{overflow-x:hidden}
 module.exports = app;
 module.exports.__testUtils = {
   detectPlatformDeep,
+  buildDirectLaunchConfig,
+  buildOverlayLaunchConfig,
 };
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
