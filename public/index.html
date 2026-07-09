@@ -3389,7 +3389,17 @@
         <div class="lab-shared-settings-grid">
           <div class="lab-shared-settings-span-2">
             <label class="fl" for="labSharedShareImageInput">Ảnh chia sẻ / ảnh đầu bài</label>
-            <input class="fi" id="labSharedShareImageInput" type="url" placeholder="https://..." />
+            <input class="fi" id="labSharedShareImageInput" type="url" placeholder="https://..." oninput="syncLabSharedShareImagePreview()" />
+            <div class="lab-shared-upload-row">
+              <button id="labSharedShareImagePickerBtn" class="btn-cancel lab-shared-upload-btn" type="button" onclick="triggerLabSharedImagePicker('shareImage')">
+                Chọn ảnh từ máy
+              </button>
+              <input id="labSharedShareImageFileInput" class="lab-shared-file-input" type="file" accept="image/*" onchange="handleLabSharedImagePicked('shareImage', this)" />
+              <span class="lab-shared-upload-status" id="labSharedShareImageStatus">Có thể dán URL hoặc chọn ảnh từ máy.</span>
+            </div>
+            <div class="lab-shared-preview" id="labSharedShareImagePreviewWrap" hidden>
+              <img id="labSharedShareImagePreview" alt="Preview ảnh chia sẻ lab" />
+            </div>
           </div>
           <div>
             <label class="fl" for="labSharedOverlayImageInput">Ảnh popup 3 giây</label>

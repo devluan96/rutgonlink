@@ -3202,6 +3202,21 @@
       .lab-shared-upload-status[data-tone="warn"] {
         color: var(--orange);
       }
+      .lab-shared-preview {
+        margin-top: 12px;
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--bg3);
+      }
+      .lab-shared-preview img {
+        display: block;
+        width: 100%;
+        max-height: 220px;
+        object-fit: cover;
+        border-radius: 10px;
+        background: var(--bg2);
+      }
       @media (max-width: 860px) {
         .lab-shared-settings-grid {
           grid-template-columns: 1fr;

@@ -916,6 +916,108 @@ async function init() {
       return data;
     },
 
+    async incrementArticleFunnelAffiliateClicks(routeSlug) {
+      const normalizedSlug = String(routeSlug || '').trim();
+      if (!normalizedSlug) return null;
+
+      const rpcResult = await sb.rpc('increment_article_funnel_affiliate_clicks', {
+        p_route_slug: normalizedSlug,
+      });
+      if (!rpcResult.error) {
+        return rpcResult.data || null;
+      }
+
+      if (
+        !/increment_article_funnel_affiliate_clicks|schema cache/i.test(
+          rpcResult.error.message || '',
+        )
+      ) {
+        check(rpcResult.error, 'article_funnel_click_increment');
+      }
+
+      const { data: funnel, error: funnelError } = await sb
+        .from('article_funnels')
+        .select('route_slug,affiliate_clicks')
+        .eq('route_slug', normalizedSlug)
+        .maybeSingle();
+      if (isMissingRelationError(funnelError, 'article_funnels')) {
+        return null;
+      }
+      check(funnelError, 'article_funnel_click_increment_get');
+      if (!funnel) return null;
+
+      const nextClicks = Math.max(Number(funnel.affiliate_clicks) || 0, 0) + 1;
+      const { error: updateFunnelError } = await sb
+        .from('article_funnels')
+        .update({ affiliate_clicks: nextClicks, updated_at: new Date().toISOString() })
+        .eq('route_slug', normalizedSlug);
+      check(updateFunnelError, 'article_funnel_click_increment_update');
+
+      const { error: updateLabError } = await sb
+        .from('article_funnel_labs')
+        .update({ affiliate_clicks: nextClicks })
+        .eq('published_route_slug', normalizedSlug);
+      if (!isMissingRelationError(updateLabError, 'article_funnel_labs')) {
+        check(updateLabError, 'article_funnel_lab_click_increment_update');
+      }
+
+      return {
+        route_slug: normalizedSlug,
+        affiliate_clicks: nextClicks,
+      };
+    },
+
+    async recordArticleFunnelClick(routeSlug, stageKey, ip, ua, ref, meta = {}) {
+      const normalizedSlug = String(routeSlug || '').trim();
+      const normalizedStageKey = String(stageKey || '').trim() || '3s';
+      if (!normalizedSlug) {
+        return { counted: false, skipped: true };
+      }
+
+      const normalizedIp = String(ip || '').trim();
+      const normalizedUa = String(ua || '').trim();
+      if (normalizedIp && normalizedUa) {
+        const duplicateSince = new Date(Date.now() - CLICK_DEDUP_WINDOW_MS).toISOString();
+        const { count, error: duplicateError } = await sb
+          .from('article_funnel_clicks')
+          .select('*', { count: 'exact', head: true })
+          .eq('route_slug', normalizedSlug)
+          .eq('stage_key', normalizedStageKey)
+          .eq('ip', normalizedIp)
+          .eq('user_agent', normalizedUa)
+          .gte('clicked_at', duplicateSince);
+        if (isMissingRelationError(duplicateError, 'article_funnel_clicks')) {
+          return { counted: false, unavailable: true };
+        }
+        check(duplicateError, 'article_funnel_click_dedup');
+        if ((count || 0) > 0) {
+          return { counted: false, deduped: true };
+        }
+      }
+
+      const articleFunnel = await this.getArticleFunnelBySlug(normalizedSlug);
+      const payload = {
+        article_funnel_id: articleFunnel?.id || null,
+        route_slug: normalizedSlug,
+        stage_key: normalizedStageKey,
+        ip: normalizedIp,
+        user_agent: normalizedUa,
+        referrer: ref || '',
+      };
+      if (meta.country_code) payload.country_code = meta.country_code;
+      if (meta.country_name) payload.country_name = meta.country_name;
+      if (meta.city) payload.city = meta.city;
+
+      const { error: insertError } = await sb.from('article_funnel_clicks').insert(payload);
+      if (isMissingRelationError(insertError, 'article_funnel_clicks')) {
+        return { counted: false, unavailable: true };
+      }
+      check(insertError, 'article_funnel_click_insert');
+
+      await this.incrementArticleFunnelAffiliateClicks(normalizedSlug);
+      return { counted: true, deduped: false };
+    },
+
     async listArticleFunnelLabs() {
       const { data, error } = await sb
         .from('article_funnel_labs')

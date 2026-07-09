@@ -561,6 +561,7 @@ app.get("/api/admin/article-funnel-labs", requireAdmin, async (req, res) => {
         name: item.name || `Lab ${item.id}`,
         title: item.title || "",
         published_route_slug: item.published_route_slug || "",
+        affiliate_clicks: Math.max(Number(item.affiliate_clicks) || 0, 0),
         created_by_user_id: item.created_by_user_id || null,
         created_at: item.created_at || null,
         updated_at: item.updated_at || item.created_at || null,
@@ -585,6 +586,7 @@ app.get("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => 
         name: row.name || `Lab ${row.id}`,
         title: row.title || "",
         published_route_slug: row.published_route_slug || "",
+        affiliate_clicks: Math.max(Number(row.affiliate_clicks) || 0, 0),
         created_by_user_id: row.created_by_user_id || null,
         created_at: row.created_at || null,
         updated_at: row.updated_at || row.created_at || null,
@@ -779,7 +781,7 @@ app.post("/api/admin/article-funnel-lab/publish", requireAdmin, async (req, res)
 });
 app.get(
   ["/_lab/article-funnel/:slug/:token", "/_lab/article-funnel/:slug/:token/"],
-  (req, res) => {
+  async (req, res) => {
   try {
     const payload = decodeArticleFunnelPreviewToken(req.params.token);
     const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
@@ -809,12 +811,12 @@ app.get(
     "/_lab/article-funnel-launch/:slug/:token/:stageKey",
     "/_lab/article-funnel-launch/:slug/:token/:stageKey/",
   ],
-  (req, res) => {
+  async (req, res) => {
     try {
       const payload = decodeArticleFunnelPreviewToken(req.params.token);
       const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
       const canonicalUrl = `${BASE_URL}/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}/${encodeURIComponent(req.params.stageKey || "")}`;
-      return handleArticleFunnelStageLaunch({
+      return await handleArticleFunnelStageLaunch({
         req,
         res,
         config,
@@ -883,12 +885,16 @@ app.get(["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"], async (re
       articleFunnel.domain_hostname,
       publicBaseUrl,
     ).replace(/\/+$/, "")}/launch/${encodeURIComponent(req.params.stageKey || "")}`;
-    return handleArticleFunnelStageLaunch({
+    return await handleArticleFunnelStageLaunch({
       req,
       res,
       config,
       stageKey: String(req.params.stageKey || "").trim(),
       canonicalUrl,
+      tracking: {
+        articleFunnelId: articleFunnel.id,
+        routeSlug: articleFunnel.route_slug,
+      },
     });
   } catch (error) {
     console.error("[article-funnel/published-launch]", error);
@@ -926,12 +932,16 @@ app.get(["/:slug/launch/:stageKey", "/:slug/launch/:stageKey/"], async (req, res
       articleFunnel.domain_hostname,
       publicBaseUrl,
     ).replace(/\/+$/, "")}/launch/${encodeURIComponent(req.params.stageKey || "")}`;
-    return handleArticleFunnelStageLaunch({
+    return await handleArticleFunnelStageLaunch({
       req,
       res,
       config,
       stageKey: String(req.params.stageKey || "").trim(),
       canonicalUrl,
+      tracking: {
+        articleFunnelId: articleFunnel.id,
+        routeSlug: articleFunnel.route_slug,
+      },
     });
   } catch (error) {
     console.error("[article-funnel/published-launch-direct]", error);
@@ -4703,6 +4713,12 @@ function buildArticleFunnelLaunchBasePath(routeSlug) {
   return normalizedSlug ? `/${normalizedSlug}/launch` : "/launch";
 }
 
+function normalizeArticleFunnelStageKey(stageKey = "") {
+  return String(stageKey || "").trim() === "5s"
+    ? "20s"
+    : String(stageKey || "").trim();
+}
+
 function getRequestHostname(req) {
   return normalizeDomainHost(
     req.headers["x-forwarded-host"] ||
@@ -4740,16 +4756,45 @@ async function findShortLinkSlugConflict(database, slug) {
   );
 }
 
-function handleArticleFunnelStageLaunch({
+async function recordArticleFunnelStageClick({
+  database,
+  req,
+  tracking,
+  stageKey,
+}) {
+  const routeSlug = String(tracking?.routeSlug || "").trim();
+  if (!database || !routeSlug) {
+    return { counted: false, skipped: true };
+  }
+  return database.recordArticleFunnelClick(
+    routeSlug,
+    normalizeArticleFunnelStageKey(stageKey),
+    getRequestIp(req),
+    req.headers["user-agent"] || "",
+    req.headers["referer"] || "",
+    extractClickGeo(req),
+  );
+}
+
+function buildArticleFunnelRedirectMeta(tracking, stageKey) {
+  const routeSlug = String(tracking?.routeSlug || "").trim();
+  if (!routeSlug) return {};
+  return {
+    articleFunnelId: Number(tracking?.articleFunnelId || 0) || null,
+    articleFunnelSlug: routeSlug,
+    articleFunnelStageKey: normalizeArticleFunnelStageKey(stageKey),
+  };
+}
+
+async function handleArticleFunnelStageLaunch({
   req,
   res,
   config,
   stageKey,
   canonicalUrl,
+  tracking = null,
 }) {
-  const normalizedStageKey = String(stageKey || "").trim() === "5s"
-    ? "20s"
-    : String(stageKey || "").trim();
+  const normalizedStageKey = normalizeArticleFunnelStageKey(stageKey);
   const stage = (config.stages || []).find(
     (item) => String(item?.stage_key || "").trim() === normalizedStageKey,
   );
@@ -4769,6 +4814,10 @@ function handleArticleFunnelStageLaunch({
   const platform = getMobilePlatform(ua);
   const uaKind = getRedirectUaKind(ua);
   const info = detectPlatformDeep(targetUrl, platform);
+  const articleFunnelLogMeta = buildArticleFunnelRedirectMeta(
+    tracking,
+    normalizedStageKey,
+  );
   const isFacebookInApp = isFacebookInAppBrowser(ua);
   const isZaloInApp = /ZaloApp/i.test(ua);
   const isIosInApp = platform === "ios" && (isFacebookInApp || isZaloInApp);
@@ -4778,6 +4827,23 @@ function handleArticleFunnelStageLaunch({
     og_desc: config.title || "Dang mo ung dung dich de tiep tuc xem noi dung.",
     og_image: config.share_image || config.overlay_image || "",
   };
+
+  if (tracking?.routeSlug) {
+    try {
+      const database = await getDb();
+      await recordArticleFunnelStageClick({
+        database,
+        req,
+        tracking,
+        stageKey: normalizedStageKey,
+      });
+    } catch (error) {
+      console.warn(
+        "[article-funnel/click-track]",
+        String(error?.message || error || "").trim() || "unknown error",
+      );
+    }
+  }
 
   if (isIosInApp && info.platform_name !== "tiktok") {
     const iosInAppTarget = String(
@@ -4800,6 +4866,7 @@ function handleArticleFunnelStageLaunch({
       status: 302,
       target: iosInAppTarget,
       referer,
+      ...articleFunnelLogMeta,
     });
     return res.redirect(302, iosInAppTarget);
   }
@@ -4830,6 +4897,7 @@ function handleArticleFunnelStageLaunch({
       status: 200,
       target: inAppTikTokIosTarget || inAppTikTokWebTarget,
       referer,
+      ...articleFunnelLogMeta,
     });
     res.set({
       "Cache-Control": "no-cache,no-store,must-revalidate",
@@ -4866,6 +4934,7 @@ function handleArticleFunnelStageLaunch({
       status: 200,
       target: targetUrl,
       referer,
+      ...articleFunnelLogMeta,
     });
     res.set({
       "Cache-Control": "no-cache,no-store,must-revalidate",
@@ -4891,6 +4960,7 @@ function handleArticleFunnelStageLaunch({
       status: 302,
       target: targetUrl,
       referer,
+      ...articleFunnelLogMeta,
     });
     return res.redirect(302, targetUrl);
   }
@@ -4911,6 +4981,7 @@ function handleArticleFunnelStageLaunch({
       status: 301,
       target: shopeeTarget,
       referer,
+      ...articleFunnelLogMeta,
     });
     return res.redirect(301, shopeeTarget);
   }
@@ -4930,6 +5001,7 @@ function handleArticleFunnelStageLaunch({
       status: 200,
       target: info.deeplink || targetUrl,
       referer,
+      ...articleFunnelLogMeta,
     });
     res.set({
       "Cache-Control": "no-cache,no-store,must-revalidate",
@@ -4952,6 +5024,7 @@ function handleArticleFunnelStageLaunch({
     status: 302,
     target: targetUrl,
     referer,
+    ...articleFunnelLogMeta,
   });
   return res.redirect(302, targetUrl);
 }
@@ -9971,6 +10044,8 @@ module.exports.__testUtils = {
   detectPlatformDeep,
   buildDirectLaunchConfig,
   buildOverlayLaunchConfig,
+  normalizeArticleFunnelStageKey,
+  recordArticleFunnelStageClick,
 };
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;

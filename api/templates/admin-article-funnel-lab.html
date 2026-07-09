@@ -4479,6 +4479,20 @@
           embedHeightTimer = setTimeout(syncEmbedHeight, 30);
         }
 
+        function postEmbedMessage(payload) {
+          if (!embedMode || window.parent === window) return;
+          let targetOrigin = "*";
+          try {
+            targetOrigin = new URL(document.referrer || "").origin || "*";
+          } catch (_) {
+            targetOrigin = "*";
+          }
+          window.parent.postMessage(
+            payload,
+            targetOrigin === "null" ? "*" : targetOrigin,
+          );
+        }
+
         function setText(selector, value) {
           const node = document.querySelector(selector);
           if (node) node.textContent = value;
@@ -4902,7 +4916,10 @@
           const publishedText = item.published_route_slug
             ? ` • đã xuất bản: /${item.published_route_slug}`
             : "";
-          return `Cập nhật: ${updatedAt}${publishedText}`;
+          const clickText = ` • click aff: ${Number(
+            item.affiliate_clicks || 0,
+          ).toLocaleString("vi-VN")}`;
+          return `Cập nhật: ${updatedAt}${publishedText}${clickText}`;
         }
 
         function openLabHome() {
@@ -5125,11 +5142,15 @@
                 item.name || item.title || `Lab ${item.id}`,
               );
               const cardKicker = `Lab ${escapeHtml(String(item.id))}`;
+              const clickText = `Click aff: ${Number(
+                item.affiliate_clicks || 0,
+              ).toLocaleString("vi-VN")}`;
               const detailsMarkup = `
                 <div class="section-kicker">${cardKicker}</div>
                 <h3>${cardTitle}</h3>
                 <div class="lab-home-meta">
                   <div>${publishedText}</div>
+                  <div>${escapeHtml(clickText)}</div>
                   <div>Cập nhật: ${escapeHtml(updatedAt)}</div>
                 </div>
               `;
@@ -5457,6 +5478,12 @@
         function showToast(message) {
           els.toast.textContent = message;
           els.toast.classList.add("show");
+          postEmbedMessage({
+            type: "article-funnel-lab:toast",
+            embedId,
+            message,
+            tone: "ok",
+          });
           clearTimeout(showToast.timer);
           showToast.timer = setTimeout(() => {
             els.toast.classList.remove("show");

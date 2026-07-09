@@ -4833,6 +4833,13 @@ window.addEventListener("resize", () => {
 window.addEventListener("message", (event) => {
   if (event.origin !== window.location.origin) return;
   const data = event.data || {};
+  if (data.type === "article-funnel-lab:toast") {
+    const message = String(data.message || "").trim();
+    if (message) {
+      toast(message, String(data.tone || "ok").trim() || "ok");
+    }
+    return;
+  }
   if (data.type !== "article-funnel-lab:height") return;
   const embedId = String(data.embedId || "").trim();
   const frameId =
@@ -5197,6 +5204,14 @@ function getLabSharedSettingsFormValueMap() {
 }
 
 const labSharedImageFieldConfig = {
+  shareImage: {
+    inputId: "labSharedShareImageInput",
+    fileInputId: "labSharedShareImageFileInput",
+    statusId: "labSharedShareImageStatus",
+    buttonId: "labSharedShareImagePickerBtn",
+    pendingMessage: "Đang upload ảnh preview chia sẻ...",
+    successMessage: "Đã tải ảnh preview chia sẻ lên",
+  },
   overlayImage: {
     inputId: "labSharedOverlayImageInput",
     fileInputId: "labSharedOverlayImageFileInput",
@@ -5253,6 +5268,21 @@ function triggerLabSharedImagePicker(assetKey) {
   }
 }
 
+function syncLabSharedShareImagePreview() {
+  const input = document.getElementById("labSharedShareImageInput");
+  const previewWrap = document.getElementById("labSharedShareImagePreviewWrap");
+  const previewImg = document.getElementById("labSharedShareImagePreview");
+  if (!input || !previewWrap || !previewImg) return;
+  const value = String(input.value || "").trim();
+  if (!value) {
+    previewImg.removeAttribute("src");
+    previewWrap.hidden = true;
+    return;
+  }
+  previewImg.src = value;
+  previewWrap.hidden = false;
+}
+
 async function handleLabSharedImagePicked(assetKey, input) {
   const config = labSharedImageFieldConfig[assetKey];
   const file = input?.files?.[0];
@@ -5276,6 +5306,9 @@ async function handleLabSharedImagePicked(assetKey, input) {
     const targetInput = document.getElementById(config.inputId);
     if (targetInput) {
       targetInput.value = absoluteUrl;
+    }
+    if (assetKey === "shareImage") {
+      syncLabSharedShareImagePreview();
     }
     setLabSharedImageStatus(assetKey, "Upload ảnh xong", "ok");
     toast(config.successMessage);
@@ -5360,12 +5393,14 @@ function openLabSharedSettingsModal(frameId = "createLabIframe") {
   });
   Object.keys(labSharedImageFieldConfig).forEach((assetKey) => {
     const statusDefaults = {
+      shareImage: "Có thể dán URL hoặc chọn ảnh từ máy.",
       overlayImage: "Có thể dán URL hoặc chọn ảnh từ máy.",
       overlay20sImage: "Để trống nếu muốn dùng lại ảnh popup 3 giây.",
       overlay300sImage: "Để trống nếu muốn dùng lại ảnh popup 3 giây.",
     };
     setLabSharedImageStatus(assetKey, statusDefaults[assetKey] || "");
   });
+  syncLabSharedShareImagePreview();
   modal.classList.remove("hidden");
   requestAnimationFrame(() => {
     document.getElementById("labSharedShareImageInput")?.focus();
