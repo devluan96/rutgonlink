@@ -4667,6 +4667,52 @@ function isWeakImportDescription(input = "") {
   return /^(c[aậ]p nh[aậ]t|update|tin m[oớ]i)$/i.test(normalized);
 }
 
+function detectImportedSensitiveMediaType(
+  html = "",
+  block = "",
+  blockIndex = 0,
+  fallbackType = "image",
+) {
+  const safeHtml = String(html || "");
+  const safeBlock = String(block || "");
+  const normalizedType = String(fallbackType || "image").trim().toLowerCase();
+  if (!safeBlock) return normalizedType;
+  const start = Math.max(0, Number(blockIndex) - 420);
+  const end = Math.min(
+    safeHtml.length,
+    Number(blockIndex) + safeBlock.length + 420,
+  );
+  const nearby = safeHtml.slice(start, end).toLowerCase();
+  const sensitiveHints =
+    normalizedType === "video"
+      ? [
+          "sensitive-video-wrapper",
+          'data-sensitive-kind="video"',
+          "video nhạy cảm",
+          "video nhay cam",
+        ]
+      : [
+          "sensitive-image-wrapper",
+          'data-sensitive-kind="image"',
+          "hình ảnh nhạy cảm",
+          "hinh anh nhay cam",
+          "ảnh nhạy cảm",
+          "anh nhay cam",
+        ];
+  const sharedHints = [
+    "reveal-button",
+    "data-reveal-sensitive",
+    "reveal-btn",
+    "sensitive-wrap",
+  ];
+  const hasSpecificHint = sensitiveHints.some((hint) => nearby.includes(hint));
+  const hasSharedHint = sharedHints.some((hint) => nearby.includes(hint));
+  if (hasSpecificHint || hasSharedHint) {
+    return normalizedType === "video" ? "sensitive-video" : "sensitive-image";
+  }
+  return normalizedType;
+}
+
 function extractOrderedArticleMedia(html = "", baseUrl = "") {
   const items = [];
   const pushItem = (type, src, caption = "") => {
@@ -4680,18 +4726,29 @@ function extractOrderedArticleMedia(html = "", baseUrl = "") {
   };
 
   const videoBlockRegex = /<video\b[\s\S]*?<\/video>/gi;
-  for (const block of String(html || "").match(videoBlockRegex) || []) {
+  for (const match of String(html || "").matchAll(videoBlockRegex)) {
+    const block = String(match?.[0] || "");
     const directSrc = pickImportedAttributeValue(block, ["src", "data-src"]);
     const sourceSrc = extractAttributeValue(block, "poster");
     const nestedSourceMatch = block.match(/<source\b[^>]*>/i);
     const nestedSrc = nestedSourceMatch
       ? pickImportedAttributeValue(nestedSourceMatch[0], ["src", "data-src"])
       : "";
-    pushItem("video", directSrc || nestedSrc, sourceSrc);
+    pushItem(
+      detectImportedSensitiveMediaType(
+        html,
+        block,
+        Number(match?.index || 0),
+        "video",
+      ),
+      directSrc || nestedSrc,
+      sourceSrc,
+    );
   }
 
   const imgRegex = /<img\b[^>]*>/gi;
-  for (const tag of String(html || "").match(imgRegex) || []) {
+  for (const match of String(html || "").matchAll(imgRegex)) {
+    const tag = String(match?.[0] || "");
     const width = Number.parseInt(extractAttributeValue(tag, "width"), 10) || 0;
     const height = Number.parseInt(extractAttributeValue(tag, "height"), 10) || 0;
     const rawClass = String(extractAttributeValue(tag, "class") || "").toLowerCase();
@@ -4708,7 +4765,16 @@ function extractOrderedArticleMedia(html = "", baseUrl = "") {
       continue;
     }
     const alt = extractAttributeValue(tag, "alt");
-    pushItem("image", src, alt);
+    pushItem(
+      detectImportedSensitiveMediaType(
+        html,
+        tag,
+        Number(match?.index || 0),
+        "image",
+      ),
+      src,
+      alt,
+    );
   }
 
   return dedupeUrls(
@@ -10623,6 +10689,7 @@ module.exports.__testUtils = {
   normalizeArticleFunnelStageKey,
   decorateArticleFunnelStagesForClient,
   shouldUseArticleFunnelClientTrackedLaunch,
+  extractArticleFunnelImportPayload,
   recordArticleFunnelStageClick,
 };
 if (require.main === module) {
