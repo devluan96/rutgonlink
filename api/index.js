@@ -4805,10 +4805,16 @@ function handleArticleFunnelStageLaunch({
   }
 
   if (isIosInApp && info.platform_name === "tiktok") {
-    const inAppTikTokTarget = String(
+    const inAppTikTokWebTarget = String(
       stage.direct_web_url ||
         stage.target_url ||
         targetUrl,
+    ).trim();
+    const inAppTikTokIosTarget = String(
+      stage.direct_ios_url ||
+        stage.direct_app_url ||
+        info.deeplink_ios ||
+        inAppTikTokWebTarget,
     ).trim();
     setRedirectDebugHeaders(res, {
       mode: "article-funnel-launch-tiktok-ios-inapp-bridge",
@@ -4822,7 +4828,7 @@ function handleArticleFunnelStageLaunch({
       platform: info.platform_name,
       uaKind,
       status: 200,
-      target: inAppTikTokTarget,
+      target: inAppTikTokIosTarget || inAppTikTokWebTarget,
       referer,
     });
     res.set({
@@ -4835,7 +4841,8 @@ function handleArticleFunnelStageLaunch({
       buildArticleFunnelTikTokInAppBridgePage(
         launchLink,
         canonicalUrl,
-        inAppTikTokTarget,
+        inAppTikTokWebTarget,
+        inAppTikTokIosTarget,
       ),
     );
   }
@@ -9129,12 +9136,18 @@ ${ogImageTag}
 </html>`;
 }
 
-function buildArticleFunnelTikTokInAppBridgePage(link, canonicalUrl, targetUrl) {
+function buildArticleFunnelTikTokInAppBridgePage(
+  link,
+  canonicalUrl,
+  targetUrl,
+  iosTargetUrl = "",
+) {
   const title = link.og_title?.trim() || "BocLink";
   const desc =
     link.og_desc?.trim() || "Dang mo ung dung goc de tiep tuc xem noi dung.";
   const image = link.og_image || "";
   const dest = String(targetUrl || link.original_url || "").trim();
+  const iosDest = String(iosTargetUrl || "").trim() || dest;
 
   const escJs = (s) =>
     (s || "")
@@ -9174,6 +9187,7 @@ ${ogImageTag}
 <script>
 (function() {
   var webUrl = "${escJs(dest)}";
+  var iosUrl = "${escJs(iosDest)}";
   var ua = navigator.userAgent || '';
   var isIOS = /iphone|ipad|ipod/i.test(ua);
   var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
@@ -9214,7 +9228,11 @@ ${ogImageTag}
       return;
     }
     setFlag(escapedKey);
-    openViaAnchor(webUrl);
+    if (iosUrl && iosUrl !== webUrl) {
+      try { window.location.href = iosUrl; } catch (_) {}
+    } else {
+      openViaAnchor(webUrl);
+    }
     setTimeout(function() {
       if (!document.hidden) {
         window.location.replace(webUrl);
