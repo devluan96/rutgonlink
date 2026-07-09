@@ -5158,23 +5158,39 @@ ${ogImageTag}
     return /FBAN|FBAV|FB_IAB|FBIOS|FB4A|ZaloApp/i.test(getUserAgent());
   }
 
+  function getPopupDismissScopeKey() {
+    return String(launchBasePath || location.pathname || 'lab')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 80) || 'lab';
+  }
+
+  function getPopupDismissCookieName(stageKey) {
+    return 'popup_closed_' +
+      getPopupDismissScopeKey() +
+      '_' +
+      encodeURIComponent(String(stageKey || ''));
+  }
+
   function setPopupDismissCookie(stageKey) {
-    var days =
-      String(stageKey || '') === '20s'
-        ? 2
-        : 1;
+    var minutes =
+      String(stageKey || '') === '300s'
+        ? 180
+        : String(stageKey || '') === '20s'
+          ? 60
+          : 30;
     var expiresAt = new Date();
-    expiresAt.setTime(expiresAt.getTime() + days * 24 * 60 * 60 * 1000);
+    expiresAt.setTime(expiresAt.getTime() + minutes * 60 * 1000);
     document.cookie =
-      'popup_closed_' +
-      encodeURIComponent(String(stageKey || '')) +
+      getPopupDismissCookieName(stageKey) +
       '=yes; expires=' +
       expiresAt.toUTCString() +
       '; path=/';
   }
 
   function hasPopupDismissCookie(stageKey) {
-    var key = 'popup_closed_' + encodeURIComponent(String(stageKey || '')) + '=';
+    var key = getPopupDismissCookieName(stageKey) + '=';
     return document.cookie
       .split(';')
       .map(function(part) { return part.trim(); })
@@ -5318,18 +5334,15 @@ ${ogImageTag}
 
   function getNativeAnchorHref(stage) {
     if (!stage) return '';
-    if (shouldUseNativeAnchorLaunch(stage)) {
-      return stage.direct_ios_fb_url || stage.direct_web_url || stage.direct_ios_url || getLaunchUrl(stage);
-    }
     return getLaunchUrl(stage) || stage.direct_web_url || '#';
   }
 
   function getNativeAnchorTarget(stage) {
-    return shouldUseNativeAnchorLaunch(stage) ? '_blank' : '_self';
+    return '_self';
   }
 
   function getNativeAnchorRel(stage) {
-    return shouldUseNativeAnchorLaunch(stage) ? 'noopener' : 'noreferrer';
+    return 'noreferrer';
   }
 
   function openViaAnchor(targetUrl, targetName, relValue) {
@@ -5485,23 +5498,11 @@ ${ogImageTag}
   function handleStageLaunch(stageKey, fallbackUrl) {
     var stage = getStageByKey(stageKey);
     if (!stage) return;
-    var nextFallbackUrl = fallbackUrl || getLaunchUrl(stage) || stage.direct_web_url || stage.target_url || '';
+    var launchUrl = getLaunchUrl(stage) || fallbackUrl || stage.direct_web_url || stage.target_url || '';
     setPopupDismissCookie(stageKey);
     removeStage(stageKey);
-    if (shouldUseNativeAnchorLaunch(stage) || shouldUseNativeLaunchRoute(stage)) {
-      var nativeHref = getNativeAnchorHref(stage) || nextFallbackUrl || '#';
-      openViaAnchor(nativeHref, getNativeAnchorTarget(stage), getNativeAnchorRel(stage));
-      return;
-    }
-    if (launchDirectTarget(stage)) {
-      return;
-    }
-    if (shouldUseLaunchRouteDirectly() && nextFallbackUrl) {
-      window.location.href = nextFallbackUrl;
-      return;
-    }
-    if (nextFallbackUrl) {
-      window.location.href = nextFallbackUrl;
+    if (launchUrl) {
+      window.location.href = launchUrl;
     }
   }
 
