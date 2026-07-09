@@ -4599,18 +4599,16 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
               overlay.popup_3s_url || config.baseUrl || "",
             ),
           },
-          {
-            stage_key: "20s",
-            delay_ms: 15000,
-            overlay_image: getOverlayImageForStage("20s"),
-            ...buildOverlayLaunchConfig(
-              overlay.popup_20s_url ||
-                overlay.popup_5s_url ||
-                overlay.popup_3s_url ||
-                config.baseUrl ||
-                "",
-            ),
-          },
+          ...((overlay.popup_20s_url || overlay.popup_5s_url)
+            ? [{
+                stage_key: "20s",
+                delay_ms: 15000,
+                overlay_image: getOverlayImageForStage("20s"),
+                ...buildOverlayLaunchConfig(
+                  overlay.popup_20s_url || overlay.popup_5s_url || "",
+                ),
+              }]
+            : []),
           {
             stage_key: "300s",
             delay_ms: 300000,
@@ -10045,6 +10043,7 @@ module.exports.__testUtils = {
   detectPlatformDeep,
   buildDirectLaunchConfig,
   buildOverlayLaunchConfig,
+  normalizeArticleFunnelPreviewConfig,
   normalizeArticleFunnelStageKey,
   recordArticleFunnelStageClick,
 };

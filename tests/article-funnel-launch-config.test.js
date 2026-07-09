@@ -43,3 +43,27 @@ test("buildOverlayLaunchConfig builds Shopee Android intent config", () => {
   assert.equal(config.direct_ios_fb_url, originalUrl);
   assert.equal(config.direct_ios_browser_url, originalUrl);
 });
+
+test("normalizeArticleFunnelPreviewConfig omits 20s stage when popup 20s URL is empty", () => {
+  const config = __testUtils.normalizeArticleFunnelPreviewConfig({
+    baseUrl: "https://shopee.vn/product/37251933/591989399",
+    overlay: {
+      popup_3s_url: "https://shopee.vn/product/37251933/591989399",
+      popup_20s_url: "",
+      popup_300s_url: "https://example.com/fallback-300s",
+    },
+  });
+
+  assert.equal(
+    config.stages.some((stage) => String(stage.stage_key) === "20s"),
+    false,
+  );
+  assert.equal(
+    config.stages.some((stage) => String(stage.stage_key) === "3s"),
+    true,
+  );
+  assert.equal(
+    config.stages.some((stage) => String(stage.stage_key) === "300s"),
+    true,
+  );
+});

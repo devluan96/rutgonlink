@@ -4850,6 +4850,9 @@
           ) {
             return state.popup20sUrl.trim();
           }
+          if (stageKey === "20s" || stageKey === "5s") {
+            return "";
+          }
           if (stageKey === "300s" && state.popup300sUrl.trim())
             return state.popup300sUrl.trim();
           return state.baseUrl.trim();
@@ -4889,7 +4892,7 @@
               popup_300s_image:
                 state.overlay300sImage.trim() || state.overlayImage.trim(),
               popup_3s_url: state.baseUrl.trim(),
-              popup_20s_url: state.popup20sUrl.trim() || state.baseUrl.trim(),
+              popup_20s_url: state.popup20sUrl.trim(),
               popup_300s_url: state.popup300sUrl.trim() || state.baseUrl.trim(),
             },
             blocks: state.blocks.map((block) => ({
@@ -6840,6 +6843,7 @@
         }
 
         function openOverlay(stageKey) {
+          if (!getEffectiveTarget(stageKey)) return;
           activeStage = stageKey;
           primeResolvedTarget(getEffectiveTarget(stageKey));
           if (!pendingStages.includes(stageKey)) {
@@ -6868,7 +6872,9 @@
           primeResolvedTargets();
           showToast("Đã bắt đầu mô phỏng timer 3s / 15s / 300s");
           timer3s = setTimeout(() => openOverlay("3s"), 3000);
-          timer20s = setTimeout(() => openOverlay("20s"), 15000);
+          if (state.popup20sUrl.trim()) {
+            timer20s = setTimeout(() => openOverlay("20s"), 15000);
+          }
           timer300s = setTimeout(() => openOverlay("300s"), 300000);
         }
 
