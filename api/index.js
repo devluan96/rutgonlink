@@ -553,19 +553,34 @@ app.post("/api/admin/article-funnel-lab/import-url", requireAdmin, async (req, r
 app.get("/api/admin/article-funnel-labs", requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
     const rows = await database.listArticleFunnelLabs();
     return res.json({
       ok: true,
-      items: rows.map((item) => ({
-        id: item.id,
-        name: item.name || `Lab ${item.id}`,
-        title: item.title || "",
-        published_route_slug: item.published_route_slug || "",
-        affiliate_clicks: Math.max(Number(item.affiliate_clicks) || 0, 0),
-        created_by_user_id: item.created_by_user_id || null,
-        created_at: item.created_at || null,
-        updated_at: item.updated_at || item.created_at || null,
-      })),
+      items: rows.map((item) => {
+        const configJson =
+          item.config_json && typeof item.config_json === "object"
+            ? item.config_json
+            : {};
+        return {
+          id: item.id,
+          name: item.name || `Lab ${item.id}`,
+          title: item.title || "",
+          published_route_slug: item.published_route_slug || "",
+          published_url:
+            item.published_route_slug
+              ? buildArticleFunnelPublicUrl(
+                  item.published_route_slug,
+                  normalizeDomainHost(configJson.source_domain),
+                  publicBaseUrl,
+                )
+              : "",
+          affiliate_clicks: Math.max(Number(item.affiliate_clicks) || 0, 0),
+          created_by_user_id: item.created_by_user_id || null,
+          created_at: item.created_at || null,
+          updated_at: item.updated_at || item.created_at || null,
+        };
+      }),
     });
   } catch (error) {
     console.error("[article-funnel-labs/list]", error);
@@ -575,10 +590,15 @@ app.get("/api/admin/article-funnel-labs", requireAdmin, async (req, res) => {
 app.get("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => {
   try {
     const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
     const row = await database.getArticleFunnelLabById(req.params.id);
     if (!row) {
       return res.status(404).json({ error: "Khong tim thay lab" });
     }
+    const configJson =
+      row.config_json && typeof row.config_json === "object"
+        ? row.config_json
+        : {};
     return res.json({
       ok: true,
       item: {
@@ -586,14 +606,19 @@ app.get("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => 
         name: row.name || `Lab ${row.id}`,
         title: row.title || "",
         published_route_slug: row.published_route_slug || "",
+        published_url:
+          row.published_route_slug
+            ? buildArticleFunnelPublicUrl(
+                row.published_route_slug,
+                normalizeDomainHost(configJson.source_domain),
+                publicBaseUrl,
+              )
+            : "",
         affiliate_clicks: Math.max(Number(row.affiliate_clicks) || 0, 0),
         created_by_user_id: row.created_by_user_id || null,
         created_at: row.created_at || null,
         updated_at: row.updated_at || row.created_at || null,
-        config_json:
-          row.config_json && typeof row.config_json === "object"
-            ? row.config_json
-            : {},
+        config_json: configJson,
       },
     });
   } catch (error) {

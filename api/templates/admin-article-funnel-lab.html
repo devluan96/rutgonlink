@@ -5188,6 +5188,7 @@
               const clickText = `Click aff: ${Number(
                 item.affiliate_clicks || 0,
               ).toLocaleString("vi-VN")}`;
+              const publishedUrl = String(item.published_url || "").trim();
               const detailsMarkup = `
                 <div class="section-kicker">${cardKicker}</div>
                 <h3>${cardTitle}</h3>
@@ -5208,6 +5209,11 @@
               `;
               const actionMarkup = `
                 <div class="lab-home-actions">
+                  ${
+                    publishedUrl
+                      ? `<button class="ghost-btn" type="button" data-copy-lab-url="${escapeAttr(publishedUrl)}">Copy link</button>`
+                      : ""
+                  }
                   <button class="btn alt" type="button" data-open-lab="${item.id}">Sửa lab</button>
                   <button class="ghost-btn danger-btn" type="button" data-delete-lab="${item.id}">Xóa</button>
                 </div>
@@ -7312,6 +7318,25 @@
           deleteLabIds(getSelectedLabIdList());
         });
         els.labHomeList.addEventListener("click", (event) => {
+          const copyButton = event.target.closest("[data-copy-lab-url]");
+          if (copyButton) {
+            const publishedUrl = String(
+              copyButton.dataset.copyLabUrl || "",
+            ).trim();
+            if (!publishedUrl) {
+              showToast("Lab này chưa có link để copy");
+              return;
+            }
+            navigator.clipboard
+              .writeText(publishedUrl)
+              .then(() => {
+                showToast("Đã copy link lab");
+              })
+              .catch(() => {
+                showToast("Không copy được link lab");
+              });
+            return;
+          }
           const deleteButton = event.target.closest("[data-delete-lab]");
           if (deleteButton) {
             deleteLabIds([deleteButton.dataset.deleteLab || ""]);
