@@ -62,3 +62,29 @@ test("recordArticleFunnelStageClick normalizes stage and forwards request contex
   assert.equal(captured[0][4], "https://facebook.com/demo-post");
   assert.equal(captured[0][5].country_code, "VN");
 });
+
+test("decorateArticleFunnelStagesForClient marks published TikTok 20s for client-side tracking", () => {
+  const stages = __testUtils.decorateArticleFunnelStagesForClient(
+    [
+      {
+        stage_key: "5s",
+        direct_platform: "tiktok",
+        direct_web_url: "https://vt.tiktok.com/demo",
+      },
+      {
+        stage_key: "3s",
+        direct_platform: "shopee",
+        direct_web_url: "https://shopee.vn/product/demo",
+      },
+    ],
+    {
+      routeSlug: "lab-tiktok-demo",
+    },
+  );
+
+  assert.equal(stages[0].stage_key, "20s");
+  assert.equal(stages[0].track_click_api, "/api/article-funnel/track-click");
+  assert.equal(stages[0].tracking_route_slug, "lab-tiktok-demo");
+  assert.equal("track_click_api" in stages[1], false);
+  assert.equal("tracking_route_slug" in stages[1], false);
+});

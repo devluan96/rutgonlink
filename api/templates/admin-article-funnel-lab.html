@@ -5847,11 +5847,15 @@
 
             if (isIOS) {
               if (tiktokTarget) {
-                openViaAnchor(
-                  tiktokTarget,
-                  isInApp ? "_blank" : "_self",
-                  "noopener",
-                );
+                if (isInApp) {
+                  window.location.href = tiktokTarget;
+                } else {
+                  openViaAnchor(
+                    tiktokTarget,
+                    "_self",
+                    "noopener",
+                  );
+                }
               }
               setTimeout(
                 () => {
