@@ -88,6 +88,19 @@ function normalizeClickAnalyticsOptions(input, fallbackLimit = 5000) {
   };
 }
 
+function getAnalyticsDayKey(
+  value = new Date(),
+  offsetMinutes = APP_TIME_ZONE_OFFSET_MINUTES,
+) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const shifted = new Date(date.getTime() + offsetMinutes * 60 * 1000);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(shifted.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function getClient() {
   if (_client) return _client;
   const url = process.env.SUPABASE_URL || '';
@@ -146,6 +159,63 @@ async function fetchPaginatedRows(fetchPage, limit = 1000, pageSize = 1000) {
   }
 
   return { data: rows, error: null };
+}
+
+const UNIQUE_CLICK_WINDOW_MS = 30 * 60 * 1000;
+
+function getArticleFunnelAnalyticsVisitorKey(row = {}) {
+  const funnelKey =
+    Number(row?.article_funnel_id || 0) ||
+    String(row?.route_slug || '').trim() ||
+    'no-funnel';
+  const stageKey = String(row?.stage_key || '').trim() || '3s';
+  const ip = String(row?.ip || '').trim() || 'no-ip';
+  const ua = String(row?.user_agent || '').trim() || 'no-ua';
+  return `${funnelKey}:${stageKey}:${ip}:${ua}`;
+}
+
+function buildArticleFunnelClickStats(rows = [], now = new Date()) {
+  const todayKey = getAnalyticsDayKey(now);
+  const orderedRows = (Array.isArray(rows) ? rows : [])
+    .filter((row) => row?.clicked_at)
+    .slice()
+    .sort(
+      (a, b) =>
+        Date.parse(a?.clicked_at || '') - Date.parse(b?.clicked_at || ''),
+    );
+  const lastSeenByVisitor = new Map();
+  let totalClicks = 0;
+  let uniqueClicks = 0;
+  let clicksToday = 0;
+  let uniqueClicksToday = 0;
+
+  for (const row of orderedRows) {
+    const clickedAtMs = Date.parse(row?.clicked_at || '');
+    if (!Number.isFinite(clickedAtMs)) continue;
+    const dayKey = getAnalyticsDayKey(clickedAtMs);
+    totalClicks += 1;
+    if (dayKey === todayKey) {
+      clicksToday += 1;
+    }
+
+    const visitorKey = getArticleFunnelAnalyticsVisitorKey(row);
+    const lastSeenMs = lastSeenByVisitor.get(visitorKey) || 0;
+    const isUnique =
+      !lastSeenMs || clickedAtMs - lastSeenMs > UNIQUE_CLICK_WINDOW_MS;
+    if (!isUnique) continue;
+    lastSeenByVisitor.set(visitorKey, clickedAtMs);
+    uniqueClicks += 1;
+    if (dayKey === todayKey) {
+      uniqueClicksToday += 1;
+    }
+  }
+
+  return {
+    totalClicks,
+    uniqueClicks,
+    clicksToday,
+    uniqueClicksToday,
+  };
 }
 
 function normalizeAnalyticsCountryCode(input) {
@@ -326,6 +396,78 @@ function finalizeClickAnalyticsSummaryPayload(summary = {}) {
 
 async function init() {
   const sb = getClient();
+
+  async function countArticleFunnelClicks({
+    userId = null,
+    includeAll = false,
+    start = null,
+    end = null,
+  } = {}) {
+    let query = null;
+    if (includeAll) {
+      query = sb.from('article_funnel_clicks').select('*', {
+        count: 'exact',
+        head: true,
+      });
+    } else if (userId) {
+      query = sb
+        .from('article_funnel_clicks')
+        .select('article_funnels!inner(created_by_user_id)', {
+          count: 'exact',
+          head: true,
+        })
+        .eq('article_funnels.created_by_user_id', userId);
+    } else {
+      return 0;
+    }
+
+    if (start) query = query.gte('clicked_at', start);
+    if (end) query = query.lt('clicked_at', end);
+    const { count, error } = await query;
+    if (isMissingRelationError(error, 'article_funnel_clicks')) {
+      return 0;
+    }
+    if (isMissingRelationError(error, 'article_funnels')) {
+      return 0;
+    }
+    check(error, 'article_funnel_click_count');
+    return count || 0;
+  }
+
+  async function listArticleFunnelClickRows({
+    userId = null,
+    includeAll = false,
+    days = 0,
+    limit = 5000,
+  } = {}) {
+    if (!includeAll && !userId) return [];
+    const safeLimit = Math.max(Number(limit) || 0, 0);
+    if (!safeLimit) return [];
+    const sinceIso = days > 0 ? getRollingWindowStartUtc(days) : null;
+    const selectExpr = includeAll
+      ? 'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at,article_funnels(config_json)'
+      : 'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at,article_funnels!inner(created_by_user_id,config_json)';
+    const result = await fetchPaginatedRows((from, to) => {
+      let query = sb
+        .from('article_funnel_clicks')
+        .select(selectExpr)
+        .order('clicked_at', { ascending: false })
+        .range(from, to);
+      if (sinceIso) query = query.gte('clicked_at', sinceIso);
+      if (!includeAll && userId) {
+        query = query.eq('article_funnels.created_by_user_id', userId);
+      }
+      return query;
+    }, safeLimit);
+    if (isMissingRelationError(result.error, 'article_funnel_clicks')) {
+      return [];
+    }
+    if (isMissingRelationError(result.error, 'article_funnels')) {
+      return [];
+    }
+    check(result.error, 'article_funnel_click_rows');
+    return result.data || [];
+  }
 
   // Supabase dùng PostgreSQL – tạo bảng qua SQL Editor hoặc migration
   // Không cần tự CREATE TABLE ở đây vì Supabase có UI migration
@@ -1559,8 +1701,14 @@ async function init() {
         q1 = q1.is('user_id', null).is('guest_session_id', null);
         q2 = q2.is('user_id', null).is('guest_session_id', null);
       }
-      const [{ count }, { data: clickData }] = await Promise.all([q1, q2]);
-      const totalClicks = (clickData || []).reduce((s, l) => s + (l.clicks || 0), 0);
+      const [{ count }, { data: clickData }, articleFunnelClicks] = await Promise.all([
+        q1,
+        q2,
+        countArticleFunnelClicks({ userId }),
+      ]);
+      const totalClicks =
+        (clickData || []).reduce((s, l) => s + (l.clicks || 0), 0) +
+        articleFunnelClicks;
       return { totalLinks: count || 0, totalClicks };
     },
 
@@ -1569,12 +1717,16 @@ async function init() {
         { count: totalLinks },
         { data: clickData },
         { count: totalUsers },
+        articleFunnelClicks,
       ] = await Promise.all([
         sb.from('links').select('*', { count: 'exact', head: true }),
         sb.from('links').select('clicks'),
         sb.from('users').select('*', { count: 'exact', head: true }),
+        countArticleFunnelClicks({ includeAll: true }),
       ]);
-      const totalClicks = (clickData || []).reduce((s, l) => s + (l.clicks || 0), 0);
+      const totalClicks =
+        (clickData || []).reduce((s, l) => s + (l.clicks || 0), 0) +
+        articleFunnelClicks;
       return { totalLinks: totalLinks || 0, totalClicks, totalUsers: totalUsers || 0 };
     },
 
@@ -1628,8 +1780,19 @@ async function init() {
           .lt('clicked_at',  end);
       }
 
-      const [{ count: linksToday }, { count: clicksToday }] = await Promise.all([q1, q2]);
-      return { linksToday: linksToday || 0, clicksToday: clicksToday || 0 };
+      const [
+        { count: linksToday },
+        { count: clicksToday },
+        articleFunnelClicksToday,
+      ] = await Promise.all([
+        q1,
+        q2,
+        countArticleFunnelClicks({ userId, start, end }),
+      ]);
+      return {
+        linksToday: linksToday || 0,
+        clicksToday: (clicksToday || 0) + articleFunnelClicksToday,
+      };
     },
 
     async getAdminTodayStats() {
@@ -1638,6 +1801,7 @@ async function init() {
         { count: usersToday },
         { count: linksToday },
         { count: clicksToday },
+        articleFunnelClicksToday,
       ] = await Promise.all([
         sb.from('users')
           .select('*', { count: 'exact', head: true })
@@ -1651,12 +1815,51 @@ async function init() {
           .select('*', { count: 'exact', head: true })
           .gte('clicked_at', start)
           .lt('clicked_at', end),
+        countArticleFunnelClicks({ includeAll: true, start, end }),
       ]);
       return {
         usersToday: usersToday || 0,
         linksToday: linksToday || 0,
-        clicksToday: clicksToday || 0,
+        clicksToday: (clicksToday || 0) + articleFunnelClicksToday,
       };
+    },
+
+    async getArticleFunnelClickStats(userId, options = {}) {
+      const { limit, days } = normalizeClickAnalyticsOptions(options, 5000);
+      const rows = await listArticleFunnelClickRows({
+        userId,
+        days,
+        limit,
+      });
+      return buildArticleFunnelClickStats(rows);
+    },
+
+    async getArticleFunnelClickAnalyticsRows(userId, options = {}) {
+      const { limit, days } = normalizeClickAnalyticsOptions(options, 5000);
+      return listArticleFunnelClickRows({
+        userId,
+        days,
+        limit,
+      });
+    },
+
+    async getAdminArticleFunnelClickStats(options = {}) {
+      const { limit, days } = normalizeClickAnalyticsOptions(options, 5000);
+      const rows = await listArticleFunnelClickRows({
+        includeAll: true,
+        days,
+        limit,
+      });
+      return buildArticleFunnelClickStats(rows);
+    },
+
+    async getAdminArticleFunnelClickAnalyticsRows(options = {}) {
+      const { limit, days } = normalizeClickAnalyticsOptions(options, 5000);
+      return listArticleFunnelClickRows({
+        includeAll: true,
+        days,
+        limit,
+      });
     },
 
     async getClickAnalytics(userId, guestSessionId, options = 5000) {
@@ -1951,6 +2154,7 @@ async function init() {
 module.exports = {
   init,
   __testUtils: {
+    buildArticleFunnelClickStats,
     fetchPaginatedRows,
     finalizeClickAnalyticsSummaryPayload,
   },

@@ -2517,6 +2517,296 @@ function buildStatsAnalytics(clickRows = []) {
   };
 }
 
+function getArticleFunnelAnalyticsLinkId(row = {}) {
+  const stageKey = String(row?.stage_key || "").trim();
+  const stageWeight = stageKey === "20s" ? 2 : stageKey === "300s" ? 3 : 1;
+  const articleFunnelId = Number(row?.article_funnel_id || 0);
+  if (articleFunnelId > 0) {
+    return articleFunnelId * 10 + stageWeight;
+  }
+  const slug = String(row?.route_slug || "").trim() || "lab";
+  let hash = 0;
+  for (let index = 0; index < slug.length; index += 1) {
+    hash = (hash * 31 + slug.charCodeAt(index)) >>> 0;
+  }
+  return Math.max(hash, 1) * 10 + stageWeight;
+}
+
+function mapArticleFunnelClickRowsToAnalyticsRows(rows = []) {
+  const configCache = new Map();
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const cacheKey =
+      String(row?.article_funnel_id || "").trim() ||
+      String(row?.route_slug || "").trim();
+    if (cacheKey && !configCache.has(cacheKey)) {
+      configCache.set(
+        cacheKey,
+        normalizeArticleFunnelPreviewConfig(
+          row?.article_funnels?.config_json || {},
+        ),
+      );
+    }
+    const normalizedStageKey = String(row?.stage_key || "").trim() || "3s";
+    const stage =
+      (configCache.get(cacheKey)?.stages || []).find(
+        (item) => String(item?.stage_key || "").trim() === normalizedStageKey,
+      ) || null;
+    const originalUrl = String(
+      stage?.target_url ||
+        stage?.direct_web_url ||
+        stage?.direct_app_url ||
+        stage?.direct_ios_url ||
+        stage?.direct_android_url ||
+        "",
+    ).trim();
+    const linkId = getArticleFunnelAnalyticsLinkId(row);
+    return {
+      id: `${String(row?.route_slug || "lab").trim()}:${normalizedStageKey}:${String(
+        row?.clicked_at || "",
+      ).trim()}`,
+      link_id: linkId,
+      ip: row?.ip || "",
+      user_agent: row?.user_agent || "",
+      referrer: row?.referrer || "",
+      country_code: row?.country_code || "",
+      country_name: row?.country_name || "",
+      city: row?.city || "",
+      clicked_at: row?.clicked_at || "",
+      link: {
+        id: linkId,
+        original_url: originalUrl,
+        link_type: "direct",
+      },
+    };
+  });
+}
+
+function buildRecentBucketsFromClickRows(clickRows = [], bucketMinutes = 15) {
+  const bucketMs = Math.max(Number(bucketMinutes) || 15, 1) * 60 * 1000;
+  const bucketMap = new Map();
+  for (const row of Array.isArray(clickRows) ? clickRows : []) {
+    const clickedAtMs = Date.parse(row?.clicked_at || "");
+    if (!Number.isFinite(clickedAtMs)) continue;
+    const bucketStart = Math.floor(clickedAtMs / bucketMs) * bucketMs;
+    bucketMap.set(bucketStart, (bucketMap.get(bucketStart) || 0) + 1);
+  }
+  return [...bucketMap.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .slice(-96)
+    .map(([bucketStartedAt, clicks]) => ({
+      bucket_started_at: new Date(bucketStartedAt).toISOString(),
+      clicks,
+    }));
+}
+
+function buildStatsAnalyticsWithRecentBuckets(clickRows = []) {
+  return {
+    ...buildStatsAnalytics(clickRows),
+    recent_buckets: buildRecentBucketsFromClickRows(clickRows),
+  };
+}
+
+function mergeTimelineRows(baseRows = [], extraRows = []) {
+  const timelineMap = new Map();
+  for (const row of [...(baseRows || []), ...(extraRows || [])]) {
+    const dayKey = String(row?.date || "").trim();
+    if (!dayKey) continue;
+    timelineMap.set(dayKey, (timelineMap.get(dayKey) || 0) + Number(row?.clicks || 0));
+  }
+  return finalizeAnalyticsTimeline(timelineMap);
+}
+
+function mergeRecentBucketRows(baseRows = [], extraRows = []) {
+  const bucketMap = new Map();
+  for (const row of [...(baseRows || []), ...(extraRows || [])]) {
+    const bucketStartedAt = String(row?.bucket_started_at || "").trim();
+    if (!bucketStartedAt) continue;
+    bucketMap.set(
+      bucketStartedAt,
+      (bucketMap.get(bucketStartedAt) || 0) + Number(row?.clicks || 0),
+    );
+  }
+  return [...bucketMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-96)
+    .map(([bucket_started_at, clicks]) => ({ bucket_started_at, clicks }));
+}
+
+function mergeCountryRows(countryRows = [], topCountryRows = []) {
+  const countryMap = new Map();
+  for (const row of Array.isArray(countryRows) ? countryRows : []) {
+    const countryCode = normalizeCountryCode(row?.country_code);
+    if (!countryCode) continue;
+    const entry = countryMap.get(countryCode) || {
+      country_code: countryCode,
+      country_name:
+        normalizeAnalyticsText(row?.country_name, 120) ||
+        getCountryNameFromCode(countryCode) ||
+        "Không rõ",
+      clicks: 0,
+      cities: new Map(),
+    };
+    entry.clicks += Number(row?.clicks || 0);
+    countryMap.set(countryCode, entry);
+  }
+  for (const row of Array.isArray(topCountryRows) ? topCountryRows : []) {
+    const countryCode = normalizeCountryCode(row?.country_code);
+    if (!countryCode) continue;
+    const entry = countryMap.get(countryCode) || {
+      country_code: countryCode,
+      country_name:
+        normalizeAnalyticsText(row?.country_name, 120) ||
+        getCountryNameFromCode(countryCode) ||
+        "Không rõ",
+      clicks: Number(row?.clicks || 0),
+      cities: new Map(),
+    };
+    if (!entry.clicks) {
+      entry.clicks = Number(row?.clicks || 0);
+    }
+    const cityName = normalizeAnalyticsText(row?.city, 120) || "Không rõ";
+    entry.cities.set(
+      cityName,
+      (entry.cities.get(cityName) || 0) + Number(row?.city_clicks || row?.clicks || 0),
+    );
+    countryMap.set(countryCode, entry);
+  }
+  return finalizeAnalyticsCountryList(countryMap);
+}
+
+function mergePlatformRows(baseRows = [], extraRows = [], totalClicks = 0) {
+  const platformMap = new Map();
+  for (const row of [...(baseRows || []), ...(extraRows || [])]) {
+    const platform = getLinkAnalyticsPlatform({
+      original_url: row?.original_url || "",
+      link_type: row?.link_type || "",
+    });
+    const key = String(row?.key || platform.key || "generic").trim() || "generic";
+    const existing = platformMap.get(key) || {
+      key,
+      label: row?.label || platform.label,
+      color: row?.color || platform.color,
+      clicks: 0,
+    };
+    existing.clicks += Number(row?.clicks || 0);
+    if (Object.prototype.hasOwnProperty.call(row || {}, "clicks_today")) {
+      existing.clicks_today =
+        Number(existing.clicks_today || 0) + Number(row?.clicks_today || 0);
+    }
+    platformMap.set(key, existing);
+  }
+  return finalizePlatformDistribution(platformMap, totalClicks);
+}
+
+function mergeStatsAnalytics(baseAnalytics = null, extraAnalytics = null) {
+  if (!baseAnalytics) return extraAnalytics || null;
+  if (!extraAnalytics) return baseAnalytics;
+
+  const totalClicks =
+    Number(baseAnalytics?.total_clicks || 0) +
+    Number(extraAnalytics?.total_clicks || 0);
+  const uniqueClicks =
+    Number(baseAnalytics?.unique_clicks || 0) +
+    Number(extraAnalytics?.unique_clicks || 0);
+  const timeline = mergeTimelineRows(
+    baseAnalytics?.timeline,
+    extraAnalytics?.timeline,
+  );
+  const uniqueTimeline = mergeTimelineRows(
+    baseAnalytics?.unique_timeline,
+    extraAnalytics?.unique_timeline,
+  );
+  const countries = mergeCountryRows(
+    [
+      ...(baseAnalytics?.geo?.countries || []),
+      ...(extraAnalytics?.geo?.countries || []),
+    ],
+    [
+      ...(baseAnalytics?.geo?.top_countries || []),
+      ...(extraAnalytics?.geo?.top_countries || []),
+    ],
+  );
+  const uniqueCountries = mergeCountryRows(
+    [
+      ...(baseAnalytics?.geo?.unique_countries || []),
+      ...(extraAnalytics?.geo?.unique_countries || []),
+    ],
+    [
+      ...(baseAnalytics?.geo?.unique_top_countries || []),
+      ...(extraAnalytics?.geo?.unique_top_countries || []),
+    ],
+  );
+  const platformDistribution = mergePlatformRows(
+    baseAnalytics?.platforms?.distribution,
+    extraAnalytics?.platforms?.distribution,
+    totalClicks,
+  );
+  const platformTodayDistribution = mergePlatformRows(
+    baseAnalytics?.platforms?.today_distribution,
+    extraAnalytics?.platforms?.today_distribution,
+    totalClicks,
+  );
+  const uniquePlatformDistribution = mergePlatformRows(
+    baseAnalytics?.platforms?.unique_distribution,
+    extraAnalytics?.platforms?.unique_distribution,
+    uniqueClicks,
+  );
+  const uniquePlatformTodayDistribution = mergePlatformRows(
+    baseAnalytics?.platforms?.unique_today_distribution,
+    extraAnalytics?.platforms?.unique_today_distribution,
+    uniqueClicks,
+  );
+
+  return {
+    total_clicks: totalClicks,
+    unique_clicks: uniqueClicks,
+    timeline,
+    unique_timeline: uniqueTimeline,
+    recent_buckets: mergeRecentBucketRows(
+      baseAnalytics?.recent_buckets,
+      extraAnalytics?.recent_buckets,
+    ),
+    geo: {
+      tracked_clicks:
+        Number(baseAnalytics?.geo?.tracked_clicks || 0) +
+        Number(extraAnalytics?.geo?.tracked_clicks || 0),
+      unknown_clicks:
+        Number(baseAnalytics?.geo?.unknown_clicks || 0) +
+        Number(extraAnalytics?.geo?.unknown_clicks || 0),
+      countries: countries.map((country) => ({
+        country_code: country.country_code,
+        country_name: country.country_name,
+        country_name_en: country.country_name_en,
+        clicks: country.clicks,
+      })),
+      top_countries: countries.slice(0, 8),
+      unique_tracked_clicks:
+        Number(baseAnalytics?.geo?.unique_tracked_clicks || 0) +
+        Number(extraAnalytics?.geo?.unique_tracked_clicks || 0),
+      unique_unknown_clicks:
+        Number(baseAnalytics?.geo?.unique_unknown_clicks || 0) +
+        Number(extraAnalytics?.geo?.unique_unknown_clicks || 0),
+      unique_countries: uniqueCountries.map((country) => ({
+        country_code: country.country_code,
+        country_name: country.country_name,
+        country_name_en: country.country_name_en,
+        clicks: country.clicks,
+      })),
+      unique_top_countries: uniqueCountries.slice(0, 8),
+    },
+    platforms: {
+      distribution: platformDistribution,
+      top_platforms: platformDistribution.slice(0, 8),
+      today_distribution: platformTodayDistribution,
+      today_top_platforms: platformTodayDistribution.slice(0, 8),
+      unique_distribution: uniquePlatformDistribution,
+      unique_top_platforms: uniquePlatformDistribution.slice(0, 8),
+      unique_today_distribution: uniquePlatformTodayDistribution,
+      unique_today_top_platforms: uniquePlatformTodayDistribution.slice(0, 8),
+    },
+  };
+}
+
 function buildStatsCacheKey(userId, guestSessionId) {
   if (userId) return `user:${userId}`;
   if (guestSessionId) return `guest:${guestSessionId}`;
@@ -3042,9 +3332,12 @@ function buildAdminOverviewPayload({
 } = {}) {
   const dayKey = getAnalyticsDayKey(currentTime);
   const monthKey = dayKey.slice(0, 7);
-  const uniqueClicksToday =
+  const analyticsUniqueClicksToday =
     (analytics.unique_timeline || []).find((item) => item.date === dayKey)
       ?.clicks || 0;
+  const uniqueClicksToday = Number(
+    (today.uniqueClicksToday ?? analyticsUniqueClicksToday) || 0,
+  );
   const rawClicksToday =
     (analytics.timeline || []).find((item) => item.date === dayKey)?.clicks ||
     0;
@@ -3200,7 +3493,9 @@ function buildAdminOverviewPayload({
       ),
       raw_clicks_today: Number(today.clicksToday || 0),
       unique_clicks_today: Number(uniqueClicksToday || 0),
-      total_unique_clicks: Number(analytics.unique_clicks || 0),
+      total_unique_clicks: Number(
+        (totals.uniqueTotalClicks ?? analytics.unique_clicks) || 0,
+      ),
       total_raw_clicks: Number(totals.totalClicks || 0),
     },
     plans,
@@ -7388,6 +7683,7 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
         links,
         payments,
         analyticsSummary,
+        labAnalyticsRows,
       ] = await Promise.all([
         measureAsyncTiming(
           "adminTotals",
@@ -7412,10 +7708,17 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
           () => database.getAdminClickAnalyticsSummary(5000),
           timings,
         ),
+        measureAsyncTiming(
+          "adminLabAnalyticsRows",
+          () => database.getAdminArticleFunnelClickAnalyticsRows(5000),
+          timings,
+        ),
       ]);
       let analytics = analyticsSummary;
       let clickRows = [];
       let analyticsSource = "rpc";
+      const mappedLabAnalyticsRows =
+        mapArticleFunnelClickRowsToAnalyticsRows(labAnalyticsRows);
       if (!analytics) {
         clickRows = await measureAsyncTiming(
           "adminClicksFallback",
@@ -7424,18 +7727,37 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
         );
         analytics = await measureAsyncTiming(
           "analyticsFallback",
-          () => Promise.resolve(buildStatsAnalytics(clickRows)),
+          () =>
+            Promise.resolve(
+              buildStatsAnalyticsWithRecentBuckets([
+                ...clickRows,
+                ...mappedLabAnalyticsRows,
+              ]),
+            ),
           timings,
         );
         analyticsSource = "node-fallback";
+      } else if (mappedLabAnalyticsRows.length) {
+        analytics = mergeStatsAnalytics(
+          analytics,
+          buildStatsAnalyticsWithRecentBuckets(mappedLabAnalyticsRows),
+        );
       }
+      const combinedToday = {
+        ...today,
+        uniqueClicksToday: Number(
+          (analytics?.unique_timeline || []).find(
+            (item) => item.date === getAnalyticsDayKey(new Date()),
+          )?.clicks || 0,
+        ),
+      };
       const payload = {
         ...totals,
-        ...today,
+        ...combinedToday,
         analytics,
         overview: buildAdminOverviewPayload({
           totals,
-          today,
+          today: combinedToday,
           analytics,
           users,
           links,
@@ -8085,6 +8407,7 @@ app.get("/api/stats", async (req, res) => {
         totals,
         today,
         analyticsSummary,
+        labAnalyticsRows,
         latestLoginEvent,
         workspaceSelection,
         recentLinks,
@@ -8107,6 +8430,17 @@ app.get("/api/stats", async (req, res) => {
             }),
           timings,
         ),
+        userId
+          ? measureAsyncTiming(
+              "labAnalyticsRows",
+              () =>
+                database.getArticleFunnelClickAnalyticsRows(userId, {
+                  days: USER_STATS_RECENT_DAYS,
+                  limit: 5000,
+                }),
+              timings,
+            )
+          : Promise.resolve([]),
         user
           ? measureAsyncTiming(
               "latestLogin",
@@ -8133,6 +8467,8 @@ app.get("/api/stats", async (req, res) => {
       let analytics = analyticsSummary;
       let clickRows = [];
       let analyticsSource = "rpc";
+      const mappedLabAnalyticsRows =
+        mapArticleFunnelClickRowsToAnalyticsRows(labAnalyticsRows);
       if (!analytics) {
         clickRows = await measureAsyncTiming(
           "clicksFallback",
@@ -8145,10 +8481,21 @@ app.get("/api/stats", async (req, res) => {
         );
         analytics = await measureAsyncTiming(
           "analyticsFallback",
-          () => Promise.resolve(buildStatsAnalytics(clickRows)),
+          () =>
+            Promise.resolve(
+              buildStatsAnalyticsWithRecentBuckets([
+                ...clickRows,
+                ...mappedLabAnalyticsRows,
+              ]),
+            ),
           timings,
         );
         analyticsSource = "node-fallback";
+      } else if (mappedLabAnalyticsRows.length) {
+        analytics = mergeStatsAnalytics(
+          analytics,
+          buildStatsAnalyticsWithRecentBuckets(mappedLabAnalyticsRows),
+        );
       }
       const todayKey = getAnalyticsDayKey(new Date());
       const uniqueClicksToday =
@@ -8177,12 +8524,12 @@ app.get("/api/stats", async (req, res) => {
       const payload = {
         ...totals,
         ...today,
-        totalClicks: analytics.unique_clicks || 0,
-        uniqueTotalClicks: analytics.unique_clicks || 0,
-        rawTotalClicks: analytics.total_clicks || 0,
-        clicksToday: uniqueClicksToday,
-        uniqueClicksToday,
-        rawClicksToday: today.clicksToday || 0,
+        totalClicks: Number(analytics.unique_clicks || 0),
+        uniqueTotalClicks: Number(analytics.unique_clicks || 0),
+        rawTotalClicks: Number(analytics.total_clicks || 0),
+        clicksToday: Number(uniqueClicksToday || 0),
+        uniqueClicksToday: Number(uniqueClicksToday || 0),
+        rawClicksToday: Number(today.clicksToday || 0),
         recentWindowDays: USER_STATS_RECENT_DAYS,
         recent,
         analytics,
