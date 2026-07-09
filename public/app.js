@@ -4833,6 +4833,10 @@ window.addEventListener("resize", () => {
 window.addEventListener("message", (event) => {
   if (event.origin !== window.location.origin) return;
   const data = event.data || {};
+  if (data.type === "article-funnel-lab:edit-lab") {
+    openExistingLabInCreateEditor(data.labId || 0);
+    return;
+  }
   if (data.type === "article-funnel-lab:toast") {
     const message = String(data.message || "").trim();
     if (message) {
@@ -5357,6 +5361,43 @@ function refreshLabEmbed(frameId) {
   if (!nextSrcdoc) return;
   frame.srcdoc = nextSrcdoc;
   frame.dataset.loaded = "true";
+}
+
+function postLabEditorMessage(frameId, payload) {
+  const frame = document.getElementById(frameId);
+  if (!frame) return;
+  ensureLabEmbedLoaded(frameId);
+  const sendMessage = () => {
+    try {
+      frame.contentWindow?.postMessage(payload, window.location.origin);
+    } catch (_) {}
+  };
+  if (frame.contentWindow) {
+    sendMessage();
+    setTimeout(sendMessage, 180);
+    return;
+  }
+  frame.addEventListener("load", sendMessage, { once: true });
+}
+
+function openExistingLabInCreateEditor(labId) {
+  const normalizedId = Number(labId || 0);
+  navigate("create");
+  createSubtab = canUseLabTabs() ? "lab" : "standard";
+  localStorage.setItem(createSubtabStorageKey, createSubtab);
+  syncCreateSubtabUI();
+  if (!canUseLabTabs()) return;
+  if (normalizedId > 0) {
+    postLabEditorMessage("createLabIframe", {
+      type: "article-funnel-lab:load-lab",
+      labId: normalizedId,
+    });
+    return;
+  }
+  postLabEditorMessage("createLabIframe", {
+    type: "article-funnel-lab:load-lab",
+    labId: 0,
+  });
 }
 
 function postLabSharedSettingsToFrame(frameId, settings) {

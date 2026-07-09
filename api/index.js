@@ -4904,14 +4904,16 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
                 ),
               }]
             : []),
-          {
-            stage_key: "300s",
-            delay_ms: 300000,
-            overlay_image: getOverlayImageForStage("300s"),
-            ...buildOverlayLaunchConfig(
-              overlay.popup_300s_url || overlay.popup_3s_url || config.baseUrl || "",
-            ),
-          },
+          ...(overlay.popup_300s_url
+            ? [{
+                stage_key: "300s",
+                delay_ms: 300000,
+                overlay_image: getOverlayImageForStage("300s"),
+                ...buildOverlayLaunchConfig(
+                  overlay.popup_300s_url || "",
+                ),
+              }]
+            : []),
         ]);
 
   return {

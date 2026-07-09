@@ -67,3 +67,23 @@ test("normalizeArticleFunnelPreviewConfig omits 20s stage when popup 20s URL is 
     true,
   );
 });
+
+test("normalizeArticleFunnelPreviewConfig omits 300s stage when popup 300s URL is empty", () => {
+  const config = __testUtils.normalizeArticleFunnelPreviewConfig({
+    baseUrl: "https://shopee.vn/product/37251933/591989399",
+    overlay: {
+      popup_3s_url: "https://shopee.vn/product/37251933/591989399",
+      popup_20s_url: "",
+      popup_300s_url: "",
+    },
+  });
+
+  assert.equal(
+    config.stages.some((stage) => String(stage.stage_key) === "300s"),
+    false,
+  );
+  assert.equal(
+    config.stages.some((stage) => String(stage.stage_key) === "3s"),
+    true,
+  );
+});

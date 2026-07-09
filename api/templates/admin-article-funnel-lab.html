@@ -4230,6 +4230,7 @@
           ) {
             els.embedStatusMount.appendChild(els.workspaceStatusStrip);
           }
+          syncEditorModeUI();
         }
 
         function setupEmbedSettingsModal() {
@@ -4855,6 +4856,9 @@
           }
           if (stageKey === "300s" && state.popup300sUrl.trim())
             return state.popup300sUrl.trim();
+          if (stageKey === "300s") {
+            return "";
+          }
           return state.baseUrl.trim();
         }
 
@@ -4893,7 +4897,7 @@
                 state.overlay300sImage.trim() || state.overlayImage.trim(),
               popup_3s_url: state.baseUrl.trim(),
               popup_20s_url: state.popup20sUrl.trim(),
-              popup_300s_url: state.popup300sUrl.trim() || state.baseUrl.trim(),
+              popup_300s_url: state.popup300sUrl.trim(),
             },
             blocks: state.blocks.map((block) => ({
               type: block.type,
@@ -4923,6 +4927,24 @@
             item.affiliate_clicks || 0,
           ).toLocaleString("vi-VN")}`;
           return `Cập nhật: ${updatedAt}${publishedText}${clickText}`;
+        }
+
+        function syncEditorModeUI() {
+          const isEditing = Number(selectedLabId || 0) > 0;
+          const editorTitle = document.querySelector(
+            ".panel.editor .page-header h1",
+          );
+          if (editorTitle) {
+            editorTitle.textContent = isEditing ? "Sửa lab" : "Tạo lab";
+          }
+          const createBtn = document.getElementById("createDbLabBtn");
+          if (createBtn) {
+            createBtn.textContent = isEditing ? "Lưu lab" : "Tạo lab";
+          }
+          const saveBtn = document.getElementById("saveDbLabBtn");
+          if (saveBtn) {
+            saveBtn.textContent = "Lưu lab";
+          }
         }
 
         function openLabHome() {
@@ -4956,6 +4978,24 @@
           requestAnimationFrame(() => {
             els.labNameInput.focus();
           });
+        }
+
+        function requestParentEditLab(labId) {
+          if (!embedMode || embedView !== "list" || !window.parent) {
+            return false;
+          }
+          try {
+            window.parent.postMessage(
+              {
+                type: "article-funnel-lab:edit-lab",
+                labId: Number(labId || 0) || 0,
+              },
+              window.location.origin,
+            );
+            return true;
+          } catch {
+            return false;
+          }
         }
 
         function getSelectedLabIdList() {
@@ -5241,6 +5281,7 @@
               (item) => Number(item.id) === Number(selectedLabId),
             ) || null;
           els.labMeta.textContent = formatLabMeta(activeLab);
+          syncEditorModeUI();
           renderLabHomeList();
           if (!selectedLabId) {
             els.labNameInput.value = els.labNameInput.value || "";
@@ -6785,6 +6826,7 @@
           applyEmbedUiOverrides();
           applyUiLanguage();
           normalizeStaticVietnameseCopy();
+          syncEditorModeUI();
           applySourceManagedEditorMode();
 
           if (!shouldRenderEditorContent()) {
@@ -6875,7 +6917,9 @@
           if (state.popup20sUrl.trim()) {
             timer20s = setTimeout(() => openOverlay("20s"), 15000);
           }
-          timer300s = setTimeout(() => openOverlay("300s"), 300000);
+          if (state.popup300sUrl.trim()) {
+            timer300s = setTimeout(() => openOverlay("300s"), 300000);
+          }
         }
 
         function applyImport() {
@@ -7271,6 +7315,9 @@
           }
           const button = event.target.closest("[data-open-lab]");
           if (!button) return;
+          if (requestParentEditLab(button.dataset.openLab || "")) {
+            return;
+          }
           loadDbLab(button.dataset.openLab || "");
         });
         els.labHomeList.addEventListener("change", (event) => {
@@ -7559,6 +7606,15 @@
         window.addEventListener("message", (event) => {
           if (event.origin !== window.location.origin) return;
           const data = event.data || {};
+          if (data.type === "article-funnel-lab:load-lab") {
+            const nextLabId = Number(data.labId || 0);
+            if (Number.isInteger(nextLabId) && nextLabId > 0) {
+              loadDbLab(nextLabId);
+            } else {
+              createDbLab();
+            }
+            return;
+          }
           if (data.type === "article-funnel-lab:open-settings") {
             openSettingsSection();
             return;
