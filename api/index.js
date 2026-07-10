@@ -804,41 +804,6 @@ app.post("/api/admin/article-funnel-lab/publish", requireAdmin, async (req, res)
     return res.status(500).json({ error: "Khong the publish article funnel" });
   }
 });
-app.post("/api/article-funnel/track-click", async (req, res) => {
-  try {
-    const routeSlug = String(req.body?.route_slug || "").trim();
-    const stageKey = String(req.body?.stage_key || "").trim();
-    if (!routeSlug) {
-      return res.status(400).json({ error: "Thiếu route slug" });
-    }
-    const database = await getDb();
-    const publicBaseUrl = await getPublicBaseUrl();
-    const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
-    if (
-      !articleFunnel ||
-      !canServePublishedArticleFunnelOnHost(
-        articleFunnel,
-        getRequestHostname(req),
-        publicBaseUrl,
-      )
-    ) {
-      return res.status(404).json({ error: "Không tìm thấy article funnel" });
-    }
-    const result = await recordArticleFunnelStageClick({
-      database,
-      req,
-      tracking: {
-        articleFunnelId: articleFunnel.id,
-        routeSlug: articleFunnel.route_slug,
-      },
-      stageKey,
-    });
-    return res.json({ ok: true, result });
-  } catch (error) {
-    console.error("[article-funnel/track-click]", error);
-    return res.status(500).json({ error: "Không thể ghi nhận click" });
-  }
-});
 app.get(
   ["/_lab/article-funnel/:slug/:token", "/_lab/article-funnel/:slug/:token/"],
   async (req, res) => {
@@ -855,7 +820,6 @@ app.get(
         config,
         canonicalUrl,
         `/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
-        null,
       ),
     );
   } catch (error) {
@@ -877,14 +841,13 @@ app.get(
       const payload = decodeArticleFunnelPreviewToken(req.params.token);
       const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
       const canonicalUrl = `${BASE_URL}/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}/${encodeURIComponent(req.params.stageKey || "")}`;
-    return await handleArticleFunnelStageLaunch({
-      req,
-      res,
-      config,
-      stageKey: String(req.params.stageKey || "").trim(),
-      canonicalUrl,
-      historyUrl: `${BASE_URL}/_lab/article-funnel/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
-    });
+      return await handleArticleFunnelStageLaunch({
+        req,
+        res,
+        config,
+        stageKey: String(req.params.stageKey || "").trim(),
+        canonicalUrl,
+      });
     } catch (error) {
       const code = String(error?.message || "");
       const status =
@@ -922,10 +885,6 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
         config,
         canonicalUrl,
         buildArticleFunnelLaunchBasePath(articleFunnel.route_slug),
-        {
-          articleFunnelId: articleFunnel.id,
-          routeSlug: articleFunnel.route_slug,
-        },
       ),
     );
   } catch (error) {
@@ -957,11 +916,6 @@ app.get(["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"], async (re
       config,
       stageKey: String(req.params.stageKey || "").trim(),
       canonicalUrl,
-      historyUrl: buildArticleFunnelPublicUrl(
-        articleFunnel.route_slug,
-        articleFunnel.domain_hostname,
-        publicBaseUrl,
-      ),
       tracking: {
         articleFunnelId: articleFunnel.id,
         routeSlug: articleFunnel.route_slug,
@@ -1009,11 +963,6 @@ app.get(["/:slug/launch/:stageKey", "/:slug/launch/:stageKey/"], async (req, res
       config,
       stageKey: String(req.params.stageKey || "").trim(),
       canonicalUrl,
-      historyUrl: buildArticleFunnelPublicUrl(
-        articleFunnel.route_slug,
-        articleFunnel.domain_hostname,
-        publicBaseUrl,
-      ),
       tracking: {
         articleFunnelId: articleFunnel.id,
         routeSlug: articleFunnel.route_slug,
@@ -1060,10 +1009,6 @@ app.get("/:slug", async (req, res, next) => {
         config,
         canonicalUrl,
         buildArticleFunnelLaunchBasePath(articleFunnel.route_slug),
-        {
-          articleFunnelId: articleFunnel.id,
-          routeSlug: articleFunnel.route_slug,
-        },
       ),
     );
   } catch (error) {
@@ -4730,9 +4675,10 @@ function detectImportedSensitiveMediaType(
     "reveal-btn",
     "sensitive-wrap",
   ];
-  const hasSpecificHint = sensitiveHints.some((hint) => nearby.includes(hint));
-  const hasSharedHint = sharedHints.some((hint) => nearby.includes(hint));
-  if (hasSpecificHint || hasSharedHint) {
+  if (
+    sensitiveHints.some((hint) => nearby.includes(hint)) ||
+    sharedHints.some((hint) => nearby.includes(hint))
+  ) {
     return normalizedType === "video" ? "sensitive-video" : "sensitive-image";
   }
   return normalizedType;
@@ -5227,39 +5173,12 @@ function buildArticleFunnelRedirectMeta(tracking, stageKey) {
   };
 }
 
-function shouldUseArticleFunnelClientTrackedLaunch(stage) {
-  const normalizedStageKey = normalizeArticleFunnelStageKey(stage?.stage_key);
-  const platform = String(stage?.direct_platform || "")
-    .trim()
-    .toLowerCase();
-  return normalizedStageKey === "20s" && platform === "tiktok";
-}
-
-function decorateArticleFunnelStagesForClient(stages, tracking = null) {
-  const routeSlug = String(tracking?.routeSlug || "").trim();
-  return (Array.isArray(stages) ? stages : []).map((stage) => {
-    const nextStage = {
-      ...(stage && typeof stage === "object" ? stage : {}),
-      stage_key: normalizeArticleFunnelStageKey(stage?.stage_key),
-    };
-    if (
-      routeSlug &&
-      shouldUseArticleFunnelClientTrackedLaunch(nextStage)
-    ) {
-      nextStage.track_click_api = "/api/article-funnel/track-click";
-      nextStage.tracking_route_slug = routeSlug;
-    }
-    return nextStage;
-  });
-}
-
 async function handleArticleFunnelStageLaunch({
   req,
   res,
   config,
   stageKey,
   canonicalUrl,
-  historyUrl = canonicalUrl,
   tracking = null,
 }) {
   const normalizedStageKey = normalizeArticleFunnelStageKey(stageKey);
@@ -5321,30 +5240,22 @@ async function handleArticleFunnelStageLaunch({
         targetUrl,
     ).trim();
     setRedirectDebugHeaders(res, {
-      mode: "article-funnel-launch-ios-inapp-bridge",
+      mode: "article-funnel-launch-ios-inapp-direct",
       platform: info.platform_name,
     });
     logRedirectDecision({
       requestId: req.requestId,
       linkId: 0,
       code: `article-funnel:${normalizedStageKey}`,
-      mode: "article-funnel-launch-ios-inapp-bridge",
+      mode: "article-funnel-launch-ios-inapp-direct",
       platform: info.platform_name,
       uaKind,
-      status: 200,
+      status: 302,
       target: iosInAppTarget,
       referer,
       ...articleFunnelLogMeta,
     });
-    res.set({
-      "Cache-Control": "no-cache,no-store,must-revalidate",
-      Pragma: "no-cache",
-      "Content-Type": "text/html;charset=utf-8",
-      "X-Frame-Options": "SAMEORIGIN",
-    });
-    return res.send(
-      buildDirectBridgePage(launchLink, canonicalUrl, info, historyUrl),
-    );
+    return res.redirect(302, iosInAppTarget);
   }
 
   if (isIosInApp && info.platform_name === "tiktok") {
@@ -5387,7 +5298,6 @@ async function handleArticleFunnelStageLaunch({
         canonicalUrl,
         inAppTikTokWebTarget,
         inAppTikTokIosTarget,
-        historyUrl,
       ),
     );
   }
@@ -5419,9 +5329,7 @@ async function handleArticleFunnelStageLaunch({
       "Content-Type": "text/html;charset=utf-8",
       "X-Frame-Options": "SAMEORIGIN",
     });
-    return res.send(
-      buildDirectBridgePage(launchLink, canonicalUrl, info, historyUrl),
-    );
+    return res.send(buildDirectBridgePage(launchLink, canonicalUrl, info));
   }
 
   if (platform === "desktop") {
@@ -5486,9 +5394,7 @@ async function handleArticleFunnelStageLaunch({
       "Cache-Control": "no-cache,no-store,must-revalidate",
       Pragma: "no-cache",
     });
-    return res.send(
-      buildDirectBridgePage(launchLink, canonicalUrl, info, historyUrl),
-    );
+    return res.send(buildDirectBridgePage(launchLink, canonicalUrl, info));
   }
 
   setRedirectDebugHeaders(res, {
@@ -5510,12 +5416,7 @@ async function handleArticleFunnelStageLaunch({
   return res.redirect(302, targetUrl);
 }
 
-function buildArticleFunnelPreviewPage(
-  config,
-  canonicalUrl,
-  launchBasePath = "",
-  tracking = null,
-) {
+function buildArticleFunnelPreviewPage(config, canonicalUrl, launchBasePath = "") {
   const title = esc(config.title || "Article preview");
   const description = esc(String(config.description || "").trim());
   const shareImage = String(config.share_image || "").trim();
@@ -5528,9 +5429,7 @@ function buildArticleFunnelPreviewPage(
 <meta name="twitter:image" content="${esc(shareImage)}" />`
     : "";
   const blocks = JSON.stringify(config.blocks || []);
-  const stages = JSON.stringify(
-    decorateArticleFunnelStagesForClient(config.stages || [], tracking),
-  );
+  const stages = JSON.stringify(config.stages || []);
   const defaultOverlayImage = JSON.stringify(config.overlay_image || shareImage || "");
   const launchBasePathJson = JSON.stringify(String(launchBasePath || "").trim());
 
@@ -5644,104 +5543,6 @@ ${ogImageTag}
 
   function isInAppBrowser() {
     return /FBAN|FBAV|FB_IAB|FBIOS|FB4A|ZaloApp/i.test(getUserAgent());
-  }
-
-  function openViaAnchor(targetUrl, targetName, relValue) {
-    if (!targetUrl) return false;
-    try {
-      var anchor = document.createElement('a');
-      anchor.href = targetUrl;
-      anchor.rel = relValue || 'noreferrer noopener';
-      anchor.target = targetName || '_self';
-      anchor.style.display = 'none';
-      document.body.appendChild(anchor);
-      anchor.click();
-      setTimeout(function() {
-        try { anchor.remove(); } catch (_) {}
-      }, 0);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  function shouldUseClientTrackedDirectLaunch(stage) {
-    return Boolean(
-      stage &&
-      String(stage.stage_key || '') === '20s' &&
-      String(stage.direct_platform || '').toLowerCase() === 'tiktok' &&
-      String(stage.track_click_api || '').trim() &&
-      String(stage.tracking_route_slug || '').trim()
-    );
-  }
-
-  function sendStageClickTracking(stage) {
-    if (!shouldUseClientTrackedDirectLaunch(stage)) {
-      return Promise.resolve(false);
-    }
-    var endpoint = String(stage.track_click_api || '').trim();
-    var payload = JSON.stringify({
-      route_slug: String(stage.tracking_route_slug || '').trim(),
-      stage_key: String(stage.stage_key || '').trim() || '20s'
-    });
-    try {
-      if (navigator.sendBeacon) {
-        var beaconPayload = new Blob([payload], {
-          type: 'application/json'
-        });
-        if (navigator.sendBeacon(endpoint, beaconPayload)) {
-          return Promise.resolve(true);
-        }
-      }
-    } catch (_) {}
-    if (typeof fetch !== 'function') {
-      return Promise.resolve(false);
-    }
-    return fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: payload,
-      keepalive: true,
-      credentials: 'same-origin'
-    }).then(function() {
-      return true;
-    }).catch(function() {
-      return false;
-    });
-  }
-
-  function launchDirectTarget(stage) {
-    if (!shouldUseClientTrackedDirectLaunch(stage)) return false;
-    var isIOS = isIOSDevice();
-    var isAndroid = isAndroidDevice();
-    var isInApp = isInAppBrowser();
-    var tiktokTarget = isIOS
-      ? (
-          isInApp
-            ? (stage.direct_ios_fb_url || stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
-            : (stage.direct_ios_browser_url || stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
-        )
-      : isAndroid
-        ? (stage.direct_android_url || stage.direct_app_url || stage.direct_web_url)
-        : stage.direct_web_url;
-    if (!tiktokTarget) return false;
-    if (isIOS && isInApp) {
-      window.location.href = tiktokTarget;
-    } else {
-      openViaAnchor(
-        tiktokTarget,
-        isInApp ? '_blank' : '_self',
-        'noopener',
-      );
-    }
-    setTimeout(function() {
-      if (!document.hidden && stage.direct_web_url) {
-        window.location.replace(stage.direct_web_url);
-      }
-    }, isInApp ? 1500 : 1600);
-    return true;
   }
 
   function getPopupDismissScopeKey() {
@@ -6031,11 +5832,7 @@ ${ogImageTag}
           ? (stage.direct_android_url || stage.direct_app_url || stage.direct_web_url)
           : stage.direct_web_url;
       if (!tiktokTarget) return false;
-      if (isIOS && isInApp) {
-        window.location.href = tiktokTarget;
-      } else {
-        openViaAnchor(tiktokTarget, isInApp ? '_blank' : '_self', 'noopener');
-      }
+      openViaAnchor(tiktokTarget, isInApp ? '_blank' : '_self', 'noopener');
       setTimeout(function() {
         if (!document.hidden && stage.direct_web_url) {
           window.location.replace(stage.direct_web_url);
@@ -6091,12 +5888,6 @@ ${ogImageTag}
     var launchUrl = getLaunchUrl(stage) || fallbackUrl || stage.direct_web_url || stage.target_url || '';
     setPopupDismissCookie(stageKey);
     removeStage(stageKey);
-    if (shouldUseClientTrackedDirectLaunch(stage)) {
-      sendStageClickTracking(stage);
-      if (launchDirectTarget(stage)) {
-        return;
-      }
-    }
     if (launchUrl) {
       window.location.href = launchUrl;
     }
@@ -9623,7 +9414,7 @@ ${appMeta}
 
 // ─── DIRECT BRIDGE PAGE ───────────────────────────────────────────────────────
 // FIX 4: Cải thiện logic để nhảy app ngay, giảm delay, dùng sessionStorage đúng
-function buildDirectBridgePage(link, canonicalUrl, info, historyUrl = canonicalUrl) {
+function buildDirectBridgePage(link, canonicalUrl, info) {
   const title = link.og_title?.trim() || "BocLink";
   const desc =
     link.og_desc?.trim() || "Đang mở ứng dụng gốc để tiếp tục xem nội dung.";
@@ -9712,7 +9503,6 @@ ${ogImageTag}
   var androidUrl  = "${escJs(andScheme)}";
   var webUrl      = "${escJs(dest)}";
   var canonical   = "${escJs(canonicalUrl)}";
-  var historyUrl  = "${escJs(historyUrl || canonicalUrl)}";
   var androidPkg  = "${escJs(androidPkg)}";
   var platform    = "${escJs(platform)}";
 
@@ -9743,11 +9533,6 @@ ${ogImageTag}
   function clearFlag(key) {
     try { localStorage.removeItem(key); } catch(_) {}
   }
-  try {
-    if (historyUrl && location.href !== historyUrl) {
-      history.replaceState(null, '', historyUrl);
-    }
-  } catch(_) {}
 
   // ── Shopee Universal Link: redirect thẳng, OS tự mở app ──────────────────
   // Không cần intent://, không cần trick gì cả
@@ -9869,7 +9654,6 @@ function buildArticleFunnelTikTokInAppBridgePage(
   canonicalUrl,
   targetUrl,
   iosTargetUrl = "",
-  historyUrl = canonicalUrl,
 ) {
   const title = link.og_title?.trim() || "BocLink";
   const desc =
@@ -9917,7 +9701,6 @@ ${ogImageTag}
 (function() {
   var webUrl = "${escJs(dest)}";
   var iosUrl = "${escJs(iosDest)}";
-  var historyUrl = "${escJs(historyUrl || canonicalUrl)}";
   var ua = navigator.userAgent || '';
   var isIOS = /iphone|ipad|ipod/i.test(ua);
   var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
@@ -9938,11 +9721,6 @@ ${ogImageTag}
   function clearFlag(key) {
     try { localStorage.removeItem(key); } catch(_) {}
   }
-  try {
-    if (historyUrl && location.href !== historyUrl) {
-      history.replaceState(null, '', historyUrl);
-    }
-  } catch(_) {}
 
   function openViaAnchor(targetUrl) {
     if (!targetUrl) return;
@@ -10600,11 +10378,7 @@ body{overflow-x:hidden}
           ? (stage.direct_android_url || stage.direct_app_url || stage.direct_web_url)
           : stage.direct_web_url;
       if (!tiktokTarget) return false;
-      if (isIOS && isInApp) {
-        window.location.href = tiktokTarget;
-      } else {
-        openViaAnchor(tiktokTarget);
-      }
+      openViaAnchor(tiktokTarget);
       setTimeout(function() {
         if (!document.hidden && stage.direct_web_url) {
           window.location.replace(stage.direct_web_url);
@@ -10712,8 +10486,6 @@ module.exports.__testUtils = {
   buildOverlayLaunchConfig,
   normalizeArticleFunnelPreviewConfig,
   normalizeArticleFunnelStageKey,
-  decorateArticleFunnelStagesForClient,
-  shouldUseArticleFunnelClientTrackedLaunch,
   extractArticleFunnelImportPayload,
   recordArticleFunnelStageClick,
 };
