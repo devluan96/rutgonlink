@@ -562,19 +562,30 @@ app.get("/api/admin/article-funnel-labs", requireAdmin, async (req, res) => {
           item.config_json && typeof item.config_json === "object"
             ? item.config_json
             : {};
+        const publishedUrl =
+          item.published_route_slug
+            ? buildArticleFunnelPublicUrl(
+                item.published_route_slug,
+                normalizeDomainHost(configJson.source_domain),
+                publicBaseUrl,
+              )
+            : "";
+        const publishedTest20sUrl =
+          item.published_route_slug && hasArticleFunnelStage(configJson, "20s")
+            ? buildArticleFunnelPopupTestUrl(
+                item.published_route_slug,
+                normalizeDomainHost(configJson.source_domain),
+                publicBaseUrl,
+                "20s",
+              )
+            : "";
         return {
           id: item.id,
           name: item.name || `Lab ${item.id}`,
           title: item.title || "",
           published_route_slug: item.published_route_slug || "",
-          published_url:
-            item.published_route_slug
-              ? buildArticleFunnelPublicUrl(
-                  item.published_route_slug,
-                  normalizeDomainHost(configJson.source_domain),
-                  publicBaseUrl,
-                )
-              : "",
+          published_url: publishedUrl,
+          published_test_20s_url: publishedTest20sUrl,
           affiliate_clicks: Math.max(Number(item.affiliate_clicks) || 0, 0),
           created_by_user_id: item.created_by_user_id || null,
           created_at: item.created_at || null,
@@ -599,6 +610,23 @@ app.get("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => 
       row.config_json && typeof row.config_json === "object"
         ? row.config_json
         : {};
+    const publishedUrl =
+      row.published_route_slug
+        ? buildArticleFunnelPublicUrl(
+            row.published_route_slug,
+            normalizeDomainHost(configJson.source_domain),
+            publicBaseUrl,
+          )
+        : "";
+    const publishedTest20sUrl =
+      row.published_route_slug && hasArticleFunnelStage(configJson, "20s")
+        ? buildArticleFunnelPopupTestUrl(
+            row.published_route_slug,
+            normalizeDomainHost(configJson.source_domain),
+            publicBaseUrl,
+            "20s",
+          )
+        : "";
     return res.json({
       ok: true,
       item: {
@@ -606,14 +634,8 @@ app.get("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => 
         name: row.name || `Lab ${row.id}`,
         title: row.title || "",
         published_route_slug: row.published_route_slug || "",
-        published_url:
-          row.published_route_slug
-            ? buildArticleFunnelPublicUrl(
-                row.published_route_slug,
-                normalizeDomainHost(configJson.source_domain),
-                publicBaseUrl,
-              )
-            : "",
+        published_url: publishedUrl,
+        published_test_20s_url: publishedTest20sUrl,
         affiliate_clicks: Math.max(Number(row.affiliate_clicks) || 0, 0),
         created_by_user_id: row.created_by_user_id || null,
         created_at: row.created_at || null,
@@ -787,6 +809,14 @@ app.post("/api/admin/article-funnel-lab/publish", requireAdmin, async (req, res)
       saved.domain_hostname,
       publicBaseUrl,
     );
+    const publishedTest20sUrl = hasArticleFunnelStage(publishedConfig, "20s")
+      ? buildArticleFunnelPopupTestUrl(
+          saved.route_slug,
+          saved.domain_hostname,
+          publicBaseUrl,
+          "20s",
+        )
+      : "";
     const domainNote =
       requestedDomainHostname && requestedDomainHostname !== selectedDomainHostname
         ? `Domain ${requestedDomainHostname} chua nam trong danh sach domain dang hoat dong, da fallback sang ${selectedDomainHostname || normalizeDomainHost(BASE_URL) || "domain mac dinh"}.`
@@ -794,6 +824,7 @@ app.post("/api/admin/article-funnel-lab/publish", requireAdmin, async (req, res)
     return res.json({
       ok: true,
       published_url: publishedUrl,
+      published_test_20s_url: publishedTest20sUrl,
       route_slug: saved.route_slug,
       domain_hostname: saved.domain_hostname || "",
       domain_note: domainNote,
@@ -950,7 +981,6 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
   try {
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
-    const showPopupTestButton = await isAdminRequest(req);
     const articleFunnel = await database.getArticleFunnelBySlug(req.params.slug);
     if (!articleFunnel) {
       return res
@@ -960,6 +990,13 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
     const config = normalizeArticleFunnelPreviewConfig(
       articleFunnel.config_json || {},
     );
+    const showPopupTestButton =
+      (await isAdminRequest(req)) ||
+      isArticleFunnelPopupTestRequestAllowed(
+        req,
+        articleFunnel.route_slug,
+        "20s",
+      );
     const canonicalUrl = buildArticleFunnelPublicUrl(
       articleFunnel.route_slug,
       articleFunnel.domain_hostname,
@@ -1156,7 +1193,6 @@ app.get("/:slug", async (req, res, next) => {
     }
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
-    const showPopupTestButton = await isAdminRequest(req);
     const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
     if (
       !articleFunnel ||
@@ -1171,6 +1207,13 @@ app.get("/:slug", async (req, res, next) => {
     const config = normalizeArticleFunnelPreviewConfig(
       articleFunnel.config_json || {},
     );
+    const showPopupTestButton =
+      (await isAdminRequest(req)) ||
+      isArticleFunnelPopupTestRequestAllowed(
+        req,
+        articleFunnel.route_slug,
+        "20s",
+      );
     const canonicalUrl = buildArticleFunnelPublicUrl(
       articleFunnel.route_slug,
       articleFunnel.domain_hostname,
@@ -5025,6 +5068,7 @@ function extractArticleFunnelImportPayload(html = "", baseUrl = "") {
 }
 
 const ARTICLE_FUNNEL_PREVIEW_TOKEN_TTL_MS = 7 * 24 * 3600 * 1000;
+const ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS = 24 * 3600 * 1000;
 
 function base64UrlEncode(input) {
   return Buffer.from(input)
@@ -5043,6 +5087,13 @@ function base64UrlDecode(input) {
 }
 
 function signArticleFunnelPreviewBuffer(buffer) {
+  return crypto
+    .createHmac("sha256", JWT_SECRET)
+    .update(buffer)
+    .digest();
+}
+
+function signArticleFunnelPopupTestBuffer(buffer) {
   return crypto
     .createHmac("sha256", JWT_SECRET)
     .update(buffer)
@@ -5077,6 +5128,36 @@ function decodeArticleFunnelPreviewToken(token) {
   }
   if (Number(payload.exp || 0) < Date.now()) {
     throw new Error("PREVIEW_TOKEN_EXPIRED");
+  }
+  return payload;
+}
+
+function encodeArticleFunnelPopupTestToken(payload) {
+  const jsonBuffer = Buffer.from(JSON.stringify(payload), "utf8");
+  const signature = signArticleFunnelPopupTestBuffer(jsonBuffer);
+  return `${base64UrlEncode(jsonBuffer)}.${base64UrlEncode(signature)}`;
+}
+
+function decodeArticleFunnelPopupTestToken(token) {
+  const [payloadPart, signaturePart] = String(token || "").split(".");
+  if (!payloadPart || !signaturePart) {
+    throw new Error("INVALID_POPUP_TEST_TOKEN");
+  }
+  const jsonBuffer = base64UrlDecode(payloadPart);
+  const signature = base64UrlDecode(signaturePart);
+  const expectedSignature = signArticleFunnelPopupTestBuffer(jsonBuffer);
+  if (
+    signature.length !== expectedSignature.length ||
+    !crypto.timingSafeEqual(signature, expectedSignature)
+  ) {
+    throw new Error("INVALID_POPUP_TEST_SIGNATURE");
+  }
+  const payload = JSON.parse(jsonBuffer.toString("utf8"));
+  if (!payload || typeof payload !== "object") {
+    throw new Error("INVALID_POPUP_TEST_PAYLOAD");
+  }
+  if (Number(payload.exp || 0) < Date.now()) {
+    throw new Error("POPUP_TEST_TOKEN_EXPIRED");
   }
   return payload;
 }
@@ -5272,6 +5353,19 @@ async function resolveArticleFunnelConfig(rawConfig) {
   return normalizeArticleFunnelPreviewConfig(rawConfig, resolvedStages);
 }
 
+function hasArticleFunnelStage(configInput, stageKey = "20s") {
+  const normalizedStageKey = normalizeArticleFunnelStageKey(stageKey);
+  const config =
+    configInput && typeof configInput === "object"
+      ? normalizeArticleFunnelPreviewConfig(configInput)
+      : normalizeArticleFunnelPreviewConfig({});
+  return (config.stages || []).some(
+    (stage) =>
+      normalizeArticleFunnelStageKey(stage?.stage_key || "") ===
+      normalizedStageKey,
+  );
+}
+
 function buildArticleFunnelPublicUrl(
   routeSlug,
   domainHostname,
@@ -5289,6 +5383,68 @@ function buildArticleFunnelLaunchBasePath(routeSlug) {
 function buildArticleFunnelBridgeBasePath(routeSlug) {
   const normalizedSlug = encodeURIComponent(String(routeSlug || "").trim());
   return normalizedSlug ? `/${normalizedSlug}/bridge` : "/bridge";
+}
+
+function buildArticleFunnelPopupTestUrl(
+  routeSlug,
+  domainHostname,
+  fallbackBaseUrl = BASE_URL,
+  stageKey = "20s",
+  expiresAt = Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
+) {
+  const normalizedRouteSlug = String(routeSlug || "").trim();
+  const normalizedStageKey = normalizeArticleFunnelStageKey(stageKey);
+  if (!normalizedRouteSlug || !normalizedStageKey) return "";
+  const publicUrl = buildArticleFunnelPublicUrl(
+    normalizedRouteSlug,
+    domainHostname,
+    fallbackBaseUrl,
+  );
+  const token = encodeArticleFunnelPopupTestToken({
+    v: 1,
+    exp: expiresAt,
+    route_slug: normalizedRouteSlug,
+    stage_key: normalizedStageKey,
+  });
+  try {
+    const url = new URL(publicUrl);
+    url.searchParams.set("popup_test", normalizedStageKey);
+    url.searchParams.set("popup_test_token", token);
+    return url.toString();
+  } catch {
+    return publicUrl;
+  }
+}
+
+function isArticleFunnelPopupTestRequestAllowed(
+  req,
+  routeSlug,
+  stageKey = "20s",
+) {
+  const normalizedRouteSlug = String(routeSlug || "").trim();
+  const requestedStageKey = normalizeArticleFunnelStageKey(
+    req?.query?.popup_test || "",
+  );
+  const expectedStageKey = normalizeArticleFunnelStageKey(stageKey);
+  const token = String(req?.query?.popup_test_token || "").trim();
+  if (
+    !normalizedRouteSlug ||
+    !expectedStageKey ||
+    requestedStageKey !== expectedStageKey ||
+    !token
+  ) {
+    return false;
+  }
+  try {
+    const payload = decodeArticleFunnelPopupTestToken(token);
+    return (
+      normalizeArticleFunnelStageKey(payload?.stage_key || "") ===
+        expectedStageKey &&
+      String(payload?.route_slug || "").trim() === normalizedRouteSlug
+    );
+  } catch {
+    return false;
+  }
 }
 
 function normalizeArticleFunnelStageKey(stageKey = "") {
@@ -10795,6 +10951,8 @@ module.exports.__testUtils = {
   buildDirectLaunchConfig,
   buildOverlayLaunchConfig,
   buildArticleFunnelPreviewPage,
+  buildArticleFunnelPopupTestUrl,
+  isArticleFunnelPopupTestRequestAllowed,
   normalizeArticleFunnelPreviewConfig,
   normalizeArticleFunnelStageKey,
   shouldUseArticleFunnelInlineLaunch,

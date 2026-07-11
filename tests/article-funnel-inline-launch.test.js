@@ -124,3 +124,31 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through dedicated bridge u
     /popupTest20sBtn\.hidden = !canShowPopupTestButton \|\| !getStageByKey\('20s'\)/,
   );
 });
+
+test("buildArticleFunnelPopupTestUrl produces a usable signed test url", () => {
+  const testUrl = __testUtils.buildArticleFunnelPopupTestUrl(
+    "demo-post",
+    "example.com",
+    "https://fallback.example",
+    "20s",
+    Date.now() + 60_000,
+  );
+  const parsed = new URL(testUrl);
+  assert.equal(parsed.origin, "https://example.com");
+  assert.equal(parsed.pathname, "/demo-post");
+  assert.equal(parsed.searchParams.get("popup_test"), "20s");
+  assert.ok(parsed.searchParams.get("popup_test_token"));
+  assert.equal(
+    __testUtils.isArticleFunnelPopupTestRequestAllowed(
+      {
+        query: {
+          popup_test: parsed.searchParams.get("popup_test"),
+          popup_test_token: parsed.searchParams.get("popup_test_token"),
+        },
+      },
+      "demo-post",
+      "20s",
+    ),
+    true,
+  );
+});

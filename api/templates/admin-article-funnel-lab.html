@@ -5189,6 +5189,9 @@
                 item.affiliate_clicks || 0,
               ).toLocaleString("vi-VN")}`;
               const publishedUrl = String(item.published_url || "").trim();
+              const publishedTest20sUrl = String(
+                item.published_test_20s_url || "",
+              ).trim();
               const detailsMarkup = `
                 <div class="section-kicker">${cardKicker}</div>
                 <h3>${cardTitle}</h3>
@@ -5212,6 +5215,11 @@
                   ${
                     publishedUrl
                       ? `<button class="ghost-btn" type="button" data-copy-lab-url="${escapeAttr(publishedUrl)}">Copy link</button>`
+                      : ""
+                  }
+                  ${
+                    publishedTest20sUrl
+                      ? `<button class="ghost-btn" type="button" data-copy-lab-test20-url="${escapeAttr(publishedTest20sUrl)}">Copy link test 20s</button>`
                       : ""
                   }
                   <button class="btn alt" type="button" data-open-lab="${item.id}">Sửa lab</button>
@@ -7330,6 +7338,25 @@
               })
               .catch(() => {
                 showToast("Không copy được link lab");
+              });
+            return;
+          }
+          const copyTestButton = event.target.closest("[data-copy-lab-test20-url]");
+          if (copyTestButton) {
+            const testUrl = String(
+              copyTestButton.dataset.copyLabTest20Url || "",
+            ).trim();
+            if (!testUrl) {
+              showToast("Lab này chưa có link test popup 20s");
+              return;
+            }
+            navigator.clipboard
+              .writeText(testUrl)
+              .then(() => {
+                showToast("Đã copy link test 20s");
+              })
+              .catch(() => {
+                showToast("Không copy được link test 20s");
               });
             return;
           }
