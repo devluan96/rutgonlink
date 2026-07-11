@@ -41,19 +41,20 @@ test("buildArticleFunnelPreviewPage embeds inline launch metadata for published 
     },
     "https://example.com/demo",
     "/demo/launch",
-    { routeSlug: "demo" },
+    { routeSlug: "demo", showPopupTestButton: true },
     "/demo/bridge",
   );
 
   assert.match(html, /"use_inline_launch":true/);
   assert.match(html, /\/api\/article-funnel\/track-click/);
   assert.match(html, /"demo"/);
-  assert.match(html, /id="popupTest3sBtn"/);
-  assert.match(html, /Mở popup 3s/);
+  assert.match(html, /id="popupTest20sBtn"/);
+  assert.match(html, /Mở popup 20s/);
+  assert.match(html, /var canShowPopupTestButton = true;/);
   assert.match(html, /openViaAnchor\(iosTarget, '_blank', 'noopener'\)/);
 });
 
-test("buildArticleFunnelPreviewPage keeps popup test button hidden when 3s stage is missing", () => {
+test("buildArticleFunnelPreviewPage keeps popup test button hidden for non-admin viewers", () => {
   const html = __testUtils.buildArticleFunnelPreviewPage(
     {
       title: "Demo",
@@ -71,7 +72,11 @@ test("buildArticleFunnelPreviewPage keeps popup test button hidden when 3s stage
     "/demo/bridge",
   );
 
-  assert.match(html, /popupTest3sBtn\.hidden = !getStageByKey\('3s'\)/);
+  assert.match(html, /var canShowPopupTestButton = false;/);
+  assert.match(
+    html,
+    /popupTest20sBtn\.hidden = !canShowPopupTestButton \|\| !getStageByKey\('20s'\)/,
+  );
 });
 
 test("buildArticleFunnelPreviewPage routes TikTok 20s through dedicated bridge url", () => {
@@ -88,7 +93,7 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through dedicated bridge u
     },
     "https://example.com/demo",
     "/demo/launch",
-    { routeSlug: "demo" },
+    { routeSlug: "demo", showPopupTestButton: true },
     "/demo/bridge",
   );
 
@@ -113,5 +118,9 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through dedicated bridge u
   assert.match(
     html,
     /var closeStageKey = closeButton\.getAttribute\('data-overlay-close'\) \|\| '';\s+setPopupDismissCookie\(closeStageKey\);\s+removeStage\(closeStageKey\);/,
+  );
+  assert.match(
+    html,
+    /popupTest20sBtn\.hidden = !canShowPopupTestButton \|\| !getStageByKey\('20s'\)/,
   );
 });

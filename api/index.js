@@ -866,6 +866,7 @@ app.get(
   ["/_lab/article-funnel/:slug/:token", "/_lab/article-funnel/:slug/:token/"],
   async (req, res) => {
   try {
+    const showPopupTestButton = await isAdminRequest(req);
     const payload = decodeArticleFunnelPreviewToken(req.params.token);
     const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
     const canonicalUrl = `${BASE_URL}/_lab/article-funnel/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`;
@@ -878,7 +879,7 @@ app.get(
         config,
         canonicalUrl,
         `/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
-        null,
+        { showPopupTestButton },
         `/_lab/article-funnel-bridge/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
       ),
     );
@@ -949,6 +950,7 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
   try {
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
+    const showPopupTestButton = await isAdminRequest(req);
     const articleFunnel = await database.getArticleFunnelBySlug(req.params.slug);
     if (!articleFunnel) {
       return res
@@ -972,7 +974,10 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
         config,
         canonicalUrl,
         buildArticleFunnelLaunchBasePath(articleFunnel.route_slug),
-        { routeSlug: articleFunnel.route_slug },
+        {
+          routeSlug: articleFunnel.route_slug,
+          showPopupTestButton,
+        },
         buildArticleFunnelBridgeBasePath(articleFunnel.route_slug),
       ),
     );
@@ -1151,6 +1156,7 @@ app.get("/:slug", async (req, res, next) => {
     }
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
+    const showPopupTestButton = await isAdminRequest(req);
     const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
     if (
       !articleFunnel ||
@@ -1179,7 +1185,10 @@ app.get("/:slug", async (req, res, next) => {
         config,
         canonicalUrl,
         buildArticleFunnelLaunchBasePath(articleFunnel.route_slug),
-        { routeSlug: articleFunnel.route_slug },
+        {
+          routeSlug: articleFunnel.route_slug,
+          showPopupTestButton,
+        },
         buildArticleFunnelBridgeBasePath(articleFunnel.route_slug),
       ),
     );
@@ -1923,6 +1932,11 @@ async function requireAuth(req, res, next) {
   } catch {
     return res.status(401).json({ error: "Token không hợp lệ" });
   }
+}
+
+async function isAdminRequest(req) {
+  const user = await resolveUser(req);
+  return Boolean(user && (user.role === "admin" || isAdminEmail(user.email)));
 }
 
 async function requireAdmin(req, res, next) {
@@ -5618,6 +5632,12 @@ function buildArticleFunnelPreviewPage(
       trackingContext?.routeSlug || trackingContext?.route_slug || "",
     ).trim() || null,
   );
+  const showPopupTestButtonJson = JSON.stringify(
+    Boolean(
+      trackingContext?.showPopupTestButton ||
+        trackingContext?.show_popup_test_button,
+    ),
+  );
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -5704,7 +5724,7 @@ ${ogImageTag}
     </div>
   </div>
   <div class="overlay" id="overlay"><div class="overlay-stack" id="overlayStack"></div></div>
-  <button type="button" class="popup-test-fab" id="popupTest3sBtn" hidden>Mở popup 3s</button>
+  <button type="button" class="popup-test-fab" id="popupTest20sBtn" hidden>Mở popup 20s</button>
 <script>
 (function(){
   var blocks = ${blocks};
@@ -5713,11 +5733,12 @@ ${ogImageTag}
   var launchBasePath = ${launchBasePathJson};
   var bridgeBasePath = ${bridgeBasePathJson};
   var trackingRouteSlug = ${trackingRouteSlugJson};
+  var canShowPopupTestButton = ${showPopupTestButtonJson};
   var pendingStages = [];
   var overlayEl = document.getElementById('overlay');
   var overlayStackEl = document.getElementById('overlayStack');
   var previewBlocksEl = document.getElementById('previewBlocks');
-  var popupTest3sBtn = document.getElementById('popupTest3sBtn');
+  var popupTest20sBtn = document.getElementById('popupTest20sBtn');
 
   function getUserAgent() {
     return navigator.userAgent || '';
@@ -6169,11 +6190,13 @@ ${ogImageTag}
   }
 
   stages.forEach(queueStageOverlay);
-  if (popupTest3sBtn) {
-    popupTest3sBtn.hidden = !getStageByKey('3s');
-    popupTest3sBtn.addEventListener('click', function(){
-      openStageForTesting('3s');
-    });
+  if (popupTest20sBtn) {
+    popupTest20sBtn.hidden = !canShowPopupTestButton || !getStageByKey('20s');
+    if (canShowPopupTestButton) {
+      popupTest20sBtn.addEventListener('click', function(){
+        openStageForTesting('20s');
+      });
+    }
   }
 
   overlayEl.addEventListener('click', function(event){
