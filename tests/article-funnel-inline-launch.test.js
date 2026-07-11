@@ -47,4 +47,26 @@ test("buildArticleFunnelPreviewPage embeds inline launch metadata for published 
   assert.match(html, /"use_inline_launch":true/);
   assert.match(html, /\/api\/article-funnel\/track-click/);
   assert.match(html, /"demo"/);
+  assert.match(html, /id="popupTest3sBtn"/);
+  assert.match(html, /Mở popup 3s/);
+});
+
+test("buildArticleFunnelPreviewPage keeps popup test button hidden when 3s stage is missing", () => {
+  const html = __testUtils.buildArticleFunnelPreviewPage(
+    {
+      title: "Demo",
+      stages: [
+        {
+          stage_key: "20s",
+          direct_platform: "tiktok",
+          direct_web_url: "https://vt.tiktok.com/demo/",
+        },
+      ],
+    },
+    "https://example.com/demo",
+    "/demo/launch",
+    { routeSlug: "demo" },
+  );
+
+  assert.match(html, /popupTest3sBtn\.hidden = !getStageByKey\('3s'\)/);
 });

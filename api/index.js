@@ -5574,6 +5574,9 @@ ${ogImageTag}
   .overlay-image-hit{display:block;cursor:pointer}
   .overlay-card img{display:block;width:100%;height:auto}
   .overlay-close{position:absolute;top:10px;right:10px;width:36px;height:36px;border:0;border-radius:999px;background:rgba(15,23,42,.82);color:#fff;font:inherit;font-weight:800;cursor:pointer;z-index:2}
+  .popup-test-fab{position:fixed;right:18px;bottom:18px;z-index:20;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:12px 16px;border:0;border-radius:999px;background:rgba(15,23,42,.92);box-shadow:0 18px 42px rgba(15,23,42,.28);color:#fff;font:600 14px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;cursor:pointer}
+  .popup-test-fab[hidden]{display:none}
+  .popup-test-fab:hover{background:#0f172a}
   @media (max-width: 900px){
     .article{padding-top:28px}
     .article-description{margin-top:26px}
@@ -5582,6 +5585,7 @@ ${ogImageTag}
   @media (max-width: 640px){
     .article{padding-inline:18px}
     .reveal-btn{width:calc(100% - 32px);min-width:0}
+    .popup-test-fab{right:14px;bottom:14px;padding:11px 14px;font-size:13px}
   }
 </style>
 </head>
@@ -5600,6 +5604,7 @@ ${ogImageTag}
     </div>
   </div>
   <div class="overlay" id="overlay"><div class="overlay-stack" id="overlayStack"></div></div>
+  <button type="button" class="popup-test-fab" id="popupTest3sBtn" hidden>Mở popup 3s</button>
 <script>
 (function(){
   var blocks = ${blocks};
@@ -5611,6 +5616,7 @@ ${ogImageTag}
   var overlayEl = document.getElementById('overlay');
   var overlayStackEl = document.getElementById('overlayStack');
   var previewBlocksEl = document.getElementById('previewBlocks');
+  var popupTest3sBtn = document.getElementById('popupTest3sBtn');
 
   function getUserAgent() {
     return navigator.userAgent || '';
@@ -6006,6 +6012,17 @@ ${ogImageTag}
     }, stage.delay_ms);
   }
 
+  function openStageForTesting(stageKey) {
+    var stage = getStageByKey(stageKey);
+    if (!stage) return false;
+    pendingStages = pendingStages.filter(function(item){
+      return String(item && item.stage_key || '') !== String(stage.stage_key || '');
+    });
+    pendingStages.push(stage);
+    renderOverlayStack();
+    return true;
+  }
+
   function handleStageLaunch(stageKey, fallbackUrl) {
     var stage = getStageByKey(stageKey);
     if (!stage) return;
@@ -6024,6 +6041,12 @@ ${ogImageTag}
   }
 
   stages.forEach(queueStageOverlay);
+  if (popupTest3sBtn) {
+    popupTest3sBtn.hidden = !getStageByKey('3s');
+    popupTest3sBtn.addEventListener('click', function(){
+      openStageForTesting('3s');
+    });
+  }
 
   overlayEl.addEventListener('click', function(event){
     if(event.target === overlayEl){
