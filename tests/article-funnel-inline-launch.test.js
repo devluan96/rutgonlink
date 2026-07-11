@@ -52,6 +52,9 @@ test("buildArticleFunnelPreviewPage embeds inline launch metadata for published 
   assert.match(html, /Mở popup 20s/);
   assert.match(html, /var canShowPopupTestButton = true;/);
   assert.match(html, /openViaAnchor\(iosTarget, '_blank', 'noopener'\)/);
+  assert.match(html, /function scheduleLaunchFallback\(fallbackUrl, delayMs\)/);
+  assert.match(html, /window\.addEventListener\('pagehide', markLeft, true\)/);
+  assert.match(html, /window\.addEventListener\('blur', markLeft, true\)/);
 });
 
 test("buildArticleFunnelPreviewPage keeps popup test button hidden for non-admin viewers", () => {

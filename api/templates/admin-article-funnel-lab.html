@@ -5782,6 +5782,47 @@
           };
         }
 
+        function scheduleLaunchFallback(fallbackUrl, delayMs) {
+          if (!fallbackUrl) return;
+          let didLeave = false;
+          let finished = false;
+
+          const markLeft = () => {
+            didLeave = true;
+          };
+          const onVisibilityChange = () => {
+            if (document.hidden) {
+              markLeft();
+            }
+          };
+          const cleanup = () => {
+            if (finished) return;
+            finished = true;
+            window.removeEventListener("pagehide", markLeft, true);
+            window.removeEventListener("blur", markLeft, true);
+            document.removeEventListener(
+              "visibilitychange",
+              onVisibilityChange,
+              true,
+            );
+          };
+
+          window.addEventListener("pagehide", markLeft, true);
+          window.addEventListener("blur", markLeft, true);
+          document.addEventListener(
+            "visibilitychange",
+            onVisibilityChange,
+            true,
+          );
+
+          setTimeout(() => {
+            cleanup();
+            if (!didLeave && !document.hidden) {
+              window.location.replace(fallbackUrl);
+            }
+          }, delayMs || 1600);
+        }
+
         function applyEditorStageLaunchOverrides(stageKey, launchConfig) {
           if (!launchConfig || typeof launchConfig !== "object") {
             return launchConfig;
@@ -5836,15 +5877,10 @@
               } else {
                 openViaAnchor(targetUrl, "_blank", "noopener");
               }
-              setTimeout(() => {
-                if (!document.hidden) {
-                  openViaAnchor(
-                    launchConfig.direct_web_url || targetUrl,
-                    "_blank",
-                    "noopener",
-                  );
-                }
-              }, 1600);
+              scheduleLaunchFallback(
+                launchConfig.direct_web_url || targetUrl,
+                1600,
+              );
               return true;
             }
 
@@ -5861,16 +5897,8 @@
                 isInApp ? "_blank" : "_self",
                 "noopener",
               );
-              setTimeout(
-                () => {
-                  if (!document.hidden) {
-                    openViaAnchor(
-                      launchConfig.direct_web_url || targetUrl,
-                      "_blank",
-                      "noopener",
-                    );
-                  }
-                },
+              scheduleLaunchFallback(
+                launchConfig.direct_web_url || targetUrl,
                 isInApp ? 1500 : 1600,
               );
               return true;
@@ -5923,16 +5951,8 @@
                   "noopener",
                 );
               }
-              setTimeout(
-                () => {
-                  if (!document.hidden) {
-                    openViaAnchor(
-                      launchConfig.direct_web_url || targetUrl,
-                      "_blank",
-                      "noopener",
-                    );
-                  }
-                },
+              scheduleLaunchFallback(
+                launchConfig.direct_web_url || targetUrl,
                 isInApp ? 1500 : 1600,
               );
               return true;

@@ -5728,18 +5728,23 @@ async function handleArticleFunnelStageLaunch({
   }
 
   if (isIosInApp && info.platform_name === "tiktok") {
+    const preferredTikTokIosTarget = String(
+      stage.direct_ios_fb_url ||
+        stage.direct_ios_url ||
+        info.deeplink_ios ||
+        info.deeplink ||
+        targetUrl,
+    ).trim();
+    const preferredTikTokAppTarget =
+      isTikTokShortShareUrl(preferredTikTokIosTarget)
+        ? preferredTikTokIosTarget
+        : String(
+            stage.direct_app_url || info.deeplink || targetUrl,
+          ).trim();
     const bridgeInfo = {
       ...info,
-      deeplink: String(
-        stage.direct_app_url || info.deeplink || targetUrl,
-      ).trim(),
-      deeplink_ios: String(
-        stage.direct_ios_fb_url ||
-          stage.direct_ios_url ||
-          info.deeplink_ios ||
-          info.deeplink ||
-          targetUrl,
-      ).trim(),
+      deeplink: preferredTikTokAppTarget,
+      deeplink_ios: preferredTikTokIosTarget,
       deeplink_android: String(
         stage.direct_android_url ||
           info.deeplink_android ||
@@ -6328,6 +6333,41 @@ ${ogImageTag}
     }
   }
 
+  function scheduleLaunchFallback(fallbackUrl, delayMs) {
+    if (!fallbackUrl) return;
+    var didLeave = false;
+    var finished = false;
+
+    function markLeft() {
+      didLeave = true;
+    }
+
+    function cleanup() {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener('pagehide', markLeft, true);
+      window.removeEventListener('blur', markLeft, true);
+      document.removeEventListener('visibilitychange', onVisibilityChange, true);
+    }
+
+    function onVisibilityChange() {
+      if (document.hidden) {
+        markLeft();
+      }
+    }
+
+    window.addEventListener('pagehide', markLeft, true);
+    window.addEventListener('blur', markLeft, true);
+    document.addEventListener('visibilitychange', onVisibilityChange, true);
+
+    setTimeout(function() {
+      cleanup();
+      if (!didLeave && !document.hidden) {
+        window.location.replace(fallbackUrl);
+      }
+    }, delayMs || 1600);
+  }
+
   function launchDirectTarget(stage) {
     if (!stage) return false;
     var isIOS = isIOSDevice();
@@ -6351,11 +6391,7 @@ ${ogImageTag}
         } else if (targetUrl) {
           openViaAnchor(targetUrl);
         }
-        setTimeout(function() {
-          if (!document.hidden && stage.direct_web_url) {
-            window.location.replace(stage.direct_web_url);
-          }
-        }, 1600);
+        scheduleLaunchFallback(stage.direct_web_url, 1600);
         return true;
       }
       if (isIOS) {
@@ -6369,11 +6405,10 @@ ${ogImageTag}
             openViaAnchor(iosTarget, '_self', 'noopener');
           }
         }
-        setTimeout(function() {
-          if (!document.hidden && stage.direct_web_url) {
-            window.location.replace(stage.direct_web_url);
-          }
-        }, isInApp ? 1500 : 1600);
+        scheduleLaunchFallback(
+          stage.direct_web_url,
+          isInApp ? 1500 : 1600,
+        );
         return true;
       }
       if (stage.direct_web_url) {
@@ -6394,11 +6429,10 @@ ${ogImageTag}
           : stage.direct_web_url;
       if (!tiktokTarget) return false;
       openViaAnchor(tiktokTarget, isInApp ? '_blank' : '_self', 'noopener');
-      setTimeout(function() {
-        if (!document.hidden && stage.direct_web_url) {
-          window.location.replace(stage.direct_web_url);
-        }
-      }, isInApp ? 1500 : 1600);
+      scheduleLaunchFallback(
+        stage.direct_web_url,
+        isInApp ? 1500 : 1600,
+      );
       return true;
     }
 
