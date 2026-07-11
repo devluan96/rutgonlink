@@ -879,6 +879,7 @@ app.get(
         canonicalUrl,
         `/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
         null,
+        `/_lab/article-funnel-bridge/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
       ),
     );
   } catch (error) {
@@ -917,6 +918,33 @@ app.get(
     }
   },
 );
+app.get(
+  [
+    "/_lab/article-funnel-bridge/:slug/:token/:stageKey",
+    "/_lab/article-funnel-bridge/:slug/:token/:stageKey/",
+  ],
+  async (req, res) => {
+    try {
+      const payload = decodeArticleFunnelPreviewToken(req.params.token);
+      const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
+      const canonicalUrl = `${BASE_URL}/_lab/article-funnel-bridge/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}/${encodeURIComponent(req.params.stageKey || "")}`;
+      return await handleArticleFunnelStageLaunch({
+        req,
+        res,
+        config,
+        stageKey: String(req.params.stageKey || "").trim(),
+        canonicalUrl,
+      });
+    } catch (error) {
+      const code = String(error?.message || "");
+      const status =
+        code === "PREVIEW_TOKEN_EXPIRED" || code.startsWith("INVALID_PREVIEW_")
+          ? 400
+          : 500;
+      return res.status(status).send("Bridge link khong hop le hoac da het han");
+    }
+  },
+);
 app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
   try {
     const database = await getDb();
@@ -945,11 +973,46 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
         canonicalUrl,
         buildArticleFunnelLaunchBasePath(articleFunnel.route_slug),
         { routeSlug: articleFunnel.route_slug },
+        buildArticleFunnelBridgeBasePath(articleFunnel.route_slug),
       ),
     );
   } catch (error) {
     console.error("[article-funnel/published]", error);
     return res.status(500).send("Khong the mo article funnel");
+  }
+});
+app.get(["/af-bridge/:slug/:stageKey", "/af-bridge/:slug/:stageKey/"], async (req, res) => {
+  try {
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const articleFunnel = await database.getArticleFunnelBySlug(req.params.slug);
+    if (!articleFunnel) {
+      return res
+        .status(404)
+        .sendFile(path.join(__dirname, "..", "public", "404.html"));
+    }
+    const config = normalizeArticleFunnelPreviewConfig(
+      articleFunnel.config_json || {},
+    );
+    const canonicalUrl = `${buildArticleFunnelPublicUrl(
+      articleFunnel.route_slug,
+      articleFunnel.domain_hostname,
+      publicBaseUrl,
+    ).replace(/\/+$/, "")}/bridge/${encodeURIComponent(req.params.stageKey || "")}`;
+    return await handleArticleFunnelStageLaunch({
+      req,
+      res,
+      config,
+      stageKey: String(req.params.stageKey || "").trim(),
+      canonicalUrl,
+      tracking: {
+        articleFunnelId: articleFunnel.id,
+        routeSlug: articleFunnel.route_slug,
+      },
+    });
+  } catch (error) {
+    console.error("[article-funnel/published-bridge]", error);
+    return res.status(500).send("Khong the mo article funnel bridge");
   }
 });
 app.get(["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"], async (req, res) => {
@@ -984,6 +1047,53 @@ app.get(["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"], async (re
   } catch (error) {
     console.error("[article-funnel/published-launch]", error);
     return res.status(500).send("Khong the launch article funnel");
+  }
+});
+app.get(["/:slug/bridge/:stageKey", "/:slug/bridge/:stageKey/"], async (req, res, next) => {
+  try {
+    const routeSlug = String(req.params.slug || "").trim();
+    if (isReservedPublishedArticleSlug(routeSlug)) {
+      return next();
+    }
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const conflictingLink = await findShortLinkSlugConflict(database, routeSlug);
+    if (conflictingLink) {
+      return next();
+    }
+    const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
+    if (
+      !articleFunnel ||
+      !canServePublishedArticleFunnelOnHost(
+        articleFunnel,
+        getRequestHostname(req),
+        publicBaseUrl,
+      )
+    ) {
+      return next();
+    }
+    const config = normalizeArticleFunnelPreviewConfig(
+      articleFunnel.config_json || {},
+    );
+    const canonicalUrl = `${buildArticleFunnelPublicUrl(
+      articleFunnel.route_slug,
+      articleFunnel.domain_hostname,
+      publicBaseUrl,
+    ).replace(/\/+$/, "")}/bridge/${encodeURIComponent(req.params.stageKey || "")}`;
+    return await handleArticleFunnelStageLaunch({
+      req,
+      res,
+      config,
+      stageKey: String(req.params.stageKey || "").trim(),
+      canonicalUrl,
+      tracking: {
+        articleFunnelId: articleFunnel.id,
+        routeSlug: articleFunnel.route_slug,
+      },
+    });
+  } catch (error) {
+    console.error("[article-funnel/published-bridge-direct]", error);
+    return res.status(500).send("Khong the mo article funnel bridge");
   }
 });
 app.get(["/:slug/launch/:stageKey", "/:slug/launch/:stageKey/"], async (req, res, next) => {
@@ -1070,6 +1180,7 @@ app.get("/:slug", async (req, res, next) => {
         canonicalUrl,
         buildArticleFunnelLaunchBasePath(articleFunnel.route_slug),
         { routeSlug: articleFunnel.route_slug },
+        buildArticleFunnelBridgeBasePath(articleFunnel.route_slug),
       ),
     );
   } catch (error) {
@@ -5161,6 +5272,11 @@ function buildArticleFunnelLaunchBasePath(routeSlug) {
   return normalizedSlug ? `/${normalizedSlug}/launch` : "/launch";
 }
 
+function buildArticleFunnelBridgeBasePath(routeSlug) {
+  const normalizedSlug = encodeURIComponent(String(routeSlug || "").trim());
+  return normalizedSlug ? `/${normalizedSlug}/bridge` : "/bridge";
+}
+
 function normalizeArticleFunnelStageKey(stageKey = "") {
   return String(stageKey || "").trim() === "5s"
     ? "20s"
@@ -5174,10 +5290,7 @@ function shouldUseArticleFunnelInlineLaunch(stage) {
   const directPlatform = String(stage?.direct_platform || "")
     .trim()
     .toLowerCase();
-  return (
-    (normalizedStageKey === "3s" && directPlatform === "shopee") ||
-    (normalizedStageKey === "20s" && directPlatform === "tiktok")
-  );
+  return normalizedStageKey === "3s" && directPlatform === "shopee";
 }
 
 function getRequestHostname(req) {
@@ -5333,30 +5446,19 @@ async function handleArticleFunnelStageLaunch({
   }
 
   if (isIosInApp && info.platform_name === "tiktok") {
-    const inAppTikTokWebTarget = String(
-      stage.direct_web_url ||
-        stage.target_url ||
-        targetUrl,
-    ).trim();
-    const inAppTikTokIosTarget = String(
-      stage.direct_ios_url ||
-        stage.direct_app_url ||
-        info.deeplink_ios ||
-        inAppTikTokWebTarget,
-    ).trim();
     setRedirectDebugHeaders(res, {
-      mode: "article-funnel-launch-tiktok-ios-inapp-bridge",
+      mode: "article-funnel-launch-tiktok-direct-bridge",
       platform: info.platform_name,
     });
     logRedirectDecision({
       requestId: req.requestId,
       linkId: 0,
       code: `article-funnel:${normalizedStageKey}`,
-      mode: "article-funnel-launch-tiktok-ios-inapp-bridge",
+      mode: "article-funnel-launch-tiktok-direct-bridge",
       platform: info.platform_name,
       uaKind,
       status: 200,
-      target: inAppTikTokIosTarget || inAppTikTokWebTarget,
+      target: info.deeplink || targetUrl,
       referer,
       ...articleFunnelLogMeta,
     });
@@ -5366,14 +5468,7 @@ async function handleArticleFunnelStageLaunch({
       "Content-Type": "text/html;charset=utf-8",
       "X-Frame-Options": "SAMEORIGIN",
     });
-    return res.send(
-      buildArticleFunnelTikTokInAppBridgePage(
-        launchLink,
-        canonicalUrl,
-        inAppTikTokWebTarget,
-        inAppTikTokIosTarget,
-      ),
-    );
+    return res.send(buildDirectBridgePage(launchLink, canonicalUrl, info));
   }
 
   if (
@@ -5495,6 +5590,7 @@ function buildArticleFunnelPreviewPage(
   canonicalUrl,
   launchBasePath = "",
   trackingContext = null,
+  bridgeBasePath = "",
 ) {
   const title = esc(config.title || "Article preview");
   const description = esc(String(config.description || "").trim());
@@ -5516,6 +5612,7 @@ function buildArticleFunnelPreviewPage(
   );
   const defaultOverlayImage = JSON.stringify(config.overlay_image || shareImage || "");
   const launchBasePathJson = JSON.stringify(String(launchBasePath || "").trim());
+  const bridgeBasePathJson = JSON.stringify(String(bridgeBasePath || "").trim());
   const trackingRouteSlugJson = JSON.stringify(
     String(
       trackingContext?.routeSlug || trackingContext?.route_slug || "",
@@ -5614,6 +5711,7 @@ ${ogImageTag}
   var stages = ${stages};
   var defaultOverlayImage = ${defaultOverlayImage};
   var launchBasePath = ${launchBasePathJson};
+  var bridgeBasePath = ${bridgeBasePathJson};
   var trackingRouteSlug = ${trackingRouteSlugJson};
   var pendingStages = [];
   var overlayEl = document.getElementById('overlay');
@@ -5795,6 +5893,23 @@ ${ogImageTag}
     return (launchBasePath || location.pathname) + '/' + stageKey;
   }
 
+  function shouldUseDedicatedBridgeRoute(stage) {
+    if (!stage) return false;
+    return String(stage.direct_platform || '').toLowerCase() === 'tiktok' &&
+      String(stage.stage_key || '') === '20s';
+  }
+
+  function getBridgeUrl(stage){
+    var stageKey = encodeURIComponent(String(stage && stage.stage_key || ''));
+    return (bridgeBasePath || '') ? (bridgeBasePath + '/' + stageKey) : '';
+  }
+
+  function getStageOpenUrl(stage) {
+    return shouldUseDedicatedBridgeRoute(stage)
+      ? (getBridgeUrl(stage) || getLaunchUrl(stage))
+      : getLaunchUrl(stage);
+  }
+
   function buildStageTrackPayload(stage) {
     if (!stage || !trackingRouteSlug) return null;
     var stageKey = String(stage.stage_key || '').trim();
@@ -5854,7 +5969,7 @@ ${ogImageTag}
 
   function getNativeAnchorHref(stage) {
     if (!stage) return '';
-    return getLaunchUrl(stage) || stage.direct_web_url || '#';
+    return getStageOpenUrl(stage) || stage.direct_web_url || '#';
   }
 
   function getNativeAnchorTarget(stage) {
@@ -6029,7 +6144,7 @@ ${ogImageTag}
   function handleStageLaunch(stageKey, fallbackUrl) {
     var stage = getStageByKey(stageKey);
     if (!stage) return;
-    var launchUrl = getLaunchUrl(stage) || fallbackUrl || stage.direct_web_url || stage.target_url || '';
+    var launchUrl = getStageOpenUrl(stage) || fallbackUrl || stage.direct_web_url || stage.target_url || '';
     setPopupDismissCookie(stageKey);
     removeStage(stageKey);
     if (stage.use_inline_launch) {
@@ -6070,7 +6185,7 @@ ${ogImageTag}
       event.preventDefault();
       var stageKey = launchButton.getAttribute('data-overlay-launch') || '';
       var stage = getStageByKey(stageKey);
-      var fallbackUrl = launchButton.getAttribute('href') || getLaunchUrl(stage);
+      var fallbackUrl = launchButton.getAttribute('href') || getStageOpenUrl(stage);
       handleStageLaunch(stageKey, fallbackUrl);
     }
   });

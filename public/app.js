@@ -4672,11 +4672,13 @@ async function showApp() {
   document.getElementById("appScreen").classList.add("show");
   finishShellBoot();
   loadThemePreference();
+  applyAppLanguage(appLanguage);
   await loadBillingData();
   updateTopbar();
   renderSupportConversation();
   loadBioConfig();
   renderForms();
+  syncLabTabAvailability();
   updateIntegrationUI();
   void syncBioProfileFromServer();
   syncRouteFromLocation();
@@ -5381,12 +5383,15 @@ function postLabEditorMessage(frameId, payload) {
 }
 
 function openExistingLabInCreateEditor(labId) {
+  if (!canUseLabTabs()) {
+    navigate("create");
+    return;
+  }
   const normalizedId = Number(labId || 0);
   navigate("create");
-  createSubtab = canUseLabTabs() ? "lab" : "standard";
+  createSubtab = "lab";
   localStorage.setItem(createSubtabStorageKey, createSubtab);
   syncCreateSubtabUI();
-  if (!canUseLabTabs()) return;
   if (normalizedId > 0) {
     postLabEditorMessage("createLabIframe", {
       type: "article-funnel-lab:load-lab",
@@ -5422,6 +5427,7 @@ function postLabSharedSettingsToFrame(frameId, settings) {
 }
 
 function openLabSharedSettingsModal(frameId = "createLabIframe") {
+  if (!canUseLabTabs()) return;
   const modal = document.getElementById("labSharedSettingsModal");
   if (!modal) return;
   modal.dataset.frameId = frameId;
@@ -5512,6 +5518,7 @@ function syncLabTabAvailability() {
   const allowLab = canUseLabTabs();
   document.querySelectorAll("[data-lab-tab-only]").forEach((node) => {
     node.hidden = !allowLab;
+    node.setAttribute("aria-hidden", allowLab ? "false" : "true");
   });
   if (!allowLab) {
     createSubtab = "standard";

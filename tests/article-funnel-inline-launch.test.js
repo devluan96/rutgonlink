@@ -3,18 +3,11 @@ const assert = require("node:assert/strict");
 
 const { __testUtils } = require("../api/index");
 
-test("shouldUseArticleFunnelInlineLaunch enables Shopee 3s and TikTok 20s only", () => {
+test("shouldUseArticleFunnelInlineLaunch enables Shopee 3s only", () => {
   assert.equal(
     __testUtils.shouldUseArticleFunnelInlineLaunch({
       stage_key: "3s",
       direct_platform: "shopee",
-    }),
-    true,
-  );
-  assert.equal(
-    __testUtils.shouldUseArticleFunnelInlineLaunch({
-      stage_key: "20s",
-      direct_platform: "tiktok",
     }),
     true,
   );
@@ -49,6 +42,7 @@ test("buildArticleFunnelPreviewPage embeds inline launch metadata for published 
     "https://example.com/demo",
     "/demo/launch",
     { routeSlug: "demo" },
+    "/demo/bridge",
   );
 
   assert.match(html, /"use_inline_launch":true/);
@@ -74,12 +68,13 @@ test("buildArticleFunnelPreviewPage keeps popup test button hidden when 3s stage
     "https://example.com/demo",
     "/demo/launch",
     { routeSlug: "demo" },
+    "/demo/bridge",
   );
 
   assert.match(html, /popupTest3sBtn\.hidden = !getStageByKey\('3s'\)/);
 });
 
-test("buildArticleFunnelPreviewPage marks TikTok 20s as inline launch", () => {
+test("buildArticleFunnelPreviewPage routes TikTok 20s through dedicated bridge url", () => {
   const html = __testUtils.buildArticleFunnelPreviewPage(
     {
       title: "Demo",
@@ -94,10 +89,13 @@ test("buildArticleFunnelPreviewPage marks TikTok 20s as inline launch", () => {
     "https://example.com/demo",
     "/demo/launch",
     { routeSlug: "demo" },
+    "/demo/bridge",
   );
 
   assert.match(
     html,
-    /"stage_key":"20s","direct_platform":"tiktok","direct_web_url":"https:\/\/vt\.tiktok\.com\/demo\/","use_inline_launch":true/,
+    /"stage_key":"20s","direct_platform":"tiktok","direct_web_url":"https:\/\/vt\.tiktok\.com\/demo\/","use_inline_launch":false/,
   );
+  assert.match(html, /var bridgeBasePath = "\/demo\/bridge"/);
+  assert.match(html, /getBridgeUrl\(stage\) \|\| getLaunchUrl\(stage\)/);
 });
