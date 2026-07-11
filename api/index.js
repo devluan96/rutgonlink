@@ -467,6 +467,12 @@ app.get("/user/register/index.html", redirectToCanonical("/register"));
 app.post("/api/admin/article-funnel-lab/resolve-target", requireAdmin, async (req, res) => {
   try {
     const inputUrl = String(req.body?.url || "").trim();
+    const iosInAppOverride = String(
+      req.body?.popup20sIosFbUrl ||
+        req.body?.popup_20s_ios_fb_url ||
+        req.body?.ios_fb_url ||
+        "",
+    ).trim();
     if (!inputUrl) {
       return res.status(400).json({ error: "Thiếu URL cần resolve" });
     }
@@ -481,7 +487,17 @@ app.post("/api/admin/article-funnel-lab/resolve-target", requireAdmin, async (re
       inputUrl;
     const health = await fetchAffiliateHealth(normalizedUrl);
     const finalUrl = String(health?.final_url || normalizedUrl || "").trim();
-    const launchConfig = buildOverlayLaunchConfig(finalUrl);
+    const launchConfig = applyArticleFunnelStageDirectOverrides(
+      {
+        stage_key: "20s",
+      },
+      buildOverlayLaunchConfig(finalUrl),
+      {
+        overlay: {
+          popup_20s_ios_fb_url: iosInAppOverride,
+        },
+      },
+    );
 
     return res.json({
       ok: true,
@@ -1573,7 +1589,8 @@ function normalizeAffiliatePresetUrl(input, platform = "") {
         hostname !== "tiktok.com" &&
         !hostname.endsWith(".tiktok.com") &&
         hostname !== "vm.tiktok.com" &&
-        hostname !== "vt.tiktok.com"
+        hostname !== "vt.tiktok.com" &&
+        !isTikTokOneLinkHostname(hostname)
       ) {
         return null;
       }
@@ -1605,7 +1622,8 @@ function inferAffiliatePlatformFromUrl(input = "") {
       hostname === "tiktok.com" ||
       hostname.endsWith(".tiktok.com") ||
       hostname === "vm.tiktok.com" ||
-      hostname === "vt.tiktok.com"
+      hostname === "vt.tiktok.com" ||
+      isTikTokOneLinkHostname(hostname)
     ) {
       return "tiktok";
     }
@@ -2136,6 +2154,51 @@ const SHOPEE_ANDROID_PACKAGE = "com.shopee.vn";
 const SHOPEE_APP_STORE_ID = "959841449";
 const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID || "1609970790226254";
 
+function isTikTokOneLinkHostname(hostname = "") {
+  const normalizedHostname = String(hostname || "").trim().toLowerCase();
+  return (
+    normalizedHostname === "snssdk1180.onelink.me" ||
+    normalizedHostname.endsWith(".onelink.me")
+  );
+}
+
+function isTikTokShortShareUrl(input = "") {
+  try {
+    const normalized = /^https?:\/\//i.test(String(input || "").trim())
+      ? String(input || "").trim()
+      : `https://${String(input || "").trim()}`;
+    const url = new URL(normalized);
+    const hostname = url.hostname.toLowerCase();
+    return (
+      hostname === "vm.tiktok.com" ||
+      hostname === "vt.tiktok.com" ||
+      isTikTokOneLinkHostname(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isTikTokProductUrl(input = "") {
+  try {
+    const normalized = /^https?:\/\//i.test(String(input || "").trim())
+      ? String(input || "").trim()
+      : `https://${String(input || "").trim()}`;
+    const url = new URL(normalized);
+    const hostname = url.hostname.toLowerCase();
+    if (
+      hostname !== "tiktok.com" &&
+      !hostname.endsWith(".tiktok.com") &&
+      !isTikTokOneLinkHostname(hostname)
+    ) {
+      return false;
+    }
+    return /\/view\/product\/\d+/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 function buildTikTokAppScheme(destinationUrl) {
   try {
     const url = new URL(destinationUrl);
@@ -2227,7 +2290,8 @@ function detectPlatformDeep(originalUrl, platform) {
     hostname === "tiktok.com" ||
     hostname.endsWith(".tiktok.com") ||
     hostname === "vm.tiktok.com" ||
-    hostname === "vt.tiktok.com"
+    hostname === "vt.tiktok.com" ||
+    isTikTokOneLinkHostname(hostname)
   ) {
     const scheme = buildTikTokAppScheme(originalUrl);
     return {
@@ -4724,14 +4788,53 @@ function buildDirectLaunchConfig(targetUrl) {
 function buildOverlayLaunchConfig(targetUrl) {
   const config = buildDirectLaunchConfig(targetUrl);
   if (config.direct_platform === "tiktok") {
+    const isTikTokProductTarget = isTikTokProductUrl(config.direct_web_url);
     const preferredIosUrl =
-      config.direct_ios_url || config.direct_app_url || config.direct_web_url;
+      isTikTokProductTarget
+        ? config.direct_web_url
+        : config.direct_ios_url || config.direct_app_url || config.direct_web_url;
     return {
       ...config,
       direct_ios_fb_url: preferredIosUrl,
       direct_ios_browser_url: config.direct_web_url,
     };
   }
+  return config;
+}
+
+function applyArticleFunnelStageDirectOverrides(
+  stage,
+  launchConfig,
+  rawConfig,
+) {
+  const normalizedStageKey = normalizeArticleFunnelStageKey(stage?.stage_key || "");
+  const config = launchConfig && typeof launchConfig === "object"
+    ? { ...launchConfig }
+    : {};
+  const sourceConfig =
+    rawConfig && typeof rawConfig === "object"
+      ? rawConfig
+      : {};
+  const overlay =
+    sourceConfig.overlay && typeof sourceConfig.overlay === "object"
+      ? sourceConfig.overlay
+      : {};
+
+  if (
+    normalizedStageKey === "20s" &&
+    config.direct_platform === "tiktok"
+  ) {
+    const iosInAppOverride = String(
+      sourceConfig.popup20sIosFbUrl ||
+        sourceConfig.popup_20s_ios_fb_url ||
+        overlay.popup_20s_ios_fb_url ||
+        "",
+    ).trim();
+    if (iosInAppOverride) {
+      config.direct_ios_fb_url = iosInAppOverride;
+    }
+  }
+
   return config;
 }
 
@@ -5338,15 +5441,24 @@ async function resolveArticleFunnelConfig(rawConfig) {
           ) ||
           normalizeAffiliatePresetUrl(candidateUrl) ||
           candidateUrl;
-        const health = await fetchAffiliateHealth(normalizedUrl);
-        finalUrl = String(
-          health?.final_url || normalizedUrl || candidateUrl,
-        ).trim();
+        if (inferAffiliatePlatformFromUrl(normalizedUrl) === "tiktok" &&
+            isTikTokShortShareUrl(normalizedUrl)) {
+          finalUrl = String(normalizedUrl || candidateUrl).trim();
+        } else {
+          const health = await fetchAffiliateHealth(normalizedUrl);
+          finalUrl = String(
+            health?.final_url || normalizedUrl || candidateUrl,
+          ).trim();
+        }
       } catch {}
       return {
         stage_key: stage.stage_key,
         delay_ms: stage.delay_ms,
-        ...buildOverlayLaunchConfig(finalUrl),
+        ...applyArticleFunnelStageDirectOverrides(
+          stage,
+          buildOverlayLaunchConfig(finalUrl),
+          rawConfig,
+        ),
       };
     }),
   );
@@ -5616,6 +5728,28 @@ async function handleArticleFunnelStageLaunch({
   }
 
   if (isIosInApp && info.platform_name === "tiktok") {
+    const bridgeInfo = {
+      ...info,
+      deeplink: String(
+        stage.direct_app_url || info.deeplink || targetUrl,
+      ).trim(),
+      deeplink_ios: String(
+        stage.direct_ios_fb_url ||
+          stage.direct_ios_url ||
+          info.deeplink_ios ||
+          info.deeplink ||
+          targetUrl,
+      ).trim(),
+      deeplink_android: String(
+        stage.direct_android_url ||
+          info.deeplink_android ||
+          info.deeplink ||
+          targetUrl,
+      ).trim(),
+      fallback: String(
+        stage.direct_web_url || info.fallback || targetUrl,
+      ).trim(),
+    };
     setRedirectDebugHeaders(res, {
       mode: "article-funnel-launch-tiktok-direct-bridge",
       platform: info.platform_name,
@@ -5628,7 +5762,7 @@ async function handleArticleFunnelStageLaunch({
       platform: info.platform_name,
       uaKind,
       status: 200,
-      target: info.deeplink || targetUrl,
+      target: bridgeInfo.deeplink_ios || bridgeInfo.deeplink || targetUrl,
       referer,
       ...articleFunnelLogMeta,
     });
@@ -5638,7 +5772,7 @@ async function handleArticleFunnelStageLaunch({
       "Content-Type": "text/html;charset=utf-8",
       "X-Frame-Options": "SAMEORIGIN",
     });
-    return res.send(buildDirectBridgePage(launchLink, canonicalUrl, info));
+    return res.send(buildDirectBridgePage(launchLink, canonicalUrl, bridgeInfo));
   }
 
   if (
@@ -10950,11 +11084,13 @@ module.exports.__testUtils = {
   detectPlatformDeep,
   buildDirectLaunchConfig,
   buildOverlayLaunchConfig,
+  applyArticleFunnelStageDirectOverrides,
   buildArticleFunnelPreviewPage,
   buildArticleFunnelPopupTestUrl,
   isArticleFunnelPopupTestRequestAllowed,
   normalizeArticleFunnelPreviewConfig,
   normalizeArticleFunnelStageKey,
+  resolveArticleFunnelConfig,
   shouldUseArticleFunnelInlineLaunch,
   extractArticleFunnelImportPayload,
   recordArticleFunnelStageClick,

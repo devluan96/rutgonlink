@@ -152,3 +152,27 @@ test("buildArticleFunnelPopupTestUrl produces a usable signed test url", () => {
     true,
   );
 });
+
+test("resolveArticleFunnelConfig keeps TikTok short share links instead of expanding them", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    throw new Error("fetch should not run for TikTok short link preservation");
+  };
+  try {
+    const resolved = await __testUtils.resolveArticleFunnelConfig({
+      overlay: {
+        popup_3s_url: "https://shopee.vn/product/37251933/591989399",
+        popup_20s_url: "https://vt.tiktok.com/ZTSHORT456/",
+      },
+    });
+    const stage20s = (resolved.stages || []).find(
+      (stage) => String(stage.stage_key) === "20s",
+    );
+    assert.ok(stage20s);
+    assert.equal(stage20s.target_url, "https://vt.tiktok.com/ZTSHORT456/");
+    assert.equal(stage20s.direct_web_url, "https://vt.tiktok.com/ZTSHORT456/");
+    assert.equal(stage20s.direct_ios_fb_url, "https://vt.tiktok.com/ZTSHORT456/");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});

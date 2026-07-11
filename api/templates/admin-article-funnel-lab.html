@@ -2904,10 +2904,21 @@
                           Chưa có link TikTok affiliate đã lưu.
                         </span>
                       </div>
-                      <div
+                    <div
                         class="field-status-note"
                         data-link-health-status="popup20sInput"
                       ></div>
+                    </div>
+
+                    <div class="field">
+                      <label for="popup20sIosFbInput">
+                        TikTok iPhone/Facebook override
+                      </label>
+                      <input id="popup20sIosFbInput" type="url" />
+                      <div class="hint">
+                        Tùy chọn. Dán link TikTok mở app tốt hơn cho iPhone trong
+                        Facebook/Zalo, ưu tiên vt.tiktok.com hoặc onelink.
+                      </div>
                     </div>
 
                     <div class="field">
@@ -3446,6 +3457,7 @@
           baseUrl:
             "https://shopee.vn/product/37251933/591989399?utm_source=admin-lab",
           popup20sUrl: "",
+          popup20sIosFbUrl: "",
           popup300sUrl: "",
           overlayImage:
             "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80",
@@ -3583,6 +3595,7 @@
           publishedUrlMeta: document.getElementById("publishedUrlMeta"),
           baseUrlInput: document.getElementById("baseUrlInput"),
           popup20sInput: document.getElementById("popup20sInput"),
+          popup20sIosFbInput: document.getElementById("popup20sIosFbInput"),
           popup300sInput: document.getElementById("popup300sInput"),
           overlayImageInput: document.getElementById("overlayImageInput"),
           overlay20sImageInput: document.getElementById("overlay20sImageInput"),
@@ -4355,11 +4368,20 @@
           setLabel("descriptionInput", copy.descriptionLabel);
           setLabel("baseUrlInput", copy.baseLabel);
           setLabel("popup20sInput", copy.popup20Label);
+          setLabel(
+            "popup20sIosFbInput",
+            copy.popup20IosFbLabel || "TikTok iPhone/Facebook override",
+          );
           setLabel("popup300sInput", copy.popup300Label);
           setHintNear("#sourceImportUrlInput", copy.sourceUrlHint);
           setHintNear("#descriptionInput", copy.descriptionHint);
           setHintNear("#baseUrlInput", copy.baseHint);
           setHintNear("#popup20sInput", copy.popup20Hint);
+          setHintNear(
+            "#popup20sIosFbInput",
+            copy.popup20IosFbHint ||
+              "Optional. Paste a better TikTok app-opening link for iPhone Facebook/Zalo, preferably vt.tiktok.com or onelink.",
+          );
           setHintNear("#popup300sInput", copy.popup300Hint);
           document
             .querySelectorAll("[data-link-health-check]")
@@ -4743,6 +4765,17 @@
                   : "") ||
                 base.popup20sUrl,
             ),
+            popup20sIosFbUrl: String(
+              source.popup20sIosFbUrl ||
+                source.popup_20s_ios_fb_url ||
+                overlay.popup_20s_ios_fb_url ||
+                (String(stage20s.direct_ios_fb_url || "").trim() &&
+                String(stage20s.direct_ios_fb_url || "").trim() !==
+                  stage20sTarget
+                  ? String(stage20s.direct_ios_fb_url || "").trim()
+                  : "") ||
+                base.popup20sIosFbUrl,
+            ),
             popup300sUrl: String(
               source.popup300sUrl ||
                 source.popup_300s_url ||
@@ -4897,6 +4930,7 @@
                 state.overlay300sImage.trim() || state.overlayImage.trim(),
               popup_3s_url: state.baseUrl.trim(),
               popup_20s_url: state.popup20sUrl.trim(),
+              popup_20s_ios_fb_url: state.popup20sIosFbUrl.trim(),
               popup_300s_url: state.popup300sUrl.trim(),
             },
             blocks: state.blocks.map((block) => ({
@@ -5748,6 +5782,28 @@
           };
         }
 
+        function applyEditorStageLaunchOverrides(stageKey, launchConfig) {
+          if (!launchConfig || typeof launchConfig !== "object") {
+            return launchConfig;
+          }
+          const normalizedStageKey = String(stageKey || "").trim();
+          if (
+            normalizedStageKey === "20s" &&
+            String(launchConfig.direct_platform || "").trim() === "tiktok"
+          ) {
+            const iosInAppOverride = String(
+              state.popup20sIosFbUrl || "",
+            ).trim();
+            if (iosInAppOverride) {
+              return {
+                ...launchConfig,
+                direct_ios_fb_url: iosInAppOverride,
+              };
+            }
+          }
+          return launchConfig;
+        }
+
         function launchLabTarget(launchConfig) {
           if (!launchConfig) return false;
 
@@ -6554,6 +6610,10 @@
           setLabel("descriptionInput", "Mô tả");
           setLabel("baseUrlInput", "Link gốc / popup 3 giây mặc định");
           setLabel("popup20sInput", "Popup 15 giây override");
+          setLabel(
+            "popup20sIosFbInput",
+            "TikTok iPhone/Facebook override",
+          );
           setLabel("popup300sInput", "Popup 300 giây override");
           setHintNear(
             "#descriptionInput",
@@ -6566,6 +6626,10 @@
           setHintNear(
             "#popup20sInput",
             "Tự điền từ link TikTok affiliate đã lưu.",
+          );
+          setHintNear(
+            "#popup20sIosFbInput",
+            "Tùy chọn. Dán link TikTok mở app tốt hơn cho iPhone trong Facebook/Zalo, ưu tiên vt.tiktok.com hoặc onelink.",
           );
           setHintNear(
             "#popup300sInput",
@@ -6735,6 +6799,7 @@
           els.descriptionInput.value = state.description;
           els.baseUrlInput.value = state.baseUrl;
           els.popup20sInput.value = state.popup20sUrl;
+          els.popup20sIosFbInput.value = state.popup20sIosFbUrl;
           els.popup300sInput.value = state.popup300sUrl;
           els.overlayImageInput.value = state.overlayImage;
           els.overlay20sImageInput.value = state.overlay20sImage;
@@ -7241,6 +7306,7 @@
           ["descriptionInput", "description"],
           ["baseUrlInput", "baseUrl"],
           ["popup20sInput", "popup20sUrl"],
+          ["popup20sIosFbInput", "popup20sIosFbUrl"],
           ["popup300sInput", "popup300sUrl"],
           ["overlayImageInput", "overlayImage"],
           ["overlay20sImageInput", "overlay20sImage"],
@@ -7635,10 +7701,12 @@
             )
               .then((launchConfig) => {
                 closeOverlay(stageKey);
+                const effectiveLaunchConfig = applyEditorStageLaunchOverrides(
+                  stageKey,
+                  launchConfig || buildFallbackLaunchConfig(targetUrl),
+                );
                 if (
-                  launchLabTarget(
-                    launchConfig || buildFallbackLaunchConfig(targetUrl),
-                  )
+                  launchLabTarget(effectiveLaunchConfig)
                 ) {
                   return;
                 }
