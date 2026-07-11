@@ -804,6 +804,64 @@ app.post("/api/admin/article-funnel-lab/publish", requireAdmin, async (req, res)
     return res.status(500).json({ error: "Khong the publish article funnel" });
   }
 });
+app.post("/api/article-funnel/track-click", async (req, res) => {
+  try {
+    const routeSlug = String(
+      req.body?.route_slug || req.body?.routeSlug || "",
+    ).trim();
+    const stageKey = normalizeArticleFunnelStageKey(
+      req.body?.stage_key || req.body?.stageKey || "",
+    );
+    if (!routeSlug || !stageKey) {
+      return res.status(400).json({
+        error: "route_slug va stage_key la bat buoc",
+      });
+    }
+
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
+    if (
+      !articleFunnel ||
+      !canServePublishedArticleFunnelOnHost(
+        articleFunnel,
+        getRequestHostname(req),
+        publicBaseUrl,
+      )
+    ) {
+      return res.status(404).json({ error: "Khong tim thay article funnel" });
+    }
+
+    const config = normalizeArticleFunnelPreviewConfig(
+      articleFunnel.config_json || {},
+    );
+    const stage = (config.stages || []).find(
+      (item) => String(item?.stage_key || "").trim() === stageKey,
+    );
+    if (!stage) {
+      return res.status(404).json({ error: "Khong tim thay popup stage" });
+    }
+
+    const result = await recordArticleFunnelStageClick({
+      database,
+      req,
+      tracking: {
+        articleFunnelId: articleFunnel.id,
+        routeSlug: articleFunnel.route_slug,
+      },
+      stageKey,
+    });
+    return res.json({
+      ok: true,
+      route_slug: articleFunnel.route_slug,
+      stage_key: stageKey,
+      ...result,
+    });
+  } catch (error) {
+    console.error("[article-funnel/track-click]", error);
+    return res.status(500).json({ error: "Khong the ghi nhan click" });
+  }
+});
 app.get(
   ["/_lab/article-funnel/:slug/:token", "/_lab/article-funnel/:slug/:token/"],
   async (req, res) => {
@@ -820,6 +878,7 @@ app.get(
         config,
         canonicalUrl,
         `/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
+        null,
       ),
     );
   } catch (error) {
@@ -885,6 +944,7 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
         config,
         canonicalUrl,
         buildArticleFunnelLaunchBasePath(articleFunnel.route_slug),
+        { routeSlug: articleFunnel.route_slug },
       ),
     );
   } catch (error) {
@@ -1009,6 +1069,7 @@ app.get("/:slug", async (req, res, next) => {
         config,
         canonicalUrl,
         buildArticleFunnelLaunchBasePath(articleFunnel.route_slug),
+        { routeSlug: articleFunnel.route_slug },
       ),
     );
   } catch (error) {
@@ -5106,6 +5167,16 @@ function normalizeArticleFunnelStageKey(stageKey = "") {
     : String(stageKey || "").trim();
 }
 
+function shouldUseArticleFunnelInlineLaunch(stage) {
+  const normalizedStageKey = normalizeArticleFunnelStageKey(
+    stage?.stage_key || "",
+  );
+  const directPlatform = String(stage?.direct_platform || "")
+    .trim()
+    .toLowerCase();
+  return normalizedStageKey === "3s" && directPlatform === "shopee";
+}
+
 function getRequestHostname(req) {
   return normalizeDomainHost(
     req.headers["x-forwarded-host"] ||
@@ -5416,7 +5487,12 @@ async function handleArticleFunnelStageLaunch({
   return res.redirect(302, targetUrl);
 }
 
-function buildArticleFunnelPreviewPage(config, canonicalUrl, launchBasePath = "") {
+function buildArticleFunnelPreviewPage(
+  config,
+  canonicalUrl,
+  launchBasePath = "",
+  trackingContext = null,
+) {
   const title = esc(config.title || "Article preview");
   const description = esc(String(config.description || "").trim());
   const shareImage = String(config.share_image || "").trim();
@@ -5429,9 +5505,19 @@ function buildArticleFunnelPreviewPage(config, canonicalUrl, launchBasePath = ""
 <meta name="twitter:image" content="${esc(shareImage)}" />`
     : "";
   const blocks = JSON.stringify(config.blocks || []);
-  const stages = JSON.stringify(config.stages || []);
+  const stages = JSON.stringify(
+    (config.stages || []).map((stage) => ({
+      ...stage,
+      use_inline_launch: shouldUseArticleFunnelInlineLaunch(stage),
+    })),
+  );
   const defaultOverlayImage = JSON.stringify(config.overlay_image || shareImage || "");
   const launchBasePathJson = JSON.stringify(String(launchBasePath || "").trim());
+  const trackingRouteSlugJson = JSON.stringify(
+    String(
+      trackingContext?.routeSlug || trackingContext?.route_slug || "",
+    ).trim() || null,
+  );
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -5520,6 +5606,7 @@ ${ogImageTag}
   var stages = ${stages};
   var defaultOverlayImage = ${defaultOverlayImage};
   var launchBasePath = ${launchBasePathJson};
+  var trackingRouteSlug = ${trackingRouteSlugJson};
   var pendingStages = [];
   var overlayEl = document.getElementById('overlay');
   var overlayStackEl = document.getElementById('overlayStack');
@@ -5697,6 +5784,43 @@ ${ogImageTag}
   function getLaunchUrl(stage){
     var stageKey = encodeURIComponent(String(stage && stage.stage_key || ''));
     return (launchBasePath || location.pathname) + '/' + stageKey;
+  }
+
+  function buildStageTrackPayload(stage) {
+    if (!stage || !trackingRouteSlug) return null;
+    var stageKey = String(stage.stage_key || '').trim();
+    if (!stageKey) return null;
+    return {
+      route_slug: trackingRouteSlug,
+      stage_key: stageKey
+    };
+  }
+
+  function trackStageClickInBackground(stage) {
+    var payload = buildStageTrackPayload(stage);
+    if (!payload) return false;
+    try {
+      var body = JSON.stringify(payload);
+      if (navigator.sendBeacon && typeof Blob === 'function') {
+        try {
+          var beaconBody = new Blob([body], { type: 'application/json' });
+          if (navigator.sendBeacon('/api/article-funnel/track-click', beaconBody)) {
+            return true;
+          }
+        } catch (_) {}
+      }
+      if (window.fetch) {
+        fetch('/api/article-funnel/track-click', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body,
+          keepalive: true,
+          credentials: 'same-origin'
+        }).catch(function(){});
+        return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   function getStageByKey(stageKey){
@@ -5888,6 +6012,12 @@ ${ogImageTag}
     var launchUrl = getLaunchUrl(stage) || fallbackUrl || stage.direct_web_url || stage.target_url || '';
     setPopupDismissCookie(stageKey);
     removeStage(stageKey);
+    if (stage.use_inline_launch) {
+      trackStageClickInBackground(stage);
+      if (launchDirectTarget(stage)) {
+        return;
+      }
+    }
     if (launchUrl) {
       window.location.href = launchUrl;
     }
@@ -10484,8 +10614,10 @@ module.exports.__testUtils = {
   detectPlatformDeep,
   buildDirectLaunchConfig,
   buildOverlayLaunchConfig,
+  buildArticleFunnelPreviewPage,
   normalizeArticleFunnelPreviewConfig,
   normalizeArticleFunnelStageKey,
+  shouldUseArticleFunnelInlineLaunch,
   extractArticleFunnelImportPayload,
   recordArticleFunnelStageClick,
 };
