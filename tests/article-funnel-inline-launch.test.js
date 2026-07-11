@@ -98,4 +98,16 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through dedicated bridge u
   );
   assert.match(html, /var bridgeBasePath = "\/demo\/bridge"/);
   assert.match(html, /getBridgeUrl\(stage\) \|\| getLaunchUrl\(stage\)/);
+  assert.match(
+    html,
+    /return shouldUseDedicatedBridgeRoute\(stage\) &&\s+isIOSDevice\(\) &&\s+isInAppBrowser\(\);/,
+  );
+  assert.match(
+    html,
+    /return shouldUseNativeLaunchRoute\(stage\) \? '_blank' : '_self';/,
+  );
+  assert.match(
+    html,
+    /if \(shouldUseNativeLaunchRoute\(stage\) &&\s+openViaAnchor\(\s+launchUrl,\s+getNativeAnchorTarget\(stage\),\s+getNativeAnchorRel\(stage\)\s+\)\) \{\s+return;\s+\}/,
+  );
 });

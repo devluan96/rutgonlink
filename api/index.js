@@ -5959,7 +5959,9 @@ ${ogImageTag}
 
   function shouldUseNativeLaunchRoute(stage) {
     if (!stage) return false;
-    return stage.direct_platform === 'tiktok';
+    return shouldUseDedicatedBridgeRoute(stage) &&
+      isIOSDevice() &&
+      isInAppBrowser();
   }
 
   function shouldUseNativeAnchorLaunch(stage) {
@@ -5973,11 +5975,13 @@ ${ogImageTag}
   }
 
   function getNativeAnchorTarget(stage) {
-    return '_self';
+    return shouldUseNativeLaunchRoute(stage) ? '_blank' : '_self';
   }
 
   function getNativeAnchorRel(stage) {
-    return 'noreferrer';
+    return shouldUseNativeLaunchRoute(stage)
+      ? 'noopener noreferrer'
+      : 'noreferrer';
   }
 
   function openViaAnchor(targetUrl, targetName, relValue) {
@@ -6154,6 +6158,14 @@ ${ogImageTag}
       }
     }
     if (launchUrl) {
+      if (shouldUseNativeLaunchRoute(stage) &&
+          openViaAnchor(
+            launchUrl,
+            getNativeAnchorTarget(stage),
+            getNativeAnchorRel(stage)
+          )) {
+        return;
+      }
       window.location.href = launchUrl;
     }
   }
