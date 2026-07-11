@@ -49,6 +49,7 @@ test("buildArticleFunnelPreviewPage embeds inline launch metadata for published 
   assert.match(html, /"demo"/);
   assert.match(html, /id="popupTest3sBtn"/);
   assert.match(html, /Mở popup 3s/);
+  assert.match(html, /openViaAnchor\(iosTarget, '_blank', 'noopener'\)/);
 });
 
 test("buildArticleFunnelPreviewPage keeps popup test button hidden when 3s stage is missing", () => {

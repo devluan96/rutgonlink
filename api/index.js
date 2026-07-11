@@ -5933,7 +5933,7 @@ ${ogImageTag}
           : (stage.direct_ios_browser_url || stage.direct_ios_url || stage.direct_web_url);
         if (iosTarget) {
           if (isInApp) {
-            window.location.href = iosTarget;
+            openViaAnchor(iosTarget, '_blank', 'noopener');
           } else {
             openViaAnchor(iosTarget, '_self', 'noopener');
           }
