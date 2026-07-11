@@ -3,11 +3,18 @@ const assert = require("node:assert/strict");
 
 const { __testUtils } = require("../api/index");
 
-test("shouldUseArticleFunnelInlineLaunch only enables Shopee 3s", () => {
+test("shouldUseArticleFunnelInlineLaunch enables Shopee 3s and TikTok 20s only", () => {
   assert.equal(
     __testUtils.shouldUseArticleFunnelInlineLaunch({
       stage_key: "3s",
       direct_platform: "shopee",
+    }),
+    true,
+  );
+  assert.equal(
+    __testUtils.shouldUseArticleFunnelInlineLaunch({
+      stage_key: "20s",
+      direct_platform: "tiktok",
     }),
     true,
   );
@@ -70,4 +77,27 @@ test("buildArticleFunnelPreviewPage keeps popup test button hidden when 3s stage
   );
 
   assert.match(html, /popupTest3sBtn\.hidden = !getStageByKey\('3s'\)/);
+});
+
+test("buildArticleFunnelPreviewPage marks TikTok 20s as inline launch", () => {
+  const html = __testUtils.buildArticleFunnelPreviewPage(
+    {
+      title: "Demo",
+      stages: [
+        {
+          stage_key: "20s",
+          direct_platform: "tiktok",
+          direct_web_url: "https://vt.tiktok.com/demo/",
+        },
+      ],
+    },
+    "https://example.com/demo",
+    "/demo/launch",
+    { routeSlug: "demo" },
+  );
+
+  assert.match(
+    html,
+    /"stage_key":"20s","direct_platform":"tiktok","direct_web_url":"https:\/\/vt\.tiktok\.com\/demo\/","use_inline_launch":true/,
+  );
 });
