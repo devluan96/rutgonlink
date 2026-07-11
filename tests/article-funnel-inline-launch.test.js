@@ -104,10 +104,14 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through dedicated bridge u
   );
   assert.match(
     html,
-    /return shouldUseNativeLaunchRoute\(stage\) \? '_blank' : '_self';/,
+    /function getNativeAnchorTarget\(stage\) \{\s+return '_self';\s+\}/,
   );
   assert.match(
     html,
-    /if \(shouldUseNativeLaunchRoute\(stage\) &&\s+openViaAnchor\(\s+launchUrl,\s+getNativeAnchorTarget\(stage\),\s+getNativeAnchorRel\(stage\)\s+\)\) \{\s+return;\s+\}/,
+    /if \(shouldUseNativeLaunchRoute\(stage\)\) \{\s+setPopupDismissCookie\(stageKey\);\s+return;\s+\}/,
+  );
+  assert.match(
+    html,
+    /var closeStageKey = closeButton\.getAttribute\('data-overlay-close'\) \|\| '';\s+setPopupDismissCookie\(closeStageKey\);\s+removeStage\(closeStageKey\);/,
   );
 });

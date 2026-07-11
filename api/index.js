@@ -5975,13 +5975,11 @@ ${ogImageTag}
   }
 
   function getNativeAnchorTarget(stage) {
-    return shouldUseNativeLaunchRoute(stage) ? '_blank' : '_self';
+    return '_self';
   }
 
   function getNativeAnchorRel(stage) {
-    return shouldUseNativeLaunchRoute(stage)
-      ? 'noopener noreferrer'
-      : 'noreferrer';
+    return 'noreferrer';
   }
 
   function openViaAnchor(targetUrl, targetName, relValue) {
@@ -6189,14 +6187,20 @@ ${ogImageTag}
     var closeButton = event.target.closest('[data-overlay-close]');
     if(closeButton){
       event.preventDefault();
-      handleStageLaunch(closeButton.getAttribute('data-overlay-close')||'');
+      var closeStageKey = closeButton.getAttribute('data-overlay-close') || '';
+      setPopupDismissCookie(closeStageKey);
+      removeStage(closeStageKey);
       return;
     }
     var launchButton = event.target.closest('[data-overlay-launch]');
     if(launchButton){
-      event.preventDefault();
       var stageKey = launchButton.getAttribute('data-overlay-launch') || '';
       var stage = getStageByKey(stageKey);
+      if (shouldUseNativeLaunchRoute(stage)) {
+        setPopupDismissCookie(stageKey);
+        return;
+      }
+      event.preventDefault();
       var fallbackUrl = launchButton.getAttribute('href') || getStageOpenUrl(stage);
       handleStageLaunch(stageKey, fallbackUrl);
     }
