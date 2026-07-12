@@ -982,6 +982,9 @@ app.get(
         config,
         stageKey: String(req.params.stageKey || "").trim(),
         canonicalUrl,
+        launchOptions: {
+          preferPopup20sDirectBridgeFlow: true,
+        },
       });
     } catch (error) {
       const code = String(error?.message || "");
@@ -1067,6 +1070,9 @@ app.get(["/af-bridge/:slug/:stageKey", "/af-bridge/:slug/:stageKey/"], async (re
         articleFunnelId: articleFunnel.id,
         routeSlug: articleFunnel.route_slug,
       },
+      launchOptions: {
+        preferPopup20sDirectBridgeFlow: true,
+      },
     });
   } catch (error) {
     console.error("[article-funnel/published-bridge]", error);
@@ -1147,6 +1153,9 @@ app.get(["/:slug/bridge/:stageKey", "/:slug/bridge/:stageKey/"], async (req, res
       tracking: {
         articleFunnelId: articleFunnel.id,
         routeSlug: articleFunnel.route_slug,
+      },
+      launchOptions: {
+        preferPopup20sDirectBridgeFlow: true,
       },
     });
   } catch (error) {
@@ -5665,6 +5674,75 @@ function buildArticleFunnelRedirectMeta(tracking, stageKey) {
   };
 }
 
+function shouldUseArticleFunnelPopup20sDirectBridgeFlow(
+  stage,
+  info,
+  launchOptions = null,
+) {
+  const normalizedStageKey = normalizeArticleFunnelStageKey(
+    stage?.stage_key || "",
+  );
+  const directPlatform = String(
+    info?.platform_name || stage?.direct_platform || "",
+  )
+    .trim()
+    .toLowerCase();
+  return (
+    Boolean(launchOptions?.preferPopup20sDirectBridgeFlow) &&
+    normalizedStageKey === "20s" &&
+    directPlatform === "tiktok"
+  );
+}
+
+function buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info) {
+  const normalizedTargetUrl = String(
+    targetUrl ||
+      stage?.target_url ||
+      stage?.direct_web_url ||
+      stage?.direct_app_url ||
+      "",
+  ).trim();
+  const directConfig = buildDirectLaunchConfig(normalizedTargetUrl);
+  const directWebUrl = String(
+    directConfig.direct_web_url || info?.fallback || normalizedTargetUrl,
+  ).trim();
+  const directAppUrl = String(
+    directConfig.direct_app_url || info?.deeplink || directWebUrl,
+  ).trim();
+  const directIosUrl = String(
+    directConfig.direct_ios_url ||
+      directAppUrl ||
+      info?.deeplink_ios ||
+      info?.deeplink ||
+      directWebUrl,
+  ).trim();
+  const directAndroidUrl = String(
+    directConfig.direct_android_url ||
+      directAppUrl ||
+      info?.deeplink_android ||
+      info?.deeplink ||
+      directWebUrl,
+  ).trim();
+
+  return {
+    ...(info && typeof info === "object" ? info : {}),
+    deeplink: directAppUrl || directWebUrl,
+    deeplink_ios: directIosUrl || directAppUrl || directWebUrl,
+    deeplink_android: directAndroidUrl || directAppUrl || directWebUrl,
+    fallback: directWebUrl,
+    universal_link: String(info?.universal_link || directWebUrl).trim(),
+    platform_name:
+      String(
+        info?.platform_name ||
+          directConfig.direct_platform ||
+          stage?.direct_platform ||
+          "generic",
+      )
+        .trim()
+        .toLowerCase() || "generic",
+  };
+}
+
 async function handleArticleFunnelStageLaunch({
   req,
   res,
@@ -5672,6 +5750,7 @@ async function handleArticleFunnelStageLaunch({
   stageKey,
   canonicalUrl,
   tracking = null,
+  launchOptions = null,
 }) {
   const normalizedStageKey = normalizeArticleFunnelStageKey(stageKey);
   const stage = (config.stages || []).find(
@@ -5751,42 +5830,55 @@ async function handleArticleFunnelStageLaunch({
   }
 
   if (isIosInApp && info.platform_name === "tiktok") {
-    const preferredTikTokIosTarget = String(
-      stage.direct_ios_fb_url ||
-        stage.direct_ios_url ||
-        info.deeplink_ios ||
-        info.deeplink ||
-        targetUrl,
-    ).trim();
-    const preferredTikTokAppTarget =
-      isTikTokShortShareUrl(preferredTikTokIosTarget)
-        ? preferredTikTokIosTarget
-        : String(
-            stage.direct_app_url || info.deeplink || targetUrl,
+    const usePopup20sDirectBridgeFlow =
+      shouldUseArticleFunnelPopup20sDirectBridgeFlow(
+        stage,
+        info,
+        launchOptions,
+      );
+    const bridgeInfo = usePopup20sDirectBridgeFlow
+      ? buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info)
+      : (() => {
+          const preferredTikTokIosTarget = String(
+            stage.direct_ios_fb_url ||
+              stage.direct_ios_url ||
+              info.deeplink_ios ||
+              info.deeplink ||
+              targetUrl,
           ).trim();
-    const bridgeInfo = {
-      ...info,
-      deeplink: preferredTikTokAppTarget,
-      deeplink_ios: preferredTikTokIosTarget,
-      deeplink_android: String(
-        stage.direct_android_url ||
-          info.deeplink_android ||
-          info.deeplink ||
-          targetUrl,
-      ).trim(),
-      fallback: String(
-        stage.direct_web_url || info.fallback || targetUrl,
-      ).trim(),
-    };
+          const preferredTikTokAppTarget =
+            isTikTokShortShareUrl(preferredTikTokIosTarget)
+              ? preferredTikTokIosTarget
+              : String(
+                  stage.direct_app_url || info.deeplink || targetUrl,
+                ).trim();
+          return {
+            ...info,
+            deeplink: preferredTikTokAppTarget,
+            deeplink_ios: preferredTikTokIosTarget,
+            deeplink_android: String(
+              stage.direct_android_url ||
+                info.deeplink_android ||
+                info.deeplink ||
+                targetUrl,
+            ).trim(),
+            fallback: String(
+              stage.direct_web_url || info.fallback || targetUrl,
+            ).trim(),
+          };
+        })();
+    const bridgeMode = usePopup20sDirectBridgeFlow
+      ? "article-funnel-launch-tiktok-popup20s-direct-bridge"
+      : "article-funnel-launch-tiktok-direct-bridge";
     setRedirectDebugHeaders(res, {
-      mode: "article-funnel-launch-tiktok-direct-bridge",
+      mode: bridgeMode,
       platform: info.platform_name,
     });
     logRedirectDecision({
       requestId: req.requestId,
       linkId: 0,
       code: `article-funnel:${normalizedStageKey}`,
-      mode: "article-funnel-launch-tiktok-direct-bridge",
+      mode: bridgeMode,
       platform: info.platform_name,
       uaKind,
       status: 200,
@@ -6536,6 +6628,28 @@ ${ogImageTag}
     }
   }
 
+  function triggerOverlayStageLaunch(stageKey, fallbackUrl) {
+    var stage = getStageByKey(stageKey);
+    if (!stage) return;
+    var nativeLaunchUrl = getNativeAnchorHref(stage) || getStageOpenUrl(stage) || fallbackUrl || ((stage && stage.direct_web_url) || (stage && stage.target_url) || '');
+    if (shouldUseNativeLaunchRoute(stage)) {
+      setPopupDismissCookie(stageKey);
+      removeStage(stageKey);
+      if (openViaAnchor(
+            nativeLaunchUrl,
+            getNativeAnchorTarget(stage),
+            getNativeAnchorRel(stage)
+          )) {
+        return;
+      }
+      if (nativeLaunchUrl) {
+        window.location.href = nativeLaunchUrl;
+      }
+      return;
+    }
+    handleStageLaunch(stageKey, fallbackUrl);
+  }
+
   stages.forEach(queueStageOverlay);
   if (popupTest20sBtn) {
     popupTest20sBtn.hidden = !canShowPopupTestButton || !getStageByKey('20s');
@@ -6558,21 +6672,18 @@ ${ogImageTag}
     if(closeButton){
       event.preventDefault();
       var closeStageKey = closeButton.getAttribute('data-overlay-close') || '';
-      setPopupDismissCookie(closeStageKey);
-      removeStage(closeStageKey);
+      var closeStage = getStageByKey(closeStageKey);
+      var closeFallbackUrl = getNativeAnchorHref(closeStage) || getStageOpenUrl(closeStage) || ((closeStage && closeStage.direct_web_url) || (closeStage && closeStage.target_url) || '');
+      triggerOverlayStageLaunch(closeStageKey, closeFallbackUrl);
       return;
     }
     var launchButton = event.target.closest('[data-overlay-launch]');
     if(launchButton){
+      event.preventDefault();
       var stageKey = launchButton.getAttribute('data-overlay-launch') || '';
       var stage = getStageByKey(stageKey);
-      if (shouldUseNativeLaunchRoute(stage)) {
-        setPopupDismissCookie(stageKey);
-        return;
-      }
-      event.preventDefault();
       var fallbackUrl = launchButton.getAttribute('href') || getStageOpenUrl(stage);
-      handleStageLaunch(stageKey, fallbackUrl);
+      triggerOverlayStageLaunch(stageKey, fallbackUrl);
     }
   });
 
@@ -11142,6 +11253,7 @@ module.exports.__testUtils = {
   buildDirectLaunchConfig,
   buildOverlayLaunchConfig,
   applyArticleFunnelStageDirectOverrides,
+  buildArticleFunnelPopup20sDirectBridgeInfo,
   decorateArticleFunnelStagesForClient,
   buildArticleFunnelPreviewPage,
   buildArticleFunnelPopupTestUrl,

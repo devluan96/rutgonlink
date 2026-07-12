@@ -116,11 +116,19 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through dedicated bridge u
   );
   assert.match(
     html,
-    /if \(shouldUseNativeLaunchRoute\(stage\)\) \{\s+setPopupDismissCookie\(stageKey\);\s+return;\s+\}/,
+    /function triggerOverlayStageLaunch\(stageKey, fallbackUrl\) \{\s+var stage = getStageByKey\(stageKey\);/s,
   );
   assert.match(
     html,
-    /var closeStageKey = closeButton\.getAttribute\('data-overlay-close'\) \|\| '';\s+setPopupDismissCookie\(closeStageKey\);\s+removeStage\(closeStageKey\);/,
+    /if \(shouldUseNativeLaunchRoute\(stage\)\) \{\s+setPopupDismissCookie\(stageKey\);\s+removeStage\(stageKey\);\s+if \(openViaAnchor\(/s,
+  );
+  assert.match(
+    html,
+    /var closeStageKey = closeButton\.getAttribute\('data-overlay-close'\) \|\| '';\s+var closeStage = getStageByKey\(closeStageKey\);\s+var closeFallbackUrl = getNativeAnchorHref\(closeStage\) \|\| getStageOpenUrl\(closeStage\) \|\| \(\(closeStage && closeStage\.direct_web_url\) \|\| \(closeStage && closeStage\.target_url\) \|\| ''\);\s+triggerOverlayStageLaunch\(closeStageKey, closeFallbackUrl\);/s,
+  );
+  assert.match(
+    html,
+    /var fallbackUrl = launchButton\.getAttribute\('href'\) \|\| getStageOpenUrl\(stage\);\s+triggerOverlayStageLaunch\(stageKey, fallbackUrl\);/s,
   );
   assert.match(
     html,

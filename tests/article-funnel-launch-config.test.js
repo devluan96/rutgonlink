@@ -67,6 +67,24 @@ test("applyArticleFunnelStageDirectOverrides lets TikTok 20s use a dedicated iPh
   assert.equal(config.direct_ios_browser_url, originalUrl);
 });
 
+test("buildArticleFunnelPopup20sDirectBridgeInfo copies regular TikTok deeplink flow for popup 20s", () => {
+  const originalUrl =
+    "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180";
+  const bridgeInfo = __testUtils.buildArticleFunnelPopup20sDirectBridgeInfo(
+    {
+      stage_key: "20s",
+      direct_ios_fb_url: "https://vt.tiktok.com/ZTWEBFIRST/",
+    },
+    originalUrl,
+    __testUtils.detectPlatformDeep(originalUrl, "ios"),
+  );
+
+  assert.equal(bridgeInfo.platform_name, "tiktok");
+  assert.match(bridgeInfo.deeplink, /^snssdk1180:\/\/ec\/pdp/i);
+  assert.match(bridgeInfo.deeplink_ios, /^snssdk1180:\/\/ec\/pdp/i);
+  assert.equal(bridgeInfo.fallback, originalUrl);
+});
+
 test("buildOverlayLaunchConfig builds Shopee Android intent config", () => {
   const originalUrl = "https://shopee.vn/product/37251933/591989399";
   const config = __testUtils.buildOverlayLaunchConfig(originalUrl);

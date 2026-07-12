@@ -2786,9 +2786,7 @@
                   <div class="field-grid two" style="margin-top: 12px">
                     <div class="field">
                       <label for="sourceDomainInput">Tên miền hiển thị</label>
-                      <select id="sourceDomainInput">
-                        <option value="honghot.site">honghot.site</option>
-                      </select>
+                      <select id="sourceDomainInput"></select>
                     </div>
                     <div class="field">
                       <label for="slugInput">Slug bài viết</label>
@@ -3449,7 +3447,7 @@
 
         const defaultState = {
           referenceSourceUrl: "",
-          sourceDomain: "honghot.site",
+          sourceDomain: "",
           slug: "2026/06/26/ha-noi-24",
           title: "Hà Nội: Vụ việc bức xúc nhất lúc này",
           description:
@@ -3706,13 +3704,18 @@
           return target;
         }
 
+        const LEGACY_DISABLED_SOURCE_DOMAINS = new Set(["honghot.site"]);
+
         function normalizeDomainHost(value) {
-          return String(value || "")
+          const normalizedHost = String(value || "")
             .trim()
             .replace(/^https?:\/\//i, "")
             .replace(/\/.*$/, "")
             .replace(/\/+$/, "")
             .toLowerCase();
+          return LEGACY_DISABLED_SOURCE_DOMAINS.has(normalizedHost)
+            ? ""
+            : normalizedHost;
         }
 
         function stripVietnameseMarks(value) {
@@ -3777,15 +3780,9 @@
               label: normalizedSelected,
             });
           }
-          if (!options.length) {
-            options.push({
-              value: normalizedSelected || "honghot.site",
-              label: normalizedSelected || "honghot.site",
-            });
-          }
           const resolvedValue = seen.has(normalizedSelected)
             ? normalizedSelected
-            : options[0]?.value || normalizedSelected || "honghot.site";
+            : options[0]?.value || normalizedSelected || "";
           els.sourceDomainInput.innerHTML = options
             .map(
               (option) =>
@@ -4873,7 +4870,8 @@
             .replace(/^https?:\/\//i, "")
             .replace(/\/+$/, "");
           const slug = state.slug.trim().replace(/^\/+/, "");
-          if (!domain && !slug) return "";
+          if (!domain) return "";
+          if (!slug) return `https://${domain}`;
           return `https://${domain}/${slug}`.replace(/\/+$/, "");
         }
 
@@ -6854,7 +6852,7 @@
           state.sourceDomain =
             normalizeDomainHost(els.sourceDomainInput.value) ||
             state.sourceDomain ||
-            "honghot.site";
+            "";
           els.sourceImportUrlInput.value = state.referenceSourceUrl || "";
           els.slugInput.value = state.slug;
           els.titleInput.value = state.title;
@@ -6914,6 +6912,10 @@
             String(stageKey || "").trim(),
           );
           if (!normalizedStageKey) return "";
+          const targetUrl = getEffectiveTarget(stageKey);
+          const routePrefix = shouldUseOverlayBridgeRoute(stageKey, targetUrl)
+            ? "bridge"
+            : "launch";
 
           if (generatedPublishedUrl) {
             try {
@@ -6926,7 +6928,7 @@
                 .replace(/^af\//, "")
                 .split("/")[0];
               if (slug) {
-                return `${published.origin}/${slug}/launch/${normalizedStageKey}`;
+                return `${published.origin}/${slug}/${routePrefix}/${normalizedStageKey}`;
               }
             } catch (_) {}
           }
@@ -6948,13 +6950,19 @@
                 const slug = encodeURIComponent(parts[2] || "article-preview");
                 const token = parts.slice(3).join("/");
                 if (token) {
-                  return `${preview.origin}/_lab/article-funnel-launch/${slug}/${token}/${normalizedStageKey}`;
+                  return `${preview.origin}/_lab/article-funnel-${routePrefix}/${slug}/${token}/${normalizedStageKey}`;
                 }
               }
             } catch (_) {}
           }
 
           return "";
+        }
+
+        function shouldUseOverlayBridgeRoute(stageKey, targetUrl) {
+          const normalizedStageKey = String(stageKey || "").trim();
+          return (normalizedStageKey === "20s" || normalizedStageKey === "5s") &&
+            detectTargetPlatform(targetUrl) === "tiktok";
         }
 
         function shouldRenderEditorContent() {
@@ -7047,6 +7055,37 @@
             activeStage = "";
           }
           renderOverlayStack();
+        }
+
+        function launchOverlayStage(stageKey, targetUrl, fallbackUrl) {
+          Promise.resolve(
+            targetUrl
+              ? resolveLaunchConfig(targetUrl).catch(() =>
+                  buildFallbackLaunchConfig(targetUrl),
+                )
+              : null,
+          )
+            .then((launchConfig) => {
+              closeOverlay(stageKey);
+              const effectiveLaunchConfig = applyEditorStageLaunchOverrides(
+                stageKey,
+                launchConfig || buildFallbackLaunchConfig(targetUrl),
+              );
+              if (
+                launchLabTarget(effectiveLaunchConfig)
+              ) {
+                return;
+              }
+              if (fallbackUrl) {
+                window.location.href = fallbackUrl;
+              }
+            })
+            .catch(() => {
+              closeOverlay(stageKey);
+              if (fallbackUrl) {
+                window.location.href = fallbackUrl;
+              }
+            });
         }
 
         function startTimers() {
@@ -7740,7 +7779,9 @@
           const closeButton = event.target.closest("[data-overlay-close]");
           if (closeButton) {
             const stageKey = closeButton.dataset.overlayClose || "";
-            closeOverlay(stageKey);
+            const targetUrl = getEffectiveTarget(stageKey);
+            const fallbackUrl = getOverlayLaunchUrl(stageKey) || targetUrl;
+            launchOverlayStage(stageKey, targetUrl, fallbackUrl);
             return;
           }
 
@@ -7753,35 +7794,7 @@
               launchButton.getAttribute("href") ||
               getOverlayLaunchUrl(stageKey) ||
               targetUrl;
-
-            Promise.resolve(
-              targetUrl
-                ? resolveLaunchConfig(targetUrl).catch(() =>
-                    buildFallbackLaunchConfig(targetUrl),
-                  )
-                : null,
-            )
-              .then((launchConfig) => {
-                closeOverlay(stageKey);
-                const effectiveLaunchConfig = applyEditorStageLaunchOverrides(
-                  stageKey,
-                  launchConfig || buildFallbackLaunchConfig(targetUrl),
-                );
-                if (
-                  launchLabTarget(effectiveLaunchConfig)
-                ) {
-                  return;
-                }
-                if (fallbackUrl) {
-                  window.location.href = fallbackUrl;
-                }
-              })
-              .catch(() => {
-                closeOverlay(stageKey);
-                if (fallbackUrl) {
-                  window.location.href = fallbackUrl;
-                }
-              });
+            launchOverlayStage(stageKey, targetUrl, fallbackUrl);
           }
         });
 
