@@ -5736,6 +5736,33 @@
           }
         }
 
+        function navigateWindowLocation(targetUrl, options = {}) {
+          if (!targetUrl) return false;
+          const preferTopLevel = Boolean(options.preferTopLevel);
+          const replace = Boolean(options.replace);
+          const navWindow =
+            preferTopLevel && window.top && window.top !== window
+              ? window.top
+              : window;
+          try {
+            if (replace) {
+              navWindow.location.replace(targetUrl);
+            } else {
+              navWindow.location.href = targetUrl;
+            }
+            return true;
+          } catch (_) {
+            if (!replace) {
+              return openViaAnchor(
+                targetUrl,
+                options.targetName || "_self",
+                options.relValue,
+              );
+            }
+            return false;
+          }
+        }
+
         function buildAndroidIntentUrl(targetUrl, packageName, fallbackUrl) {
           if (!targetUrl || !packageName) return "";
           try {
@@ -5782,10 +5809,11 @@
           };
         }
 
-        function scheduleLaunchFallback(fallbackUrl, delayMs) {
+        function scheduleLaunchFallback(fallbackUrl, delayMs, options = {}) {
           if (!fallbackUrl) return;
           let didLeave = false;
           let finished = false;
+          const preferTopLevel = Boolean(options.preferTopLevel);
 
           const markLeft = () => {
             didLeave = true;
@@ -5818,7 +5846,14 @@
           setTimeout(() => {
             cleanup();
             if (!didLeave && !document.hidden) {
-              window.location.replace(fallbackUrl);
+              if (
+                !navigateWindowLocation(fallbackUrl, {
+                  preferTopLevel,
+                  replace: true,
+                })
+              ) {
+                window.location.replace(fallbackUrl);
+              }
             }
           }, delayMs || 1600);
         }
@@ -5945,15 +5980,22 @@
 
             if (isIOS) {
               if (tiktokTarget) {
-                openViaAnchor(
-                  tiktokTarget,
-                  isInApp ? "_blank" : "_self",
-                  "noopener",
-                );
+                if (isInApp) {
+                  navigateWindowLocation(tiktokTarget, {
+                    preferTopLevel: true,
+                  });
+                } else {
+                  openViaAnchor(
+                    tiktokTarget,
+                    "_self",
+                    "noopener",
+                  );
+                }
               }
               scheduleLaunchFallback(
                 launchConfig.direct_web_url || targetUrl,
                 isInApp ? 1500 : 1600,
+                { preferTopLevel: isInApp },
               );
               return true;
             }

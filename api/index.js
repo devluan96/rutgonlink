@@ -5565,6 +5565,29 @@ function normalizeArticleFunnelStageKey(stageKey = "") {
     : String(stageKey || "").trim();
 }
 
+function decorateArticleFunnelStagesForClient(stages, tracking = {}) {
+  const routeSlug = String(tracking?.routeSlug || "").trim();
+  return (Array.isArray(stages) ? stages : []).map((stage) => {
+    const normalizedStageKey = normalizeArticleFunnelStageKey(stage?.stage_key || "");
+    const directPlatform = String(stage?.direct_platform || "").trim().toLowerCase();
+    const nextStage = {
+      ...(stage && typeof stage === "object" ? stage : {}),
+      stage_key: normalizedStageKey,
+    };
+
+    if (
+      routeSlug &&
+      normalizedStageKey === "20s" &&
+      directPlatform === "tiktok"
+    ) {
+      nextStage.track_click_api = "/api/article-funnel/track-click";
+      nextStage.tracking_route_slug = routeSlug;
+    }
+
+    return nextStage;
+  });
+}
+
 function shouldUseArticleFunnelInlineLaunch(stage) {
   const normalizedStageKey = normalizeArticleFunnelStageKey(
     stage?.stage_key || "",
@@ -11119,6 +11142,7 @@ module.exports.__testUtils = {
   buildDirectLaunchConfig,
   buildOverlayLaunchConfig,
   applyArticleFunnelStageDirectOverrides,
+  decorateArticleFunnelStagesForClient,
   buildArticleFunnelPreviewPage,
   buildArticleFunnelPopupTestUrl,
   isArticleFunnelPopupTestRequestAllowed,
