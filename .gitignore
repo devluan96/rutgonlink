@@ -5,3 +5,12 @@ data/
 *.db-shm
 *.db-wal
 logs/
+
+# Share only selected project-local agent skills; keep other local agent state untracked.
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/research-before-build-rutgonlink/
+!/.agents/skills/research-before-build-rutgonlink/**
+!/.agents/skills/current-docs-verification-rutgonlink/
+!/.agents/skills/current-docs-verification-rutgonlink/**
