@@ -15,7 +15,11 @@ test("admin article funnel lab uses top-level navigation for TikTok iOS in-app p
   );
   assert.match(
     templateHtml,
-    /if \(isInApp\) \{\s*navigateWindowLocation\(tiktokTarget, \{\s*preferTopLevel: true,\s*\}\);\s*\} else \{\s*openViaAnchor\(\s*tiktokTarget,\s*"_self",\s*"noopener",\s*\);/s,
+    /function getTikTokInAppDirectAppTarget\(launchConfig\) \{\s+const directAppTarget = String\(\s+launchConfig\?\.direct_ios_url \|\| launchConfig\?\.direct_app_url \|\| "",\s+\)\.trim\(\);/s,
+  );
+  assert.match(
+    templateHtml,
+    /const directAppTarget = isInApp \? getTikTokInAppDirectAppTarget\(launchConfig\) : "";\s+if \(tiktokTarget\) \{\s+if \(isInApp && directAppTarget\) \{\s+navigateWindowLocation\(directAppTarget, \{\s*preferTopLevel: true,\s*\}\);\s*\} else if \(isInApp\) \{\s+navigateWindowLocation\(tiktokTarget, \{\s*preferTopLevel: true,\s*\}\);\s*\} else \{\s*openViaAnchor\(\s*tiktokTarget,\s*"_self",\s*"noopener",\s*\);/s,
   );
   assert.match(
     templateHtml,

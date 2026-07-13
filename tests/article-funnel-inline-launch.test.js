@@ -120,7 +120,15 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through dedicated bridge u
   );
   assert.match(
     html,
-    /if \(shouldUseNativeLaunchRoute\(stage\)\) \{\s+setPopupDismissCookie\(stageKey\);\s+removeStage\(stageKey\);\s+if \(openViaAnchor\(/s,
+    /function getNativePopupDirectAppLaunchUrl\(stage\) \{\s+if \(!stage\) return '';\s+var directAppLaunchUrl = String\(stage\.direct_ios_url \|\| stage\.direct_app_url \|\| ''\)\.trim\(\);/s,
+  );
+  assert.match(
+    html,
+    /if \(shouldUseNativeLaunchRoute\(stage\)\) \{\s+var directAppLaunchUrl = getNativePopupDirectAppLaunchUrl\(stage\);\s+var nativeFallbackUrl = \(\(stage && stage\.direct_web_url\) \|\| \(stage && stage\.target_url\) \|\| nativeLaunchUrl\);\s+setPopupDismissCookie\(stageKey\);\s+removeStage\(stageKey\);\s+if \(directAppLaunchUrl\) \{\s+trackStageClickInBackground\(stage\);\s+if \(openViaAnchor\(/s,
+  );
+  assert.match(
+    html,
+    /scheduleLaunchFallback\(nativeFallbackUrl,\s*1500\);\s+return;/s,
   );
   assert.match(
     html,

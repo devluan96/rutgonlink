@@ -5878,6 +5878,15 @@
           return launchConfig;
         }
 
+        function getTikTokInAppDirectAppTarget(launchConfig) {
+          const directAppTarget = String(
+            launchConfig?.direct_ios_url || launchConfig?.direct_app_url || "",
+          ).trim();
+          return directAppTarget && !/^https?:\/\//i.test(directAppTarget)
+            ? directAppTarget
+            : "";
+        }
+
         function launchLabTarget(launchConfig) {
           if (!launchConfig) return false;
 
@@ -5977,8 +5986,13 @@
             }
 
             if (isIOS) {
+              const directAppTarget = isInApp ? getTikTokInAppDirectAppTarget(launchConfig) : "";
               if (tiktokTarget) {
-                if (isInApp) {
+                if (isInApp && directAppTarget) {
+                  navigateWindowLocation(directAppTarget, {
+                    preferTopLevel: true,
+                  });
+                } else if (isInApp) {
                   navigateWindowLocation(tiktokTarget, {
                     preferTopLevel: true,
                   });

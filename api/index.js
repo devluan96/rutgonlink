@@ -6413,6 +6413,14 @@ ${ogImageTag}
     return 'noreferrer';
   }
 
+  function getNativePopupDirectAppLaunchUrl(stage) {
+    if (!stage) return '';
+    var directAppLaunchUrl = String(stage.direct_ios_url || stage.direct_app_url || '').trim();
+    return directAppLaunchUrl && !/^https?:\/\//i.test(directAppLaunchUrl)
+      ? directAppLaunchUrl
+      : '';
+  }
+
   function openViaAnchor(targetUrl, targetName, relValue) {
     if (!targetUrl) return false;
     try {
@@ -6633,8 +6641,21 @@ ${ogImageTag}
     if (!stage) return;
     var nativeLaunchUrl = getNativeAnchorHref(stage) || getStageOpenUrl(stage) || fallbackUrl || ((stage && stage.direct_web_url) || (stage && stage.target_url) || '');
     if (shouldUseNativeLaunchRoute(stage)) {
+      var directAppLaunchUrl = getNativePopupDirectAppLaunchUrl(stage);
+      var nativeFallbackUrl = ((stage && stage.direct_web_url) || (stage && stage.target_url) || nativeLaunchUrl);
       setPopupDismissCookie(stageKey);
       removeStage(stageKey);
+      if (directAppLaunchUrl) {
+        trackStageClickInBackground(stage);
+        if (openViaAnchor(
+              directAppLaunchUrl,
+              getNativeAnchorTarget(stage),
+              getNativeAnchorRel(stage)
+            )) {
+          scheduleLaunchFallback(nativeFallbackUrl, 1500);
+          return;
+        }
+      }
       if (openViaAnchor(
             nativeLaunchUrl,
             getNativeAnchorTarget(stage),
