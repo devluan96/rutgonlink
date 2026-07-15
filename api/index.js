@@ -5604,7 +5604,10 @@ function shouldUseArticleFunnelInlineLaunch(stage) {
   const directPlatform = String(stage?.direct_platform || "")
     .trim()
     .toLowerCase();
-  return normalizedStageKey === "3s" && directPlatform === "shopee";
+  return (
+    (normalizedStageKey === "3s" && directPlatform === "shopee") ||
+    (normalizedStageKey === "20s" && directPlatform === "tiktok")
+  );
 }
 
 function getRequestHostname(req) {
@@ -5696,50 +5699,36 @@ function shouldUseArticleFunnelPopup20sDirectBridgeFlow(
 
 function buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info) {
   const normalizedTargetUrl = String(
-    targetUrl ||
+    stage?.direct_web_url ||
+      targetUrl ||
       stage?.target_url ||
-      stage?.direct_web_url ||
       stage?.direct_app_url ||
       "",
   ).trim();
-  const directConfig = buildDirectLaunchConfig(normalizedTargetUrl);
-  const directWebUrl = String(
-    directConfig.direct_web_url || info?.fallback || normalizedTargetUrl,
+  const browserUrl = String(
+    stage?.direct_ios_browser_url || normalizedTargetUrl || info?.fallback || "",
   ).trim();
-  const directAppUrl = String(
-    directConfig.direct_app_url || info?.deeplink || directWebUrl,
-  ).trim();
-  const directIosUrl = String(
-    directConfig.direct_ios_url ||
-      directAppUrl ||
-      info?.deeplink_ios ||
-      info?.deeplink ||
-      directWebUrl,
-  ).trim();
-  const directAndroidUrl = String(
-    directConfig.direct_android_url ||
-      directAppUrl ||
-      info?.deeplink_android ||
-      info?.deeplink ||
-      directWebUrl,
+  const iosInAppUrl = String(
+    stage?.direct_ios_fb_url || browserUrl,
   ).trim();
 
   return {
     ...(info && typeof info === "object" ? info : {}),
-    deeplink: directAppUrl || directWebUrl,
-    deeplink_ios: directIosUrl || directAppUrl || directWebUrl,
-    deeplink_android: directAndroidUrl || directAppUrl || directWebUrl,
-    fallback: directWebUrl,
-    universal_link: String(info?.universal_link || directWebUrl).trim(),
+    deeplink: iosInAppUrl || browserUrl,
+    deeplink_ios: iosInAppUrl || browserUrl,
+    deeplink_android: browserUrl,
+    fallback: browserUrl,
+    popup20s_browser_url: browserUrl,
+    popup20s_ios_inapp_url: iosInAppUrl || browserUrl,
+    universal_link: String(info?.universal_link || browserUrl).trim(),
     platform_name:
       String(
         info?.platform_name ||
-          directConfig.direct_platform ||
           stage?.direct_platform ||
-          "generic",
+          "tiktok",
       )
         .trim()
-        .toLowerCase() || "generic",
+        .toLowerCase() || "tiktok",
   };
 }
 
@@ -5882,7 +5871,11 @@ async function handleArticleFunnelStageLaunch({
       platform: info.platform_name,
       uaKind,
       status: 200,
-      target: bridgeInfo.deeplink_ios || bridgeInfo.deeplink || targetUrl,
+      target:
+        bridgeInfo.popup20s_ios_inapp_url ||
+        bridgeInfo.deeplink_ios ||
+        bridgeInfo.deeplink ||
+        targetUrl,
       referer,
       ...articleFunnelLogMeta,
     });
@@ -5892,7 +5885,15 @@ async function handleArticleFunnelStageLaunch({
       "Content-Type": "text/html;charset=utf-8",
       "X-Frame-Options": "SAMEORIGIN",
     });
-    return res.send(buildDirectBridgePage(launchLink, canonicalUrl, bridgeInfo));
+    return res.send(
+      usePopup20sDirectBridgeFlow
+        ? buildArticleFunnelPopup20sTikTokBridgePage(
+            launchLink,
+            canonicalUrl,
+            bridgeInfo,
+          )
+        : buildDirectBridgePage(launchLink, canonicalUrl, bridgeInfo),
+    );
   }
 
   if (
@@ -6325,9 +6326,7 @@ ${ogImageTag}
   }
 
   function shouldUseDedicatedBridgeRoute(stage) {
-    if (!stage) return false;
-    return String(stage.direct_platform || '').toLowerCase() === 'tiktok' &&
-      String(stage.stage_key || '') === '20s';
+    return false;
   }
 
   function getBridgeUrl(stage){
@@ -6402,6 +6401,20 @@ ${ogImageTag}
 
   function getNativeAnchorHref(stage) {
     if (!stage) return '';
+    if (stage.use_inline_launch) {
+      if (
+        String(stage.direct_platform || '').toLowerCase() === 'tiktok' &&
+        String(stage.stage_key || '') === '20s'
+      ) {
+        if (isIOSDevice()) {
+          return isInAppBrowser()
+            ? (stage.direct_ios_fb_url || stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '')
+            : (stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '');
+        }
+        return stage.direct_web_url || stage.direct_android_url || stage.target_url || '';
+      }
+      return stage.direct_web_url || stage.target_url || '';
+    }
     return getStageOpenUrl(stage) || stage.direct_web_url || '#';
   }
 
@@ -6415,10 +6428,45 @@ ${ogImageTag}
 
   function getNativePopupDirectAppLaunchUrl(stage) {
     if (!stage) return '';
-    var directAppLaunchUrl = String(stage.direct_ios_url || stage.direct_app_url || '').trim();
-    return directAppLaunchUrl && !/^https?:\/\//i.test(directAppLaunchUrl)
-      ? directAppLaunchUrl
-      : '';
+    var launchCandidates = [
+      stage.direct_ios_url,
+      stage.direct_app_url,
+    ];
+    for (var index = 0; index < launchCandidates.length; index += 1) {
+      var directAppLaunchUrl = String(launchCandidates[index] || '').trim();
+      if (directAppLaunchUrl && !/^https?:\/\//i.test(directAppLaunchUrl)) {
+        return directAppLaunchUrl;
+      }
+    }
+    return '';
+  }
+
+  function navigateWindowLocation(targetUrl, options) {
+    if (!targetUrl) return false;
+    var settings = options && typeof options === 'object' ? options : {};
+    var preferTopLevel = Boolean(settings.preferTopLevel);
+    var replace = Boolean(settings.replace);
+    var navWindow =
+      preferTopLevel && window.top && window.top !== window
+        ? window.top
+        : window;
+    try {
+      if (replace) {
+        navWindow.location.replace(targetUrl);
+      } else {
+        navWindow.location.href = targetUrl;
+      }
+      return true;
+    } catch (_) {
+      if (!replace) {
+        return openViaAnchor(
+          targetUrl,
+          settings.targetName || '_self',
+          settings.relValue,
+        );
+      }
+      return false;
+    }
   }
 
   function openViaAnchor(targetUrl, targetName, relValue) {
@@ -6456,10 +6504,12 @@ ${ogImageTag}
     }
   }
 
-  function scheduleLaunchFallback(fallbackUrl, delayMs) {
+  function scheduleLaunchFallback(fallbackUrl, delayMs, options) {
     if (!fallbackUrl) return;
     var didLeave = false;
     var finished = false;
+    var settings = options && typeof options === 'object' ? options : {};
+    var preferTopLevel = Boolean(settings.preferTopLevel);
 
     function markLeft() {
       didLeave = true;
@@ -6486,7 +6536,12 @@ ${ogImageTag}
     setTimeout(function() {
       cleanup();
       if (!didLeave && !document.hidden) {
-        window.location.replace(fallbackUrl);
+        if (!navigateWindowLocation(fallbackUrl, {
+          preferTopLevel: preferTopLevel,
+          replace: true,
+        })) {
+          window.location.replace(fallbackUrl);
+        }
       }
     }, delayMs || 1600);
   }
@@ -6518,12 +6573,21 @@ ${ogImageTag}
         return true;
       }
       if (isIOS) {
+        var shopeeDirectAppTarget = isInApp
+          ? getNativePopupDirectAppLaunchUrl(stage)
+          : '';
         var iosTarget = isInApp
           ? (stage.direct_ios_fb_url || stage.direct_web_url || stage.direct_ios_url)
           : (stage.direct_ios_browser_url || stage.direct_ios_url || stage.direct_web_url);
-        if (iosTarget) {
+        if (shopeeDirectAppTarget) {
+          navigateWindowLocation(shopeeDirectAppTarget, {
+            preferTopLevel: true,
+          });
+        } else if (iosTarget) {
           if (isInApp) {
-            openViaAnchor(iosTarget, '_blank', 'noopener');
+            navigateWindowLocation(iosTarget, {
+              preferTopLevel: true,
+            });
           } else {
             openViaAnchor(iosTarget, '_self', 'noopener');
           }
@@ -6531,6 +6595,7 @@ ${ogImageTag}
         scheduleLaunchFallback(
           stage.direct_web_url,
           isInApp ? 1500 : 1600,
+          { preferTopLevel: isInApp },
         );
         return true;
       }
@@ -6541,21 +6606,57 @@ ${ogImageTag}
     }
 
     if (stage.direct_platform === 'tiktok') {
-      var tiktokTarget = isIOS
+      var isTikTokPopup20s = String(stage.stage_key || '') === '20s';
+      var tiktokBrowserTarget =
+        stage.direct_ios_browser_url || stage.direct_web_url || targetUrl;
+      var tiktokTarget = isTikTokPopup20s
         ? (
-            isInApp
-              ? (stage.direct_ios_fb_url || stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
-              : (stage.direct_ios_browser_url || stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
+            isIOS
+              ? (
+                  isInApp
+                    ? (stage.direct_ios_fb_url || tiktokBrowserTarget)
+                    : tiktokBrowserTarget
+                )
+              : tiktokBrowserTarget
           )
-        : isAndroid
-          ? (stage.direct_android_url || stage.direct_app_url || stage.direct_web_url)
-          : stage.direct_web_url;
+        : (
+            isIOS
+              ? (
+                  isInApp
+                    ? (stage.direct_ios_fb_url || stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
+                    : (stage.direct_ios_browser_url || stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
+                )
+              : isAndroid
+                ? (stage.direct_android_url || stage.direct_app_url || stage.direct_web_url)
+                : stage.direct_web_url
+          );
       if (!tiktokTarget) return false;
-      openViaAnchor(tiktokTarget, isInApp ? '_blank' : '_self', 'noopener');
-      scheduleLaunchFallback(
-        stage.direct_web_url,
-        isInApp ? 1500 : 1600,
-      );
+      if (isIOS) {
+        var directAppTarget =
+          isInApp && !isTikTokPopup20s
+            ? getNativePopupDirectAppLaunchUrl(stage)
+            : '';
+        if (isInApp && directAppTarget) {
+          navigateWindowLocation(directAppTarget, {
+            preferTopLevel: true,
+          });
+        } else if (isInApp) {
+          navigateWindowLocation(tiktokTarget, {
+            preferTopLevel: true,
+          });
+        } else {
+          openViaAnchor(tiktokTarget, '_self', 'noopener');
+        }
+      } else {
+        openViaAnchor(tiktokTarget, isInApp ? '_blank' : '_self', 'noopener');
+      }
+      if (isInApp) {
+        scheduleLaunchFallback(
+          tiktokBrowserTarget || stage.direct_web_url,
+          1500,
+          { preferTopLevel: true },
+        );
+      }
       return true;
     }
 
@@ -6614,7 +6715,7 @@ ${ogImageTag}
   function handleStageLaunch(stageKey, fallbackUrl) {
     var stage = getStageByKey(stageKey);
     if (!stage) return;
-    var launchUrl = getStageOpenUrl(stage) || fallbackUrl || stage.direct_web_url || stage.target_url || '';
+    var launchUrl = fallbackUrl || getStageOpenUrl(stage) || stage.direct_web_url || stage.target_url || '';
     setPopupDismissCookie(stageKey);
     removeStage(stageKey);
     if (stage.use_inline_launch) {
@@ -6641,21 +6742,8 @@ ${ogImageTag}
     if (!stage) return;
     var nativeLaunchUrl = getNativeAnchorHref(stage) || getStageOpenUrl(stage) || fallbackUrl || ((stage && stage.direct_web_url) || (stage && stage.target_url) || '');
     if (shouldUseNativeLaunchRoute(stage)) {
-      var directAppLaunchUrl = getNativePopupDirectAppLaunchUrl(stage);
-      var nativeFallbackUrl = ((stage && stage.direct_web_url) || (stage && stage.target_url) || nativeLaunchUrl);
       setPopupDismissCookie(stageKey);
       removeStage(stageKey);
-      if (directAppLaunchUrl) {
-        trackStageClickInBackground(stage);
-        if (openViaAnchor(
-              directAppLaunchUrl,
-              getNativeAnchorTarget(stage),
-              getNativeAnchorRel(stage)
-            )) {
-          scheduleLaunchFallback(nativeFallbackUrl, 1500);
-          return;
-        }
-      }
       if (openViaAnchor(
             nativeLaunchUrl,
             getNativeAnchorTarget(stage),
@@ -10438,6 +10526,99 @@ ${ogImageTag}
 </html>`;
 }
 
+function buildArticleFunnelPopup20sTikTokBridgePage(link, canonicalUrl, info) {
+  const title = link.og_title?.trim() || "BocLink";
+  const desc =
+    link.og_desc?.trim() || "Dang mo ung dung goc de tiep tuc xem noi dung.";
+  const image = link.og_image || "";
+  const browserUrl = String(
+    info?.popup20s_browser_url || info?.fallback || link.original_url || "",
+  ).trim();
+  const iosInAppUrl = String(
+    info?.popup20s_ios_inapp_url || browserUrl,
+  ).trim();
+  const fallbackUrl = browserUrl || String(link.original_url || "").trim();
+
+  const escJs = (s) =>
+    (s || "")
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/'/g, "\\'")
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r");
+
+  const ogImageTag = image
+    ? `<meta property="og:image" content="${esc(image)}" />`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}" />
+<meta name="robots" content="noindex, nofollow" />
+<link rel="canonical" href="${esc(canonicalUrl)}" />
+<meta property="fb:app_id" content="${FACEBOOK_APP_ID}" />
+<meta property="og:locale" content="vi_VN" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="${esc(title)}" />
+<meta property="og:description" content="${esc(desc)}" />
+<meta property="og:url" content="${esc(canonicalUrl)}" />
+<meta property="og:site_name" content="BocLink" />
+${ogImageTag}
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${esc(title)}" />
+<meta name="twitter:description" content="${esc(desc)}" />
+${ogImageTag}
+</head>
+<body>
+<script>
+(function() {
+  var browserUrl = "${escJs(browserUrl)}";
+  var iosInAppUrl = "${escJs(iosInAppUrl)}";
+  var fallbackUrl = "${escJs(fallbackUrl)}";
+  var ua = navigator.userAgent || '';
+  var isIOS = /iphone|ipad|ipod/i.test(ua);
+  var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
+  var isZalo = /ZaloApp/i.test(ua);
+  var isInApp = isFacebook || isZalo;
+
+  function openSameWindow(targetUrl) {
+    if (!targetUrl) return false;
+    try {
+      window.location.href = targetUrl;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  if (isIOS && isInApp) {
+    openSameWindow(iosInAppUrl || browserUrl || fallbackUrl);
+    setTimeout(function() {
+      if (!document.hidden && fallbackUrl) {
+        window.location.replace(fallbackUrl);
+      }
+    }, 1500);
+    return;
+  }
+
+  if (browserUrl) {
+    openSameWindow(browserUrl);
+    return;
+  }
+
+  if (fallbackUrl) {
+    window.location.replace(fallbackUrl);
+  }
+})();
+</script>
+</body>
+</html>`;
+}
+
 function buildArticleFunnelTikTokInAppBridgePage(
   link,
   canonicalUrl,
@@ -11161,18 +11342,36 @@ body{overflow-x:hidden}
     }
 
     if (stage.direct_platform === 'tiktok') {
-      var tiktokTarget = isIOS
-        ? (stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
-        : isAndroid
-          ? (stage.direct_android_url || stage.direct_app_url || stage.direct_web_url)
-          : stage.direct_web_url;
+      var isTikTokPopup20s = String(stage.stage_key || '') === '20s';
+      var tiktokBrowserTarget =
+        stage.direct_ios_browser_url || stage.direct_web_url || '';
+      var tiktokTarget = isTikTokPopup20s
+        ? (
+            isIOS
+              ? (
+                  isInApp
+                    ? (stage.direct_ios_fb_url || tiktokBrowserTarget)
+                    : tiktokBrowserTarget
+                )
+              : tiktokBrowserTarget
+          )
+        : (
+            isIOS
+              ? (stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
+              : isAndroid
+                ? (stage.direct_android_url || stage.direct_app_url || stage.direct_web_url)
+                : stage.direct_web_url
+          );
       if (!tiktokTarget) return false;
       openViaAnchor(tiktokTarget);
-      setTimeout(function() {
-        if (!document.hidden && stage.direct_web_url) {
-          window.location.replace(stage.direct_web_url);
-        }
-      }, 1600);
+      if (isInApp) {
+        setTimeout(function() {
+          var fallbackUrl = tiktokBrowserTarget || stage.direct_web_url;
+          if (!document.hidden && fallbackUrl) {
+            window.location.replace(fallbackUrl);
+          }
+        }, 1500);
+      }
       return true;
     }
 
@@ -11270,11 +11469,13 @@ body{overflow-x:hidden}
 
 module.exports = app;
 module.exports.__testUtils = {
+  buildTikTokAppScheme,
   detectPlatformDeep,
   buildDirectLaunchConfig,
   buildOverlayLaunchConfig,
   applyArticleFunnelStageDirectOverrides,
   buildArticleFunnelPopup20sDirectBridgeInfo,
+  buildArticleFunnelPopup20sTikTokBridgePage,
   decorateArticleFunnelStagesForClient,
   buildArticleFunnelPreviewPage,
   buildArticleFunnelPopupTestUrl,

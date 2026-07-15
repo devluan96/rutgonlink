@@ -2895,6 +2895,13 @@
                         >
                           Lấy link TikTok đã lưu
                         </button>
+                        <button
+                          class="ghost-btn"
+                          type="button"
+                          data-copy-derived-deeplink="popup20sInput"
+                        >
+                          Copy deeplink app
+                        </button>
                         <span
                           class="quick-fill-note"
                           data-affiliate-note="popup20sInput"
@@ -4003,6 +4010,49 @@
           }
         }
 
+        async function copyDerivedTikTokDeepLink(fieldKey) {
+          const input = els[fieldKey];
+          if (!input) return;
+          const rawUrl = String(input.value || "").trim();
+          if (!rawUrl) {
+            setFieldStatus(fieldKey, "Nhập link TikTok trước khi copy deeplink", "danger");
+            showToast("Nhập link TikTok trước khi copy deeplink");
+            return;
+          }
+          if (detectTargetPlatform(rawUrl) !== "tiktok") {
+            setFieldStatus(fieldKey, "Link này không phải TikTok nên không tạo được deeplink app", "danger");
+            showToast("Link này không phải TikTok");
+            return;
+          }
+          const button = document.querySelector(
+            `[data-copy-derived-deeplink="${fieldKey}"]`,
+          );
+          try {
+            if (button) button.disabled = true;
+            setFieldStatus(fieldKey, "Đang tạo deeplink app...", "warn");
+            const launchConfig = await resolveLaunchConfig(rawUrl);
+            const deeplink = String(
+              launchConfig?.direct_ios_url ||
+                launchConfig?.direct_app_url ||
+                "",
+            ).trim();
+            if (!deeplink || /^https?:\/\//i.test(deeplink)) {
+              throw new Error("Không sinh được deeplink app từ link này");
+            }
+            await navigator.clipboard.writeText(deeplink);
+            setFieldStatus(fieldKey, "Đã copy deeplink app TikTok", "success");
+            showToast("Đã copy deeplink app TikTok");
+          } catch (error) {
+            const message =
+              String(error?.message || "").trim() ||
+              "Không copy được deeplink app lúc này";
+            setFieldStatus(fieldKey, message, "danger");
+            showToast(message);
+          } finally {
+            if (button) button.disabled = false;
+          }
+        }
+
         function setSourceImportStatus(message = "", tone = "") {
           if (!els.sourceImportMeta) return;
           els.sourceImportMeta.textContent = message || "";
@@ -4294,6 +4344,7 @@
                 popup20Hint: "Autofills from your saved TikTok affiliate link.",
                 popup20Ready: "TikTok autofill ready",
                 popup20Missing: "No saved TikTok affiliate link",
+                copyDeepLink: "Copy app deeplink",
                 popup300Label: "300s popup override",
                 popup300Hint:
                   "Optional. Leave empty if you only want the 3s and 15s flow.",
@@ -4336,6 +4387,7 @@
                 popup20Hint: "Tự điền từ link TikTok affiliate đã lưu.",
                 popup20Ready: "TikTok đã sẵn sàng để tự điền",
                 popup20Missing: "Chưa có link TikTok affiliate đã lưu",
+                copyDeepLink: "Copy deeplink app",
                 popup300Label: "Popup 300 giây override",
                 popup300Hint:
                   "Tùy chọn. Để trống nếu bạn chỉ muốn giữ luồng 3 giây và 15 giây.",
@@ -4384,6 +4436,11 @@
             .querySelectorAll("[data-link-health-check]")
             .forEach((button) => {
               button.textContent = copy.checkLink;
+            });
+          document
+            .querySelectorAll("[data-copy-derived-deeplink]")
+            .forEach((button) => {
+              button.textContent = copy.copyDeepLink || "Copy deeplink app";
             });
           const baseAffiliateNote = document.querySelector(
             '[data-affiliate-note="baseUrlInput"]',
@@ -5861,6 +5918,10 @@
             return launchConfig;
           }
           const normalizedStageKey = String(stageKey || "").trim();
+          const configWithStageKey = {
+            ...launchConfig,
+            stage_key: normalizedStageKey || launchConfig.stage_key || "",
+          };
           if (
             normalizedStageKey === "20s" &&
             String(launchConfig.direct_platform || "").trim() === "tiktok"
@@ -5870,12 +5931,12 @@
             ).trim();
             if (iosInAppOverride) {
               return {
-                ...launchConfig,
+                ...configWithStageKey,
                 direct_ios_fb_url: iosInAppOverride,
               };
             }
           }
-          return launchConfig;
+          return configWithStageKey;
         }
 
         function getTikTokInAppDirectAppTarget(launchConfig) {
@@ -5954,39 +6015,56 @@
           }
 
           if (platform === "tiktok") {
-            const tiktokTarget = isIOS
-              ? isInApp
-                ? launchConfig.direct_ios_fb_url ||
-                  launchConfig.direct_ios_url ||
-                  launchConfig.direct_app_url ||
-                  launchConfig.direct_web_url
-                : launchConfig.direct_ios_browser_url ||
-                  launchConfig.direct_ios_url ||
-                  launchConfig.direct_app_url ||
-                  launchConfig.direct_web_url
-              : isAndroid
-                ? launchConfig.direct_android_url ||
-                  launchConfig.direct_app_url ||
-                  launchConfig.direct_web_url
-                : launchConfig.direct_web_url || targetUrl;
-            if (isAndroid) {
+            const isPopup20s =
+              String(launchConfig.stage_key || "").trim() === "20s";
+            const tiktokBrowserTarget =
+              launchConfig.direct_ios_browser_url ||
+              launchConfig.direct_web_url ||
+              targetUrl;
+            const tiktokTarget = isPopup20s
+              ? isIOS
+                ? isInApp
+                  ? launchConfig.direct_ios_fb_url || tiktokBrowserTarget
+                  : tiktokBrowserTarget
+                : tiktokBrowserTarget
+              : isIOS
+                ? isInApp
+                  ? launchConfig.direct_ios_fb_url ||
+                    launchConfig.direct_ios_url ||
+                    launchConfig.direct_app_url ||
+                    launchConfig.direct_web_url
+                  : launchConfig.direct_ios_browser_url ||
+                    launchConfig.direct_ios_url ||
+                    launchConfig.direct_app_url ||
+                    launchConfig.direct_web_url
+                : isAndroid
+                  ? launchConfig.direct_android_url ||
+                    launchConfig.direct_app_url ||
+                    launchConfig.direct_web_url
+                  : launchConfig.direct_web_url || targetUrl;
+            if (isAndroid || isPopup20s) {
               if (tiktokTarget) {
                 openViaAnchor(tiktokTarget);
               }
-              setTimeout(() => {
-                if (!document.hidden) {
-                  openViaAnchor(
-                    launchConfig.direct_web_url || targetUrl,
-                    "_blank",
-                    "noopener",
-                  );
-                }
-              }, 1600);
+              if (isInApp) {
+                setTimeout(() => {
+                  if (!document.hidden) {
+                    openViaAnchor(
+                      tiktokBrowserTarget || launchConfig.direct_web_url || targetUrl,
+                      "_blank",
+                      "noopener",
+                    );
+                  }
+                }, 1500);
+              }
               return true;
             }
 
             if (isIOS) {
-              const directAppTarget = isInApp ? getTikTokInAppDirectAppTarget(launchConfig) : "";
+              const directAppTarget =
+                isInApp && !isPopup20s
+                  ? getTikTokInAppDirectAppTarget(launchConfig)
+                  : "";
               if (tiktokTarget) {
                 if (isInApp && directAppTarget) {
                   navigateWindowLocation(directAppTarget, {
@@ -6005,7 +6083,9 @@
                 }
               }
               scheduleLaunchFallback(
-                launchConfig.direct_web_url || targetUrl,
+                (isPopup20s
+                  ? tiktokBrowserTarget
+                  : launchConfig.direct_web_url || targetUrl),
                 isInApp ? 1500 : 1600,
                 { preferTopLevel: isInApp },
               );
@@ -6978,9 +7058,7 @@
         }
 
         function shouldUseOverlayBridgeRoute(stageKey, targetUrl) {
-          const normalizedStageKey = String(stageKey || "").trim();
-          return (normalizedStageKey === "20s" || normalizedStageKey === "5s") &&
-            detectTargetPlatform(targetUrl) === "tiktok";
+          return false;
         }
 
         function shouldRenderEditorContent() {
@@ -7393,6 +7471,15 @@
           );
           if (linkHealthTrigger) {
             checkAffiliateLink(linkHealthTrigger.dataset.linkHealthCheck || "");
+            return;
+          }
+          const copyDeepLinkTrigger = event.target.closest(
+            "[data-copy-derived-deeplink]",
+          );
+          if (copyDeepLinkTrigger) {
+            copyDerivedTikTokDeepLink(
+              copyDeepLinkTrigger.dataset.copyDerivedDeeplink || "",
+            );
             return;
           }
           const uploadTrigger = event.target.closest(

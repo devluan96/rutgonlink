@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
 
-test("admin article funnel lab uses top-level navigation for TikTok iOS in-app popup launch", () => {
+test("admin article funnel lab mirrors HongHotDuong-style TikTok popup 20s routing", () => {
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
     "utf8",
@@ -19,11 +19,43 @@ test("admin article funnel lab uses top-level navigation for TikTok iOS in-app p
   );
   assert.match(
     templateHtml,
-    /const directAppTarget = isInApp \? getTikTokInAppDirectAppTarget\(launchConfig\) : "";\s+if \(tiktokTarget\) \{\s+if \(isInApp && directAppTarget\) \{\s+navigateWindowLocation\(directAppTarget, \{\s*preferTopLevel: true,\s*\}\);\s*\} else if \(isInApp\) \{\s+navigateWindowLocation\(tiktokTarget, \{\s*preferTopLevel: true,\s*\}\);\s*\} else \{\s*openViaAnchor\(\s*tiktokTarget,\s*"_self",\s*"noopener",\s*\);/s,
+    /const isPopup20s =\s+String\(launchConfig\.stage_key \|\| ""\)\.trim\(\) === "20s";\s+const tiktokBrowserTarget =\s+launchConfig\.direct_ios_browser_url \|\|\s+launchConfig\.direct_web_url \|\|\s+targetUrl;/s,
   );
   assert.match(
     templateHtml,
-    /scheduleLaunchFallback\(\s*launchConfig\.direct_web_url \|\| targetUrl,\s*isInApp \? 1500 : 1600,\s*\{ preferTopLevel: isInApp \},\s*\);/s,
+    /if \(isAndroid \|\| isPopup20s\) \{\s+if \(tiktokTarget\) \{\s+openViaAnchor\(tiktokTarget\);/s,
+  );
+  assert.match(
+    templateHtml,
+    /if \(isInApp\) \{\s+setTimeout\(\(\) => \{\s+if \(!document\.hidden\) \{\s+openViaAnchor\(\s+tiktokBrowserTarget \|\| launchConfig\.direct_web_url \|\| targetUrl,/s,
+  );
+  assert.match(
+    templateHtml,
+    /const directAppTarget =\s+isInApp && !isPopup20s\s+\? getTikTokInAppDirectAppTarget\(launchConfig\)\s+: "";/s,
+  );
+});
+
+test("admin article funnel lab can copy the derived TikTok app deeplink from popup 20s links", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(
+    templateHtml,
+    /data-copy-derived-deeplink="popup20sInput"/,
+  );
+  assert.match(
+    templateHtml,
+    /async function copyDerivedTikTokDeepLink\(fieldKey\) \{/,
+  );
+  assert.match(
+    templateHtml,
+    /const deeplink = String\(\s+launchConfig\?\.direct_ios_url \|\|\s+launchConfig\?\.direct_app_url \|\|\s+"",\s+\)\.trim\(\);/s,
+  );
+  assert.match(
+    templateHtml,
+    /await navigator\.clipboard\.writeText\(deeplink\);/,
   );
 });
 
@@ -47,7 +79,7 @@ test("admin article funnel lab routes popup X button through the same launch flo
   );
 });
 
-test("admin article funnel lab routes TikTok popup 20s through bridge urls", () => {
+test("admin article funnel lab keeps TikTok popup 20s on launch helpers instead of bridge urls", () => {
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
     "utf8",
@@ -59,7 +91,7 @@ test("admin article funnel lab routes TikTok popup 20s through bridge urls", () 
   );
   assert.match(
     templateHtml,
-    /return \(normalizedStageKey === "20s" \|\| normalizedStageKey === "5s"\) &&\s+detectTargetPlatform\(targetUrl\) === "tiktok";/s,
+    /return false;/,
   );
   assert.match(
     templateHtml,
