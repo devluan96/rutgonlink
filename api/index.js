@@ -6434,7 +6434,7 @@ ${ogImageTag}
     ];
     for (var index = 0; index < launchCandidates.length; index += 1) {
       var directAppLaunchUrl = String(launchCandidates[index] || '').trim();
-      if (directAppLaunchUrl && !/^https?:\/\//i.test(directAppLaunchUrl)) {
+      if (directAppLaunchUrl && !/^https?:\\/\\//i.test(directAppLaunchUrl)) {
         return directAppLaunchUrl;
       }
     }

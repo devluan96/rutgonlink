@@ -80,6 +80,38 @@ test("buildArticleFunnelPreviewPage embeds inline launch metadata for published 
   );
 });
 
+test("buildArticleFunnelPreviewPage emits a parseable inline script", () => {
+  const html = __testUtils.buildArticleFunnelPreviewPage(
+    {
+      title: "Demo",
+      stages: [
+        {
+          stage_key: "3s",
+          direct_platform: "shopee",
+          direct_web_url: "https://shopee.vn/product/37251933/591989399",
+        },
+        {
+          stage_key: "20s",
+          direct_platform: "tiktok",
+          direct_web_url: "https://vt.tiktok.com/demo/",
+          direct_ios_url:
+            "snssdk1180://ec/pdp?biz_type=0&requestParams=%7B%22product_id%22%3A%5B%22123%22%5D%7D",
+        },
+      ],
+    },
+    "https://example.com/demo",
+    "/demo/launch",
+    { routeSlug: "demo", showPopupTestButton: true },
+    "/demo/bridge",
+  );
+
+  const scriptMatch = html.match(/<script>\s*\(function\(\)\{([\s\S]*?)\}\)\(\);\s*<\/script>/);
+  assert.ok(scriptMatch, "expected inline preview script");
+  assert.doesNotThrow(() => {
+    new Function(scriptMatch[1]);
+  });
+});
+
 test("buildArticleFunnelPreviewPage keeps popup test button hidden for non-admin viewers", () => {
   const html = __testUtils.buildArticleFunnelPreviewPage(
     {
