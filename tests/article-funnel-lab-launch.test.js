@@ -74,3 +74,27 @@ test("admin article funnel lab routes TikTok popup 20s through bridge urls", () 
     /return `\$\{preview\.origin\}\/_lab\/article-funnel-\$\{routePrefix\}\/\$\{slug\}\/\$\{token\}\/\$\{normalizedStageKey\}`;/,
   );
 });
+
+test("admin article funnel lab uploads sensitive video blocks through the video flow", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(
+    templateHtml,
+    /function isVideoBlockType\(blockType\) \{\s+return blockType === "video" \|\| blockType === "sensitive-video";\s+\}/s,
+  );
+  assert.match(
+    templateHtml,
+    /async function uploadBlockAsset\(file, blockType\) \{\s+const isVideo = isVideoBlockType\(blockType\);/s,
+  );
+  assert.match(
+    templateHtml,
+    /setUploadStatus\(\s+blockId,\s+isVideoBlockType\(block\.type\)\s+\? "Đang upload video\.\.\."\s+: "Đang upload ảnh\.\.\.",\s+\);/s,
+  );
+  assert.match(
+    templateHtml,
+    /showToast\(\s+isVideoBlockType\(block\.type\) \? "Đã tải video lên" : "Đã tải ảnh lên",\s+\);/s,
+  );
+});

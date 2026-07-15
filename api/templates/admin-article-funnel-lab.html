@@ -6042,6 +6042,10 @@
           return state.blocks.find((item) => item.id === blockId) || null;
         }
 
+        function isVideoBlockType(blockType) {
+          return blockType === "video" || blockType === "sensitive-video";
+        }
+
         function setUploadStatus(blockId, message, tone = "") {
           const status = els.blockList.querySelector(
             `[data-upload-status="${blockId}"]`,
@@ -6067,7 +6071,7 @@
         }
 
         async function uploadBlockAsset(file, blockType) {
-          const isVideo = blockType === "video";
+          const isVideo = isVideoBlockType(blockType);
           const formData = new FormData();
           formData.append(isVideo ? "video" : "image", file);
           const response = await fetch(
@@ -6103,7 +6107,7 @@
             setUploadBusy(blockId, true);
             setUploadStatus(
               blockId,
-              block.type === "video"
+              isVideoBlockType(block.type)
                 ? "Đang upload video..."
                 : "Đang upload ảnh...",
             );
@@ -6118,7 +6122,7 @@
             saveState();
             setUploadStatus(blockId, "Upload xong", "ok");
             showToast(
-              block.type === "video" ? "Đã tải video lên" : "Đã tải ảnh lên",
+              isVideoBlockType(block.type) ? "Đã tải video lên" : "Đã tải ảnh lên",
             );
           } catch (error) {
             const message =
