@@ -6215,7 +6215,7 @@
                     launchConfig.direct_app_url ||
                     launchConfig.direct_web_url
                   : launchConfig.direct_web_url || targetUrl;
-            if (isAndroid || isPopup20s) {
+            if (isAndroid) {
               if (tiktokTarget) {
                 openViaAnchor(tiktokTarget);
               }
@@ -6235,7 +6235,7 @@
 
             if (isIOS) {
               const directAppTarget =
-                isInApp && !isPopup20s
+                isInApp
                   ? getTikTokInAppDirectAppTarget(launchConfig)
                   : "";
               if (tiktokTarget) {

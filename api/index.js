@@ -6536,7 +6536,7 @@ ${ogImageTag}
       ) {
         if (isIOSDevice()) {
           return isInAppBrowser()
-            ? (stage.direct_ios_fb_url || stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '')
+            ? (getNativePopupDirectAppLaunchUrl(stage) || stage.direct_ios_fb_url || stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '')
             : (stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '');
         }
         return stage.direct_web_url || stage.direct_android_url || stage.target_url || '';
@@ -6801,7 +6801,7 @@ ${ogImageTag}
       if (!tiktokTarget) return false;
       if (isIOS) {
         var directAppTarget =
-          isInApp && !isTikTokPopup20s
+          isInApp
             ? getNativePopupDirectAppLaunchUrl(stage)
             : '';
         if (isInApp && directAppTarget) {

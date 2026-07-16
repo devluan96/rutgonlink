@@ -23,7 +23,7 @@ test("admin article funnel lab mirrors HongHotDuong-style TikTok popup 20s routi
   );
   assert.match(
     templateHtml,
-    /if \(isAndroid \|\| isPopup20s\) \{\s+if \(tiktokTarget\) \{\s+openViaAnchor\(tiktokTarget\);/s,
+    /if \(isAndroid\) \{\s+if \(tiktokTarget\) \{\s+openViaAnchor\(tiktokTarget\);/s,
   );
   assert.match(
     templateHtml,
@@ -31,7 +31,7 @@ test("admin article funnel lab mirrors HongHotDuong-style TikTok popup 20s routi
   );
   assert.match(
     templateHtml,
-    /const directAppTarget =\s+isInApp && !isPopup20s\s+\? getTikTokInAppDirectAppTarget\(launchConfig\)\s+: "";/s,
+    /const directAppTarget =\s+isInApp\s+\? getTikTokInAppDirectAppTarget\(launchConfig\)\s+: "";/s,
   );
 });
 
