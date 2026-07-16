@@ -33,3 +33,15 @@ test("app lab access logic allows explicitly granted users and stores popup 3s d
   assert.doesNotMatch(appJs, /labSharedShareImageInput/);
   assert.match(appJs, /async function adminSetLabAccess\(userId, checkboxEl\)/);
 });
+
+test("db user fallback preserves can_use_lab when only other optional columns are missing", () => {
+  const dbJs = fs.readFileSync(
+    path.join(__dirname, "..", "api", "db.js"),
+    "utf8",
+  );
+
+  assert.match(dbJs, /const activeOptionalColumns = \['phone', 'avatar_url', 'can_use_lab', 'updated_at'\];/);
+  assert.match(dbJs, /const missingColumn = activeOptionalColumns\.find\(\(columnName\) =>\s+isMissingColumnError\(error, columnName\),\s+\);/s);
+  assert.match(dbJs, /return Array\.isArray\(data\)\s+\? data\.map\(\(row\) => normalizeLegacyAdminUserRow\(row\)\)\s+: \[\];/s);
+  assert.doesNotMatch(dbJs, /can_use_lab:\s*false/);
+});

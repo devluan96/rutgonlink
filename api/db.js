@@ -656,39 +656,49 @@ async function init() {
     },
 
     async getAllUsers() {
-      let { data, error } = await sb
-        .from('users')
-        .select(
-          'id,email,name,plan,role,phone,avatar_url,can_use_lab,created_at,updated_at',
-        )
-        .order('created_at', { ascending: false });
-      if (
-        isMissingAnyColumnError(error, [
-          'phone',
-          'avatar_url',
-          'can_use_lab',
-          'updated_at',
-        ])
-      ) {
-        console.warn(
-          '[db] users table is missing one or more optional admin columns; falling back to legacy user list. Run the latest users migrations locally.',
-        );
-        const legacyResult = await sb
+      const requiredColumns = ['id', 'email', 'name', 'plan', 'role', 'created_at'];
+      const activeOptionalColumns = ['phone', 'avatar_url', 'can_use_lab', 'updated_at'];
+      const omittedColumns = [];
+
+      while (true) {
+        const selectedColumns = [...requiredColumns, ...activeOptionalColumns].join(',');
+        const { data, error } = await sb
           .from('users')
-          .select('id,email,name,plan,role,created_at')
+          .select(selectedColumns)
           .order('created_at', { ascending: false });
-        data = Array.isArray(legacyResult.data)
-          ? legacyResult.data.map((row) =>
-              normalizeLegacyAdminUserRow({
-                ...row,
-                can_use_lab: false,
-              }),
-            )
-          : [];
-        error = legacyResult.error;
+
+        if (!error) {
+          if (omittedColumns.length) {
+            console.warn(
+              `[db] users table is missing optional admin columns (${omittedColumns.join(
+                ', ',
+              )}); using reduced user list until local migrations are updated.`,
+            );
+          }
+          return Array.isArray(data)
+            ? data.map((row) => normalizeLegacyAdminUserRow(row))
+            : [];
+        }
+
+        const missingColumn = activeOptionalColumns.find((columnName) =>
+          isMissingColumnError(error, columnName),
+        );
+        if (!missingColumn) {
+          check(error);
+        }
+
+        omittedColumns.push(missingColumn);
+        const columnIndex = activeOptionalColumns.indexOf(missingColumn);
+        if (columnIndex >= 0) {
+          activeOptionalColumns.splice(columnIndex, 1);
+        }
+
+        if (!activeOptionalColumns.length && isMissingAnyColumnError(error, ['can_use_lab'])) {
+          console.warn(
+            '[db] users.can_use_lab is missing locally; lab access toggles will appear off until migrations are updated.',
+          );
+        }
       }
-      check(error);
-      return data || [];
     },
 
     async createPaymentRequest(payload) {
