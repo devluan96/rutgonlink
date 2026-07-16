@@ -464,7 +464,7 @@ app.get(
   redirectToCanonical("/register"),
 );
 app.get("/user/register/index.html", redirectToCanonical("/register"));
-app.post("/api/admin/article-funnel-lab/resolve-target", requireAdmin, async (req, res) => {
+app.post("/api/admin/article-funnel-lab/resolve-target", requireArticleFunnelLab, async (req, res) => {
   try {
     const inputUrl = String(req.body?.url || "").trim();
     const iosInAppOverride = String(
@@ -516,7 +516,7 @@ app.post("/api/admin/article-funnel-lab/resolve-target", requireAdmin, async (re
     return res.status(500).json({ error: "Resolve target thất bại" });
   }
 });
-app.post("/api/admin/article-funnel-lab/import-url", requireAdmin, async (req, res) => {
+app.post("/api/admin/article-funnel-lab/import-url", requireArticleFunnelLab, async (req, res) => {
   try {
     const sourceUrl = normalizeImportSourceUrl(req.body?.url || "");
     if (!sourceUrl) {
@@ -566,11 +566,15 @@ app.post("/api/admin/article-funnel-lab/import-url", requireAdmin, async (req, r
     return res.status(500).json({ error: "Khong the lay nhanh du lieu tu URL nguon" });
   }
 });
-app.get("/api/admin/article-funnel-labs", requireAdmin, async (req, res) => {
+app.get("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, res) => {
   try {
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
-    const rows = await database.listArticleFunnelLabs();
+    const rows = await database.listArticleFunnelLabs({
+      createdByUserId: isAdminUserRecord(req.currentUser)
+        ? 0
+        : req.currentUser?.id || 0,
+    });
     return res.json({
       ok: true,
       items: rows.map((item) => {
@@ -614,13 +618,16 @@ app.get("/api/admin/article-funnel-labs", requireAdmin, async (req, res) => {
     return res.status(500).json({ error: "Khong the tai danh sach lab" });
   }
 });
-app.get("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => {
+app.get("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (req, res) => {
   try {
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
     const row = await database.getArticleFunnelLabById(req.params.id);
     if (!row) {
       return res.status(404).json({ error: "Khong tim thay lab" });
+    }
+    if (!canManageArticleFunnelLab(req.currentUser, row)) {
+      return res.status(403).json({ error: "Khong co quyen xem lab nay" });
     }
     const configJson =
       row.config_json && typeof row.config_json === "object"
@@ -664,7 +671,7 @@ app.get("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => 
     return res.status(500).json({ error: "Khong the tai lab" });
   }
 });
-app.post("/api/admin/article-funnel-labs", requireAdmin, async (req, res) => {
+app.post("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, res) => {
   try {
     const database = await getDb();
     const rawConfig =
@@ -694,9 +701,16 @@ app.post("/api/admin/article-funnel-labs", requireAdmin, async (req, res) => {
     return res.status(500).json({ error: "Khong the tao lab" });
   }
 });
-app.put("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => {
+app.put("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (req, res) => {
   try {
     const database = await getDb();
+    const existingLab = await database.getArticleFunnelLabById(req.params.id);
+    if (!existingLab) {
+      return res.status(404).json({ error: "Khong tim thay lab" });
+    }
+    if (!canManageArticleFunnelLab(req.currentUser, existingLab)) {
+      return res.status(403).json({ error: "Khong co quyen sua lab nay" });
+    }
     const rawConfig =
       req.body?.config && typeof req.body.config === "object"
         ? req.body.config
@@ -731,9 +745,16 @@ app.put("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => 
     return res.status(500).json({ error: "Khong the luu lab" });
   }
 });
-app.delete("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) => {
+app.delete("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (req, res) => {
   try {
     const database = await getDb();
+    const existingLab = await database.getArticleFunnelLabById(req.params.id);
+    if (!existingLab) {
+      return res.status(404).json({ error: "Khong tim thay lab" });
+    }
+    if (!canManageArticleFunnelLab(req.currentUser, existingLab)) {
+      return res.status(403).json({ error: "Khong co quyen xoa lab nay" });
+    }
     await database.deleteArticleFunnelLab(req.params.id);
     return res.json({ ok: true });
   } catch (error) {
@@ -741,7 +762,7 @@ app.delete("/api/admin/article-funnel-labs/:id", requireAdmin, async (req, res) 
     return res.status(500).json({ error: "Khong the xoa lab" });
   }
 });
-app.post("/api/admin/article-funnel-lab/preview-link", requireAdmin, async (req, res) => {
+app.post("/api/admin/article-funnel-lab/preview-link", requireArticleFunnelLab, async (req, res) => {
   try {
     const rawConfig =
       req.body?.config && typeof req.body.config === "object"
@@ -768,7 +789,7 @@ app.post("/api/admin/article-funnel-lab/preview-link", requireAdmin, async (req,
     return res.status(500).json({ error: "Không thể tạo preview link" });
   }
 });
-app.post("/api/admin/article-funnel-lab/publish", requireAdmin, async (req, res) => {
+app.post("/api/admin/article-funnel-lab/publish", requireArticleFunnelLab, async (req, res) => {
   try {
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
@@ -800,6 +821,16 @@ app.post("/api/admin/article-funnel-lab/publish", requireAdmin, async (req, res)
     const fallbackDomainHostname = normalizeDomainHost(publicBaseUrl);
     const selectedDomainHostname =
       activeRequestedDomain || fallbackDomainHostname || null;
+    const draftLabId = Number(req.body?.lab_id || 0);
+    if (Number.isInteger(draftLabId) && draftLabId > 0) {
+      const draftLab = await database.getArticleFunnelLabById(draftLabId);
+      if (!draftLab) {
+        return res.status(404).json({ error: "Khong tim thay lab de publish" });
+      }
+      if (!canManageArticleFunnelLab(req.currentUser, draftLab)) {
+        return res.status(403).json({ error: "Khong co quyen publish lab nay" });
+      }
+    }
     const saved = await database.upsertArticleFunnel({
       route_slug: routeSlug,
       domain_hostname: selectedDomainHostname,
@@ -807,7 +838,6 @@ app.post("/api/admin/article-funnel-lab/publish", requireAdmin, async (req, res)
       config_json: publishedConfig,
       created_by_user_id: req.currentUser?.id || null,
     });
-    const draftLabId = Number(req.body?.lab_id || 0);
     if (Number.isInteger(draftLabId) && draftLabId > 0) {
       try {
         await database.updateArticleFunnelLab(draftLabId, {
@@ -2009,6 +2039,20 @@ async function isAdminRequest(req) {
   return Boolean(user && (user.role === "admin" || isAdminEmail(user.email)));
 }
 
+function isAdminUserRecord(user) {
+  return Boolean(user && (user.role === "admin" || isAdminEmail(user.email)));
+}
+
+function canUseArticleFunnelLab(user) {
+  return isAdminUserRecord(user) || !!user?.can_use_lab;
+}
+
+function canManageArticleFunnelLab(user, labRow) {
+  if (isAdminUserRecord(user)) return true;
+  const ownerUserId = Number(labRow?.created_by_user_id || 0);
+  return ownerUserId > 0 && ownerUserId === Number(user?.id || 0);
+}
+
 async function requireAdmin(req, res, next) {
   const token = parseToken(req);
   if (!token) return res.status(401).json({ error: "Chưa đăng nhập" });
@@ -2018,6 +2062,23 @@ async function requireAdmin(req, res, next) {
     const isAdmin = user?.role === "admin" || isAdminEmail(user?.email);
     if (!user || !isAdmin) {
       return res.status(403).json({ error: "Không có quyền quản trị" });
+    }
+    req._tokenPayload = payload;
+    req.currentUser = user;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Token không hợp lệ" });
+  }
+}
+
+async function requireArticleFunnelLab(req, res, next) {
+  const token = parseToken(req);
+  if (!token) return res.status(401).json({ error: "Chưa đăng nhập" });
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = await resolveUserFromTokenPayload(payload);
+    if (!user || !canUseArticleFunnelLab(user)) {
+      return res.status(403).json({ error: "Không có quyền dùng lab" });
     }
     req._tokenPayload = payload;
     req.currentUser = user;
@@ -3883,6 +3944,7 @@ function buildAuthUserPayload(user, isAdmin = false) {
     avatar_url: user.avatar_url || null,
     affiliate_shopee_url: user.affiliate_shopee_url || null,
     affiliate_tiktok_url: user.affiliate_tiktok_url || null,
+    can_use_lab: isAdmin ? true : !!user.can_use_lab,
     plan: isAdmin ? "admin" : user.plan,
     role: isAdmin ? "admin" : user.role || "user",
     two_factor_enabled: !!user.two_factor_enabled,
@@ -4885,6 +4947,21 @@ function applyArticleFunnelStageDirectOverrides(
     }
   }
 
+  if (
+    normalizedStageKey === "3s" &&
+    config.direct_platform === "shopee"
+  ) {
+    const iosInAppOverride = String(
+      sourceConfig.popup3sIosFbUrl ||
+        sourceConfig.popup_3s_ios_fb_url ||
+        overlay.popup_3s_ios_fb_url ||
+        "",
+    ).trim();
+    if (iosInAppOverride) {
+      config.direct_ios_fb_url = iosInAppOverride;
+    }
+  }
+
   return config;
 }
 
@@ -5443,36 +5520,44 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
     backup_label: String(config.backup_label || config.backupLabel || "Page phu").trim(),
     backup_url: String(config.backup_url || config.backupUrl || "").trim(),
     blocks: normalizeArticleFunnelBlocks(config.blocks),
-    stages: normalizedStages.map((stage) => ({
-      stage_key: String(stage.stage_key || "").trim() === "5s"
-        ? "20s"
-        : String(stage.stage_key || "").trim(),
-      delay_ms:
-        String(stage.stage_key || "").trim() === "5s" && Number(stage.delay_ms || 0) === 5000
-          ? 15000
-          : Number(stage.delay_ms || 0) || 0,
-      target_url: String(stage.target_url || "").trim(),
-      overlay_image:
-        String(stage.overlay_image || "").trim() ||
-        getOverlayImageForStage(
-          String(stage.stage_key || "").trim() === "5s"
-            ? "20s"
-            : String(stage.stage_key || "").trim(),
-        ),
-      direct_platform: String(stage.direct_platform || "generic").trim(),
-      direct_web_url: String(stage.direct_web_url || "").trim(),
-      direct_app_url: String(stage.direct_app_url || "").trim(),
-      direct_ios_url: String(stage.direct_ios_url || "").trim(),
-      direct_ios_fb_url: String(stage.direct_ios_fb_url || "").trim(),
-      direct_ios_browser_url: String(stage.direct_ios_browser_url || "").trim(),
-      direct_android_url: String(stage.direct_android_url || "").trim(),
-      direct_android_intent_url: String(
-        stage.direct_android_intent_url || "",
-      ).trim(),
-      direct_android_package: String(
-        stage.direct_android_package || "",
-      ).trim(),
-    })),
+    stages: normalizedStages.map((stage) => {
+      const normalizedStageKey =
+        String(stage.stage_key || "").trim() === "5s"
+          ? "20s"
+          : String(stage.stage_key || "").trim();
+      const normalizedStage = {
+        stage_key: normalizedStageKey,
+        delay_ms:
+          String(stage.stage_key || "").trim() === "5s" &&
+          Number(stage.delay_ms || 0) === 5000
+            ? 15000
+            : Number(stage.delay_ms || 0) || 0,
+        target_url: String(stage.target_url || "").trim(),
+        overlay_image:
+          String(stage.overlay_image || "").trim() ||
+          getOverlayImageForStage(normalizedStageKey),
+        direct_platform: String(stage.direct_platform || "generic").trim(),
+        direct_web_url: String(stage.direct_web_url || "").trim(),
+        direct_app_url: String(stage.direct_app_url || "").trim(),
+        direct_ios_url: String(stage.direct_ios_url || "").trim(),
+        direct_ios_fb_url: String(stage.direct_ios_fb_url || "").trim(),
+        direct_ios_browser_url: String(
+          stage.direct_ios_browser_url || "",
+        ).trim(),
+        direct_android_url: String(stage.direct_android_url || "").trim(),
+        direct_android_intent_url: String(
+          stage.direct_android_intent_url || "",
+        ).trim(),
+        direct_android_package: String(
+          stage.direct_android_package || "",
+        ).trim(),
+      };
+      return applyArticleFunnelStageDirectOverrides(
+        { stage_key: normalizedStageKey },
+        normalizedStage,
+        config,
+      );
+    }),
   };
 }
 
@@ -8587,7 +8672,7 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
-    const { plan, role } = req.body || {};
+    const { plan, role, can_use_lab: canUseLab } = req.body || {};
     const uid = Number(req.params.id);
     if (!Number.isInteger(uid) || uid < 1) {
       return res.status(400).json({ error: "User không hợp lệ" });
@@ -8608,6 +8693,10 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
           .trim()
           .toLowerCase()
       : "";
+    const hasCanUseLabUpdate = Object.prototype.hasOwnProperty.call(
+      req.body || {},
+      "can_use_lab",
+    );
 
     if (nextPlan && !allowedPlans.has(nextPlan)) {
       return res.status(400).json({ error: "Gói người dùng không hợp lệ" });
@@ -8636,6 +8725,9 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
 
     if (effectivePlan) await database.updateUserPlan(uid, effectivePlan);
     if (effectiveRole) await database.updateUserRole(uid, effectiveRole);
+    if (hasCanUseLabUpdate) {
+      await database.updateUserLabAccess(uid, !!canUseLab);
+    }
     const updated = await database.getUserById(uid);
     res.json({
       user: {
@@ -8644,6 +8736,7 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
         name: updated.name,
         plan: updated.plan,
         role: updated.role,
+        can_use_lab: !!updated.can_use_lab,
       },
     });
   } catch (e) {

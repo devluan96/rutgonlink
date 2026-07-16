@@ -2821,6 +2821,32 @@
                       Nếu cần, mô tả sẽ hiển thị ngay dưới tiêu đề bài viết.
                     </div>
                   </div>
+                  <div class="field" style="margin-top: 14px">
+                    <label for="shareImageInput">Ảnh chia sẻ / hero đầu bài</label>
+                    <input id="shareImageInput" type="url" />
+                    <div class="upload-row">
+                      <button
+                        class="upload-btn"
+                        type="button"
+                        data-asset-upload-trigger="shareImage"
+                      >
+                        Chọn ảnh từ máy
+                      </button>
+                      <input
+                        class="sr-only-input"
+                        type="file"
+                        accept="image/*"
+                        data-asset-upload-input="shareImage"
+                      />
+                      <span
+                        class="upload-status"
+                        data-asset-upload-status="shareImage"
+                      >Có thể dán URL hoặc chọn ảnh preview từ máy.</span>
+                    </div>
+                    <div class="hint">
+                      Có thể để trống nếu bạn muốn card comment gọn, không có ảnh lớn.
+                    </div>
+                  </div>
                 </div>
               </details>
 
@@ -2872,6 +2898,16 @@
                         class="field-status-note"
                         data-link-health-status="baseUrlInput"
                       ></div>
+                    </div>
+
+                    <div class="field">
+                      <label for="popup3sIosFbInput">
+                        Shopee iPhone/Facebook opaanlp override
+                      </label>
+                      <input id="popup3sIosFbInput" type="url" />
+                      <div class="hint">
+                        Tùy chọn. Dán riêng link Shopee <code>opaanlp</code> cho popup 3 giây để Facebook iPhone đi web-first mà vẫn giữ tracking.
+                      </div>
                     </div>
 
                     <div class="field">
@@ -2960,20 +2996,13 @@
                     <div class="section-kicker">CÀI ĐẶT</div>
                     <h2>Popup, ảnh và tùy chỉnh phụ</h2>
                     <div class="section-copy">
-                      Nhóm này gom link 300s, ảnh popup, ảnh share và các tùy chỉnh hiển thị ít dùng hơn.
+                      Nhóm này gom link 300s, ảnh popup và các tùy chỉnh hiển thị ít dùng hơn.
                     </div>
                   </div>
                   <div class="section-toggle" aria-hidden="true"></div>
                 </summary>
                 <div class="section-body tight">
                   <div class="field-grid two" style="margin-top: 12px">
-                    <div class="field">
-                      <label for="shareImageInput">Ảnh chia sẻ / hero đầu bài</label>
-                      <input id="shareImageInput" type="url" />
-                      <div class="hint">
-                        Có thể để trống nếu bạn muốn card comment gọn, không có ảnh lớn.
-                      </div>
-                    </div>
                     <input id="articleUrlOutput" type="hidden" />
                   </div>
                   <div class="field-grid two" style="margin-top: 14px">
@@ -3461,6 +3490,7 @@
             "Mô tả ngắn của bài viết sẽ hiện ngay dưới tiêu đề khi bạn cần thêm ngữ cảnh.",
           baseUrl:
             "https://shopee.vn/product/37251933/591989399?utm_source=admin-lab",
+          popup3sIosFbUrl: "",
           popup20sUrl: "",
           popup20sIosFbUrl: "",
           popup300sUrl: "",
@@ -3599,6 +3629,7 @@
           publishedUrlOutput: document.getElementById("publishedUrlOutput"),
           publishedUrlMeta: document.getElementById("publishedUrlMeta"),
           baseUrlInput: document.getElementById("baseUrlInput"),
+          popup3sIosFbInput: document.getElementById("popup3sIosFbInput"),
           popup20sInput: document.getElementById("popup20sInput"),
           popup20sIosFbInput: document.getElementById("popup20sIosFbInput"),
           popup300sInput: document.getElementById("popup300sInput"),
@@ -3653,7 +3684,8 @@
         function normalizeSharedLabSettings(input = {}) {
           const source = input && typeof input === "object" ? input : {};
           return {
-            shareImage: String(source.shareImage || "").trim(),
+            popup3sUrl: String(source.popup3sUrl || "").trim(),
+            popup3sIosFbUrl: String(source.popup3sIosFbUrl || "").trim(),
             overlayImage: String(source.overlayImage || "").trim(),
             overlay20sImage: String(source.overlay20sImage || "").trim(),
             overlay300sImage: String(source.overlay300sImage || "").trim(),
@@ -3691,15 +3723,16 @@
         ) {
           if (!target || typeof target !== "object") return target;
           const shared = normalizeSharedLabSettings(settings);
-          const applyValue = (key) => {
-            const nextValue = shared[key];
+          const applyValue = (sourceKey, targetKey = sourceKey) => {
+            const nextValue = shared[sourceKey];
             if (!nextValue) return;
-            const currentValue = String(target[key] || "").trim();
+            const currentValue = String(target[targetKey] || "").trim();
             if (replaceExisting || !currentValue) {
-              target[key] = nextValue;
+              target[targetKey] = nextValue;
             }
           };
-          applyValue("shareImage");
+          applyValue("popup3sUrl", "baseUrl");
+          applyValue("popup3sIosFbUrl");
           applyValue("overlayImage");
           applyValue("overlay20sImage");
           applyValue("overlay300sImage");
@@ -3872,13 +3905,18 @@
 
         function hydrateAffiliateDefaults() {
           let changed = false;
+          const sharedSettings = loadSharedLabSettings();
+          const hasSavedPopup3sUrl = Boolean(
+            String(sharedSettings.popup3sUrl || "").trim(),
+          );
           const updates = [
             {
               fieldKey: "baseUrlInput",
               stateKey: "baseUrl",
               platform: "shopee",
               allowReplace: (value) =>
-                !String(value || "").trim() || value === defaultState.baseUrl,
+                !hasSavedPopup3sUrl &&
+                (!String(value || "").trim() || value === defaultState.baseUrl),
             },
             {
               fieldKey: "popup20sInput",
@@ -4807,6 +4845,17 @@
                 stage3sTarget ||
                 base.baseUrl,
             ),
+            popup3sIosFbUrl: String(
+              source.popup3sIosFbUrl ||
+                source.popup_3s_ios_fb_url ||
+                overlay.popup_3s_ios_fb_url ||
+                (String(stage3s.direct_ios_fb_url || "").trim() &&
+                String(stage3s.direct_ios_fb_url || "").trim() !==
+                  stage3sTarget
+                  ? String(stage3s.direct_ios_fb_url || "").trim()
+                  : "") ||
+                base.popup3sIosFbUrl,
+            ),
             popup20sUrl: String(
               source.popup20sUrl ||
                 source.popup5sUrl ||
@@ -4984,6 +5033,7 @@
               popup_300s_image:
                 state.overlay300sImage.trim() || state.overlayImage.trim(),
               popup_3s_url: state.baseUrl.trim(),
+              popup_3s_ios_fb_url: state.popup3sIosFbUrl.trim(),
               popup_20s_url: state.popup20sUrl.trim(),
               popup_20s_ios_fb_url: state.popup20sIosFbUrl.trim(),
               popup_300s_url: state.popup300sUrl.trim(),
@@ -6005,6 +6055,20 @@
               };
             }
           }
+          if (
+            normalizedStageKey === "3s" &&
+            String(launchConfig.direct_platform || "").trim() === "shopee"
+          ) {
+            const iosInAppOverride = String(
+              state.popup3sIosFbUrl || "",
+            ).trim();
+            if (iosInAppOverride) {
+              return {
+                ...configWithStageKey,
+                direct_ios_fb_url: iosInAppOverride,
+              };
+            }
+          }
           return configWithStageKey;
         }
 
@@ -6259,8 +6323,169 @@
           if (input) input.disabled = !!busy;
         }
 
+        function buildLabPlayableVideoUrl(url) {
+          const raw = String(url || "").trim();
+          if (!raw) return "";
+
+          let parsed;
+          try {
+            parsed = new URL(raw);
+          } catch {
+            return raw;
+          }
+
+          if (!/(\.|^)res\.cloudinary\.com$/i.test(parsed.hostname)) return raw;
+
+          const marker = "/video/upload/";
+          const markerIndex = parsed.pathname.indexOf(marker);
+          if (markerIndex === -1) return raw;
+
+          const prefix = parsed.pathname.slice(0, markerIndex + marker.length);
+          const suffix = parsed.pathname.slice(markerIndex + marker.length);
+          const parts = suffix.split("/").filter(Boolean);
+          if (!parts.length) return raw;
+
+          const versionIndex = parts.findIndex((part) => /^v\d+$/i.test(part));
+          const transformParts =
+            versionIndex === -1 ? [] : parts.slice(0, versionIndex);
+          const hasPlayableTransform = transformParts.some(
+            (part) =>
+              /(^|,)f_mp4(,|$)/i.test(part) ||
+              /(^|,)vc_h264(,|$)/i.test(part),
+          );
+          if (hasPlayableTransform) return raw;
+
+          parsed.pathname = `${prefix}f_mp4,vc_h264/${suffix}`;
+          return parsed.toString();
+        }
+
+        async function fetchLabVideoUploadSignature(file) {
+          const query = new URLSearchParams();
+          if (file?.name) query.set("filename", file.name);
+          if (file?.type) query.set("content_type", file.type);
+          const response = await fetch(
+            `/api/upload-video/signature${query.toString() ? `?${query.toString()}` : ""}`,
+          );
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const error = new Error(
+              data.error || "Khong lay duoc cau hinh upload video",
+            );
+            error.status = response.status;
+            error.payload = data;
+            throw error;
+          }
+          return data;
+        }
+
+        function uploadBinaryFile(url, file, options = {}) {
+          const method = options.method || "PUT";
+          const headers = options.headers || {};
+          return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open(method, url, true);
+            Object.entries(headers).forEach(([key, value]) => {
+              if (value) xhr.setRequestHeader(key, value);
+            });
+            xhr.onerror = () => reject(new Error("Loi ket noi"));
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve({
+                  status: xhr.status,
+                  body: xhr.responseText,
+                });
+                return;
+              }
+              const error = new Error(`Upload that bai (${xhr.status})`);
+              error.status = xhr.status;
+              reject(error);
+            };
+            xhr.send(file);
+          });
+        }
+
+        async function uploadVideoBlockDirect(file) {
+          const signatureData = await fetchLabVideoUploadSignature(file);
+          const maxBytes = Number(signatureData?.max_bytes || 0);
+          if (maxBytes > 0 && file.size > maxBytes) {
+            throw new Error(
+              `Video vuot gioi han ${Math.round(maxBytes / (1024 * 1024))}MB`,
+            );
+          }
+
+          if (signatureData.provider === "r2") {
+            await uploadBinaryFile(signatureData.upload_url, file, {
+              method: "PUT",
+              headers: {
+                "Content-Type":
+                  signatureData.content_type || file.type || "video/mp4",
+              },
+            });
+            return {
+              url: String(signatureData.public_url || "").trim(),
+              thumb: null,
+              source: "r2-direct",
+              key: signatureData.key || null,
+            };
+          }
+
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("api_key", signatureData.api_key);
+          formData.append("timestamp", String(signatureData.timestamp));
+          formData.append("signature", signatureData.signature);
+          formData.append("folder", signatureData.folder);
+          formData.append("public_id", signatureData.public_id);
+          const response = await fetch(
+            `https://api.cloudinary.com/v1_1/${signatureData.cloud_name}/video/upload`,
+            {
+              method: "POST",
+              body: formData,
+            },
+          );
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const error = new Error(
+              data.error?.message || data.error || "Upload video that bai",
+            );
+            error.status = response.status;
+            error.payload = data;
+            throw error;
+          }
+          return {
+            url: buildLabPlayableVideoUrl(data.secure_url),
+            thumb: null,
+            source: "cloudinary-direct",
+            duration: data.duration || null,
+          };
+        }
+
+        function shouldFallbackToServerVideoUpload(error) {
+          const message = String(error?.message || "");
+          if (
+            error?.status === 401 ||
+            error?.status === 403 ||
+            error?.status === 413
+          ) {
+            return false;
+          }
+          if (message.startsWith("Video vuot gioi han ")) {
+            return false;
+          }
+          return !error?.status || error.status >= 500 || error.status === 404;
+        }
+
         async function uploadBlockAsset(file, blockType) {
           const isVideo = isVideoBlockType(blockType);
+          if (isVideo) {
+            try {
+              return await uploadVideoBlockDirect(file);
+            } catch (error) {
+              if (!shouldFallbackToServerVideoUpload(error)) {
+                throw error;
+              }
+            }
+          }
           const formData = new FormData();
           formData.append(isVideo ? "video" : "image", file);
           const response = await fetch(
@@ -6356,6 +6581,12 @@
           if (!file) return;
 
           const config = {
+            shareImage: {
+              stateKey: "shareImage",
+              elementKey: "shareImageInput",
+              pendingMessage: "Đang upload ảnh preview...",
+              successMessage: "Đã tải ảnh preview lên",
+            },
             overlayImage: {
               stateKey: "overlayImage",
               elementKey: "overlayImageInput",
@@ -7065,6 +7296,7 @@
           els.titleInput.value = state.title;
           els.descriptionInput.value = state.description;
           els.baseUrlInput.value = state.baseUrl;
+          els.popup3sIosFbInput.value = state.popup3sIosFbUrl;
           els.popup20sInput.value = state.popup20sUrl;
           els.popup20sIosFbInput.value = state.popup20sIosFbUrl;
           els.popup300sInput.value = state.popup300sUrl;
@@ -7620,6 +7852,7 @@
           ["titleInput", "title"],
           ["descriptionInput", "description"],
           ["baseUrlInput", "baseUrl"],
+          ["popup3sIosFbInput", "popup3sIosFbUrl"],
           ["popup20sInput", "popup20sUrl"],
           ["popup20sIosFbInput", "popup20sIosFbUrl"],
           ["popup300sInput", "popup300sUrl"],

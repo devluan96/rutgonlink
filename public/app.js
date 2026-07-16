@@ -5161,13 +5161,14 @@ function renderForms() {
 }
 
 function canUseLabTabs() {
-  return isAdminUser();
+  return isAdminUser() || !!user?.can_use_lab;
 }
 
 function normalizeLabSharedSettings(input = {}) {
   const source = input && typeof input === "object" ? input : {};
   return {
-    shareImage: String(source.shareImage || "").trim(),
+    popup3sUrl: String(source.popup3sUrl || "").trim(),
+    popup3sIosFbUrl: String(source.popup3sIosFbUrl || "").trim(),
     overlayImage: String(source.overlayImage || "").trim(),
     overlay20sImage: String(source.overlay20sImage || "").trim(),
     overlay300sImage: String(source.overlay300sImage || "").trim(),
@@ -5197,7 +5198,8 @@ function setLabSharedSettings(value) {
 
 function getLabSharedSettingsFormValueMap() {
   return {
-    shareImage: document.getElementById("labSharedShareImageInput"),
+    popup3sUrl: document.getElementById("labSharedPopup3UrlInput"),
+    popup3sIosFbUrl: document.getElementById("labSharedPopup3IosFbUrlInput"),
     overlayImage: document.getElementById("labSharedOverlayImageInput"),
     overlay20sImage: document.getElementById("labSharedOverlay20ImageInput"),
     overlay300sImage: document.getElementById("labSharedOverlay300ImageInput"),
@@ -5210,14 +5212,6 @@ function getLabSharedSettingsFormValueMap() {
 }
 
 const labSharedImageFieldConfig = {
-  shareImage: {
-    inputId: "labSharedShareImageInput",
-    fileInputId: "labSharedShareImageFileInput",
-    statusId: "labSharedShareImageStatus",
-    buttonId: "labSharedShareImagePickerBtn",
-    pendingMessage: "Đang upload ảnh preview chia sẻ...",
-    successMessage: "Đã tải ảnh preview chia sẻ lên",
-  },
   overlayImage: {
     inputId: "labSharedOverlayImageInput",
     fileInputId: "labSharedOverlayImageFileInput",
@@ -5274,20 +5268,6 @@ function triggerLabSharedImagePicker(assetKey) {
   }
 }
 
-function syncLabSharedShareImagePreview() {
-  const input = document.getElementById("labSharedShareImageInput");
-  const previewWrap = document.getElementById("labSharedShareImagePreviewWrap");
-  const previewImg = document.getElementById("labSharedShareImagePreview");
-  if (!input || !previewWrap || !previewImg) return;
-  const value = String(input.value || "").trim();
-  if (!value) {
-    previewImg.removeAttribute("src");
-    previewWrap.hidden = true;
-    return;
-  }
-  previewImg.src = value;
-  previewWrap.hidden = false;
-}
 
 async function handleLabSharedImagePicked(assetKey, input) {
   const config = labSharedImageFieldConfig[assetKey];
@@ -5312,9 +5292,6 @@ async function handleLabSharedImagePicked(assetKey, input) {
     const targetInput = document.getElementById(config.inputId);
     if (targetInput) {
       targetInput.value = absoluteUrl;
-    }
-    if (assetKey === "shareImage") {
-      syncLabSharedShareImagePreview();
     }
     setLabSharedImageStatus(assetKey, "Upload ảnh xong", "ok");
     toast(config.successMessage);
@@ -5440,17 +5417,15 @@ function openLabSharedSettingsModal(frameId = "createLabIframe") {
   });
   Object.keys(labSharedImageFieldConfig).forEach((assetKey) => {
     const statusDefaults = {
-      shareImage: "Có thể dán URL hoặc chọn ảnh từ máy.",
       overlayImage: "Có thể dán URL hoặc chọn ảnh từ máy.",
       overlay20sImage: "Để trống nếu muốn dùng lại ảnh popup 3 giây.",
       overlay300sImage: "Để trống nếu muốn dùng lại ảnh popup 3 giây.",
     };
     setLabSharedImageStatus(assetKey, statusDefaults[assetKey] || "");
   });
-  syncLabSharedShareImagePreview();
   modal.classList.remove("hidden");
   requestAnimationFrame(() => {
-    document.getElementById("labSharedShareImageInput")?.focus();
+    document.getElementById("labSharedPopup3UrlInput")?.focus();
   });
 }
 
@@ -10508,6 +10483,9 @@ function renderAdminUsers() {
     .map((u) => {
       const userId = Number(u.id);
       const isSelected = adminSelectedUserIds.has(userId);
+      const isAdminRole =
+        String(u.role || "user").trim().toLowerCase() === "admin";
+      const canUseLab = isAdminRole || !!u.can_use_lab;
       return `<tr class="admin-user-row ${isSelected ? "admin-row-selected" : ""}" onclick="openAdminUserDetailModal(${userId})">
     <td class="td-check" onclick="event.stopPropagation()">
       <label class="tbl-check">
@@ -10527,6 +10505,18 @@ function renderAdminUsers() {
       <select class="plan-select" data-current-role="${esc(u.role || "user")}" onchange="adminSetRole(${u.id},this)">
         ${["user", "support", "admin"].map((role) => `<option value="${role}"${String(u.role || "user") === role ? " selected" : ""}>${getManagedUserRoleLabel(role)}</option>`).join("")}
       </select>
+    </td>
+    <td onclick="event.stopPropagation()">
+      <label class="tbl-check" title="${canUseLab ? "Đã cấp quyền dùng lab" : "Chưa cấp quyền dùng lab"}">
+        <input
+          type="checkbox"
+          data-current-value="${u.can_use_lab ? "true" : "false"}"
+          ${canUseLab ? "checked" : ""}
+          ${isAdminRole ? "disabled" : ""}
+          onchange="adminSetLabAccess(${userId}, this)"
+        />
+        <span></span>
+      </label>
     </td>
     <td style="color:var(--text3);font-size:11px">${(u.created_at || "").substring(0, 10)}</td>
     <td class="td-actions"><button class="btn-del" onclick="adminDeleteUser(${u.id},'${esc(u.email)}')">Xóa</button></td>
@@ -11069,6 +11059,66 @@ function getManagedUserRoleLabel(role) {
   if (normalizedRole === "admin") return "Admin";
   if (normalizedRole === "support") return "Hỗ trợ";
   return "User";
+}
+
+async function adminSetLabAccess(userId, checkboxEl) {
+  const targetUser = adminUsers.find((u) => Number(u.id) === Number(userId));
+  const isAdminRole =
+    String(targetUser?.role || "").trim().toLowerCase() === "admin";
+  if (isAdminRole) {
+    if (checkboxEl) checkboxEl.checked = true;
+    return;
+  }
+  const nextValue = !!checkboxEl?.checked;
+  const currentValue =
+    String(checkboxEl?.dataset?.currentValue || "false") === "true";
+  if (nextValue === currentValue) return;
+  const confirmed = await showConfirmDialog({
+    title: "Cập nhật quyền dùng lab",
+    message: `${nextValue ? "Cấp" : "Thu hồi"} quyền dùng lab cho ${targetUser?.email || "người dùng này"}?`,
+    note: nextValue
+      ? "Người dùng sẽ thấy tab lab, xem danh sách lab của họ và tự tạo link lab."
+      : "Người dùng sẽ bị ẩn tab lab và không gọi được API lab nữa.",
+    confirmLabel: nextValue ? "Cấp quyền" : "Thu hồi quyền",
+  });
+  if (!confirmed) {
+    if (checkboxEl) checkboxEl.checked = currentValue;
+    return;
+  }
+  try {
+    const response = await fetch("/api/admin/users/" + userId, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ can_use_lab: nextValue }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể cập nhật quyền dùng lab");
+    }
+    const updatedUser = data.user || {};
+    if (checkboxEl) {
+      checkboxEl.dataset.currentValue = updatedUser.can_use_lab
+        ? "true"
+        : "false";
+      checkboxEl.checked = !!updatedUser.can_use_lab;
+    }
+    adminUsers = adminUsers.map((userItem) =>
+      Number(userItem.id) === Number(userId)
+        ? {
+            ...userItem,
+            can_use_lab: !!updatedUser.can_use_lab,
+          }
+        : userItem,
+    );
+    renderAdminUsers();
+    toast(
+      nextValue ? "✅ Đã cấp quyền dùng lab" : "✅ Đã thu hồi quyền dùng lab",
+      "ok",
+    );
+  } catch (error) {
+    if (checkboxEl) checkboxEl.checked = currentValue;
+    toast(error.message || "Không thể cập nhật quyền dùng lab", "err");
+  }
 }
 
 async function adminSetRole(userId, selectEl) {
@@ -12021,5 +12071,6 @@ window.addEventListener("hashchange", () => {
     showAuthScreen(getAuthRouteMode());
   }
 })();
+
 
 

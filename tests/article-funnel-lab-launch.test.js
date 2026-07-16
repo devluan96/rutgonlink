@@ -35,6 +35,35 @@ test("admin article funnel lab mirrors HongHotDuong-style TikTok popup 20s routi
   );
 });
 
+test("admin article funnel lab supports saved popup 3s opaanlp overrides and share preview uploads", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(templateHtml, /id="popup3sIosFbInput"/);
+  assert.match(templateHtml, /data-asset-upload-trigger="shareImage"/);
+  assert.match(templateHtml, /data-asset-upload-input="shareImage"/);
+  assert.match(
+    templateHtml,
+    /<label for="descriptionInput">[\s\S]*?<label for="shareImageInput">/s,
+  );
+  assert.doesNotMatch(templateHtml, /applyValue\("shareImage"\)/);
+  assert.match(
+    templateHtml,
+    /popup3sIosFbUrl:\s*String\(\s*source\.popup3sIosFbUrl \|\|/s,
+  );
+  assert.match(
+    templateHtml,
+    /popup_3s_ios_fb_url:\s*state\.popup3sIosFbUrl\.trim\(\)/,
+  );
+  assert.match(
+    templateHtml,
+    /normalizedStageKey === "3s"\s+&&\s+String\(launchConfig\.direct_platform \|\| ""\)\.trim\(\) === "shopee"/s,
+  );
+  assert.match(templateHtml, /direct_ios_fb_url:\s*iosInAppOverride/);
+});
+
 test("admin article funnel lab keeps Shopee popup 3s web-first on iPhone in-app", () => {
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
@@ -167,6 +196,13 @@ test("admin article funnel lab uploads sensitive video blocks through the video 
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
     "utf8",
+  );
+
+  assert.match(templateHtml, /async function fetchLabVideoUploadSignature\(file\) \{/);
+  assert.match(templateHtml, /\/api\/upload-video\/signature/);
+  assert.match(
+    templateHtml,
+    /if \(isVideo\) \{\s+try \{\s+return await uploadVideoBlockDirect\(file\);/s,
   );
 
   assert.match(

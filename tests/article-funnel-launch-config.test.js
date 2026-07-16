@@ -168,6 +168,25 @@ test("buildDirectLaunchConfig keeps Shopee affiliate params on the FB iPhone web
   assert.equal(config.direct_ios_browser_url, originalUrl);
 });
 
+test("normalizeArticleFunnelPreviewConfig preserves explicit Shopee popup 3s FB iPhone override", () => {
+  const config = __testUtils.normalizeArticleFunnelPreviewConfig({
+    overlay: {
+      popup_3s_url: "https://s.shopee.vn/short-3s",
+      popup_3s_ios_fb_url:
+        "https://shopee.vn/opaanlp/37251933/591989399?__mobile__=1&mmp_pid=an_123",
+    },
+  });
+
+  const stage3s = config.stages.find((stage) => stage.stage_key === "3s");
+  assert.ok(stage3s);
+  assert.equal(stage3s.direct_platform, "shopee");
+  assert.equal(stage3s.target_url, "https://s.shopee.vn/short-3s");
+  assert.equal(
+    stage3s.direct_ios_fb_url,
+    "https://shopee.vn/opaanlp/37251933/591989399?__mobile__=1&mmp_pid=an_123",
+  );
+});
+
 test("normalizeArticleFunnelPreviewConfig omits 20s stage when popup 20s URL is empty", () => {
   const config = __testUtils.normalizeArticleFunnelPreviewConfig({
     baseUrl: "https://shopee.vn/product/37251933/591989399",

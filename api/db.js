@@ -133,6 +133,34 @@ function isMissingRelationError(error, relationName) {
   );
 }
 
+function isMissingColumnError(error, columnName) {
+  const normalizedColumn = String(columnName || '').trim();
+  if (!error || !normalizedColumn) return false;
+  return Boolean(
+    error.code === '42703' ||
+      error.code === 'PGRST204' ||
+      new RegExp(`column .*${normalizedColumn}|${normalizedColumn}.*does not exist|schema cache`, 'i').test(
+        error.message || '',
+      ),
+  );
+}
+
+function isMissingAnyColumnError(error, columnNames = []) {
+  return Array.isArray(columnNames)
+    ? columnNames.some((columnName) => isMissingColumnError(error, columnName))
+    : false;
+}
+
+function normalizeLegacyAdminUserRow(row = {}) {
+  return {
+    ...row,
+    phone: row.phone || null,
+    avatar_url: row.avatar_url || null,
+    can_use_lab: !!row.can_use_lab,
+    updated_at: row.updated_at || row.created_at || null,
+  };
+}
+
 async function fetchPaginatedRows(fetchPage, limit = 1000, pageSize = 1000) {
   const safeLimit = Math.max(Number(limit) || 0, 0);
   if (!safeLimit) return { data: [], error: null };
@@ -505,6 +533,19 @@ async function init() {
       check(error);
     },
 
+    async updateUserLabAccess(userId, canUseLab) {
+      const { error } = await sb
+        .from('users')
+        .update({ can_use_lab: !!canUseLab })
+        .eq('id', userId);
+      if (isMissingColumnError(error, 'can_use_lab')) {
+        throw new Error(
+          'DB schema chưa cập nhật cột can_use_lab. Hãy chạy migration 20260716_add_user_lab_access.sql',
+        );
+      }
+      check(error);
+    },
+
     async updateUserName(userId, name) {
       const { error } = await sb.from('users').update({ name: name || null }).eq('id', userId);
       check(error);
@@ -615,10 +656,37 @@ async function init() {
     },
 
     async getAllUsers() {
-      const { data, error } = await sb
+      let { data, error } = await sb
         .from('users')
-        .select('id,email,name,plan,role,created_at')
+        .select(
+          'id,email,name,plan,role,phone,avatar_url,can_use_lab,created_at,updated_at',
+        )
         .order('created_at', { ascending: false });
+      if (
+        isMissingAnyColumnError(error, [
+          'phone',
+          'avatar_url',
+          'can_use_lab',
+          'updated_at',
+        ])
+      ) {
+        console.warn(
+          '[db] users table is missing one or more optional admin columns; falling back to legacy user list. Run the latest users migrations locally.',
+        );
+        const legacyResult = await sb
+          .from('users')
+          .select('id,email,name,plan,role,created_at')
+          .order('created_at', { ascending: false });
+        data = Array.isArray(legacyResult.data)
+          ? legacyResult.data.map((row) =>
+              normalizeLegacyAdminUserRow({
+                ...row,
+                can_use_lab: false,
+              }),
+            )
+          : [];
+        error = legacyResult.error;
+      }
       check(error);
       return data || [];
     },
@@ -1160,11 +1228,16 @@ async function init() {
       return { counted: true, deduped: false };
     },
 
-    async listArticleFunnelLabs() {
-      const { data, error } = await sb
+    async listArticleFunnelLabs(options = {}) {
+      const createdByUserId = Number(options.createdByUserId || 0);
+      let query = sb
         .from('article_funnel_labs')
         .select('*')
         .order('updated_at', { ascending: false });
+      if (Number.isInteger(createdByUserId) && createdByUserId > 0) {
+        query = query.eq('created_by_user_id', createdByUserId);
+      }
+      const { data, error } = await query;
       check(error, 'article_funnel_labs_list');
       return data || [];
     },

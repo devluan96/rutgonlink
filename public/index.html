@@ -2963,13 +2963,14 @@
                         <th>Tên</th>
                         <th>Gói hiện tại</th>
                         <th>Role</th>
+                        <th>Lab</th>
                         <th>Ngày tạo</th>
                         <th>Thao tác</th>
                       </tr>
                     </thead>
                     <tbody id="adUserBody">
                       <tr>
-                        <td colspan="8" class="tbl-empty">⏳ Đang tải...</td>
+                        <td colspan="9" class="tbl-empty">⏳ Đang tải...</td>
                       </tr>
                     </tbody>
                   </table>
@@ -3389,20 +3390,6 @@
           Bộ này áp dụng cho các lab bạn tạo tiếp theo trong tab này. Nó không mở bên trong từng lab nữa.
         </div>
         <div class="lab-shared-settings-grid">
-          <div class="lab-shared-settings-span-2">
-            <label class="fl" for="labSharedShareImageInput">Ảnh chia sẻ / ảnh đầu bài</label>
-            <input class="fi" id="labSharedShareImageInput" type="url" placeholder="https://..." oninput="syncLabSharedShareImagePreview()" />
-            <div class="lab-shared-upload-row">
-              <button id="labSharedShareImagePickerBtn" class="btn-cancel lab-shared-upload-btn" type="button" onclick="triggerLabSharedImagePicker('shareImage')">
-                Chọn ảnh từ máy
-              </button>
-              <input id="labSharedShareImageFileInput" class="lab-shared-file-input" type="file" accept="image/*" onchange="handleLabSharedImagePicked('shareImage', this)" />
-              <span class="lab-shared-upload-status" id="labSharedShareImageStatus">Có thể dán URL hoặc chọn ảnh từ máy.</span>
-            </div>
-            <div class="lab-shared-preview" id="labSharedShareImagePreviewWrap" hidden>
-              <img id="labSharedShareImagePreview" alt="Preview ảnh chia sẻ lab" />
-            </div>
-          </div>
           <div>
             <label class="fl" for="labSharedOverlayImageInput">Ảnh popup 3 giây</label>
             <input class="fi" id="labSharedOverlayImageInput" type="url" placeholder="https://..." />
@@ -3435,6 +3422,14 @@
               <input id="labSharedOverlay300ImageFileInput" class="lab-shared-file-input" type="file" accept="image/*" onchange="handleLabSharedImagePicked('overlay300sImage', this)" />
               <span class="lab-shared-upload-status" id="labSharedOverlay300ImageStatus">Để trống nếu muốn dùng lại ảnh popup 3 giây.</span>
             </div>
+          </div>
+          <div class="lab-shared-settings-span-2">
+            <label class="fl" for="labSharedPopup3UrlInput">Link popup 3 giây</label>
+            <input class="fi" id="labSharedPopup3UrlInput" type="url" placeholder="https://..." />
+          </div>
+          <div class="lab-shared-settings-span-2">
+            <label class="fl" for="labSharedPopup3IosFbUrlInput">Link popup 3 giây opaanlp cho iPhone/Facebook</label>
+            <input class="fi" id="labSharedPopup3IosFbUrlInput" type="url" placeholder="https://shopee.vn/opaanlp/..." />
           </div>
           <div class="lab-shared-settings-span-2">
             <label class="fl" for="labSharedPopup300UrlInput">Link popup 300 giây</label>
@@ -3721,8 +3716,8 @@
     <div class="toast" id="toast"></div>
 
     <script src="/shared-client.js"></script>
-    <script src="/article-funnel-lab-srcdoc.js?v=20260708c"></script>
-    <script src="/app.js?v=20260620a"></script>
+    <script src="/article-funnel-lab-srcdoc.js?v=20260716a"></script>
+    <script src="/app.js?v=20260716a"></script>
   </body>
 </html>
 
