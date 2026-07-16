@@ -2953,7 +2953,7 @@
 
                     <div class="field">
                       <label for="popup20sIosFbInput">
-                        TikTok iPhone/Facebook override
+                        TikTok iPhone/Facebook web override
                       </label>
                       <input id="popup20sIosFbInput" type="url" />
                       <div class="hint">
@@ -4457,7 +4457,7 @@
           setLabel("popup20sInput", copy.popup20Label);
           setLabel(
             "popup20sIosFbInput",
-            copy.popup20IosFbLabel || "TikTok iPhone/Facebook override",
+            copy.popup20IosFbLabel || "TikTok iPhone/Facebook web override",
           );
           setLabel("popup300sInput", copy.popup300Label);
           setHintNear("#sourceImportUrlInput", copy.sourceUrlHint);
@@ -4467,7 +4467,7 @@
           setHintNear(
             "#popup20sIosFbInput",
             copy.popup20IosFbHint ||
-              "Optional. Paste a better TikTok app-opening link for iPhone Facebook/Zalo, preferably vt.tiktok.com or onelink.",
+              "Optional. Keep this empty to stay web-first on iPhone Facebook/Zalo, or paste a full https://www.tiktok.com/... URL. Avoid vt.tiktok.com and onelink here.",
           );
           setHintNear("#popup300sInput", copy.popup300Hint);
           document
@@ -6045,13 +6045,13 @@
             normalizedStageKey === "20s" &&
             String(launchConfig.direct_platform || "").trim() === "tiktok"
           ) {
-            const iosInAppOverride = String(
+            const iosBrowserOverride = String(
               state.popup20sIosFbUrl || "",
             ).trim();
-            if (iosInAppOverride) {
+            if (iosBrowserOverride) {
               return {
                 ...configWithStageKey,
-                direct_ios_fb_url: iosInAppOverride,
+                direct_ios_browser_url: iosBrowserOverride,
               };
             }
           }
@@ -6195,11 +6195,7 @@
               launchConfig.direct_web_url ||
               targetUrl;
             const tiktokTarget = isPopup20s
-              ? isIOS
-                ? isInApp
-                  ? launchConfig.direct_ios_fb_url || tiktokBrowserTarget
-                  : tiktokBrowserTarget
-                : tiktokBrowserTarget
+              ? tiktokBrowserTarget
               : isIOS
                 ? isInApp
                   ? launchConfig.direct_ios_fb_url ||
@@ -7110,7 +7106,7 @@
           setLabel("popup20sInput", "Popup 15 giây override");
           setLabel(
             "popup20sIosFbInput",
-            "TikTok iPhone/Facebook override",
+            "TikTok iPhone/Facebook web override",
           );
           setLabel("popup300sInput", "Popup 300 giây override");
           setHintNear(

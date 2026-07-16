@@ -23,6 +23,10 @@ test("admin article funnel lab mirrors HongHotDuong-style TikTok popup 20s routi
   );
   assert.match(
     templateHtml,
+    /const tiktokTarget = isPopup20s\s+\? tiktokBrowserTarget\s+: isIOS/s,
+  );
+  assert.match(
+    templateHtml,
     /if \(isAndroid \|\| isPopup20s\) \{\s+if \(tiktokTarget\) \{\s+openViaAnchor\(tiktokTarget\);/s,
   );
   assert.match(

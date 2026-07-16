@@ -4936,14 +4936,14 @@ function applyArticleFunnelStageDirectOverrides(
     normalizedStageKey === "20s" &&
     config.direct_platform === "tiktok"
   ) {
-    const iosInAppOverride = String(
+    const iosBrowserOverride = String(
       sourceConfig.popup20sIosFbUrl ||
         sourceConfig.popup_20s_ios_fb_url ||
         overlay.popup_20s_ios_fb_url ||
         "",
     ).trim();
-    if (iosInAppOverride) {
-      config.direct_ios_fb_url = iosInAppOverride;
+    if (iosBrowserOverride) {
+      config.direct_ios_browser_url = iosBrowserOverride;
     }
   }
 
@@ -5834,9 +5834,7 @@ function buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info) {
   const browserUrl = String(
     stage?.direct_ios_browser_url || normalizedTargetUrl || info?.fallback || "",
   ).trim();
-  const iosInAppUrl = String(
-    stage?.direct_ios_fb_url || browserUrl,
-  ).trim();
+  const iosInAppUrl = browserUrl;
 
   return {
     ...(info && typeof info === "object" ? info : {}),
@@ -6537,9 +6535,7 @@ ${ogImageTag}
         String(stage.stage_key || '') === '20s'
       ) {
         if (isIOSDevice()) {
-          return isInAppBrowser()
-            ? (stage.direct_ios_fb_url || stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '')
-            : (stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '');
+          return stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '';
         }
         return stage.direct_web_url || stage.direct_android_url || stage.target_url || '';
       }
@@ -6780,15 +6776,7 @@ ${ogImageTag}
       var tiktokBrowserTarget =
         stage.direct_ios_browser_url || stage.direct_web_url || targetUrl;
       var tiktokTarget = isTikTokPopup20s
-        ? (
-            isIOS
-              ? (
-                  isInApp
-                    ? (stage.direct_ios_fb_url || tiktokBrowserTarget)
-                    : tiktokBrowserTarget
-                )
-              : tiktokBrowserTarget
-          )
+        ? tiktokBrowserTarget
         : (
             isIOS
               ? (
@@ -11524,15 +11512,7 @@ body{overflow-x:hidden}
       var tiktokBrowserTarget =
         stage.direct_ios_browser_url || stage.direct_web_url || '';
       var tiktokTarget = isTikTokPopup20s
-        ? (
-            isIOS
-              ? (
-                  isInApp
-                    ? (stage.direct_ios_fb_url || tiktokBrowserTarget)
-                    : tiktokBrowserTarget
-                )
-              : tiktokBrowserTarget
-          )
+        ? tiktokBrowserTarget
         : (
             isIOS
               ? (stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)
