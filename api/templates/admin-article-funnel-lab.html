@@ -7402,6 +7402,14 @@
           return false;
         }
 
+        function shouldUseOverlayLaunchRoute(stageKey, targetUrl, routeLaunchUrl) {
+          return (
+            String(stageKey || "").trim() === "20s" &&
+            detectTargetPlatform(targetUrl) === "tiktok" &&
+            Boolean(String(routeLaunchUrl || "").trim())
+          );
+        }
+
         function shouldRenderEditorContent() {
           return !isEmbedListView || document.body.classList.contains("lab-editor-open");
         }
@@ -7495,6 +7503,20 @@
         }
 
         function launchOverlayStage(stageKey, targetUrl, fallbackUrl) {
+          const routeLaunchUrl = String(
+            getOverlayLaunchUrl(stageKey) || "",
+          ).trim();
+          if (
+            shouldUseOverlayLaunchRoute(
+              stageKey,
+              targetUrl,
+              routeLaunchUrl,
+            )
+          ) {
+            closeOverlay(stageKey);
+            window.location.href = routeLaunchUrl;
+            return;
+          }
           Promise.resolve(
             targetUrl
               ? resolveLaunchConfig(targetUrl).catch(() =>

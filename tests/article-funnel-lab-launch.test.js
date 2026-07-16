@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
 
-test("admin article funnel lab mirrors HongHotDuong-style TikTok popup 20s routing", () => {
+test("admin article funnel lab prefers launch routes for TikTok popup 20s before inline fallback", () => {
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
     "utf8",
@@ -11,23 +11,19 @@ test("admin article funnel lab mirrors HongHotDuong-style TikTok popup 20s routi
 
   assert.match(
     templateHtml,
+    /function shouldUseOverlayLaunchRoute\(stageKey, targetUrl, routeLaunchUrl\) \{\s+return \(\s+String\(stageKey \|\| ""\)\.trim\(\) === "20s" &&\s+detectTargetPlatform\(targetUrl\) === "tiktok" &&\s+Boolean\(String\(routeLaunchUrl \|\| ""\)\.trim\(\)\)\s+\);\s+\}/s,
+  );
+  assert.match(
+    templateHtml,
+    /const routeLaunchUrl = String\(\s+getOverlayLaunchUrl\(stageKey\) \|\| "",\s+\)\.trim\(\);\s+if \(\s+shouldUseOverlayLaunchRoute\(\s+stageKey,\s+targetUrl,\s+routeLaunchUrl,\s+\)\s+\) \{\s+closeOverlay\(stageKey\);\s+window\.location\.href = routeLaunchUrl;\s+return;\s+\}/s,
+  );
+  assert.match(
+    templateHtml,
     /function navigateWindowLocation\(targetUrl, options = \{\}\)/,
   );
   assert.match(
     templateHtml,
     /function getTikTokInAppDirectAppTarget\(launchConfig\) \{\s+const directAppTarget = String\(\s+launchConfig\?\.direct_ios_url \|\| launchConfig\?\.direct_app_url \|\| "",\s+\)\.trim\(\);/s,
-  );
-  assert.match(
-    templateHtml,
-    /const isPopup20s =\s+String\(launchConfig\.stage_key \|\| ""\)\.trim\(\) === "20s";\s+const tiktokBrowserTarget =\s+launchConfig\.direct_ios_browser_url \|\|\s+launchConfig\.direct_web_url \|\|\s+targetUrl;/s,
-  );
-  assert.match(
-    templateHtml,
-    /if \(isAndroid\) \{\s+if \(tiktokTarget\) \{\s+openViaAnchor\(tiktokTarget\);/s,
-  );
-  assert.match(
-    templateHtml,
-    /if \(isInApp\) \{\s+setTimeout\(\(\) => \{\s+if \(!document\.hidden\) \{\s+openViaAnchor\(\s+tiktokBrowserTarget \|\| launchConfig\.direct_web_url \|\| targetUrl,/s,
   );
   assert.match(
     templateHtml,

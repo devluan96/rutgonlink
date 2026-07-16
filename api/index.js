@@ -5728,10 +5728,7 @@ function shouldUseArticleFunnelInlineLaunch(stage) {
   const directPlatform = String(stage?.direct_platform || "")
     .trim()
     .toLowerCase();
-  return (
-    (normalizedStageKey === "3s" && directPlatform === "shopee") ||
-    (normalizedStageKey === "20s" && directPlatform === "tiktok")
-  );
+  return normalizedStageKey === "3s" && directPlatform === "shopee";
 }
 
 function getRequestHostname(req) {

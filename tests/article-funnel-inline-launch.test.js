@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 const { __testUtils } = require("../api/index");
 
-test("shouldUseArticleFunnelInlineLaunch enables Shopee 3s and TikTok 20s", () => {
+test("shouldUseArticleFunnelInlineLaunch keeps only Shopee 3s on inline launch", () => {
   assert.equal(
     __testUtils.shouldUseArticleFunnelInlineLaunch({
       stage_key: "3s",
@@ -16,7 +16,7 @@ test("shouldUseArticleFunnelInlineLaunch enables Shopee 3s and TikTok 20s", () =
       stage_key: "20s",
       direct_platform: "tiktok",
     }),
-    true,
+    false,
   );
   assert.equal(
     __testUtils.shouldUseArticleFunnelInlineLaunch({
@@ -155,7 +155,7 @@ test("buildArticleFunnelPreviewPage keeps popup test button hidden for non-admin
   );
 });
 
-test("buildArticleFunnelPreviewPage launches TikTok 20s inline like HongHotDuong", () => {
+test("buildArticleFunnelPreviewPage routes TikTok 20s through the launch helper like regular deeplinks", () => {
   const html = __testUtils.buildArticleFunnelPreviewPage(
     {
       title: "Demo",
@@ -175,7 +175,7 @@ test("buildArticleFunnelPreviewPage launches TikTok 20s inline like HongHotDuong
 
   assert.match(
     html,
-    /"stage_key":"20s","direct_platform":"tiktok","direct_web_url":"https:\/\/vt\.tiktok\.com\/demo\/","use_inline_launch":true/,
+    /"stage_key":"20s","direct_platform":"tiktok","direct_web_url":"https:\/\/vt\.tiktok\.com\/demo\/","use_inline_launch":false/,
   );
   assert.match(html, /var bridgeBasePath = "\/demo\/bridge"/);
   assert.match(html, /function shouldUseDedicatedBridgeRoute\(stage\) \{\s+return false;\s+\}/);
@@ -185,7 +185,7 @@ test("buildArticleFunnelPreviewPage launches TikTok 20s inline like HongHotDuong
   );
   assert.match(
     html,
-    /function getNativeAnchorHref\(stage\) \{\s+if \(!stage\) return '';\s+if \(stage\.use_inline_launch\) \{\s+if \(\s+String\(stage\.direct_platform \|\| ''\)\.toLowerCase\(\) === 'tiktok' &&\s+String\(stage\.stage_key \|\| ''\) === '20s'\s+\) \{\s+if \(isIOSDevice\(\)\) \{\s+return isInAppBrowser\(\)\s+\? \(getNativePopupDirectAppLaunchUrl\(stage\) \|\| stage\.direct_ios_fb_url \|\| stage\.direct_ios_browser_url \|\| stage\.direct_web_url \|\| stage\.target_url \|\| ''\)\s+:\s+\(stage\.direct_ios_browser_url \|\| stage\.direct_web_url \|\| stage\.target_url \|\| ''\);\s+\}\s+return stage\.direct_web_url \|\| stage\.direct_android_url \|\| stage\.target_url \|\| '';\s+\}\s+return stage\.direct_web_url \|\| stage\.target_url \|\| '';\s+\}\s+return getStageOpenUrl\(stage\) \|\| stage\.direct_web_url \|\| '#';\s+\}/s,
+    /function getNativeAnchorHref\(stage\) \{\s+if \(!stage\) return '';\s+if \(stage\.use_inline_launch\) \{[\s\S]*?\}\s+return getStageOpenUrl\(stage\) \|\| stage\.direct_web_url \|\| '#';\s+\}/s,
   );
   assert.match(
     html,
@@ -193,15 +193,15 @@ test("buildArticleFunnelPreviewPage launches TikTok 20s inline like HongHotDuong
   );
   assert.match(
     html,
-    /var isTikTokPopup20s = String\(stage\.stage_key \|\| ''\) === '20s';\s+var tiktokBrowserTarget =\s+stage\.direct_ios_browser_url \|\| stage\.direct_web_url \|\| targetUrl;/s,
+    /if \(stage\.use_inline_launch\) \{\s+trackStageClickInBackground\(stage\);\s+if \(launchDirectTarget\(stage\)\) \{\s+return;\s+\}\s+\}\s+if \(launchUrl\) \{/s,
   );
   assert.match(
     html,
-    /var directAppTarget =\s+isInApp\s+\? getNativePopupDirectAppLaunchUrl\(stage\)\s+: '';/s,
+    /window\.location\.href = launchUrl;/,
   );
   assert.match(
     html,
-    /scheduleLaunchFallback\(\s+tiktokBrowserTarget \|\| stage\.direct_web_url,\s+1500,\s+\{ preferTopLevel: true \},\s+\);/s,
+    /var nativeLaunchUrl = getNativeAnchorHref\(stage\) \|\| getStageOpenUrl\(stage\) \|\| fallbackUrl \|\| \(\(stage && stage\.direct_web_url\) \|\| \(stage && stage\.target_url\) \|\| ''\);/s,
   );
   assert.match(
     html,
