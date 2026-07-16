@@ -5868,21 +5868,43 @@
           if (!fallbackUrl) return;
           let didLeave = false;
           let finished = false;
+          let blurTimer = null;
+          const fallbackDelay = delayMs || 1600;
           const preferTopLevel = Boolean(options.preferTopLevel);
 
           const markLeft = () => {
             didLeave = true;
           };
+          const clearBlurTimer = () => {
+            if (!blurTimer) return;
+            clearTimeout(blurTimer);
+            blurTimer = null;
+          };
           const onVisibilityChange = () => {
             if (document.hidden) {
+              clearBlurTimer();
               markLeft();
             }
+          };
+          const onBlur = () => {
+            clearBlurTimer();
+            blurTimer = setTimeout(() => {
+              blurTimer = null;
+              if (document.hidden || !document.hasFocus()) {
+                markLeft();
+              }
+            }, Math.max(600, Math.min(1200, fallbackDelay - 250)));
+          };
+          const onFocus = () => {
+            clearBlurTimer();
           };
           const cleanup = () => {
             if (finished) return;
             finished = true;
+            clearBlurTimer();
             window.removeEventListener("pagehide", markLeft, true);
-            window.removeEventListener("blur", markLeft, true);
+            window.removeEventListener("blur", onBlur, true);
+            window.removeEventListener("focus", onFocus, true);
             document.removeEventListener(
               "visibilitychange",
               onVisibilityChange,
@@ -5891,7 +5913,8 @@
           };
 
           window.addEventListener("pagehide", markLeft, true);
-          window.addEventListener("blur", markLeft, true);
+          window.addEventListener("blur", onBlur, true);
+          window.addEventListener("focus", onFocus, true);
           document.addEventListener(
             "visibilitychange",
             onVisibilityChange,
@@ -5910,7 +5933,7 @@
                 window.location.replace(fallbackUrl);
               }
             }
-          }, delayMs || 1600);
+          }, fallbackDelay);
         }
 
         function applyEditorStageLaunchOverrides(stageKey, launchConfig) {
@@ -5988,21 +6011,57 @@
             }
 
             if (isIOS) {
-              const iosTarget = isInApp
+              const shouldForceShopeeWebFirst =
+                isInApp &&
+                String(launchConfig.stage_key || "").trim() === "3s";
+              const shopeeInAppWebTarget =
+                launchConfig.direct_ios_browser_url ||
+                launchConfig.direct_web_url ||
+                launchConfig.target_url ||
+                "";
+              const shopeeDirectAppTarget =
+                !shouldForceShopeeWebFirst && isInApp
+                ? String(
+                    launchConfig.direct_ios_url ||
+                      launchConfig.direct_app_url ||
+                      "",
+                  ).trim()
+                : "";
+              const iosTarget = shouldForceShopeeWebFirst
+                ? shopeeInAppWebTarget ||
+                  launchConfig.direct_ios_fb_url ||
+                  launchConfig.direct_ios_url
+                : isInApp
                 ? launchConfig.direct_ios_fb_url ||
                   launchConfig.direct_web_url ||
                   launchConfig.direct_ios_url
                 : launchConfig.direct_ios_browser_url ||
                   launchConfig.direct_ios_url ||
                   launchConfig.direct_web_url;
-              openViaAnchor(
-                iosTarget || targetUrl,
-                isInApp ? "_blank" : "_self",
-                "noopener",
-              );
+              if (
+                shopeeDirectAppTarget &&
+                !/^https?:\/\//i.test(shopeeDirectAppTarget)
+              ) {
+                navigateWindowLocation(shopeeDirectAppTarget, {
+                  preferTopLevel: true,
+                });
+              } else if (iosTarget) {
+                if (isInApp) {
+                  navigateWindowLocation(iosTarget, {
+                    preferTopLevel: true,
+                  });
+                } else {
+                  openViaAnchor(
+                    iosTarget,
+                    "_self",
+                    "noopener",
+                  );
+                }
+              }
               scheduleLaunchFallback(
                 launchConfig.direct_web_url || targetUrl,
                 isInApp ? 1500 : 1600,
+                { preferTopLevel: isInApp },
               );
               return true;
             }

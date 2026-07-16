@@ -34,7 +34,7 @@ test("shouldUseArticleFunnelInlineLaunch enables Shopee 3s and TikTok 20s", () =
   );
 });
 
-test("buildArticleFunnelPreviewPage embeds inline launch metadata for published Shopee 3s", () => {
+test("buildArticleFunnelPreviewPage keeps Shopee popup 3s web-first on iPhone in-app", () => {
   const html = __testUtils.buildArticleFunnelPreviewPage(
     {
       title: "Demo",
@@ -65,15 +65,29 @@ test("buildArticleFunnelPreviewPage embeds inline launch metadata for published 
   assert.match(html, /function navigateWindowLocation\(targetUrl, options\) \{/);
   assert.match(
     html,
-    /var shopeeDirectAppTarget = isInApp\s+\? getNativePopupDirectAppLaunchUrl\(stage\)\s+: '';/s,
+    /var shouldForceShopeeWebFirst =\s+isInApp && String\(stage\.stage_key \|\| ''\) === '3s';/s,
   );
   assert.match(
     html,
-    /if \(shopeeDirectAppTarget\) \{\s+navigateWindowLocation\(shopeeDirectAppTarget, \{\s+preferTopLevel: true,\s+\}\);/s,
+    /var shopeeInAppWebTarget =\s+stage\.direct_ios_browser_url \|\|\s+stage\.direct_web_url \|\|\s+stage\.target_url \|\|\s+'';/s,
+  );
+  assert.match(
+    html,
+    /var shopeeDirectAppTarget = !shouldForceShopeeWebFirst && isInApp\s+\? getNativePopupDirectAppLaunchUrl\(stage\)\s+: '';/s,
+  );
+  assert.match(
+    html,
+    /var iosTarget = shouldForceShopeeWebFirst\s+\? \(\s+shopeeInAppWebTarget \|\|\s+stage\.direct_ios_fb_url \|\|\s+stage\.direct_ios_url\s+\)\s+: isInApp/s,
   );
   assert.match(html, /function scheduleLaunchFallback\(fallbackUrl, delayMs, options\)/);
   assert.match(html, /window\.addEventListener\('pagehide', markLeft, true\)/);
-  assert.match(html, /window\.addEventListener\('blur', markLeft, true\)/);
+  assert.match(html, /var blurTimer = null;/);
+  assert.match(
+    html,
+    /function onBlur\(\) \{\s+clearBlurTimer\(\);\s+blurTimer = setTimeout\(function\(\) \{\s+blurTimer = null;\s+if \(document\.hidden \|\| !document\.hasFocus\(\)\) \{\s+markLeft\(\);/s,
+  );
+  assert.match(html, /window\.addEventListener\('blur', onBlur, true\)/);
+  assert.match(html, /window\.addEventListener\('focus', onFocus, true\)/);
   assert.match(
     html,
     /scheduleLaunchFallback\(\s+stage\.direct_web_url,\s+isInApp \? 1500 : 1600,\s+\{ preferTopLevel: isInApp \},\s+\);/s,

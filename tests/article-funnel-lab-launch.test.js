@@ -35,6 +35,54 @@ test("admin article funnel lab mirrors HongHotDuong-style TikTok popup 20s routi
   );
 });
 
+test("admin article funnel lab keeps Shopee popup 3s web-first on iPhone in-app", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(
+    templateHtml,
+    /const shouldForceShopeeWebFirst =\s+isInApp &&\s+String\(launchConfig\.stage_key \|\| ""\)\.trim\(\) === "3s";/s,
+  );
+  assert.match(
+    templateHtml,
+    /const shopeeInAppWebTarget =\s+launchConfig\.direct_ios_browser_url \|\|\s+launchConfig\.direct_web_url \|\|\s+launchConfig\.target_url \|\|\s+"";/s,
+  );
+  assert.match(
+    templateHtml,
+    /const shopeeDirectAppTarget =\s+!shouldForceShopeeWebFirst && isInApp\s+\? String\(\s+launchConfig\.direct_ios_url \|\|\s+launchConfig\.direct_app_url \|\|\s+"",\s+\)\.trim\(\)\s+: "";/s,
+  );
+  assert.match(
+    templateHtml,
+    /const iosTarget = shouldForceShopeeWebFirst\s+\? shopeeInAppWebTarget \|\|\s+launchConfig\.direct_ios_fb_url \|\|\s+launchConfig\.direct_ios_url\s+: isInApp/s,
+  );
+  assert.match(
+    templateHtml,
+    /if \(isInApp\) \{\s+navigateWindowLocation\(iosTarget, \{\s+preferTopLevel: true,\s+\}\);/s,
+  );
+  assert.match(
+    templateHtml,
+    /scheduleLaunchFallback\(\s+launchConfig\.direct_web_url \|\| targetUrl,\s+isInApp \? 1500 : 1600,\s+\{ preferTopLevel: isInApp \},\s+\);/s,
+  );
+  assert.match(
+    templateHtml,
+    /let blurTimer = null;/,
+  );
+  assert.match(
+    templateHtml,
+    /const onBlur = \(\) => \{\s+clearBlurTimer\(\);\s+blurTimer = setTimeout\(\(\) => \{\s+blurTimer = null;\s+if \(document\.hidden \|\| !document\.hasFocus\(\)\) \{\s+markLeft\(\);/s,
+  );
+  assert.match(
+    templateHtml,
+    /window\.addEventListener\("blur", onBlur, true\);/,
+  );
+  assert.match(
+    templateHtml,
+    /window\.addEventListener\("focus", onFocus, true\);/,
+  );
+});
+
 test("admin article funnel lab can copy the derived TikTok app deeplink from popup 20s links", () => {
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),

@@ -6508,6 +6508,8 @@ ${ogImageTag}
     if (!fallbackUrl) return;
     var didLeave = false;
     var finished = false;
+    var blurTimer = null;
+    var fallbackDelay = delayMs || 1600;
     var settings = options && typeof options === 'object' ? options : {};
     var preferTopLevel = Boolean(settings.preferTopLevel);
 
@@ -6515,22 +6517,46 @@ ${ogImageTag}
       didLeave = true;
     }
 
+    function clearBlurTimer() {
+      if (!blurTimer) return;
+      clearTimeout(blurTimer);
+      blurTimer = null;
+    }
+
     function cleanup() {
       if (finished) return;
       finished = true;
+      clearBlurTimer();
       window.removeEventListener('pagehide', markLeft, true);
-      window.removeEventListener('blur', markLeft, true);
+      window.removeEventListener('blur', onBlur, true);
+      window.removeEventListener('focus', onFocus, true);
       document.removeEventListener('visibilitychange', onVisibilityChange, true);
     }
 
     function onVisibilityChange() {
       if (document.hidden) {
+        clearBlurTimer();
         markLeft();
       }
     }
 
+    function onBlur() {
+      clearBlurTimer();
+      blurTimer = setTimeout(function() {
+        blurTimer = null;
+        if (document.hidden || !document.hasFocus()) {
+          markLeft();
+        }
+      }, Math.max(600, Math.min(1200, fallbackDelay - 250)));
+    }
+
+    function onFocus() {
+      clearBlurTimer();
+    }
+
     window.addEventListener('pagehide', markLeft, true);
-    window.addEventListener('blur', markLeft, true);
+    window.addEventListener('blur', onBlur, true);
+    window.addEventListener('focus', onFocus, true);
     document.addEventListener('visibilitychange', onVisibilityChange, true);
 
     setTimeout(function() {
@@ -6543,7 +6569,7 @@ ${ogImageTag}
           window.location.replace(fallbackUrl);
         }
       }
-    }, delayMs || 1600);
+    }, fallbackDelay);
   }
 
   function launchDirectTarget(stage) {
@@ -6573,10 +6599,23 @@ ${ogImageTag}
         return true;
       }
       if (isIOS) {
-        var shopeeDirectAppTarget = isInApp
+        var shouldForceShopeeWebFirst =
+          isInApp && String(stage.stage_key || '') === '3s';
+        var shopeeInAppWebTarget =
+          stage.direct_ios_browser_url ||
+          stage.direct_web_url ||
+          stage.target_url ||
+          '';
+        var shopeeDirectAppTarget = !shouldForceShopeeWebFirst && isInApp
           ? getNativePopupDirectAppLaunchUrl(stage)
           : '';
-        var iosTarget = isInApp
+        var iosTarget = shouldForceShopeeWebFirst
+          ? (
+              shopeeInAppWebTarget ||
+              stage.direct_ios_fb_url ||
+              stage.direct_ios_url
+            )
+          : isInApp
           ? (stage.direct_ios_fb_url || stage.direct_web_url || stage.direct_ios_url)
           : (stage.direct_ios_browser_url || stage.direct_ios_url || stage.direct_web_url);
         if (shopeeDirectAppTarget) {
