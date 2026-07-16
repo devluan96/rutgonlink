@@ -45,3 +45,19 @@ test("db user fallback preserves can_use_lab when only other optional columns ar
   assert.match(dbJs, /return Array\.isArray\(data\)\s+\? data\.map\(\(row\) => normalizeLegacyAdminUserRow\(row\)\)\s+: \[\];/s);
   assert.doesNotMatch(dbJs, /can_use_lab:\s*false/);
 });
+
+test("article funnel lab list scopes admins to their own labs", () => {
+  const indexJs = fs.readFileSync(
+    path.join(__dirname, "..", "api", "index.js"),
+    "utf8",
+  );
+
+  assert.match(
+    indexJs,
+    /app\.get\("\/api\/admin\/article-funnel-labs", requireArticleFunnelLab, async \(req, res\) => \{[\s\S]*?createdByUserId:\s*req\.currentUser\?\.id \|\| 0,/,
+  );
+  assert.doesNotMatch(
+    indexJs,
+    /app\.get\("\/api\/admin\/article-funnel-labs", requireArticleFunnelLab, async \(req, res\) => \{[\s\S]*?createdByUserId:\s*isAdminUserRecord\(req\.currentUser\)/,
+  );
+});

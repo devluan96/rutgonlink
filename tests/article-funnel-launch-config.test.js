@@ -61,11 +61,10 @@ test("buildOverlayLaunchConfig keeps TikTok product links web-first for iOS in-a
   assert.match(config.direct_app_url, /^snssdk1180:\/\/ec\/pdp/i);
 });
 
-test("applyArticleFunnelStageDirectOverrides lets TikTok 20s use a dedicated iPhone/Facebook browser target", () => {
+test("applyArticleFunnelStageDirectOverrides lets TikTok 20s use a dedicated iPhone/Facebook target", () => {
   const originalUrl =
     "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180";
-  const overrideUrl =
-    "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180&webfirst=1";
+  const overrideUrl = "https://vt.tiktok.com/ZTAPPDIRECT/";
   const config = __testUtils.applyArticleFunnelStageDirectOverrides(
     {
       stage_key: "20s",
@@ -80,36 +79,32 @@ test("applyArticleFunnelStageDirectOverrides lets TikTok 20s use a dedicated iPh
 
   assert.equal(config.direct_platform, "tiktok");
   assert.equal(config.direct_web_url, originalUrl);
-  assert.equal(config.direct_ios_fb_url, originalUrl);
-  assert.equal(config.direct_ios_browser_url, overrideUrl);
+  assert.equal(config.direct_ios_fb_url, overrideUrl);
+  assert.equal(config.direct_ios_browser_url, originalUrl);
 });
 
-test("buildArticleFunnelPopup20sDirectBridgeInfo keeps TikTok popup 20s web-first on iPhone in-app", () => {
+test("buildArticleFunnelPopup20sDirectBridgeInfo keeps HongHotDuong-style TikTok targets for popup 20s", () => {
   const originalUrl =
     "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180";
-  const iosBrowserUrl =
-    "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180&webfirst=1";
   const bridgeInfo = __testUtils.buildArticleFunnelPopup20sDirectBridgeInfo(
     {
       stage_key: "20s",
-      direct_ios_fb_url: "https://vt.tiktok.com/ZTAPPDIRECT/",
-      direct_ios_browser_url: iosBrowserUrl,
+      direct_ios_fb_url: "https://vt.tiktok.com/ZTWEBFIRST/",
+      direct_ios_browser_url: originalUrl,
     },
     originalUrl,
     __testUtils.detectPlatformDeep(originalUrl, "ios"),
   );
 
   assert.equal(bridgeInfo.platform_name, "tiktok");
-  assert.equal(bridgeInfo.deeplink, iosBrowserUrl);
-  assert.equal(bridgeInfo.deeplink_ios, iosBrowserUrl);
-  assert.equal(bridgeInfo.popup20s_ios_inapp_url, iosBrowserUrl);
-  assert.equal(bridgeInfo.popup20s_browser_url, iosBrowserUrl);
-  assert.equal(bridgeInfo.fallback, iosBrowserUrl);
+  assert.equal(bridgeInfo.deeplink, "https://vt.tiktok.com/ZTWEBFIRST/");
+  assert.equal(bridgeInfo.deeplink_ios, "https://vt.tiktok.com/ZTWEBFIRST/");
+  assert.equal(bridgeInfo.popup20s_ios_inapp_url, "https://vt.tiktok.com/ZTWEBFIRST/");
+  assert.equal(bridgeInfo.popup20s_browser_url, originalUrl);
+  assert.equal(bridgeInfo.fallback, originalUrl);
 });
 
-test("buildArticleFunnelPopup20sTikTokBridgePage sends iOS in-app to the browser url", () => {
-  const browserUrl =
-    "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180&webfirst=1";
+test("buildArticleFunnelPopup20sTikTokBridgePage sends iOS in-app to override and others to browser url", () => {
   const html = __testUtils.buildArticleFunnelPopup20sTikTokBridgePage(
     {
       original_url:
@@ -120,18 +115,19 @@ test("buildArticleFunnelPopup20sTikTokBridgePage sends iOS in-app to the browser
     },
     "https://example.com/demo/bridge/20s",
     {
-      popup20s_browser_url: browserUrl,
-      popup20s_ios_inapp_url: browserUrl,
+      popup20s_browser_url: "https://vt.tiktok.com/ZTBROWSER123/",
+      popup20s_ios_inapp_url:
+        "https://snssdk1180.onelink.me/demo?af_dp=snssdk1180%3A%2F%2Fec%2Fpdp",
     },
   );
 
   assert.match(
     html,
-    /var browserUrl = "https:\/\/www\.tiktok\.com\/view\/product\/1731062681949079816\?share_app_id=1180&webfirst=1";/,
+    /var browserUrl = "https:\/\/vt\.tiktok\.com\/ZTBROWSER123\/";/,
   );
   assert.match(
     html,
-    /var iosInAppUrl = "https:\/\/www\.tiktok\.com\/view\/product\/1731062681949079816\?share_app_id=1180&webfirst=1";/,
+    /var iosInAppUrl = "https:\/\/snssdk1180\.onelink\.me\/demo\?af_dp=snssdk1180%3A%2F%2Fec%2Fpdp";/,
   );
   assert.match(
     html,

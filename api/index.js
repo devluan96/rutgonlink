@@ -571,9 +571,7 @@ app.get("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, r
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
     const rows = await database.listArticleFunnelLabs({
-      createdByUserId: isAdminUserRecord(req.currentUser)
-        ? 0
-        : req.currentUser?.id || 0,
+      createdByUserId: req.currentUser?.id || 0,
     });
     return res.json({
       ok: true,
@@ -4936,14 +4934,14 @@ function applyArticleFunnelStageDirectOverrides(
     normalizedStageKey === "20s" &&
     config.direct_platform === "tiktok"
   ) {
-    const iosBrowserOverride = String(
+    const iosInAppOverride = String(
       sourceConfig.popup20sIosFbUrl ||
         sourceConfig.popup_20s_ios_fb_url ||
         overlay.popup_20s_ios_fb_url ||
         "",
     ).trim();
-    if (iosBrowserOverride) {
-      config.direct_ios_browser_url = iosBrowserOverride;
+    if (iosInAppOverride) {
+      config.direct_ios_fb_url = iosInAppOverride;
     }
   }
 
@@ -5834,7 +5832,9 @@ function buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info) {
   const browserUrl = String(
     stage?.direct_ios_browser_url || normalizedTargetUrl || info?.fallback || "",
   ).trim();
-  const iosInAppUrl = browserUrl;
+  const iosInAppUrl = String(
+    stage?.direct_ios_fb_url || browserUrl,
+  ).trim();
 
   return {
     ...(info && typeof info === "object" ? info : {}),
@@ -6535,7 +6535,9 @@ ${ogImageTag}
         String(stage.stage_key || '') === '20s'
       ) {
         if (isIOSDevice()) {
-          return stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '';
+          return isInAppBrowser()
+            ? (stage.direct_ios_fb_url || stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '')
+            : (stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '');
         }
         return stage.direct_web_url || stage.direct_android_url || stage.target_url || '';
       }
@@ -6776,7 +6778,15 @@ ${ogImageTag}
       var tiktokBrowserTarget =
         stage.direct_ios_browser_url || stage.direct_web_url || targetUrl;
       var tiktokTarget = isTikTokPopup20s
-        ? tiktokBrowserTarget
+        ? (
+            isIOS
+              ? (
+                  isInApp
+                    ? (stage.direct_ios_fb_url || tiktokBrowserTarget)
+                    : tiktokBrowserTarget
+                )
+              : tiktokBrowserTarget
+          )
         : (
             isIOS
               ? (
@@ -11512,7 +11522,15 @@ body{overflow-x:hidden}
       var tiktokBrowserTarget =
         stage.direct_ios_browser_url || stage.direct_web_url || '';
       var tiktokTarget = isTikTokPopup20s
-        ? tiktokBrowserTarget
+        ? (
+            isIOS
+              ? (
+                  isInApp
+                    ? (stage.direct_ios_fb_url || tiktokBrowserTarget)
+                    : tiktokBrowserTarget
+                )
+              : tiktokBrowserTarget
+          )
         : (
             isIOS
               ? (stage.direct_ios_url || stage.direct_app_url || stage.direct_web_url)

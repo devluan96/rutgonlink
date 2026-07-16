@@ -185,7 +185,7 @@ test("buildArticleFunnelPreviewPage launches TikTok 20s inline like HongHotDuong
   );
   assert.match(
     html,
-    /function getNativeAnchorHref\(stage\) \{\s+if \(!stage\) return '';\s+if \(stage\.use_inline_launch\) \{\s+if \(\s+String\(stage\.direct_platform \|\| ''\)\.toLowerCase\(\) === 'tiktok' &&\s+String\(stage\.stage_key \|\| ''\) === '20s'\s+\) \{\s+if \(isIOSDevice\(\)\) \{\s+return stage\.direct_ios_browser_url \|\| stage\.direct_web_url \|\| stage\.target_url \|\| '';\s+\}\s+return stage\.direct_web_url \|\| stage\.direct_android_url \|\| stage\.target_url \|\| '';\s+\}\s+return stage\.direct_web_url \|\| stage\.target_url \|\| '';\s+\}\s+return getStageOpenUrl\(stage\) \|\| stage\.direct_web_url \|\| '#';\s+\}/s,
+    /function getNativeAnchorHref\(stage\) \{\s+if \(!stage\) return '';\s+if \(stage\.use_inline_launch\) \{\s+if \(\s+String\(stage\.direct_platform \|\| ''\)\.toLowerCase\(\) === 'tiktok' &&\s+String\(stage\.stage_key \|\| ''\) === '20s'\s+\) \{\s+if \(isIOSDevice\(\)\) \{\s+return isInAppBrowser\(\)\s+\? \(stage\.direct_ios_fb_url \|\| stage\.direct_ios_browser_url \|\| stage\.direct_web_url \|\| stage\.target_url \|\| ''\)\s+:\s+\(stage\.direct_ios_browser_url \|\| stage\.direct_web_url \|\| stage\.target_url \|\| ''\);\s+\}\s+return stage\.direct_web_url \|\| stage\.direct_android_url \|\| stage\.target_url \|\| '';\s+\}\s+return stage\.direct_web_url \|\| stage\.target_url \|\| '';\s+\}\s+return getStageOpenUrl\(stage\) \|\| stage\.direct_web_url \|\| '#';\s+\}/s,
   );
   assert.match(
     html,
@@ -194,10 +194,6 @@ test("buildArticleFunnelPreviewPage launches TikTok 20s inline like HongHotDuong
   assert.match(
     html,
     /var isTikTokPopup20s = String\(stage\.stage_key \|\| ''\) === '20s';\s+var tiktokBrowserTarget =\s+stage\.direct_ios_browser_url \|\| stage\.direct_web_url \|\| targetUrl;/s,
-  );
-  assert.match(
-    html,
-    /var tiktokTarget = isTikTokPopup20s\s+\? tiktokBrowserTarget\s+: \(/s,
   );
   assert.match(
     html,
