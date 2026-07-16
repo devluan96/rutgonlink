@@ -145,7 +145,26 @@ test("buildOverlayLaunchConfig builds Shopee Android intent config", () => {
 
   assert.equal(config.direct_platform, "shopee");
   assert.match(config.direct_android_intent_url, /^intent:\/\/shopee\.vn\//);
-  assert.equal(config.direct_ios_fb_url, originalUrl);
+  assert.equal(
+    config.direct_ios_fb_url,
+    "https://shopee.vn/opaanlp/37251933/591989399?__mobile__=1",
+  );
+  assert.equal(config.direct_ios_browser_url, originalUrl);
+});
+
+test("buildDirectLaunchConfig keeps Shopee affiliate params on the FB iPhone web-first url", () => {
+  const originalUrl =
+    "https://shopee.vn/product/37251933/591989399?mmp_pid=an_123&utm_source=an_123";
+  const config = __testUtils.buildDirectLaunchConfig(originalUrl);
+
+  assert.equal(config.direct_platform, "shopee");
+  assert.match(
+    config.direct_ios_fb_url,
+    /^https:\/\/shopee\.vn\/opaanlp\/37251933\/591989399\?/,
+  );
+  assert.match(config.direct_ios_fb_url, /mmp_pid=an_123/);
+  assert.match(config.direct_ios_fb_url, /utm_source=an_123/);
+  assert.match(config.direct_ios_fb_url, /__mobile__=1/);
   assert.equal(config.direct_ios_browser_url, originalUrl);
 });
 

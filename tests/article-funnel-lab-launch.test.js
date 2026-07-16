@@ -43,6 +43,14 @@ test("admin article funnel lab keeps Shopee popup 3s web-first on iPhone in-app"
 
   assert.match(
     templateHtml,
+    /function buildShopeeIosInAppWebUrl\(targetUrl\) \{/,
+  );
+  assert.match(
+    templateHtml,
+    /const shopeeIosFbUrl =\s+platform === "shopee"\s+\? buildShopeeIosInAppWebUrl\(targetUrl\) \|\| targetUrl\s+: targetUrl;/s,
+  );
+  assert.match(
+    templateHtml,
     /const shouldForceShopeeWebFirst =\s+isInApp &&\s+String\(launchConfig\.stage_key \|\| ""\)\.trim\(\) === "3s";/s,
   );
   assert.match(
@@ -55,7 +63,7 @@ test("admin article funnel lab keeps Shopee popup 3s web-first on iPhone in-app"
   );
   assert.match(
     templateHtml,
-    /const iosTarget = shouldForceShopeeWebFirst\s+\? shopeeInAppWebTarget \|\|\s+launchConfig\.direct_ios_fb_url \|\|\s+launchConfig\.direct_ios_url\s+: isInApp/s,
+    /const iosTarget = shouldForceShopeeWebFirst\s+\? isFacebook\s+\? launchConfig\.direct_ios_fb_url \|\|\s+shopeeInAppWebTarget \|\|\s+launchConfig\.direct_ios_url\s+: shopeeInAppWebTarget \|\|\s+launchConfig\.direct_ios_fb_url \|\|\s+launchConfig\.direct_ios_url\s+: isInApp/s,
   );
   assert.match(
     templateHtml,

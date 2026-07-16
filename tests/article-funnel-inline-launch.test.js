@@ -60,6 +60,10 @@ test("buildArticleFunnelPreviewPage keeps Shopee popup 3s web-first on iPhone in
   assert.match(html, /var canShowPopupTestButton = true;/);
   assert.match(
     html,
+    /function isFacebookInAppBrowser\(\) \{\s+return \/FBAN\|FBAV\|FB_IAB\|FBIOS\|FB4A\/i\.test\(getUserAgent\(\)\);\s+\}/s,
+  );
+  assert.match(
+    html,
     /function getNativePopupDirectAppLaunchUrl\(stage\) \{\s+if \(!stage\) return '';\s+var launchCandidates = \[\s+stage\.direct_ios_url,\s+stage\.direct_app_url,\s+\];/s,
   );
   assert.match(html, /function navigateWindowLocation\(targetUrl, options\) \{/);
@@ -77,7 +81,7 @@ test("buildArticleFunnelPreviewPage keeps Shopee popup 3s web-first on iPhone in
   );
   assert.match(
     html,
-    /var iosTarget = shouldForceShopeeWebFirst\s+\? \(\s+shopeeInAppWebTarget \|\|\s+stage\.direct_ios_fb_url \|\|\s+stage\.direct_ios_url\s+\)\s+: isInApp/s,
+    /var iosTarget = shouldForceShopeeWebFirst\s+\? \(\s+isFacebookInApp\s+\? \(stage\.direct_ios_fb_url \|\| shopeeInAppWebTarget \|\| stage\.direct_ios_url\)\s+:\s+\(shopeeInAppWebTarget \|\| stage\.direct_ios_fb_url \|\| stage\.direct_ios_url\)\s+\)\s+: isInApp/s,
   );
   assert.match(html, /function scheduleLaunchFallback\(fallbackUrl, delayMs, options\)/);
   assert.match(html, /window\.addEventListener\('pagehide', markLeft, true\)/);

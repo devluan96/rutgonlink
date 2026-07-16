@@ -5840,15 +5840,61 @@
           }
         }
 
+        function buildShopeeIosInAppWebUrl(targetUrl) {
+          try {
+            const webUrl = String(targetUrl || "").trim();
+            if (!webUrl) return "";
+
+            const parsed = new URL(webUrl);
+            const hostname = parsed.hostname.toLowerCase();
+            if (hostname !== "shopee.vn" && !hostname.endsWith(".shopee.vn")) {
+              return "";
+            }
+
+            const pathname = parsed.pathname || "";
+            const productPathMatch = pathname.match(
+              /^\/(?:universal-link\/)?product\/(\d+)\/(\d+)/i,
+            );
+            const legacyProductMatch = pathname.match(/-i\.(\d+)\.(\d+)/i);
+            const opaanlpMatch = pathname.match(/^\/opaanlp\/(\d+)\/(\d+)/i);
+
+            const shopId =
+              productPathMatch?.[1] ||
+              legacyProductMatch?.[1] ||
+              opaanlpMatch?.[1] ||
+              "";
+            const itemId =
+              productPathMatch?.[2] ||
+              legacyProductMatch?.[2] ||
+              opaanlpMatch?.[2] ||
+              "";
+
+            if (!shopId || !itemId) {
+              return webUrl;
+            }
+
+            const query = new URLSearchParams(parsed.searchParams);
+            query.set("__mobile__", "1");
+            const queryString = query.toString();
+            return `https://shopee.vn/opaanlp/${shopId}/${itemId}${queryString ? `?${queryString}` : ""}`;
+          } catch (_) {
+            return "";
+          }
+        }
+
         function buildFallbackLaunchConfig(targetUrl) {
           const platform = detectTargetPlatform(targetUrl);
+          const shopeeIosFbUrl =
+            platform === "shopee"
+              ? buildShopeeIosInAppWebUrl(targetUrl) || targetUrl
+              : targetUrl;
           return {
             target_url: targetUrl,
             direct_platform: platform,
             direct_web_url: targetUrl,
             direct_app_url: targetUrl,
             direct_ios_url: targetUrl,
-            direct_ios_fb_url: targetUrl,
+            direct_ios_fb_url: shopeeIosFbUrl,
             direct_ios_browser_url: targetUrl,
             direct_android_url: targetUrl,
             direct_android_intent_url:
@@ -6028,9 +6074,13 @@
                   ).trim()
                 : "";
               const iosTarget = shouldForceShopeeWebFirst
-                ? shopeeInAppWebTarget ||
-                  launchConfig.direct_ios_fb_url ||
-                  launchConfig.direct_ios_url
+                ? isFacebook
+                  ? launchConfig.direct_ios_fb_url ||
+                    shopeeInAppWebTarget ||
+                    launchConfig.direct_ios_url
+                  : shopeeInAppWebTarget ||
+                    launchConfig.direct_ios_fb_url ||
+                    launchConfig.direct_ios_url
                 : isInApp
                 ? launchConfig.direct_ios_fb_url ||
                   launchConfig.direct_web_url ||
