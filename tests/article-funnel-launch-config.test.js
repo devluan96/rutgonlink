@@ -98,6 +98,8 @@ test("buildArticleFunnelPopup20sDirectBridgeInfo keeps HongHotDuong-style TikTok
     {
       stage_key: "20s",
       direct_ios_fb_url: "https://vt.tiktok.com/ZTWEBFIRST/",
+      direct_ios_url:
+        "snssdk1180://ec/pdp?biz_type=0&requestParams=%7B%22product_id%22%3A%5B%221731062681949079816%22%5D%7D",
       direct_ios_browser_url: originalUrl,
     },
     originalUrl,
@@ -105,10 +107,11 @@ test("buildArticleFunnelPopup20sDirectBridgeInfo keeps HongHotDuong-style TikTok
   );
 
   assert.equal(bridgeInfo.platform_name, "tiktok");
-  assert.equal(bridgeInfo.deeplink, "https://vt.tiktok.com/ZTWEBFIRST/");
-  assert.equal(bridgeInfo.deeplink_ios, "https://vt.tiktok.com/ZTWEBFIRST/");
-  assert.equal(bridgeInfo.popup20s_ios_inapp_url, "https://vt.tiktok.com/ZTWEBFIRST/");
-  assert.equal(bridgeInfo.popup20s_browser_url, originalUrl);
+  assert.match(bridgeInfo.deeplink, /^snssdk1180:\/\/ec\/pdp/i);
+  assert.match(bridgeInfo.deeplink_ios, /^snssdk1180:\/\/ec\/pdp/i);
+  assert.match(bridgeInfo.popup20s_ios_inapp_url, /^snssdk1180:\/\/ec\/pdp/i);
+  assert.equal(bridgeInfo.popup20s_browser_url, "https://vt.tiktok.com/ZTWEBFIRST/");
+  assert.equal(bridgeInfo.ios_inapp_browser_fallback, "https://vt.tiktok.com/ZTWEBFIRST/");
   assert.equal(bridgeInfo.fallback, originalUrl);
 });
 
@@ -190,6 +193,10 @@ test("buildDirectBridgePage renders bridge diagnostics when popup debug is enabl
   );
   assert.match(
     html,
+    /var iosInAppFallbackUrl = "https:\/\/www\.tiktok\.com\/view\/product\/1731062681949079816\?share_app_id=1180";/,
+  );
+  assert.match(
+    html,
     /navigator\.sendBeacon\(bridgeDebug\.debug_api_url, beaconBody\)/,
   );
   assert.match(
@@ -202,11 +209,37 @@ test("buildDirectBridgePage renders bridge diagnostics when popup debug is enabl
   );
   assert.match(
     html,
-    /emitBridgeDebug\('fallback_to_web', \{ fallback_url: webUrl \}\);/,
+    /emitBridgeDebug\('fallback_to_web', \{ fallback_url: fallbackTarget \}\);/,
   );
   assert.doesNotThrow(() => {
     new Function(extractInlineIifeScriptBody(html));
   });
+});
+
+test("resolveTikTokIosInAppTargets prefers app deeplink before TikTok override links", () => {
+  const resolved = __testUtils.resolveTikTokIosInAppTargets(
+    {
+      direct_ios_fb_url: "https://vt.tiktok.com/ZTAPPFALLBACK/",
+      direct_ios_browser_url:
+        "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180",
+      direct_ios_url:
+        "snssdk1180://ec/pdp?biz_type=0&requestParams=%7B%22product_id%22%3A%5B%221731062681949079816%22%5D%7D",
+      direct_app_url:
+        "snssdk1180://ec/pdp?biz_type=0&requestParams=%7B%22product_id%22%3A%5B%221731062681949079816%22%5D%7D",
+    },
+    "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180",
+    __testUtils.detectPlatformDeep(
+      "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180",
+      "ios",
+    ),
+  );
+
+  assert.match(resolved.appTarget, /^snssdk1180:\/\/ec\/pdp/i);
+  assert.equal(resolved.browserFallback, "https://vt.tiktok.com/ZTAPPFALLBACK/");
+  assert.equal(
+    resolved.webFallback,
+    "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180",
+  );
 });
 
 test("buildDirectBridgePage emits a parseable script for long TikTok popup 20s urls", () => {

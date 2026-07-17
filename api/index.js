@@ -5958,6 +5958,39 @@ function shouldUseArticleFunnelPopup20sDirectBridgeFlow(
   );
 }
 
+function resolveTikTokIosInAppTargets(stage, targetUrl, info) {
+  const normalizedTargetUrl = String(
+    stage?.direct_web_url ||
+      targetUrl ||
+      stage?.target_url ||
+      stage?.direct_app_url ||
+      "",
+  ).trim();
+  const webFallbackUrl = String(
+    stage?.direct_ios_browser_url ||
+      stage?.direct_web_url ||
+      info?.fallback ||
+      normalizedTargetUrl,
+  ).trim();
+  const iosOverrideUrl = String(stage?.direct_ios_fb_url || "").trim();
+  const nativeAppUrl = String(
+    stage?.direct_ios_url ||
+      stage?.direct_app_url ||
+      info?.deeplink_ios ||
+      info?.deeplink ||
+      normalizedTargetUrl,
+  ).trim();
+  const browserFallbackUrl = String(
+    iosOverrideUrl || webFallbackUrl || normalizedTargetUrl,
+  ).trim();
+
+  return {
+    appTarget: nativeAppUrl || browserFallbackUrl,
+    browserFallback: browserFallbackUrl || webFallbackUrl || normalizedTargetUrl,
+    webFallback: webFallbackUrl || normalizedTargetUrl,
+  };
+}
+
 function buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info) {
   const normalizedTargetUrl = String(
     stage?.direct_web_url ||
@@ -5966,11 +5999,16 @@ function buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info) {
       stage?.direct_app_url ||
       "",
   ).trim();
+  const resolvedTargets = resolveTikTokIosInAppTargets(stage, targetUrl, info);
   const browserUrl = String(
-    stage?.direct_ios_browser_url || normalizedTargetUrl || info?.fallback || "",
+    resolvedTargets.browserFallback ||
+      stage?.direct_ios_browser_url ||
+      normalizedTargetUrl ||
+      info?.fallback ||
+      "",
   ).trim();
   const iosInAppUrl = String(
-    stage?.direct_ios_fb_url || browserUrl,
+    resolvedTargets.appTarget || browserUrl,
   ).trim();
 
   return {
@@ -5978,7 +6016,8 @@ function buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info) {
     deeplink: iosInAppUrl || browserUrl,
     deeplink_ios: iosInAppUrl || browserUrl,
     deeplink_android: browserUrl,
-    fallback: browserUrl,
+    fallback: String(resolvedTargets.webFallback || browserUrl).trim(),
+    ios_inapp_browser_fallback: browserUrl,
     popup20s_browser_url: browserUrl,
     popup20s_ios_inapp_url: iosInAppUrl || browserUrl,
     universal_link: String(info?.universal_link || browserUrl).trim(),
@@ -6090,19 +6129,24 @@ async function handleArticleFunnelStageLaunch({
     const bridgeInfo = usePopup20sDirectBridgeFlow
       ? buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info)
       : (() => {
+          const resolvedTargets = resolveTikTokIosInAppTargets(
+            stage,
+            targetUrl,
+            info,
+          );
           const preferredTikTokIosTarget = String(
-            stage.direct_ios_fb_url ||
+            resolvedTargets.appTarget ||
               stage.direct_ios_url ||
               info.deeplink_ios ||
               info.deeplink ||
               targetUrl,
           ).trim();
-          const preferredTikTokAppTarget =
-            isTikTokShortShareUrl(preferredTikTokIosTarget)
-              ? preferredTikTokIosTarget
-              : String(
-                  stage.direct_app_url || info.deeplink || targetUrl,
-                ).trim();
+          const preferredTikTokAppTarget = String(
+            stage.direct_app_url ||
+              resolvedTargets.appTarget ||
+              info.deeplink ||
+              targetUrl,
+          ).trim();
           return {
             ...info,
             deeplink: preferredTikTokAppTarget,
@@ -6115,6 +6159,13 @@ async function handleArticleFunnelStageLaunch({
             ).trim(),
             fallback: String(
               stage.direct_web_url || info.fallback || targetUrl,
+            ).trim(),
+            ios_inapp_browser_fallback: String(
+              resolvedTargets.browserFallback ||
+                stage.direct_ios_browser_url ||
+                stage.direct_web_url ||
+                info.fallback ||
+                targetUrl,
             ).trim(),
           };
         })();
@@ -10786,6 +10837,7 @@ ${ogImageTag}
   var canonical   = "${escJs(canonicalUrl)}";
   var androidPkg  = "${escJs(androidPkg)}";
   var platform    = "${escJs(platform)}";
+  var iosInAppFallbackUrl = "${escJs(info.ios_inapp_browser_fallback || dest)}";
   var bridgeDebug = ${bridgeDebugJson};
   var bridgeStatusText = document.getElementById('bridgeStatusText');
   var bridgeDebugPanel = document.getElementById('bridgeDebugPanel');
@@ -10986,12 +11038,13 @@ ${ogImageTag}
         emitBridgeDebug('attempt_open_app', { target: iosUrl, branch: 'ios_inapp_tiktok' });
         try { window.location.href = iosUrl; } catch (_) {}
       }
-      emitBridgeDebug('schedule_fallback', { fallback_url: webUrl, delay_ms: '1500' });
+      emitBridgeDebug('schedule_fallback', { fallback_url: iosInAppFallbackUrl || webUrl, delay_ms: '1500' });
       setTimeout(function() {
         if (!document.hidden) {
+          var fallbackTarget = iosInAppFallbackUrl || webUrl;
           updateStatusText('TikTok app khong mo duoc, dang chuyen sang web...');
-          emitBridgeDebug('fallback_to_web', { fallback_url: webUrl });
-          window.location.replace(webUrl);
+          emitBridgeDebug('fallback_to_web', { fallback_url: fallbackTarget });
+          window.location.replace(fallbackTarget);
         }
       }, 1500);
       return;
@@ -12138,6 +12191,7 @@ module.exports.__testUtils = {
   buildOverlayLaunchConfig,
   applyArticleFunnelStageDirectOverrides,
   buildArticleFunnelPopup20sDirectBridgeInfo,
+  resolveTikTokIosInAppTargets,
   buildArticleFunnelPopup20sTikTokBridgePage,
   decorateArticleFunnelStagesForClient,
   buildArticleFunnelPreviewPage,
