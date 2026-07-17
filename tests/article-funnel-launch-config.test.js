@@ -146,6 +146,10 @@ test("buildArticleFunnelPopup20sTikTokBridgePage sends iOS in-app to override an
   );
   assert.match(
     html,
+    /if \(isIOS && isInApp\) \{[\s\S]*?var iosInAppPromptFallbackDelayMs = 4500;[\s\S]*?delay_ms: String\(iosInAppPromptFallbackDelayMs\)/s,
+  );
+  assert.match(
+    html,
     /if \(browserUrl\) \{[\s\S]*?openSameWindow\(browserUrl\);/s,
   );
 });
@@ -206,6 +210,10 @@ test("buildDirectBridgePage renders bridge diagnostics when popup debug is enabl
   assert.match(
     html,
     /emitBridgeDebug\('attempt_open_app', \{ target: iosUrl, branch: 'ios_inapp_tiktok' \}\);/,
+  );
+  assert.match(
+    html,
+    /var iosInAppPromptFallbackDelayMs = 4500;/,
   );
   assert.match(
     html,

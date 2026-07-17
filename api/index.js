@@ -11033,12 +11033,13 @@ ${ogImageTag}
     setFlag(escapedKey);
 
     if (platform === 'tiktok') {
+      var iosInAppPromptFallbackDelayMs = 4500;
       if (iosUrl && iosUrl !== webUrl) {
         updateStatusText('Dang thu mo TikTok tu Facebook...');
         emitBridgeDebug('attempt_open_app', { target: iosUrl, branch: 'ios_inapp_tiktok' });
         try { window.location.href = iosUrl; } catch (_) {}
       }
-      emitBridgeDebug('schedule_fallback', { fallback_url: iosInAppFallbackUrl || webUrl, delay_ms: '1500' });
+      emitBridgeDebug('schedule_fallback', { fallback_url: iosInAppFallbackUrl || webUrl, delay_ms: String(iosInAppPromptFallbackDelayMs) });
       setTimeout(function() {
         if (!document.hidden) {
           var fallbackTarget = iosInAppFallbackUrl || webUrl;
@@ -11046,7 +11047,7 @@ ${ogImageTag}
           emitBridgeDebug('fallback_to_web', { fallback_url: fallbackTarget });
           window.location.replace(fallbackTarget);
         }
-      }, 1500);
+      }, iosInAppPromptFallbackDelayMs);
       return;
     }
 
@@ -11304,17 +11305,18 @@ ${ogImageTag}
   }
 
   if (isIOS && isInApp) {
+    var iosInAppPromptFallbackDelayMs = 4500;
     updateStatusText('Dang thu mo TikTok tu Facebook...');
     emitBridgeDebug('attempt_open_app', { target: iosInAppUrl || browserUrl || fallbackUrl });
     openSameWindow(iosInAppUrl || browserUrl || fallbackUrl);
-    emitBridgeDebug('schedule_fallback', { fallback_url: fallbackUrl, delay_ms: '1500' });
+    emitBridgeDebug('schedule_fallback', { fallback_url: fallbackUrl, delay_ms: String(iosInAppPromptFallbackDelayMs) });
     setTimeout(function() {
       if (!document.hidden && fallbackUrl) {
         updateStatusText('TikTok app khong mo duoc, dang chuyen sang web...');
         emitBridgeDebug('fallback_to_web', { fallback_url: fallbackUrl });
         window.location.replace(fallbackUrl);
       }
-    }, 1500);
+    }, iosInAppPromptFallbackDelayMs);
     return;
   }
 
