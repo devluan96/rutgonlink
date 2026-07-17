@@ -178,10 +178,22 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through the launch helper 
     /"stage_key":"20s","direct_platform":"tiktok","direct_web_url":"https:\/\/vt\.tiktok\.com\/demo\/","use_inline_launch":false/,
   );
   assert.match(html, /var bridgeBasePath = "\/demo\/bridge"/);
+  assert.match(
+    html,
+    /function shouldEnablePopupDebugMode\(\) \{\s+try \{\s+var params = new URLSearchParams\(window\.location\.search \|\| ''\);\s+return params\.get\('popup_debug'\) === '1' \|\|\s+\(Boolean\(params\.get\('popup_test'\)\) && Boolean\(params\.get\('popup_test_token'\)\)\);/s,
+  );
+  assert.match(
+    html,
+    /function appendPopupDebugQuery\(rawUrl\) \{[\s\S]*?parsed\.searchParams\.set\('popup_debug', '1'\);[\s\S]*?\}/s,
+  );
   assert.match(html, /function shouldUseDedicatedBridgeRoute\(stage\) \{\s+return false;\s+\}/);
   assert.match(
     html,
     /function getStageOpenUrl\(stage\) \{\s+return shouldUseDedicatedBridgeRoute\(stage\)\s+\? \(getBridgeUrl\(stage\) \|\| getLaunchUrl\(stage\)\)\s+:\s+getLaunchUrl\(stage\);\s+\}/s,
+  );
+  assert.match(
+    html,
+    /function getLaunchUrl\(stage\)\{\s+var stageKey = encodeURIComponent\(String\(stage && stage\.stage_key \|\| ''\)\);\s+return appendPopupDebugQuery\(\(launchBasePath \|\| location\.pathname\) \+ '\/' \+ stageKey\);\s+\}/s,
   );
   assert.match(
     html,

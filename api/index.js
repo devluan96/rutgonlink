@@ -937,6 +937,80 @@ app.post("/api/article-funnel/track-click", async (req, res) => {
     return res.status(500).json({ error: "Khong the ghi nhan click" });
   }
 });
+app.post("/api/article-funnel/bridge-debug", async (req, res) => {
+  try {
+    const step = String(req.body?.step || "").trim().slice(0, 80);
+    if (!step) {
+      return res.status(400).json({ error: "step la bat buoc" });
+    }
+    const requestId = String(
+      req.body?.request_id || req.body?.requestId || req.requestId || "",
+    )
+      .trim()
+      .slice(0, 80);
+    const mode = String(req.body?.mode || "").trim().slice(0, 120);
+    const stageKey = normalizeArticleFunnelStageKey(
+      req.body?.stage_key || req.body?.stageKey || "",
+    );
+    const routeSlug = String(
+      req.body?.route_slug || req.body?.routeSlug || "",
+    )
+      .trim()
+      .slice(0, 180);
+    const pageUrl = String(
+      req.body?.page_url || req.body?.pageUrl || "",
+    )
+      .trim()
+      .slice(0, 600);
+    const targetUrl = String(
+      req.body?.target_url || req.body?.targetUrl || "",
+    )
+      .trim()
+      .slice(0, 600);
+    const fallbackUrl = String(
+      req.body?.fallback_url || req.body?.fallbackUrl || "",
+    )
+      .trim()
+      .slice(0, 600);
+    const details =
+      req.body?.details && typeof req.body.details === "object"
+        ? JSON.parse(JSON.stringify(req.body.details))
+        : null;
+    persistArticleFunnelBridgeDebugEvent({
+      requestId: requestId || req.requestId || null,
+      bridgeRequestId: req.requestId || null,
+      step,
+      mode: mode || null,
+      stageKey: stageKey || null,
+      routeSlug: routeSlug || null,
+      pageUrl: pageUrl || null,
+      targetUrl: targetUrl || null,
+      fallbackUrl: fallbackUrl || null,
+      refererHost: getRefererHost(req.headers["referer"] || "") || null,
+      details,
+    });
+    return res.json({ ok: true, request_id: requestId || req.requestId || null });
+  } catch (error) {
+    console.error("[article-funnel/bridge-debug]", error);
+    return res.status(500).json({ error: "Khong the ghi nhan bridge debug" });
+  }
+});
+app.get("/api/article-funnel/bridge-debug", async (req, res) => {
+  try {
+    if (!(await isAdminRequest(req))) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const requestId = String(req.query?.request_id || "").trim();
+    const limit = Number(req.query?.limit || 50) || 50;
+    return res.json({
+      ok: true,
+      events: readRecentArticleFunnelBridgeDebugEvents(limit, requestId),
+    });
+  } catch (error) {
+    console.error("[article-funnel/bridge-debug:list]", error);
+    return res.status(500).json({ error: "Khong the doc bridge debug" });
+  }
+});
 app.get(
   ["/_lab/article-funnel/:slug/:token", "/_lab/article-funnel/:slug/:token/"],
   async (req, res) => {
@@ -2214,6 +2288,72 @@ async function readRecentRedirectLogEntries(limit = 20) {
   await redirectLogWriteQueue;
   const database = await getDb();
   return database.listRedirectLogEntries(limit);
+}
+
+const ARTICLE_FUNNEL_BRIDGE_DEBUG_EVENT_LIMIT = 200;
+const recentArticleFunnelBridgeDebugEvents = [];
+
+function persistArticleFunnelBridgeDebugEvent(entry) {
+  const nextEntry =
+    entry && typeof entry === "object"
+      ? {
+          event: "article_funnel_bridge_debug",
+          timestamp: new Date().toISOString(),
+          ...entry,
+        }
+      : {
+          event: "article_funnel_bridge_debug",
+          timestamp: new Date().toISOString(),
+        };
+  recentArticleFunnelBridgeDebugEvents.push(nextEntry);
+  if (
+    recentArticleFunnelBridgeDebugEvents.length >
+    ARTICLE_FUNNEL_BRIDGE_DEBUG_EVENT_LIMIT
+  ) {
+    recentArticleFunnelBridgeDebugEvents.splice(
+      0,
+      recentArticleFunnelBridgeDebugEvents.length -
+        ARTICLE_FUNNEL_BRIDGE_DEBUG_EVENT_LIMIT,
+    );
+  }
+  console.info(`[article-funnel-bridge-debug] ${JSON.stringify(nextEntry)}`);
+}
+
+function readRecentArticleFunnelBridgeDebugEvents(limit = 50, requestId = "") {
+  const normalizedRequestId = String(requestId || "").trim();
+  const entries = normalizedRequestId
+    ? recentArticleFunnelBridgeDebugEvents.filter(
+        (entry) => String(entry?.requestId || "").trim() === normalizedRequestId,
+      )
+    : recentArticleFunnelBridgeDebugEvents;
+  return entries.slice(-Math.max(1, Math.min(Number(limit) || 50, 200)));
+}
+
+function isArticleFunnelBridgeDebugEnabled(req) {
+  return String(req?.query?.popup_debug || "").trim() === "1";
+}
+
+function buildArticleFunnelBridgeDebugContext({
+  req,
+  mode = "",
+  stageKey = "",
+  routeSlug = "",
+  canonicalUrl = "",
+  targetUrl = "",
+  fallbackUrl = "",
+  enabled = false,
+} = {}) {
+  return {
+    enabled: Boolean(enabled),
+    request_id: String(req?.requestId || "").trim(),
+    mode: String(mode || "").trim(),
+    stage_key: normalizeArticleFunnelStageKey(stageKey || ""),
+    route_slug: String(routeSlug || "").trim() || null,
+    canonical_url: String(canonicalUrl || "").trim(),
+    target_url: String(targetUrl || "").trim(),
+    fallback_url: String(fallbackUrl || "").trim(),
+    debug_api_url: "/api/article-funnel/bridge-debug",
+  };
 }
 
 const TIKTOK_ANDROID_PACKAGE = "com.ss.android.ugc.trill";
@@ -5889,6 +6029,7 @@ async function handleArticleFunnelStageLaunch({
   const isFacebookInApp = isFacebookInAppBrowser(ua);
   const isZaloInApp = /ZaloApp/i.test(ua);
   const isIosInApp = platform === "ios" && (isFacebookInApp || isZaloInApp);
+  const bridgeDebugEnabled = isArticleFunnelBridgeDebugEnabled(req);
   const launchLink = {
     original_url: targetUrl,
     og_title: config.title || "Article preview",
@@ -5980,6 +6121,27 @@ async function handleArticleFunnelStageLaunch({
     const bridgeMode = usePopup20sDirectBridgeFlow
       ? "article-funnel-launch-tiktok-popup20s-direct-bridge"
       : "article-funnel-launch-tiktok-direct-bridge";
+    const bridgeDebug = buildArticleFunnelBridgeDebugContext({
+      req,
+      mode: bridgeMode,
+      stageKey: normalizedStageKey,
+      routeSlug: tracking?.routeSlug || "",
+      canonicalUrl,
+      targetUrl:
+        bridgeInfo.popup20s_ios_inapp_url ||
+        bridgeInfo.deeplink_ios ||
+        bridgeInfo.deeplink ||
+        targetUrl,
+      fallbackUrl:
+        bridgeInfo.popup20s_browser_url ||
+        bridgeInfo.fallback ||
+        targetUrl,
+      enabled: bridgeDebugEnabled,
+    });
+    const bridgedInfo = {
+      ...bridgeInfo,
+      bridge_debug: bridgeDebug,
+    };
     setRedirectDebugHeaders(res, {
       mode: bridgeMode,
       platform: info.platform_name,
@@ -5993,9 +6155,9 @@ async function handleArticleFunnelStageLaunch({
       uaKind,
       status: 200,
       target:
-        bridgeInfo.popup20s_ios_inapp_url ||
-        bridgeInfo.deeplink_ios ||
-        bridgeInfo.deeplink ||
+        bridgedInfo.popup20s_ios_inapp_url ||
+        bridgedInfo.deeplink_ios ||
+        bridgedInfo.deeplink ||
         targetUrl,
       referer,
       ...articleFunnelLogMeta,
@@ -6011,9 +6173,9 @@ async function handleArticleFunnelStageLaunch({
         ? buildArticleFunnelPopup20sTikTokBridgePage(
             launchLink,
             canonicalUrl,
-            bridgeInfo,
+            bridgedInfo,
           )
-        : buildDirectBridgePage(launchLink, canonicalUrl, bridgeInfo),
+        : buildDirectBridgePage(launchLink, canonicalUrl, bridgedInfo),
     );
   }
 
@@ -6445,9 +6607,37 @@ ${ogImageTag}
     return 'transform: translateY('+offset+'px) scale('+scale+'); opacity:'+opacity+'; z-index:'+(index+1)+';';
   }
 
+  function shouldEnablePopupDebugMode() {
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      return params.get('popup_debug') === '1' ||
+        (Boolean(params.get('popup_test')) && Boolean(params.get('popup_test_token')));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function appendPopupDebugQuery(rawUrl) {
+    if (!rawUrl || !shouldEnablePopupDebugMode()) return rawUrl;
+    try {
+      var parsed = new URL(rawUrl, window.location.origin);
+      parsed.searchParams.set('popup_debug', '1');
+      if (
+        rawUrl.charAt(0) === '/' &&
+        parsed.origin === window.location.origin
+      ) {
+        return parsed.pathname + parsed.search + parsed.hash;
+      }
+      return parsed.toString();
+    } catch (_) {
+      var joiner = rawUrl.indexOf('?') === -1 ? '?' : '&';
+      return rawUrl + joiner + 'popup_debug=1';
+    }
+  }
+
   function getLaunchUrl(stage){
     var stageKey = encodeURIComponent(String(stage && stage.stage_key || ''));
-    return (launchBasePath || location.pathname) + '/' + stageKey;
+    return appendPopupDebugQuery((launchBasePath || location.pathname) + '/' + stageKey);
   }
 
   function shouldUseDedicatedBridgeRoute(stage) {
@@ -6456,7 +6646,9 @@ ${ogImageTag}
 
   function getBridgeUrl(stage){
     var stageKey = encodeURIComponent(String(stage && stage.stage_key || ''));
-    return (bridgeBasePath || '') ? (bridgeBasePath + '/' + stageKey) : '';
+    return (bridgeBasePath || '')
+      ? appendPopupDebugQuery(bridgeBasePath + '/' + stageKey)
+      : '';
   }
 
   function getStageOpenUrl(stage) {
@@ -10475,6 +10667,16 @@ function buildDirectBridgePage(link, canonicalUrl, info) {
   const iosScheme = info.deeplink_ios || appScheme;
   const andScheme = info.deeplink_android || appScheme;
   const platform = info.platform_name;
+  const bridgeDebug =
+    info?.bridge_debug && typeof info.bridge_debug === "object"
+      ? info.bridge_debug
+      : null;
+  const bridgeHeading =
+    platform === "tiktok" ? "Dang mo TikTok..." : "Dang mo ung dung...";
+  const bridgeStatusDescription =
+    platform === "tiktok"
+      ? "Trang dang thu mo TikTok. Neu khong mo duoc app, he thong se tu fallback ve web."
+      : "Trang dang thu mo ung dung dich. Neu app khong mo duoc, he thong se fallback sang web.";
 
   // Shopee dùng Universal Link → không cần khai báo al:android/ios:url riêng
   // vì al:web:url đã đủ để OS intercept và mở app
@@ -10521,6 +10723,7 @@ function buildDirectBridgePage(link, canonicalUrl, info) {
   const ogImageTag = image
     ? `<meta property="og:image" content="${esc(image)}" />`
     : "";
+  const bridgeDebugJson = JSON.stringify(bridgeDebug || null);
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -10544,8 +10747,36 @@ ${ogImageTag}
 <meta name="twitter:title" content="${esc(title)}" />
 <meta name="twitter:description" content="${esc(desc)}" />
 ${ogImageTag}
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:#f8fafc;color:#0f172a}
+  .bridge-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px}
+  .bridge-card{width:min(100%,520px);padding:26px 22px;border:1px solid rgba(148,163,184,.32);border-radius:24px;background:#fff;box-shadow:0 24px 60px rgba(15,23,42,.08)}
+  .bridge-card h1{margin:0 0 10px;font-size:28px;line-height:1.15;letter-spacing:-.03em}
+  .bridge-card p{margin:0;color:#475569;font-size:15px;line-height:1.6}
+  .bridge-debug{margin-top:18px;padding-top:18px;border-top:1px solid rgba(148,163,184,.22)}
+  .bridge-debug[hidden]{display:none}
+  .bridge-debug-meta{display:grid;gap:4px;margin:0 0 14px;color:#334155;font-size:12px;line-height:1.5;word-break:break-word}
+  .bridge-debug-meta code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}
+  .bridge-debug-list{margin:0;padding-left:18px;display:grid;gap:8px;color:#0f172a;font-size:13px;line-height:1.5}
+  .bridge-debug-list li{word-break:break-word}
+</style>
 </head>
 <body>
+<div class="bridge-shell">
+  <div class="bridge-card">
+    <h1>${esc(bridgeHeading)}</h1>
+    <p id="bridgeStatusText">${esc(bridgeStatusDescription)}</p>
+    <div class="bridge-debug" id="bridgeDebugPanel" hidden>
+      <div class="bridge-debug-meta">
+        <div>Request ID: <code id="bridgeDebugRequestId"></code></div>
+        <div>Mode: <code id="bridgeDebugMode"></code></div>
+      </div>
+      <ol class="bridge-debug-list" id="bridgeDebugList"></ol>
+    </div>
+  </div>
+</div>
 <script>
 (function() {
   var appUrl      = "${escJs(appScheme)}";
@@ -10555,6 +10786,12 @@ ${ogImageTag}
   var canonical   = "${escJs(canonicalUrl)}";
   var androidPkg  = "${escJs(androidPkg)}";
   var platform    = "${escJs(platform)}";
+  var bridgeDebug = ${bridgeDebugJson};
+  var bridgeStatusText = document.getElementById('bridgeStatusText');
+  var bridgeDebugPanel = document.getElementById('bridgeDebugPanel');
+  var bridgeDebugRequestId = document.getElementById('bridgeDebugRequestId');
+  var bridgeDebugMode = document.getElementById('bridgeDebugMode');
+  var bridgeDebugList = document.getElementById('bridgeDebugList');
 
   var ua         = navigator.userAgent || '';
   var isIOS      = /iphone|ipad|ipod/i.test(ua);
@@ -10568,6 +10805,104 @@ ${ogImageTag}
   // sessionStorage bị xóa khi FB mở tab mới → loop vô tận
   var flagKey    = 'rgl_v2_redirected_' + location.pathname;
   var escapedKey = 'rgl_v2_escaped_'    + location.pathname;
+
+  function updateStatusText(text) {
+    if (bridgeStatusText && text) {
+      bridgeStatusText.textContent = text;
+    }
+  }
+
+  function formatDebugDetails(details) {
+    if (!details || typeof details !== 'object') return '';
+    try {
+      var parts = Object.keys(details).map(function(key) {
+        var value = details[key];
+        if (value === undefined || value === null || value === '') return '';
+        return key + '=' + String(value);
+      }).filter(Boolean);
+      return parts.join(' | ');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function appendDebugLine(step, details) {
+    if (!(bridgeDebug && bridgeDebug.enabled) || !bridgeDebugList) return;
+    var item = document.createElement('li');
+    var detailText = formatDebugDetails(details);
+    item.textContent = detailText ? (step + ' - ' + detailText) : step;
+    bridgeDebugList.appendChild(item);
+  }
+
+  function emitBridgeDebug(step, details) {
+    appendDebugLine(step, details);
+    if (!(bridgeDebug && bridgeDebug.enabled && bridgeDebug.debug_api_url)) return;
+    var payload = {
+      request_id: bridgeDebug.request_id || '',
+      mode: bridgeDebug.mode || '',
+      route_slug: bridgeDebug.route_slug || '',
+      stage_key: bridgeDebug.stage_key || '',
+      page_url: location.href,
+      target_url: bridgeDebug.target_url || appUrl || iosUrl || androidUrl || webUrl,
+      fallback_url: bridgeDebug.fallback_url || webUrl,
+      step: step,
+      details: details || {}
+    };
+    try {
+      var body = JSON.stringify(payload);
+      if (navigator.sendBeacon && typeof Blob === 'function') {
+        try {
+          var beaconBody = new Blob([body], { type: 'application/json' });
+          if (navigator.sendBeacon(bridgeDebug.debug_api_url, beaconBody)) {
+            return;
+          }
+        } catch (_) {}
+      }
+      if (window.fetch) {
+        fetch(bridgeDebug.debug_api_url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body,
+          keepalive: true,
+          credentials: 'same-origin'
+        }).catch(function(){});
+      }
+    } catch (_) {}
+  }
+
+  if (bridgeDebug && bridgeDebug.enabled) {
+    if (bridgeDebugPanel) bridgeDebugPanel.hidden = false;
+    if (bridgeDebugRequestId) bridgeDebugRequestId.textContent = bridgeDebug.request_id || 'n/a';
+    if (bridgeDebugMode) bridgeDebugMode.textContent = bridgeDebug.mode || 'n/a';
+  }
+
+  window.addEventListener('error', function(event) {
+    emitBridgeDebug('window_error', {
+      message: event && event.message ? event.message : '',
+      source: event && event.filename ? event.filename : '',
+      line: event && event.lineno ? event.lineno : '',
+      column: event && event.colno ? event.colno : ''
+    });
+  });
+  window.addEventListener('unhandledrejection', function(event) {
+    var reason = event && event.reason;
+    emitBridgeDebug('unhandled_rejection', {
+      reason: reason && reason.message ? reason.message : String(reason || '')
+    });
+  });
+  window.addEventListener('pagehide', function() {
+    emitBridgeDebug('pagehide', { hidden: document.hidden ? '1' : '0' });
+  }, true);
+  document.addEventListener('visibilitychange', function() {
+    emitBridgeDebug('visibility_' + (document.hidden ? 'hidden' : 'visible'), {});
+  }, true);
+
+  emitBridgeDebug('bridge_page_rendered', {
+    platform: platform,
+    is_ios: isIOS ? '1' : '0',
+    is_android: isAndroid ? '1' : '0',
+    is_inapp: isInApp ? '1' : '0'
+  });
 
   function setFlag(key) {
     try { localStorage.setItem(key, Date.now().toString()); } catch(_) {}
@@ -10587,9 +10922,16 @@ ${ogImageTag}
   // ── Shopee Universal Link: redirect thẳng, OS tự mở app ──────────────────
   // Không cần intent://, không cần trick gì cả
   if (platform === 'shopee') {
+    updateStatusText('Dang thu mo Shopee...');
+    emitBridgeDebug('attempt_open_app', { target: appUrl, branch: 'shopee_universal_link' });
     window.location.href = appUrl;  // appUrl = Universal Link
+    emitBridgeDebug('schedule_fallback', { fallback_url: webUrl, delay_ms: '2500' });
     setTimeout(function() {
-      if (!document.hidden) window.location.replace(webUrl);
+      if (!document.hidden) {
+        updateStatusText('App khong mo duoc, dang chuyen sang web...');
+        emitBridgeDebug('fallback_to_web', { fallback_url: webUrl });
+        window.location.replace(webUrl);
+      }
     }, 2500);
     return;
   }
@@ -10609,8 +10951,17 @@ ${ogImageTag}
         webUrl.replace(/^https?:\/\//, '') +
         '#Intent;scheme=https;package=' + (androidPkg || 'com.ss.android.ugc.trill') +
         ';S.browser_fallback_url=' + encodeURIComponent(webUrl) + ';end';
+      updateStatusText('Dang thu mo TikTok tren Android...');
+      emitBridgeDebug('attempt_open_app', { target: intentUrl, branch: 'android_inapp_tiktok_intent' });
       window.location.href = intentUrl;
-      setTimeout(function() { if (!document.hidden) window.location.replace(webUrl); }, 2000);
+      emitBridgeDebug('schedule_fallback', { fallback_url: webUrl, delay_ms: '2000' });
+      setTimeout(function() {
+        if (!document.hidden) {
+          updateStatusText('TikTok app khong mo duoc, dang quay ve web...');
+          emitBridgeDebug('fallback_to_web', { fallback_url: webUrl });
+          window.location.replace(webUrl);
+        }
+      }, 2000);
       return;
     }
 
@@ -10619,8 +10970,15 @@ ${ogImageTag}
       canonical.replace(/^https?:\/\//, '') +
       '#Intent;scheme=https;package=com.android.chrome' +
       ';S.browser_fallback_url=' + encodeURIComponent(canonical) + ';end';
+    emitBridgeDebug('attempt_open_app', { target: intentEscape, branch: 'android_inapp_escape' });
     window.location.href = intentEscape;
-    setTimeout(function() { if (!document.hidden) window.location.replace(canonical); }, 1500);
+    emitBridgeDebug('schedule_fallback', { fallback_url: canonical, delay_ms: '1500' });
+    setTimeout(function() {
+      if (!document.hidden) {
+        emitBridgeDebug('fallback_to_web', { fallback_url: canonical });
+        window.location.replace(canonical);
+      }
+    }, 1500);
     return;
   }
 
@@ -10635,10 +10993,15 @@ ${ogImageTag}
 
     if (platform === 'tiktok') {
       if (iosUrl && iosUrl !== webUrl) {
+        updateStatusText('Dang thu mo TikTok tu Facebook...');
+        emitBridgeDebug('attempt_open_app', { target: iosUrl, branch: 'ios_inapp_tiktok' });
         try { window.location.href = iosUrl; } catch (_) {}
       }
+      emitBridgeDebug('schedule_fallback', { fallback_url: webUrl, delay_ms: '1500' });
       setTimeout(function() {
         if (!document.hidden) {
+          updateStatusText('TikTok app khong mo duoc, dang chuyen sang web...');
+          emitBridgeDebug('fallback_to_web', { fallback_url: webUrl });
           window.location.replace(webUrl);
         }
       }, 1500);
@@ -10651,9 +11014,15 @@ ${ogImageTag}
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     document.body.appendChild(a);
+    emitBridgeDebug('open_browser_url', { target: target, branch: 'ios_inapp_browser_escape' });
     a.click();
     document.body.removeChild(a);
-    setTimeout(function() { window.location.replace(webUrl); }, 1500);
+    emitBridgeDebug('schedule_fallback', { fallback_url: webUrl, delay_ms: '1500' });
+    setTimeout(function() {
+      updateStatusText('Dang mo web...');
+      emitBridgeDebug('fallback_to_web', { fallback_url: webUrl });
+      window.location.replace(webUrl);
+    }, 1500);
     return;
   }
 
@@ -10664,12 +11033,19 @@ ${ogImageTag}
   // ── iOS bình thường (Safari, Chrome iOS) ────────────────────────────────
   if (isIOS) {
     if (appUrl && appUrl !== webUrl) {
+      updateStatusText('Dang thu mo app tren iPhone...');
+      emitBridgeDebug('attempt_open_app', { target: iosUrl, branch: 'ios_browser' });
       window.location.href = iosUrl;
       // FIX: Giảm timeout xuống 1500ms → cảm giác nhanh hơn
       setTimeout(function() {
-        if (!document.hidden) window.location.replace(webUrl);
+        if (!document.hidden) {
+          updateStatusText('App khong mo duoc, dang chuyen sang web...');
+          emitBridgeDebug('fallback_to_web', { fallback_url: webUrl });
+          window.location.replace(webUrl);
+        }
       }, 1500);
     } else {
+      emitBridgeDebug('open_browser_url', { target: webUrl, branch: 'ios_browser_web_only' });
       window.location.replace(webUrl);
     }
     return;
@@ -10680,18 +11056,24 @@ ${ogImageTag}
     if (androidUrl && androidUrl !== webUrl) {
       var didLeave = false;
       window.addEventListener('blur', function() { didLeave = true; }, { once: true });
+      emitBridgeDebug('attempt_open_app', { target: androidUrl, branch: 'android_browser' });
       // FIX: Giảm timeout → nếu app mở được thì page đã blur rồi
       setTimeout(function() {
-        if (!didLeave && !document.hidden) window.location.replace(webUrl);
+        if (!didLeave && !document.hidden) {
+          emitBridgeDebug('fallback_to_web', { fallback_url: webUrl });
+          window.location.replace(webUrl);
+        }
       }, 1500);
       window.location.href = androidUrl;
     } else {
+      emitBridgeDebug('open_browser_url', { target: webUrl, branch: 'android_browser_web_only' });
       window.location.replace(webUrl);
     }
     return;
   }
 
   // ── Desktop fallback ────────────────────────────────────────────────────
+  emitBridgeDebug('open_browser_url', { target: webUrl, branch: 'desktop_fallback' });
   window.location.replace(webUrl);
 })();
 </script>
@@ -10711,6 +11093,10 @@ function buildArticleFunnelPopup20sTikTokBridgePage(link, canonicalUrl, info) {
     info?.popup20s_ios_inapp_url || browserUrl,
   ).trim();
   const fallbackUrl = browserUrl || String(link.original_url || "").trim();
+  const bridgeDebug =
+    info?.bridge_debug && typeof info.bridge_debug === "object"
+      ? info.bridge_debug
+      : null;
 
   const escJs = (s) =>
     (s || "")
@@ -10723,6 +11109,7 @@ function buildArticleFunnelPopup20sTikTokBridgePage(link, canonicalUrl, info) {
   const ogImageTag = image
     ? `<meta property="og:image" content="${esc(image)}" />`
     : "";
+  const bridgeDebugJson = JSON.stringify(bridgeDebug || null);
 
   return `<!DOCTYPE html>
 <html lang="vi">
@@ -10745,18 +11132,130 @@ ${ogImageTag}
 <meta name="twitter:title" content="${esc(title)}" />
 <meta name="twitter:description" content="${esc(desc)}" />
 ${ogImageTag}
+<style>
+  :root{color-scheme:light}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:#f8fafc;color:#0f172a}
+  .bridge-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px}
+  .bridge-card{width:min(100%,520px);padding:26px 22px;border:1px solid rgba(148,163,184,.32);border-radius:24px;background:#fff;box-shadow:0 24px 60px rgba(15,23,42,.08)}
+  .bridge-card h1{margin:0 0 10px;font-size:28px;line-height:1.15;letter-spacing:-.03em}
+  .bridge-card p{margin:0;color:#475569;font-size:15px;line-height:1.6}
+  .bridge-debug{margin-top:18px;padding-top:18px;border-top:1px solid rgba(148,163,184,.22)}
+  .bridge-debug[hidden]{display:none}
+  .bridge-debug-meta{display:grid;gap:4px;margin:0 0 14px;color:#334155;font-size:12px;line-height:1.5;word-break:break-word}
+  .bridge-debug-meta code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}
+  .bridge-debug-list{margin:0;padding-left:18px;display:grid;gap:8px;color:#0f172a;font-size:13px;line-height:1.5}
+  .bridge-debug-list li{word-break:break-word}
+</style>
 </head>
 <body>
+<div class="bridge-shell">
+  <div class="bridge-card">
+    <h1>Dang mo TikTok...</h1>
+    <p id="bridgeStatusText">Trang dang thu mo TikTok. Neu khong mo duoc app, he thong se fallback ve web.</p>
+    <div class="bridge-debug" id="bridgeDebugPanel" hidden>
+      <div class="bridge-debug-meta">
+        <div>Request ID: <code id="bridgeDebugRequestId"></code></div>
+        <div>Mode: <code id="bridgeDebugMode"></code></div>
+      </div>
+      <ol class="bridge-debug-list" id="bridgeDebugList"></ol>
+    </div>
+  </div>
+</div>
 <script>
 (function() {
   var browserUrl = "${escJs(browserUrl)}";
   var iosInAppUrl = "${escJs(iosInAppUrl)}";
   var fallbackUrl = "${escJs(fallbackUrl)}";
+  var bridgeDebug = ${bridgeDebugJson};
+  var bridgeStatusText = document.getElementById('bridgeStatusText');
+  var bridgeDebugPanel = document.getElementById('bridgeDebugPanel');
+  var bridgeDebugRequestId = document.getElementById('bridgeDebugRequestId');
+  var bridgeDebugMode = document.getElementById('bridgeDebugMode');
+  var bridgeDebugList = document.getElementById('bridgeDebugList');
   var ua = navigator.userAgent || '';
   var isIOS = /iphone|ipad|ipod/i.test(ua);
   var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
   var isZalo = /ZaloApp/i.test(ua);
   var isInApp = isFacebook || isZalo;
+
+  function updateStatusText(text) {
+    if (bridgeStatusText && text) bridgeStatusText.textContent = text;
+  }
+
+  function appendDebugLine(step, details) {
+    if (!(bridgeDebug && bridgeDebug.enabled) || !bridgeDebugList) return;
+    var item = document.createElement('li');
+    var text = step;
+    if (details && typeof details === 'object') {
+      try {
+        var parts = Object.keys(details).map(function(key) {
+          var value = details[key];
+          if (value === undefined || value === null || value === '') return '';
+          return key + '=' + String(value);
+        }).filter(Boolean);
+        if (parts.length) text += ' - ' + parts.join(' | ');
+      } catch (_) {}
+    }
+    item.textContent = text;
+    bridgeDebugList.appendChild(item);
+  }
+
+  function emitBridgeDebug(step, details) {
+    appendDebugLine(step, details);
+    if (!(bridgeDebug && bridgeDebug.enabled && bridgeDebug.debug_api_url)) return;
+    var payload = {
+      request_id: bridgeDebug.request_id || '',
+      mode: bridgeDebug.mode || '',
+      route_slug: bridgeDebug.route_slug || '',
+      stage_key: bridgeDebug.stage_key || '',
+      page_url: location.href,
+      target_url: bridgeDebug.target_url || iosInAppUrl || browserUrl,
+      fallback_url: bridgeDebug.fallback_url || fallbackUrl,
+      step: step,
+      details: details || {}
+    };
+    try {
+      var body = JSON.stringify(payload);
+      if (navigator.sendBeacon && typeof Blob === 'function') {
+        try {
+          var beaconBody = new Blob([body], { type: 'application/json' });
+          if (navigator.sendBeacon(bridgeDebug.debug_api_url, beaconBody)) return;
+        } catch (_) {}
+      }
+      if (window.fetch) {
+        fetch(bridgeDebug.debug_api_url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body,
+          keepalive: true,
+          credentials: 'same-origin'
+        }).catch(function(){});
+      }
+    } catch (_) {}
+  }
+
+  if (bridgeDebug && bridgeDebug.enabled) {
+    if (bridgeDebugPanel) bridgeDebugPanel.hidden = false;
+    if (bridgeDebugRequestId) bridgeDebugRequestId.textContent = bridgeDebug.request_id || 'n/a';
+    if (bridgeDebugMode) bridgeDebugMode.textContent = bridgeDebug.mode || 'n/a';
+  }
+
+  emitBridgeDebug('bridge_page_rendered', {
+    is_ios: isIOS ? '1' : '0',
+    is_inapp: isInApp ? '1' : '0'
+  });
+  window.addEventListener('error', function(event) {
+    emitBridgeDebug('window_error', {
+      message: event && event.message ? event.message : ''
+    });
+  });
+  window.addEventListener('pagehide', function() {
+    emitBridgeDebug('pagehide', { hidden: document.hidden ? '1' : '0' });
+  }, true);
+  document.addEventListener('visibilitychange', function() {
+    emitBridgeDebug('visibility_' + (document.hidden ? 'hidden' : 'visible'), {});
+  }, true);
 
   function openSameWindow(targetUrl) {
     if (!targetUrl) return false;
@@ -10769,9 +11268,14 @@ ${ogImageTag}
   }
 
   if (isIOS && isInApp) {
+    updateStatusText('Dang thu mo TikTok tu Facebook...');
+    emitBridgeDebug('attempt_open_app', { target: iosInAppUrl || browserUrl || fallbackUrl });
     openSameWindow(iosInAppUrl || browserUrl || fallbackUrl);
+    emitBridgeDebug('schedule_fallback', { fallback_url: fallbackUrl, delay_ms: '1500' });
     setTimeout(function() {
       if (!document.hidden && fallbackUrl) {
+        updateStatusText('TikTok app khong mo duoc, dang chuyen sang web...');
+        emitBridgeDebug('fallback_to_web', { fallback_url: fallbackUrl });
         window.location.replace(fallbackUrl);
       }
     }, 1500);
@@ -10779,11 +11283,13 @@ ${ogImageTag}
   }
 
   if (browserUrl) {
+    emitBridgeDebug('open_browser_url', { target: browserUrl });
     openSameWindow(browserUrl);
     return;
   }
 
   if (fallbackUrl) {
+    emitBridgeDebug('fallback_to_web', { fallback_url: fallbackUrl });
     window.location.replace(fallbackUrl);
   }
 })();
@@ -11645,6 +12151,7 @@ module.exports.__testUtils = {
   buildTikTokAppScheme,
   detectPlatformDeep,
   buildDirectLaunchConfig,
+  buildDirectBridgePage,
   buildOverlayLaunchConfig,
   applyArticleFunnelStageDirectOverrides,
   buildArticleFunnelPopup20sDirectBridgeInfo,

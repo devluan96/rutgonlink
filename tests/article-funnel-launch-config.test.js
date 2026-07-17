@@ -131,11 +131,70 @@ test("buildArticleFunnelPopup20sTikTokBridgePage sends iOS in-app to override an
   );
   assert.match(
     html,
-    /if \(isIOS && isInApp\) \{\s+openSameWindow\(iosInAppUrl \|\| browserUrl \|\| fallbackUrl\);/s,
+    /if \(isIOS && isInApp\) \{[\s\S]*?openSameWindow\(iosInAppUrl \|\| browserUrl \|\| fallbackUrl\);/s,
   );
   assert.match(
     html,
-    /if \(browserUrl\) \{\s+openSameWindow\(browserUrl\);/s,
+    /if \(browserUrl\) \{[\s\S]*?openSameWindow\(browserUrl\);/s,
+  );
+});
+
+test("buildDirectBridgePage renders bridge diagnostics when popup debug is enabled", () => {
+  const html = __testUtils.buildDirectBridgePage(
+    {
+      original_url:
+        "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180",
+      og_title: "Demo",
+      og_desc: "Bridge demo",
+      og_image: "",
+    },
+    "https://example.com/demo/launch/20s",
+    {
+      platform_name: "tiktok",
+      deeplink:
+        "snssdk1180://ec/pdp?biz_type=0&requestParams=%7B%22product_id%22%3A%5B%221731062681949079816%22%5D%7D",
+      deeplink_ios:
+        "snssdk1180://ec/pdp?biz_type=0&requestParams=%7B%22product_id%22%3A%5B%221731062681949079816%22%5D%7D",
+      deeplink_android:
+        "snssdk1180://ec/pdp?biz_type=0&requestParams=%7B%22product_id%22%3A%5B%221731062681949079816%22%5D%7D",
+      fallback:
+        "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180",
+      bridge_debug: {
+        enabled: true,
+        request_id: "req_popup20_debug_123",
+        mode: "article-funnel-launch-tiktok-direct-bridge",
+        stage_key: "20s",
+        route_slug: "demo-post",
+        target_url:
+          "snssdk1180://ec/pdp?biz_type=0&requestParams=%7B%22product_id%22%3A%5B%221731062681949079816%22%5D%7D",
+        fallback_url:
+          "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180",
+        debug_api_url: "/api/article-funnel/bridge-debug",
+      },
+    },
+  );
+
+  assert.match(html, /id="bridgeStatusText"/);
+  assert.match(html, /id="bridgeDebugPanel" hidden/);
+  assert.match(
+    html,
+    /var bridgeDebug = \{"enabled":true,"request_id":"req_popup20_debug_123","mode":"article-funnel-launch-tiktok-direct-bridge"/,
+  );
+  assert.match(
+    html,
+    /navigator\.sendBeacon\(bridgeDebug\.debug_api_url, beaconBody\)/,
+  );
+  assert.match(
+    html,
+    /emitBridgeDebug\('bridge_page_rendered'/,
+  );
+  assert.match(
+    html,
+    /emitBridgeDebug\('attempt_open_app', \{ target: iosUrl, branch: 'ios_inapp_tiktok' \}\);/,
+  );
+  assert.match(
+    html,
+    /emitBridgeDebug\('fallback_to_web', \{ fallback_url: webUrl \}\);/,
   );
 });
 
