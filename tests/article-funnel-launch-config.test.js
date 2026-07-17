@@ -3,6 +3,14 @@ const assert = require("node:assert/strict");
 
 const { __testUtils } = require("../api/index");
 
+function extractInlineIifeScriptBody(html) {
+  const match = html.match(
+    /<script>\s*\(function\(\) \{([\s\S]*?)\}\)\(\);\s*<\/script>/,
+  );
+  assert.ok(match, "expected inline bridge script");
+  return match[1];
+}
+
 test("buildTikTokAppScheme converts TikTok product links into snssdk1180 app deeplinks", () => {
   const originalUrl =
     "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180&chain_key=%7B%22t%22%3A1%7D&trackParams=%7B%22enter_from_info%22%3A%22product_share_outside%22%7D";
@@ -196,6 +204,45 @@ test("buildDirectBridgePage renders bridge diagnostics when popup debug is enabl
     html,
     /emitBridgeDebug\('fallback_to_web', \{ fallback_url: webUrl \}\);/,
   );
+  assert.doesNotThrow(() => {
+    new Function(extractInlineIifeScriptBody(html));
+  });
+});
+
+test("buildDirectBridgePage emits a parseable script for long TikTok popup 20s urls", () => {
+  const originalUrl =
+    "https://www.tiktok.com/view/product/1730922303991548451?_d=el72geal3i4981&_svg=1&chain_key=%7B%22t%22%3A1%2C%22k%22%3A%22000000000000000007663149517492340501%22%2C%22sc%22%3A%22copy%22%7D&checksum=c9ef567daf6fcc12cdd83ed8e8130853fbb7fddce1de58986234492ba372852c&encode_params=MIIBUwQMp-TQCDxpB8-_bD40BIIBL6hWnZ6B22Fl_agbJveySIUg8uvcenJa-XWXSG0reekqYSIcujWmVoCSgnNH3JaDBzXJrISWDm0_TkK9UGewAeoMgO62_ojd_x2J9X1hz8QNfG98KhGp2eAsyxgioijK2y-86H7dXcXqSYnD3C-e_rvS95PJcOPsZCvjmNHLsYSEF7aecliA6zBtRU3ID-nHMZ7dQ_ntFPTCgXr0nuKqFIklaFuVGhm4yKg9IMDoxQeYQl4tV6Ng4rLwdE7z7t9ub5X7X_cp-16AYOiDOO4BdG9cwrQs-4QtIZBiO_spjJ8lcqdYcW1h67fUN-BmymjLluQuM-1VUnfKX9I3iCbhwUB3Q1P-P0BOW7zcDlYftFKnJJJjv_JBhJUFB1maHSYL7MqSkSMfhWLvgIBUEv3joQQQOcVCWUAspKVwFIiSGQlo2A%3D%3D&og_info=%7B%22title%22%3A%22Kh%E1%BA%A9u+trang+Anti+UV+Cool+mask+-+UNICARE+Combo+2%2C+3%2C+4+Chi%E1%BA%BFc+Kh%E1%BA%A9u+Trang+Ch%E1%BB%91ng+N%E1%BA%AFng+1+l%E1%BB%9Bp+UPF50++%7C+Che+ph%E1%BB%A7+k%C3%ADn+g%C3%B2+m%C3%A1+%7C+M%C3%A1t+l%E1%BA%A1nh%2C+tho%C3%A1ng+kh%C3%AD+%7C+Logo+%C4%91%E1%BB%95i+m%C3%A0u+UV%22%2C%22image%22%3A%22https%3A%5C%2F%5C%2Fp16-oec-sg.ibyteimg.com%5C%2Ftos-alisg-i-aphluv4xwc-sg%5C%2Fa0396b5e7b3e4c57a6bb70fb391e1800~tplv-aphluv4xwc-resize-webp%3A260%3A260.webp%3Fdr%3D15582%26t%3D555f072d%26ps%3D933b5bde%26shp%3D7745054a%26shcp%3D9b759fb9%26idc%3Dmy2%26from%3D2001012042%22%7D&sec_user_id=MS4wLjABAAAAAWJY5YYg6pBbgsjTWbcMfiOvzt5lE8mZgSeOTaKhosfvToZuTH9hnNfO-taeS_W2&share_app_id=1180&share_link_id=FCD20C1A-60E7-4EF7-B818-BFA5165857AE&share_region=VN&social_share_type=15&timestamp=1784216053&trackParams=%7B%22enable_shop_tab_popup%22%3A1%2C%22device_id%22%3A%227523498653488580152%22%2C%22enter_from_info%22%3A%22product_share_outside%22%2C%22source_page_type%22%3A%22product_share%22%7D&tt_from=copy&u_code=E0J5MCC3F2EIL7&ug_btm=b0%2Cb6661&unique_id=diemthichriviu&user_id=7074860191556649986&utm_campaign=client_share&utm_medium=ios&utm_source=copy";
+  const info = __testUtils.detectPlatformDeep(originalUrl, "ios");
+  const html = __testUtils.buildDirectBridgePage(
+    {
+      original_url: originalUrl,
+      og_title: "Demo",
+      og_desc: "Bridge demo",
+      og_image: "",
+    },
+    "https://example.com/demo/launch/20s",
+    {
+      ...info,
+      deeplink: "https://vt.tiktok.com/ZS9MK75nsrBWW-9I4UI/",
+      deeplink_ios: "https://vt.tiktok.com/ZS9MK75nsrBWW-9I4UI/",
+      deeplink_android: info.deeplink_android || info.deeplink || originalUrl,
+      fallback: originalUrl,
+      bridge_debug: {
+        enabled: true,
+        request_id: "debug123",
+        mode: "article-funnel-launch-tiktok-direct-bridge",
+        stage_key: "20s",
+        route_slug: "demo-post",
+        target_url: "https://vt.tiktok.com/ZS9MK75nsrBWW-9I4UI/",
+        fallback_url: originalUrl,
+        debug_api_url: "/api/article-funnel/bridge-debug",
+      },
+    },
+  );
+
+  assert.doesNotThrow(() => {
+    new Function(extractInlineIifeScriptBody(html));
+  });
 });
 
 test("buildOverlayLaunchConfig builds Shopee Android intent config", () => {

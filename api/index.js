@@ -10796,13 +10796,9 @@ ${ogImageTag}
   var ua         = navigator.userAgent || '';
   var isIOS      = /iphone|ipad|ipod/i.test(ua);
   var isAndroid  = /android/i.test(ua);
-  // FIX: Nhận diện chính xác Facebook in-app browser
   var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
   var isZalo     = /ZaloApp/i.test(ua);
   var isInApp    = isFacebook || isZalo;
-
-  // FIX: Dùng localStorage thay sessionStorage để persist qua redirect
-  // sessionStorage bị xóa khi FB mở tab mới → loop vô tận
   var flagKey    = 'rgl_v2_redirected_' + location.pathname;
   var escapedKey = 'rgl_v2_escaped_'    + location.pathname;
 
@@ -10911,7 +10907,6 @@ ${ogImageTag}
     try {
       var val = localStorage.getItem(key);
       if (!val) return false;
-      // Flag hết hạn sau 30 giây (tránh kẹt khi user thật click lại)
       return (Date.now() - parseInt(val, 10)) < 30000;
     } catch(_) { return false; }
   }
@@ -10919,12 +10914,10 @@ ${ogImageTag}
     try { localStorage.removeItem(key); } catch(_) {}
   }
 
-  // ── Shopee Universal Link: redirect thẳng, OS tự mở app ──────────────────
-  // Không cần intent://, không cần trick gì cả
   if (platform === 'shopee') {
     updateStatusText('Dang thu mo Shopee...');
     emitBridgeDebug('attempt_open_app', { target: appUrl, branch: 'shopee_universal_link' });
-    window.location.href = appUrl;  // appUrl = Universal Link
+    window.location.href = appUrl;
     emitBridgeDebug('schedule_fallback', { fallback_url: webUrl, delay_ms: '2500' });
     setTimeout(function() {
       if (!document.hidden) {
@@ -10936,10 +10929,8 @@ ${ogImageTag}
     return;
   }
 
-  // ── Android trong FB/Zalo in-app browser ────────────────────────────────
   if (isInApp && isAndroid) {
     if (hasFlag(escapedKey)) {
-      // Đã escape ra Chrome rồi nhưng vẫn quay lại đây → fallback web
       clearFlag(escapedKey);
       window.location.replace(webUrl);
       return;
@@ -10948,7 +10939,7 @@ ${ogImageTag}
 
     if (platform === 'tiktok') {
       var intentUrl = 'intent://' +
-        webUrl.replace(/^https?:\/\//, '') +
+        webUrl.replace(/^https?:\\/\\//, '') +
         '#Intent;scheme=https;package=' + (androidPkg || 'com.ss.android.ugc.trill') +
         ';S.browser_fallback_url=' + encodeURIComponent(webUrl) + ';end';
       updateStatusText('Dang thu mo TikTok tren Android...');
@@ -10965,9 +10956,8 @@ ${ogImageTag}
       return;
     }
 
-    // Shopee: escape ra Chrome, Chrome sẽ xử lý custom scheme
     var intentEscape = 'intent://' +
-      canonical.replace(/^https?:\/\//, '') +
+      canonical.replace(/^https?:\\/\\//, '') +
       '#Intent;scheme=https;package=com.android.chrome' +
       ';S.browser_fallback_url=' + encodeURIComponent(canonical) + ';end';
     emitBridgeDebug('attempt_open_app', { target: intentEscape, branch: 'android_inapp_escape' });
@@ -10982,7 +10972,6 @@ ${ogImageTag}
     return;
   }
 
-  // ── iOS trong FB/Zalo in-app browser ────────────────────────────────────
   if (isInApp && isIOS) {
     if (hasFlag(escapedKey)) {
       clearFlag(escapedKey);
@@ -11026,17 +11015,14 @@ ${ogImageTag}
     return;
   }
 
-  // ── Tránh loop cho browser bình thường ──────────────────────────────────
   if (hasFlag(flagKey)) return;
   setFlag(flagKey);
 
-  // ── iOS bình thường (Safari, Chrome iOS) ────────────────────────────────
   if (isIOS) {
     if (appUrl && appUrl !== webUrl) {
       updateStatusText('Dang thu mo app tren iPhone...');
       emitBridgeDebug('attempt_open_app', { target: iosUrl, branch: 'ios_browser' });
       window.location.href = iosUrl;
-      // FIX: Giảm timeout xuống 1500ms → cảm giác nhanh hơn
       setTimeout(function() {
         if (!document.hidden) {
           updateStatusText('App khong mo duoc, dang chuyen sang web...');
@@ -11051,13 +11037,11 @@ ${ogImageTag}
     return;
   }
 
-  // ── Android bình thường ─────────────────────────────────────────────────
   if (isAndroid) {
     if (androidUrl && androidUrl !== webUrl) {
       var didLeave = false;
       window.addEventListener('blur', function() { didLeave = true; }, { once: true });
       emitBridgeDebug('attempt_open_app', { target: androidUrl, branch: 'android_browser' });
-      // FIX: Giảm timeout → nếu app mở được thì page đã blur rồi
       setTimeout(function() {
         if (!didLeave && !document.hidden) {
           emitBridgeDebug('fallback_to_web', { fallback_url: webUrl });
@@ -11072,7 +11056,6 @@ ${ogImageTag}
     return;
   }
 
-  // ── Desktop fallback ────────────────────────────────────────────────────
   emitBridgeDebug('open_browser_url', { target: webUrl, branch: 'desktop_fallback' });
   window.location.replace(webUrl);
 })();
