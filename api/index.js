@@ -833,6 +833,16 @@ app.post("/api/admin/article-funnel-lab/publish", requireArticleFunnelLab, async
         return res.status(403).json({ error: "Khong co quyen publish lab nay" });
       }
     }
+    const conflictingPublishedLab = await findArticleFunnelPublishConflict(
+      database,
+      routeSlug,
+      { draftLabId },
+    );
+    if (conflictingPublishedLab) {
+      return res.status(409).json({
+        error: `Slug /${routeSlug} da duoc dung boi mot lab khac. Hay doi slug khac de tranh de bai published va gom nham click.`,
+      });
+    }
     const saved = await database.upsertArticleFunnel({
       route_slug: routeSlug,
       domain_hostname: selectedDomainHostname,
@@ -5910,6 +5920,42 @@ async function findShortLinkSlugConflict(database, slug) {
     (await database.getLinkByCode(normalizedSlug)) ||
     null
   );
+}
+
+async function findArticleFunnelPublishConflict(database, slug, options = {}) {
+  const normalizedSlug = String(slug || "").trim();
+  const draftLabId = Number(options.draftLabId || 0);
+  if (!database || !normalizedSlug) return null;
+
+  const matchingLabs = await database.listArticleFunnelLabsByPublishedSlug(
+    normalizedSlug,
+  );
+  const conflictingLab = matchingLabs.find(
+    (lab) => Number(lab?.id || 0) !== draftLabId,
+  );
+  if (conflictingLab) {
+    return {
+      type: "lab",
+      slug: normalizedSlug,
+      lab: conflictingLab,
+    };
+  }
+
+  const articleFunnel = await database.getArticleFunnelBySlug(normalizedSlug);
+  if (!articleFunnel) return null;
+
+  const currentDraftOwnsSlug =
+    draftLabId > 0 &&
+    matchingLabs.some((lab) => Number(lab?.id || 0) === draftLabId);
+  if (currentDraftOwnsSlug) {
+    return null;
+  }
+
+  return {
+    type: "published",
+    slug: normalizedSlug,
+    articleFunnel,
+  };
 }
 
 async function recordArticleFunnelStageClick({
@@ -12457,6 +12503,7 @@ module.exports.__testUtils = {
   resolveArticleFunnelConfig,
   shouldUseArticleFunnelInlineLaunch,
   extractArticleFunnelImportPayload,
+  findArticleFunnelPublishConflict,
   recordArticleFunnelStageClick,
 };
 if (require.main === module) {

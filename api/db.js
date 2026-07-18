@@ -1300,6 +1300,18 @@ async function init() {
       return data;
     },
 
+    async listArticleFunnelLabsByPublishedSlug(publishedSlug) {
+      const normalizedSlug = String(publishedSlug || '').trim();
+      if (!normalizedSlug) return [];
+      const { data, error } = await sb
+        .from('article_funnel_labs')
+        .select('*')
+        .eq('published_route_slug', normalizedSlug)
+        .order('updated_at', { ascending: false });
+      check(error, 'article_funnel_labs_by_published_slug');
+      return data || [];
+    },
+
     async createArticleFunnelLab(payload = {}) {
       const name = String(payload.name || '').trim() || 'Lab mới';
       const insertPayload = {
