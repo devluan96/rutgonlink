@@ -118,6 +118,8 @@ let createDomainSelection = "";
 let qrRenderedText = "";
 let qrStyler = null;
 let bioConfig = null;
+let bioProfileSyncPromise = null;
+let bioProfileSyncedUserId = 0;
 let appTheme = localStorage.getItem("rutgonlink-theme") || "dark";
 const appLanguageStorageKey = "rutgonlink-lang";
 let appLanguage =
@@ -1138,6 +1140,9 @@ async function saveBioConfig() {
       return;
     }
   }
+  if (user?.id) {
+    bioProfileSyncedUserId = Number(user.id || 0);
+  }
   renderBioPage();
   toast("✅ Đã lưu cấu hình Bio", "ok");
 }
@@ -1686,28 +1691,48 @@ async function copyIntegrationSnippet(key) {
   toast(`📋 Đã sao chép mẫu ${key}`, "ok");
 }
 
-async function syncBioProfileFromServer() {
-  if (!user?.id) return;
-  try {
-    const r = await fetch("/api/bio/me");
-    const d = await r.json();
-    if (!r.ok || !d.profile) return;
-    bioConfig = {
-      ...getDefaultBioConfig(),
-      ...bioConfig,
-      ...d.profile,
-      linkCount: String(d.profile.link_count || bioConfig?.linkCount || "5"),
-      linkSource: d.profile.link_source || bioConfig?.linkSource || "recent",
-      slug: d.profile.slug || bioConfig?.slug || getDefaultBioConfig().slug,
-      linkOrder: normalizeBioLinkOrder(
-        d.profile.link_order || bioConfig?.linkOrder || [],
-      ),
-    };
-    localStorage.setItem("rutgonlink-bio-config", JSON.stringify(bioConfig));
-    if (document.getElementById("page-bio")?.classList.contains("active")) {
-      renderBioPage();
+async function syncBioProfileFromServer({ force = false } = {}) {
+  const activeUserId = Number(user?.id || 0);
+  if (!activeUserId) {
+    bioProfileSyncPromise = null;
+    bioProfileSyncedUserId = 0;
+    return bioConfig;
+  }
+  if (!force && bioProfileSyncedUserId === activeUserId) {
+    return bioConfig;
+  }
+  if (bioProfileSyncPromise) {
+    return bioProfileSyncPromise;
+  }
+  bioProfileSyncPromise = (async () => {
+    try {
+      const r = await fetch("/api/bio/me");
+      const d = await r.json();
+      if (!r.ok || !d.profile) return bioConfig;
+      bioConfig = {
+        ...getDefaultBioConfig(),
+        ...bioConfig,
+        ...d.profile,
+        linkCount: String(d.profile.link_count || bioConfig?.linkCount || "5"),
+        linkSource: d.profile.link_source || bioConfig?.linkSource || "recent",
+        slug: d.profile.slug || bioConfig?.slug || getDefaultBioConfig().slug,
+        linkOrder: normalizeBioLinkOrder(
+          d.profile.link_order || bioConfig?.linkOrder || [],
+        ),
+      };
+      bioProfileSyncedUserId = activeUserId;
+      localStorage.setItem("rutgonlink-bio-config", JSON.stringify(bioConfig));
+      if (document.getElementById("page-bio")?.classList.contains("active")) {
+        renderBioPage();
+      }
+      return bioConfig;
+    } catch {
+      return bioConfig;
+    } finally {
+      bioProfileSyncPromise = null;
     }
-  } catch {}
+  })();
+  return bioProfileSyncPromise;
 }
 
 function getBioLinkKey(link) {
@@ -1954,7 +1979,6 @@ function showApp() {
   renderForms();
   syncLabTabAvailability();
   updateIntegrationUI();
-  void syncBioProfileFromServer();
   syncRouteFromLocation();
   loadData();
   startRealtimeNotificationLoop({ immediate: false });
@@ -4675,7 +4699,6 @@ async function showApp() {
   renderForms();
   syncLabTabAvailability();
   updateIntegrationUI();
-  void syncBioProfileFromServer();
   syncRouteFromLocation();
   loadData();
   startRealtimeNotificationLoop({ immediate: false });
@@ -5533,6 +5556,9 @@ function renderQrPage() {
 
 function renderBioPage() {
   const cfg = loadBioConfig();
+  if (user?.id) {
+    void syncBioProfileFromServer();
+  }
   const slugInput = document.getElementById("bioSlugInput");
   const titleInput = document.getElementById("bioTitleInput");
   const subtitleInput = document.getElementById("bioSubtitleInput");

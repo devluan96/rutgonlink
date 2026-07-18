@@ -60,3 +60,26 @@ test("frontend notification polling uses lightweight admin summary endpoint", ()
     /const SUPPORT_POLL_INTERVAL_MS = 20000;/,
   );
 });
+
+test("bio profile sync is lazy-loaded instead of preloading on app boot", () => {
+  assert.match(
+    appSource,
+    /async function syncBioProfileFromServer\(\{ force = false \} = \{\}\)/,
+  );
+  assert.match(
+    appSource,
+    /if \(!force && bioProfileSyncedUserId === activeUserId\)/,
+  );
+  assert.match(
+    appSource,
+    /function renderBioPage\(\) \{\s*const cfg = loadBioConfig\(\);\s*if \(user\?\.id\) \{\s*void syncBioProfileFromServer\(\);\s*\}/s,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /function showApp\(\) \{[\s\S]{0,500}?syncBioProfileFromServer\(\)/s,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /async function showApp\(\) \{[\s\S]{0,500}?syncBioProfileFromServer\(\)/s,
+  );
+});
