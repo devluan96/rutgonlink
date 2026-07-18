@@ -149,6 +149,9 @@ const STATS_PAYLOAD_CACHE_TTL_MS = 2000;
 let statsPayloadPromise = null;
 let statsPayloadCache = null;
 let statsPayloadCacheAt = 0;
+let statsSummaryPayloadPromise = null;
+let statsSummaryPayloadCache = null;
+let statsSummaryPayloadCacheAt = 0;
 const labEmbedCacheBust = Date.now().toString(36);
 const labSharedSettingsStorageKey = "rutgonlink-lab-shared-settings-v1";
 let confirmModalResolver = null;
@@ -1980,7 +1983,6 @@ function showApp() {
   syncLabTabAvailability();
   updateIntegrationUI();
   syncRouteFromLocation();
-  loadData();
   startRealtimeNotificationLoop({ immediate: false });
 }
 function showAuth(mode = "landing") {
@@ -2012,6 +2014,7 @@ function showAuth(mode = "landing") {
 
 function continueAsGuest() {
   user = null;
+  resetStatsDataCaches();
   closeLandingNav();
   document.getElementById("authScreen").style.display = "none";
   document.getElementById("appScreen").classList.add("show");
@@ -2024,7 +2027,6 @@ function continueAsGuest() {
   syncLabTabAvailability();
   updateIntegrationUI();
   syncRouteFromLocation();
-  loadData();
   startRealtimeNotificationLoop({ immediate: false });
   if (landingQuickUrl) {
     prefillCreateUrl(landingQuickUrl);
@@ -2072,6 +2074,7 @@ async function doLogin() {
       return;
     }
     user = d.user;
+    resetStatsDataCaches();
     showApp();
     toast("✅ Đăng nhập thành công!", "ok");
   } catch {
@@ -2104,6 +2107,7 @@ async function doRegister() {
       return;
     }
     user = d.user;
+    resetStatsDataCaches();
     showApp();
     toast("🎉 Đăng ký thành công!", "ok");
   } catch {
@@ -2115,6 +2119,7 @@ async function doRegister() {
 async function doLogout() {
   await fetch("/api/auth/logout", { method: "POST" });
   user = null;
+  resetStatsDataCaches();
   accountLoginEvents = [];
   accountTwoFactorSetup = null;
   accountTwoFactorMode = "";
@@ -2361,6 +2366,27 @@ function rememberStatsNotificationSnapshot(payload = {}) {
   notificationStatsSnapshot = buildStatsNotificationSnapshot(payload);
 }
 
+function getActiveAppPage() {
+  const activePageId = document.querySelector(".page.active")?.id || "";
+  return activePageId.replace(/^page-/, "") || "dashboard";
+}
+
+function pageNeedsFullStatsPayload(page = getActiveAppPage()) {
+  return !["account", "payment", "team", "admin"].includes(
+    String(page || "").trim(),
+  );
+}
+
+function resetStatsDataCaches() {
+  statsPayloadPromise = null;
+  statsPayloadCache = null;
+  statsPayloadCacheAt = 0;
+  statsSummaryPayloadPromise = null;
+  statsSummaryPayloadCache = null;
+  statsSummaryPayloadCacheAt = 0;
+  notificationStatsSnapshot = null;
+}
+
 function buildAdminNotificationSnapshot(
   statsPayload = {},
   redirectPayload = {},
@@ -2389,7 +2415,7 @@ function rememberAdminNotificationSnapshot(
 async function pollRealtimeNotifications() {
   if (!document.getElementById("appScreen")?.classList.contains("show")) return;
   try {
-    const statsPayload = await getStatsPayload({ preferCache: true });
+    const statsPayload = await getStatsSummaryPayload({ preferCache: true });
     if (statsPayload) {
       enqueueStatsAlerts(statsPayload);
       const previous = notificationStatsSnapshot;
@@ -2418,7 +2444,9 @@ async function pollRealtimeNotifications() {
           });
         }
       }
-      await loadData(statsPayload);
+      if (pageNeedsFullStatsPayload()) {
+        await loadData();
+      }
       if (
         document.getElementById("page-account")?.classList.contains("active")
       ) {
@@ -3061,6 +3089,7 @@ function renderAccountPage() {
   }
   resetAccountProfileForm();
   renderAccountBillingHistory();
+  void loadBillingData();
   renderAccountAffiliateSettings();
   renderAccountTwoFactorState();
   if (!accountLoginEvents.length) {
@@ -3801,6 +3830,8 @@ async function logoutAllDevices() {
     user = null;
     billingConfig = null;
     billingRequests = [];
+    billingDataPromise = null;
+    billingDataLoadedUserId = 0;
     paymentRequestDraft = null;
     closeUserPopup();
     showAuth();
@@ -3838,6 +3869,8 @@ async function deleteAccount() {
     user = null;
     billingConfig = null;
     billingRequests = [];
+    billingDataPromise = null;
+    billingDataLoadedUserId = 0;
     paymentRequestDraft = null;
     accountLoginEvents = [];
     closeUserPopup();
@@ -4040,21 +4073,37 @@ async function saveProfile() {
 }
 
 async function loadBillingData() {
-  if (!user?.id) {
+  const activeUserId = Number(user?.id || 0);
+  if (!activeUserId) {
     billingConfig = null;
     billingRequests = [];
+    billingDataPromise = null;
+    billingDataLoadedUserId = 0;
     return;
   }
+  if (billingDataLoadedUserId === activeUserId && !billingDataPromise) {
+    return;
+  }
+  if (billingDataPromise) {
+    return billingDataPromise;
+  }
   try {
-    const response = await fetch("/api/billing/config");
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) return;
-    billingConfig = data.config || null;
-    billingRequests = Array.isArray(data.requests) ? data.requests : [];
-    renderPaymentPlanPills();
-    renderAccountBillingHistory();
-    updateTopbar();
+    billingDataPromise = (async () => {
+      const response = await fetch("/api/billing/config");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) return;
+      billingConfig = data.config || null;
+      billingRequests = Array.isArray(data.requests) ? data.requests : [];
+      billingDataLoadedUserId = activeUserId;
+      renderPaymentPlanPills();
+      renderAccountBillingHistory();
+      updateTopbar();
+    })();
+    return await billingDataPromise;
   } catch {}
+  finally {
+    billingDataPromise = null;
+  }
 }
 
 function renderPaymentPlanPills() {
@@ -4692,7 +4741,6 @@ async function showApp() {
   finishShellBoot();
   loadThemePreference();
   applyAppLanguage(appLanguage);
-  await loadBillingData();
   updateTopbar();
   renderSupportConversation();
   loadBioConfig();
@@ -4700,7 +4748,6 @@ async function showApp() {
   syncLabTabAvailability();
   updateIntegrationUI();
   syncRouteFromLocation();
-  loadData();
   startRealtimeNotificationLoop({ immediate: false });
   startSupportSyncLoops();
 }
@@ -4965,6 +5012,9 @@ function navigate(page, el) {
     loadAdminData();
   }
   if (page === "stats") renderStatsPage();
+  if (pageNeedsFullStatsPayload(page)) {
+    void loadData();
+  }
   const sidebar = document.getElementById("sidebar");
   sidebar?.classList.remove("mob-open");
   document.getElementById("sidebarBackdrop")?.classList.remove("show");
@@ -8731,6 +8781,13 @@ function rememberStatsPayloadCache(payload) {
   if (!payload || typeof payload !== "object") return;
   statsPayloadCache = payload;
   statsPayloadCacheAt = Date.now();
+  rememberStatsSummaryPayloadCache(payload);
+}
+
+function rememberStatsSummaryPayloadCache(payload) {
+  if (!payload || typeof payload !== "object") return;
+  statsSummaryPayloadCache = payload;
+  statsSummaryPayloadCacheAt = Date.now();
 }
 
 async function getStatsPayload({ preferCache = false } = {}) {
@@ -8758,6 +8815,34 @@ async function getStatsPayload({ preferCache = false } = {}) {
     return await statsPayloadPromise;
   } finally {
     statsPayloadPromise = null;
+  }
+}
+
+async function getStatsSummaryPayload({ preferCache = false } = {}) {
+  const now = Date.now();
+  if (
+    preferCache &&
+    statsSummaryPayloadCache &&
+    now - statsSummaryPayloadCacheAt <= STATS_PAYLOAD_CACHE_TTL_MS
+  ) {
+    return statsSummaryPayloadCache;
+  }
+  if (statsSummaryPayloadPromise) {
+    return statsSummaryPayloadPromise;
+  }
+  statsSummaryPayloadPromise = (async () => {
+    const response = await fetch("/api/stats/summary");
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(payload?.error || "Không thể tải thống kê nhanh");
+    }
+    rememberStatsSummaryPayloadCache(payload || {});
+    return payload || {};
+  })();
+  try {
+    return await statsSummaryPayloadPromise;
+  } finally {
+    statsSummaryPayloadPromise = null;
   }
 }
 
@@ -8843,6 +8928,8 @@ async function loadData(prefetched = null) {
       renderQrPage();
     if (document.getElementById("page-bio")?.classList.contains("active"))
       renderBioPage();
+    if (document.getElementById("page-stats")?.classList.contains("active"))
+      renderStatsPage();
     if (document.getElementById("page-links")?.classList.contains("active"))
       applyLinkFilters();
     enqueueStatsAlerts(d);
@@ -9832,6 +9919,8 @@ let adminRedirectPage = 1;
 let adminSelectedUserIds = new Set();
 let billingConfig = null;
 let billingRequests = [];
+let billingDataPromise = null;
+let billingDataLoadedUserId = 0;
 let paymentRequestDraft = null;
 let paymentSelectedPlan = "pro";
 let paymentQrStyler = null;

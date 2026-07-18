@@ -46,6 +46,25 @@ test("admin notification summary route exists for lightweight polling", () => {
   );
 });
 
+test("user stats summary route exists for lightweight notification polling", () => {
+  assert.match(
+    apiSource,
+    /app\.get\("\/api\/stats\/summary", async \(req, res\) => \{/,
+  );
+  assert.match(
+    apiSource,
+    /database\.getLatestLink\(userId, guestSessionId\)/,
+  );
+  assert.match(
+    apiSource,
+    /database\.getArticleFunnelClickStats\(userId, \{/,
+  );
+  assert.doesNotMatch(
+    apiSource,
+    /app\.get\("\/api\/stats\/summary"[\s\S]{0,4000}?database\.getRecentLinks\(userId, guestSessionId\)/s,
+  );
+});
+
 test("frontend notification polling uses lightweight admin summary endpoint", () => {
   assert.match(
     appSource,
@@ -58,6 +77,25 @@ test("frontend notification polling uses lightweight admin summary endpoint", ()
   assert.match(
     appSource,
     /const SUPPORT_POLL_INTERVAL_MS = 20000;/,
+  );
+});
+
+test("frontend notification polling uses lightweight user stats summary endpoint", () => {
+  assert.match(
+    appSource,
+    /const statsPayload = await getStatsSummaryPayload\(\{ preferCache: true \}\);/,
+  );
+  assert.match(
+    appSource,
+    /const response = await fetch\("\/api\/stats\/summary"\);/,
+  );
+  assert.match(
+    appSource,
+    /function pageNeedsFullStatsPayload\(page = getActiveAppPage\(\)\) \{/,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /async function pollRealtimeNotifications\(\) \{[\s\S]{0,1200}?getStatsPayload\(\{ preferCache: true \}\)/s,
   );
 });
 
@@ -81,5 +119,43 @@ test("bio profile sync is lazy-loaded instead of preloading on app boot", () => 
   assert.doesNotMatch(
     appSource,
     /async function showApp\(\) \{[\s\S]{0,500}?syncBioProfileFromServer\(\)/s,
+  );
+});
+
+test("billing config is lazy-loaded instead of preloading on app boot", () => {
+  assert.match(
+    appSource,
+    /async function loadBillingData\(\) \{/,
+  );
+  assert.match(
+    appSource,
+    /if \(billingDataLoadedUserId === activeUserId && !billingDataPromise\) \{/,
+  );
+  assert.match(
+    appSource,
+    /function renderAccountPage\(\) \{[\s\S]{0,1200}?void loadBillingData\(\);/s,
+  );
+  assert.match(
+    appSource,
+    /function renderPaymentPage\(\) \{[\s\S]{0,800}?void loadBillingData\(\);/s,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /async function showApp\(\) \{[\s\S]{0,400}?loadBillingData\(\)/s,
+  );
+});
+
+test("full stats payload is no longer preloaded for every app page on boot", () => {
+  assert.doesNotMatch(
+    appSource,
+    /async function showApp\(\) \{[\s\S]{0,400}?loadData\(\)/s,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /function continueAsGuest\(\) \{[\s\S]{0,400}?loadData\(\)/s,
+  );
+  assert.match(
+    appSource,
+    /if \(pageNeedsFullStatsPayload\(page\)\) \{\s*void loadData\(\);\s*\}/,
   );
 });

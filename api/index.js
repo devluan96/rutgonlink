@@ -87,6 +87,8 @@ const STATS_RESPONSE_CACHE_TTL_MS = Math.max(
 );
 const statsResponseCache = new Map();
 const statsResponseInFlight = new Map();
+const statsSummaryResponseCache = new Map();
+const statsSummaryResponseInFlight = new Map();
 const ADMIN_STATS_RESPONSE_CACHE_TTL_MS = Math.max(
   Number(process.env.ADMIN_STATS_RESPONSE_CACHE_TTL_MS) ||
     STATS_RESPONSE_CACHE_TTL_MS,
@@ -9810,6 +9812,208 @@ app.post("/api/extract-thumb", requireAuth, async (req, res) => {
     });
   }
   res.json({ thumb: null, source: "local" });
+});
+
+app.get("/api/stats/summary", async (req, res) => {
+  try {
+    const database = await getDb();
+    const [publicBaseUrl, user] = await Promise.all([
+      getPublicBaseUrl(),
+      resolveUser(req),
+    ]);
+    const userId = user?.id || null;
+    const guestSessionId = user ? null : req.guestSessionId;
+    const cacheKey = `summary:${buildStatsCacheKey(userId, guestSessionId)}`;
+    const cachedEntry = statsSummaryResponseCache.get(cacheKey);
+    if (
+      cachedEntry &&
+      cachedEntry.expiresAt > Date.now() &&
+      cachedEntry.publicBaseUrl === publicBaseUrl &&
+      cachedEntry.plan === (user?.plan || "guest")
+    ) {
+      return res.json(cachedEntry.payload);
+    }
+    if (statsSummaryResponseInFlight.has(cacheKey)) {
+      const payload = await statsSummaryResponseInFlight.get(cacheKey);
+      return res.json(payload);
+    }
+
+    const requestPromise = (async () => {
+      const timings = {};
+      const startedAt = Date.now();
+      const [
+        totals,
+        today,
+        analyticsSummaryResult,
+        articleFunnelStats,
+        latestLoginEvent,
+        workspaceSelection,
+        latestLink,
+      ] = await Promise.all([
+        measureAsyncTiming(
+          "totals",
+          () => database.getTotals(userId, guestSessionId),
+          timings,
+        ),
+        measureAsyncTiming(
+          "today",
+          () => database.getTodayStats(userId, guestSessionId),
+          timings,
+        ),
+        measureAsyncTiming(
+          "analyticsSummary",
+          async () => {
+            const analyticsSummary = await database.getClickAnalyticsSummary(
+              userId,
+              guestSessionId,
+              {
+                days: USER_STATS_RECENT_DAYS,
+                limit: 96,
+              },
+            );
+            if (analyticsSummary) {
+              return {
+                analytics: analyticsSummary,
+                alertRows: analyticsSummary?.recent_buckets || [],
+                source: "rpc",
+              };
+            }
+            const clickRows = await measureAsyncTiming(
+              "clicksFallback",
+              () =>
+                database.getClickAnalytics(userId, guestSessionId, {
+                  limit: 5000,
+                  days: USER_STATS_RECENT_DAYS,
+                }),
+              timings,
+            );
+            return {
+              analytics: buildStatsAnalyticsWithRecentBuckets(clickRows),
+              alertRows: clickRows,
+              source: "node-fallback",
+            };
+          },
+          timings,
+        ),
+        userId
+          ? measureAsyncTiming(
+              "labStats",
+              () =>
+                database.getArticleFunnelClickStats(userId, {
+                  days: USER_STATS_RECENT_DAYS,
+                  limit: 5000,
+                }),
+              timings,
+            )
+          : Promise.resolve(null),
+        user
+          ? measureAsyncTiming(
+              "latestLogin",
+              () => database.getLatestLoginEvent(user.id),
+              timings,
+            )
+          : Promise.resolve(null),
+        user
+          ? measureAsyncTiming(
+              "workspace",
+              () =>
+                resolveWorkspaceSelection(database, user, {
+                  ensureOwnerWorkspace: false,
+                }),
+              timings,
+            )
+          : Promise.resolve(null),
+        measureAsyncTiming(
+          "latestLink",
+          () => database.getLatestLink(userId, guestSessionId),
+          timings,
+        ),
+      ]);
+      const analytics = analyticsSummaryResult?.analytics || null;
+      const alertRows = analyticsSummaryResult?.alertRows || [];
+      const todayKey = getAnalyticsDayKey(new Date());
+      const baseUniqueClicksToday =
+        (analytics?.unique_timeline || []).find((item) => item.date === todayKey)
+          ?.clicks || 0;
+      const totalClicks =
+        Number(analytics?.unique_clicks || 0) +
+        Number(articleFunnelStats?.uniqueClicks || 0);
+      const uniqueClicksToday =
+        Number(baseUniqueClicksToday || 0) +
+        Number(articleFunnelStats?.uniqueClicksToday || 0);
+      const rawTotalClicks =
+        Number(analytics?.total_clicks || 0) +
+        Number(articleFunnelStats?.totalClicks || 0);
+      const alerts = buildStatsAlertPayload({
+        planName: user?.plan || "guest",
+        linksToday: today.linksToday || 0,
+        hasAccount: !!user,
+        clickRows: alertRows,
+        latestLoginEvent,
+      });
+      const workspaceInviteAlert =
+        buildWorkspaceInvitationAlert(workspaceSelection);
+      if (workspaceInviteAlert) {
+        alerts.active = Array.isArray(alerts.active) ? alerts.active : [];
+        alerts.active.push(workspaceInviteAlert);
+      }
+      const recent = latestLink
+        ? [
+            {
+              ...attachVideoOverlayPublicFields(latestLink),
+              short_url: buildLinkShortUrl(latestLink, publicBaseUrl),
+            },
+          ]
+        : [];
+      const payload = {
+        ...totals,
+        ...today,
+        totalClicks,
+        uniqueTotalClicks: totalClicks,
+        rawTotalClicks,
+        clicksToday: uniqueClicksToday,
+        uniqueClicksToday,
+        rawClicksToday: Number(today.clicksToday || 0),
+        recentWindowDays: USER_STATS_RECENT_DAYS,
+        recent,
+        alerts,
+        plan: user?.plan || "guest",
+      };
+      timings.total = Date.now() - startedAt;
+      if (timings.total >= 1000) {
+        console.log("[stats-summary] slow request", {
+          ...timings,
+          analyticsSource: analyticsSummaryResult?.source || "unknown",
+          totalClicks,
+          totalLinks: totals?.totalLinks || 0,
+          hasUser: !!user,
+        });
+      }
+      if (STATS_RESPONSE_CACHE_TTL_MS > 0) {
+        statsSummaryResponseCache.set(cacheKey, {
+          payload,
+          expiresAt: Date.now() + STATS_RESPONSE_CACHE_TTL_MS,
+          publicBaseUrl,
+          plan: user?.plan || "guest",
+        });
+      }
+      return { payload, timings };
+    })();
+    statsSummaryResponseInFlight.set(cacheKey, requestPromise);
+    try {
+      const { payload, timings } = await requestPromise;
+      const serverTimingHeader = formatServerTimingHeader(timings);
+      if (serverTimingHeader) {
+        res.setHeader("Server-Timing", serverTimingHeader);
+      }
+      return res.json(payload);
+    } finally {
+      statsSummaryResponseInFlight.delete(cacheKey);
+    }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get("/api/stats", async (req, res) => {

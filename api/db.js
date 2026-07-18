@@ -1766,6 +1766,24 @@ async function init() {
       return data || [];
     },
 
+    async getLatestLink(userId, guestSessionId) {
+      let query = sb
+        .from('links')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (userId) {
+        query = query.eq('user_id', userId);
+      } else if (guestSessionId) {
+        query = query.eq('guest_session_id', guestSessionId);
+      } else {
+        query = query.is('user_id', null).is('guest_session_id', null);
+      }
+      const { data, error } = await query;
+      check(error);
+      return Array.isArray(data) && data.length ? data[0] : null;
+    },
+
     async getAllLinks() {
       const { data, error } = await sb
         .from('links')
