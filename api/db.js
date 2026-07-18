@@ -473,8 +473,8 @@ async function init() {
     if (!safeLimit) return [];
     const sinceIso = days > 0 ? getRollingWindowStartUtc(days) : null;
     const selectExpr = includeAll
-      ? 'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at,article_funnels(config_json)'
-      : 'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at,article_funnels!inner(created_by_user_id,config_json)';
+      ? 'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at'
+      : 'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at,article_funnels!inner(created_by_user_id)';
     const result = await fetchPaginatedRows((from, to) => {
       let query = sb
         .from('article_funnel_clicks')
@@ -494,7 +494,43 @@ async function init() {
       return [];
     }
     check(result.error, 'article_funnel_click_rows');
-    return result.data || [];
+    const rows = Array.isArray(result.data) ? result.data : [];
+    const articleFunnelIds = [...new Set(
+      rows
+        .map((row) => Number(row?.article_funnel_id || 0))
+        .filter((articleFunnelId) => Number.isInteger(articleFunnelId) && articleFunnelId > 0),
+    )];
+    if (!articleFunnelIds.length) {
+      return rows;
+    }
+
+    const { data: funnelConfigs, error: funnelConfigError } = await sb
+      .from('article_funnels')
+      .select('id,config_json')
+      .in('id', articleFunnelIds);
+    if (!isMissingRelationError(funnelConfigError, 'article_funnels')) {
+      check(funnelConfigError, 'article_funnel_click_row_configs');
+    }
+    const configByFunnelId = new Map(
+      (Array.isArray(funnelConfigs) ? funnelConfigs : []).map((row) => [
+        Number(row?.id || 0),
+        row?.config_json && typeof row.config_json === 'object' ? row.config_json : {},
+      ]),
+    );
+    return rows.map((row) => {
+      const articleFunnelId = Number(row?.article_funnel_id || 0);
+      const existingFunnelPayload =
+        row?.article_funnels && typeof row.article_funnels === 'object'
+          ? row.article_funnels
+          : {};
+      return {
+        ...row,
+        article_funnels: {
+          ...existingFunnelPayload,
+          config_json: configByFunnelId.get(articleFunnelId) || {},
+        },
+      };
+    });
   }
 
   // Supabase dùng PostgreSQL – tạo bảng qua SQL Editor hoặc migration

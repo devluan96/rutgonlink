@@ -2395,9 +2395,6 @@ async function pollRealtimeNotifications() {
         }
       }
       await loadData(statsPayload);
-      if (document.getElementById("page-admin")?.classList.contains("active")) {
-        void loadAdminData();
-      }
       if (
         document.getElementById("page-account")?.classList.contains("active")
       ) {
@@ -2407,26 +2404,24 @@ async function pollRealtimeNotifications() {
     }
 
     if (isAdminUser()) {
-      const [adminStatsResponse, redirectResponse] = await Promise.all([
-        fetch("/api/admin/stats"),
-        fetch("/api/admin/redirects?limit=3"),
-      ]);
-      const adminStatsPayload = await adminStatsResponse
+      const adminNotificationResponse = await fetch(
+        "/api/admin/notification-summary",
+      );
+      const adminNotificationPayload = await adminNotificationResponse
         .json()
         .catch(() => null);
-      const redirectPayload = await redirectResponse.json().catch(() => null);
-      if (adminStatsResponse.ok && adminStatsPayload) {
-        enqueueAdminAlerts(adminStatsPayload);
+      const redirectPayload = adminNotificationPayload?.redirects || null;
+      if (adminNotificationResponse.ok && adminNotificationPayload) {
+        enqueueAdminAlerts(adminNotificationPayload);
       }
       if (
-        adminStatsResponse.ok &&
-        redirectResponse.ok &&
-        adminStatsPayload &&
+        adminNotificationResponse.ok &&
+        adminNotificationPayload &&
         redirectPayload
       ) {
         const previousAdmin = adminNotificationSnapshot;
         const nextAdmin = buildAdminNotificationSnapshot(
-          adminStatsPayload,
+          adminNotificationPayload,
           redirectPayload,
         );
         if (previousAdmin) {
@@ -9838,7 +9833,7 @@ let adminSupportConversationSyncInFlight = false;
 let adminSupportPollTimer = null;
 let adminSupportEventSource = null;
 const ADMIN_PAGE_SIZE = 20;
-const SUPPORT_POLL_INTERVAL_MS = 7000;
+const SUPPORT_POLL_INTERVAL_MS = 20000;
 
 function syncAdminSectionUI() {
   const availableSections = isAdminUser()
