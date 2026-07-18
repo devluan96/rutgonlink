@@ -1044,6 +1044,7 @@ app.get(
         `/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
         { showPopupTestButton },
         `/_lab/article-funnel-bridge/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
+        `/_lab/article-funnel-go/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
       ),
     );
   } catch (error) {
@@ -1079,6 +1080,33 @@ app.get(
           ? 400
           : 500;
       return res.status(status).send("Launch link khong hop le hoac da het han");
+    }
+  },
+);
+app.get(
+  [
+    "/_lab/article-funnel-go/:slug/:token/:stageKey",
+    "/_lab/article-funnel-go/:slug/:token/:stageKey/",
+  ],
+  async (req, res) => {
+    try {
+      const payload = decodeArticleFunnelPreviewToken(req.params.token);
+      const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
+      const canonicalUrl = `${BASE_URL}/_lab/article-funnel-go/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}/${encodeURIComponent(req.params.stageKey || "")}`;
+      return await handleArticleFunnelStageDeeplinkRoute({
+        req,
+        res,
+        config,
+        stageKey: String(req.params.stageKey || "").trim(),
+        canonicalUrl,
+      });
+    } catch (error) {
+      const code = String(error?.message || "");
+      const status =
+        code === "PREVIEW_TOKEN_EXPIRED" || code.startsWith("INVALID_PREVIEW_")
+          ? 400
+          : 500;
+      return res.status(status).send("Go link khong hop le hoac da het han");
     }
   },
 );
@@ -1151,6 +1179,7 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
           showPopupTestButton,
         },
         buildArticleFunnelBridgeBasePath(articleFunnel.route_slug),
+        buildArticleFunnelGoBasePath(articleFunnel.route_slug),
       ),
     );
   } catch (error) {
@@ -1195,6 +1224,40 @@ app.get(["/af-bridge/:slug/:stageKey", "/af-bridge/:slug/:stageKey/"], async (re
     return res.status(500).send("Khong the mo article funnel bridge");
   }
 });
+app.get(["/af-go/:slug/:stageKey", "/af-go/:slug/:stageKey/"], async (req, res) => {
+  try {
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const articleFunnel = await database.getArticleFunnelBySlug(req.params.slug);
+    if (!articleFunnel) {
+      return res
+        .status(404)
+        .sendFile(path.join(__dirname, "..", "public", "404.html"));
+    }
+    const config = normalizeArticleFunnelPreviewConfig(
+      articleFunnel.config_json || {},
+    );
+    const canonicalUrl = `${buildArticleFunnelPublicUrl(
+      articleFunnel.route_slug,
+      articleFunnel.domain_hostname,
+      publicBaseUrl,
+    ).replace(/\/+$/, "")}/go/${encodeURIComponent(req.params.stageKey || "")}`;
+    return await handleArticleFunnelStageDeeplinkRoute({
+      req,
+      res,
+      config,
+      stageKey: String(req.params.stageKey || "").trim(),
+      canonicalUrl,
+      tracking: {
+        articleFunnelId: articleFunnel.id,
+        routeSlug: articleFunnel.route_slug,
+      },
+    });
+  } catch (error) {
+    console.error("[article-funnel/published-go]", error);
+    return res.status(500).send("Khong the mo article funnel deeplink");
+  }
+});
 app.get(["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"], async (req, res) => {
   try {
     const database = await getDb();
@@ -1227,6 +1290,53 @@ app.get(["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"], async (re
   } catch (error) {
     console.error("[article-funnel/published-launch]", error);
     return res.status(500).send("Khong the launch article funnel");
+  }
+});
+app.get(["/:slug/go/:stageKey", "/:slug/go/:stageKey/"], async (req, res, next) => {
+  try {
+    const routeSlug = String(req.params.slug || "").trim();
+    if (isReservedPublishedArticleSlug(routeSlug)) {
+      return next();
+    }
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const conflictingLink = await findShortLinkSlugConflict(database, routeSlug);
+    if (conflictingLink) {
+      return next();
+    }
+    const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
+    if (
+      !articleFunnel ||
+      !canServePublishedArticleFunnelOnHost(
+        articleFunnel,
+        getRequestHostname(req),
+        publicBaseUrl,
+      )
+    ) {
+      return next();
+    }
+    const config = normalizeArticleFunnelPreviewConfig(
+      articleFunnel.config_json || {},
+    );
+    const canonicalUrl = `${buildArticleFunnelPublicUrl(
+      articleFunnel.route_slug,
+      articleFunnel.domain_hostname,
+      publicBaseUrl,
+    ).replace(/\/+$/, "")}/go/${encodeURIComponent(req.params.stageKey || "")}`;
+    return await handleArticleFunnelStageDeeplinkRoute({
+      req,
+      res,
+      config,
+      stageKey: String(req.params.stageKey || "").trim(),
+      canonicalUrl,
+      tracking: {
+        articleFunnelId: articleFunnel.id,
+        routeSlug: articleFunnel.route_slug,
+      },
+    });
+  } catch (error) {
+    console.error("[article-funnel/published-go-direct]", error);
+    return res.status(500).send("Khong the mo article funnel deeplink");
   }
 });
 app.get(["/:slug/bridge/:stageKey", "/:slug/bridge/:stageKey/"], async (req, res, next) => {
@@ -1374,6 +1484,7 @@ app.get("/:slug", async (req, res, next) => {
           showPopupTestButton,
         },
         buildArticleFunnelBridgeBasePath(articleFunnel.route_slug),
+        buildArticleFunnelGoBasePath(articleFunnel.route_slug),
       ),
     );
   } catch (error) {
@@ -5804,6 +5915,11 @@ function buildArticleFunnelBridgeBasePath(routeSlug) {
   return normalizedSlug ? `/${normalizedSlug}/bridge` : "/bridge";
 }
 
+function buildArticleFunnelGoBasePath(routeSlug) {
+  const normalizedSlug = encodeURIComponent(String(routeSlug || "").trim());
+  return normalizedSlug ? `/${normalizedSlug}/go` : "/go";
+}
+
 function buildArticleFunnelPopupTestUrl(
   routeSlug,
   domainHostname,
@@ -5903,6 +6019,16 @@ function shouldUseArticleFunnelInlineLaunch(stage) {
     .trim()
     .toLowerCase();
   return normalizedStageKey === "3s" && directPlatform === "shopee";
+}
+
+function shouldUseArticleFunnelDeeplinkRoute(stage) {
+  const normalizedStageKey = normalizeArticleFunnelStageKey(
+    stage?.stage_key || "",
+  );
+  const directPlatform = String(stage?.direct_platform || "")
+    .trim()
+    .toLowerCase();
+  return normalizedStageKey === "20s" && directPlatform === "tiktok";
 }
 
 function getRequestHostname(req) {
@@ -6414,12 +6540,190 @@ async function handleArticleFunnelStageLaunch({
   return res.redirect(302, targetUrl);
 }
 
+async function handleArticleFunnelStageDeeplinkRoute({
+  req,
+  res,
+  config,
+  stageKey,
+  canonicalUrl,
+  tracking = null,
+}) {
+  const normalizedStageKey = normalizeArticleFunnelStageKey(stageKey);
+  const stage = (config.stages || []).find(
+    (item) => String(item?.stage_key || "").trim() === normalizedStageKey,
+  );
+  if (!stage) {
+    return res.status(404).send("Khong tim thay popup stage");
+  }
+
+  const targetUrl = String(
+    stage.target_url || stage.direct_web_url || stage.direct_app_url || "",
+  ).trim();
+  if (!targetUrl) {
+    return res.status(400).send("Stage target khong hop le");
+  }
+
+  const ua = req.headers["user-agent"] || "";
+  const referer = req.headers["referer"] || "";
+  const platform = getMobilePlatform(ua);
+  const uaKind = getRedirectUaKind(ua);
+  const info = detectPlatformDeep(targetUrl, platform);
+  const articleFunnelLogMeta = buildArticleFunnelRedirectMeta(
+    tracking,
+    normalizedStageKey,
+  );
+  const isFacebookInApp = isFacebookInAppBrowser(ua);
+  const launchLink = {
+    original_url: targetUrl,
+    og_title: config.title || "Article preview",
+    og_desc:
+      String(config.description || "").trim() ||
+      config.title ||
+      "Dang mo ung dung dich de tiep tuc xem noi dung.",
+    og_image: config.share_image || config.overlay_image || "",
+    link_type: info.deeplink ? "deeplink" : "direct",
+  };
+
+  if (tracking?.routeSlug) {
+    try {
+      const database = await getDb();
+      await recordArticleFunnelStageClick({
+        database,
+        req,
+        tracking,
+        stageKey: normalizedStageKey,
+      });
+    } catch (error) {
+      console.warn(
+        "[article-funnel/click-track:go]",
+        String(error?.message || error || "").trim() || "unknown error",
+      );
+    }
+  }
+
+  if (
+    platform !== "desktop" &&
+    info.platform_name === "shopee" &&
+    isFacebookInApp
+  ) {
+    setRedirectDebugHeaders(res, {
+      mode: "article-funnel-go-shopee-facebook-bridge",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: 0,
+      code: `article-funnel-go:${normalizedStageKey}`,
+      mode: "article-funnel-go-shopee-facebook-bridge",
+      platform: info.platform_name,
+      uaKind,
+      status: 200,
+      target: info.fallback || targetUrl,
+      referer,
+      ...articleFunnelLogMeta,
+    });
+    res.set({
+      "Cache-Control": "no-cache,no-store,must-revalidate",
+      Pragma: "no-cache",
+      "Content-Type": "text/html;charset=utf-8",
+      "X-Frame-Options": "SAMEORIGIN",
+    });
+    return res.send(
+      buildShopeeFacebookBridgePage(launchLink, canonicalUrl, info),
+    );
+  }
+
+  if (platform === "desktop") {
+    setRedirectDebugHeaders(res, {
+      mode: "article-funnel-go-desktop-redirect",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: 0,
+      code: `article-funnel-go:${normalizedStageKey}`,
+      mode: "article-funnel-go-desktop-redirect",
+      platform: info.platform_name,
+      uaKind,
+      status: 302,
+      target: targetUrl,
+      referer,
+      ...articleFunnelLogMeta,
+    });
+    return res.redirect(302, targetUrl);
+  }
+
+  if (info.platform_name === "shopee") {
+    const shopeeTarget = info.deeplink || targetUrl;
+    setRedirectDebugHeaders(res, {
+      mode: "article-funnel-go-shopee-direct-redirect",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: 0,
+      code: `article-funnel-go:${normalizedStageKey}`,
+      mode: "article-funnel-go-shopee-direct-redirect",
+      platform: info.platform_name,
+      uaKind,
+      status: 301,
+      target: shopeeTarget,
+      referer,
+      ...articleFunnelLogMeta,
+    });
+    return res.redirect(301, shopeeTarget);
+  }
+
+  if (info.deeplink || launchLink.link_type === "deeplink") {
+    setRedirectDebugHeaders(res, {
+      mode: "article-funnel-go-deeplink-bridge",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: 0,
+      code: `article-funnel-go:${normalizedStageKey}`,
+      mode: "article-funnel-go-deeplink-bridge",
+      platform: info.platform_name,
+      uaKind,
+      status: 200,
+      target: info.deeplink || targetUrl,
+      referer,
+      ...articleFunnelLogMeta,
+    });
+    res.set({
+      "Cache-Control": "no-cache,no-store,must-revalidate",
+      Pragma: "no-cache",
+    });
+    return res.send(buildDirectBridgePage(launchLink, canonicalUrl, info));
+  }
+
+  setRedirectDebugHeaders(res, {
+    mode: "article-funnel-go-mobile-direct",
+    platform: info.platform_name,
+  });
+  logRedirectDecision({
+    requestId: req.requestId,
+    linkId: 0,
+    code: `article-funnel-go:${normalizedStageKey}`,
+    mode: "article-funnel-go-mobile-direct",
+    platform: info.platform_name,
+    uaKind,
+    status: 302,
+    target: targetUrl,
+    referer,
+    ...articleFunnelLogMeta,
+  });
+  return res.redirect(302, targetUrl);
+}
+
 function buildArticleFunnelPreviewPage(
   config,
   canonicalUrl,
   launchBasePath = "",
   trackingContext = null,
   bridgeBasePath = "",
+  deeplinkBasePath = "",
 ) {
   const title = esc(config.title || "Article preview");
   const description = esc(String(config.description || "").trim());
@@ -6437,11 +6741,15 @@ function buildArticleFunnelPreviewPage(
     (config.stages || []).map((stage) => ({
       ...stage,
       use_inline_launch: shouldUseArticleFunnelInlineLaunch(stage),
+      use_deeplink_route: shouldUseArticleFunnelDeeplinkRoute(stage),
     })),
   );
   const defaultOverlayImage = JSON.stringify(config.overlay_image || shareImage || "");
   const launchBasePathJson = JSON.stringify(String(launchBasePath || "").trim());
   const bridgeBasePathJson = JSON.stringify(String(bridgeBasePath || "").trim());
+  const deeplinkBasePathJson = JSON.stringify(
+    String(deeplinkBasePath || "").trim(),
+  );
   const trackingRouteSlugJson = JSON.stringify(
     String(
       trackingContext?.routeSlug || trackingContext?.route_slug || "",
@@ -6547,6 +6855,7 @@ ${ogImageTag}
   var defaultOverlayImage = ${defaultOverlayImage};
   var launchBasePath = ${launchBasePathJson};
   var bridgeBasePath = ${bridgeBasePathJson};
+  var deeplinkBasePath = ${deeplinkBasePathJson};
   var trackingRouteSlug = ${trackingRouteSlugJson};
   var canShowPopupTestButton = ${showPopupTestButtonJson};
   var pendingStages = [];
@@ -6758,7 +7067,11 @@ ${ogImageTag}
 
   function getLaunchUrl(stage){
     var stageKey = encodeURIComponent(String(stage && stage.stage_key || ''));
-    return appendPopupDebugQuery((launchBasePath || location.pathname) + '/' + stageKey);
+    var basePath =
+      stage && stage.use_deeplink_route
+        ? (deeplinkBasePath || launchBasePath || location.pathname)
+        : (launchBasePath || location.pathname);
+    return appendPopupDebugQuery(basePath + '/' + stageKey);
   }
 
   function shouldUseDedicatedBridgeRoute(stage) {

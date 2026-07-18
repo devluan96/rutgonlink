@@ -171,13 +171,15 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through the launch helper 
     "/demo/launch",
     { routeSlug: "demo", showPopupTestButton: true },
     "/demo/bridge",
+    "/demo/go",
   );
 
   assert.match(
     html,
-    /"stage_key":"20s","direct_platform":"tiktok","direct_web_url":"https:\/\/vt\.tiktok\.com\/demo\/","use_inline_launch":false/,
+    /"stage_key":"20s","direct_platform":"tiktok","direct_web_url":"https:\/\/vt\.tiktok\.com\/demo\/","use_inline_launch":false,"use_deeplink_route":true/,
   );
   assert.match(html, /var bridgeBasePath = "\/demo\/bridge"/);
+  assert.match(html, /var deeplinkBasePath = "\/demo\/go"/);
   assert.match(
     html,
     /function shouldEnablePopupDebugMode\(\) \{\s+try \{\s+var params = new URLSearchParams\(window\.location\.search \|\| ''\);\s+return params\.get\('popup_debug'\) === '1' \|\|\s+\(Boolean\(params\.get\('popup_test'\)\) && Boolean\(params\.get\('popup_test_token'\)\)\);/s,
@@ -193,7 +195,7 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through the launch helper 
   );
   assert.match(
     html,
-    /function getLaunchUrl\(stage\)\{\s+var stageKey = encodeURIComponent\(String\(stage && stage\.stage_key \|\| ''\)\);\s+return appendPopupDebugQuery\(\(launchBasePath \|\| location\.pathname\) \+ '\/' \+ stageKey\);\s+\}/s,
+    /function getLaunchUrl\(stage\)\{\s+var stageKey = encodeURIComponent\(String\(stage && stage\.stage_key \|\| ''\)\);\s+var basePath =\s+stage && stage\.use_deeplink_route\s+\? \(deeplinkBasePath \|\| launchBasePath \|\| location\.pathname\)\s+:\s+\(launchBasePath \|\| location\.pathname\);\s+return appendPopupDebugQuery\(basePath \+ '\/' \+ stageKey\);\s+\}/s,
   );
   assert.match(
     html,

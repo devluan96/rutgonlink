@@ -7352,9 +7352,11 @@
           );
           if (!normalizedStageKey) return "";
           const targetUrl = getEffectiveTarget(stageKey);
-          const routePrefix = shouldUseOverlayBridgeRoute(stageKey, targetUrl)
-            ? "bridge"
-            : "launch";
+          const routePrefix = shouldUseOverlayGoRoute(stageKey, targetUrl)
+            ? "go"
+            : shouldUseOverlayBridgeRoute(stageKey, targetUrl)
+              ? "bridge"
+              : "launch";
 
           if (generatedPublishedUrl) {
             try {
@@ -7400,6 +7402,13 @@
 
         function shouldUseOverlayBridgeRoute(stageKey, targetUrl) {
           return false;
+        }
+
+        function shouldUseOverlayGoRoute(stageKey, targetUrl) {
+          return (
+            String(stageKey || "").trim() === "20s" &&
+            detectTargetPlatform(targetUrl) === "tiktok"
+          );
         }
 
         function shouldUseOverlayLaunchRoute(stageKey, targetUrl, routeLaunchUrl) {

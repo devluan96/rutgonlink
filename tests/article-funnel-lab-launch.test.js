@@ -160,7 +160,7 @@ test("admin article funnel lab routes popup X button through the same launch flo
   );
 });
 
-test("admin article funnel lab keeps TikTok popup 20s on launch helpers instead of bridge urls", () => {
+test("admin article funnel lab keeps TikTok popup 20s on deeplink go helpers instead of bridge urls", () => {
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
     "utf8",
@@ -176,7 +176,11 @@ test("admin article funnel lab keeps TikTok popup 20s on launch helpers instead 
   );
   assert.match(
     templateHtml,
-    /const targetUrl = getEffectiveTarget\(stageKey\);\s+const routePrefix = shouldUseOverlayBridgeRoute\(stageKey, targetUrl\)\s+\? "bridge"\s+:\s+"launch";/s,
+    /function shouldUseOverlayGoRoute\(stageKey, targetUrl\) \{\s+return \(\s+String\(stageKey \|\| ""\)\.trim\(\) === "20s" &&\s+detectTargetPlatform\(targetUrl\) === "tiktok"\s+\);\s+\}/s,
+  );
+  assert.match(
+    templateHtml,
+    /const targetUrl = getEffectiveTarget\(stageKey\);\s+const routePrefix = shouldUseOverlayGoRoute\(stageKey, targetUrl\)\s+\? "go"\s+:\s+shouldUseOverlayBridgeRoute\(stageKey, targetUrl\)\s+\? "bridge"\s+:\s+"launch";/s,
   );
   assert.match(
     templateHtml,
