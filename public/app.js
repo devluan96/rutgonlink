@@ -4956,7 +4956,7 @@ function navigate(page, el) {
 function toggleSidebar() {
   const sb = document.getElementById("sidebar");
   if (!sb) return;
-  if (window.innerWidth <= 768) {
+  if (shouldUseSidebarDrawerViewport()) {
     sb.classList.toggle("mob-open");
     document
       .getElementById("sidebarBackdrop")
@@ -9834,6 +9834,17 @@ let adminSupportPollTimer = null;
 let adminSupportEventSource = null;
 const ADMIN_PAGE_SIZE = 20;
 const SUPPORT_POLL_INTERVAL_MS = 20000;
+const SIDEBAR_DRAWER_BREAKPOINT_PX = 1024;
+
+function shouldUseSidebarDrawerViewport() {
+  if (typeof window === "undefined") return false;
+  if (typeof window.matchMedia === "function") {
+    return window.matchMedia(
+      `(max-width: ${SIDEBAR_DRAWER_BREAKPOINT_PX}px)`,
+    ).matches;
+  }
+  return window.innerWidth <= SIDEBAR_DRAWER_BREAKPOINT_PX;
+}
 
 function syncAdminSectionUI() {
   const availableSections = isAdminUser()
