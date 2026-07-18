@@ -61,3 +61,40 @@ test("article funnel lab list scopes admins to their own labs", () => {
     /app\.get\("\/api\/admin\/article-funnel-labs", requireArticleFunnelLab, async \(req, res\) => \{[\s\S]*?createdByUserId:\s*isAdminUserRecord\(req\.currentUser\)/,
   );
 });
+
+test("lab shared settings persist on the user profile instead of local-only storage", () => {
+  const schemaSql = fs.readFileSync(
+    path.join(__dirname, "..", "supabase", "schema.sql"),
+    "utf8",
+  );
+  const dbJs = fs.readFileSync(
+    path.join(__dirname, "..", "api", "db.js"),
+    "utf8",
+  );
+  const indexJs = fs.readFileSync(
+    path.join(__dirname, "..", "api", "index.js"),
+    "utf8",
+  );
+  const appJs = fs.readFileSync(
+    path.join(__dirname, "..", "public", "app.js"),
+    "utf8",
+  );
+
+  assert.match(
+    schemaSql,
+    /lab_shared_settings_json JSONB NOT NULL DEFAULT '\{\}'::jsonb/,
+  );
+  assert.match(
+    dbJs,
+    /Object\.prototype\.hasOwnProperty\.call\(profile, 'lab_shared_settings_json'\)/,
+  );
+  assert.match(
+    indexJs,
+    /lab_shared_settings:\s*normalizeUserLabSharedSettings\(\s*user\.lab_shared_settings_json \|\| \{\},/s,
+  );
+  assert.match(appJs, /function syncLabSharedSettingsStorageFromUser\(\)/);
+  assert.match(
+    appJs,
+    /body:\s*JSON\.stringify\(\{\s*lab_shared_settings:\s*nextSettings\s*\}\)/s,
+  );
+});

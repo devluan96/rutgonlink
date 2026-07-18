@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url TEXT,
   affiliate_shopee_url TEXT,
   affiliate_tiktok_url TEXT,
+  lab_shared_settings_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   can_use_lab BOOLEAN DEFAULT FALSE,
   plan       TEXT DEFAULT 'free',
   role       TEXT DEFAULT 'user',
@@ -28,6 +29,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS affiliate_shopee_url TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS affiliate_tiktok_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lab_shared_settings_json JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_use_lab BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;

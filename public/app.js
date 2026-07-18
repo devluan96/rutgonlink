@@ -1990,6 +1990,7 @@ function showAuth(mode = "landing") {
     window.location.replace("/");
     return;
   }
+  syncLabSharedSettingsStorageFromUser();
   closeLandingNav();
   setAuthRouteMode(mode);
   document.getElementById("appScreen").classList.remove("show");
@@ -2014,6 +2015,7 @@ function showAuth(mode = "landing") {
 
 function continueAsGuest() {
   user = null;
+  syncLabSharedSettingsStorageFromUser();
   resetStatsDataCaches();
   closeLandingNav();
   document.getElementById("authScreen").style.display = "none";
@@ -2119,6 +2121,7 @@ async function doRegister() {
 async function doLogout() {
   await fetch("/api/auth/logout", { method: "POST" });
   user = null;
+  syncLabSharedSettingsStorageFromUser();
   resetStatsDataCaches();
   accountLoginEvents = [];
   accountTwoFactorSetup = null;
@@ -3828,6 +3831,7 @@ async function logoutAllDevices() {
       throw new Error(data.error || "Không thể đăng xuất tất cả thiết bị");
     }
     user = null;
+    syncLabSharedSettingsStorageFromUser();
     billingConfig = null;
     billingRequests = [];
     billingDataPromise = null;
@@ -3867,6 +3871,7 @@ async function deleteAccount() {
       throw new Error(data.error || "Không thể xóa tài khoản");
     }
     user = null;
+    syncLabSharedSettingsStorageFromUser();
     billingConfig = null;
     billingRequests = [];
     billingDataPromise = null;
@@ -4741,6 +4746,7 @@ async function showApp() {
   finishShellBoot();
   loadThemePreference();
   applyAppLanguage(appLanguage);
+  syncLabSharedSettingsStorageFromUser();
   updateTopbar();
   renderSupportConversation();
   loadBioConfig();
@@ -5248,7 +5254,36 @@ function normalizeLabSharedSettings(input = {}) {
   };
 }
 
+function hasAnyLabSharedSettingsValue(settings) {
+  return Object.values(normalizeLabSharedSettings(settings)).some((value) =>
+    Boolean(String(value || "").trim()),
+  );
+}
+
+function syncLabSharedSettingsStorageFromUser() {
+  if (!user?.id) {
+    localStorage.removeItem(labSharedSettingsStorageKey);
+    return normalizeLabSharedSettings();
+  }
+  const normalized = normalizeLabSharedSettings(user.lab_shared_settings || {});
+  user.lab_shared_settings = normalized;
+  if (hasAnyLabSharedSettingsValue(normalized)) {
+    localStorage.setItem(
+      labSharedSettingsStorageKey,
+      JSON.stringify(normalized),
+    );
+  } else {
+    localStorage.removeItem(labSharedSettingsStorageKey);
+  }
+  return normalized;
+}
+
 function getLabSharedSettings() {
+  if (user?.id) {
+    const normalized = normalizeLabSharedSettings(user.lab_shared_settings || {});
+    user.lab_shared_settings = normalized;
+    return normalized;
+  }
   try {
     const raw = localStorage.getItem(labSharedSettingsStorageKey);
     if (!raw) return normalizeLabSharedSettings();
@@ -5260,7 +5295,17 @@ function getLabSharedSettings() {
 
 function setLabSharedSettings(value) {
   const normalized = normalizeLabSharedSettings(value);
-  localStorage.setItem(labSharedSettingsStorageKey, JSON.stringify(normalized));
+  if (user?.id) {
+    user.lab_shared_settings = normalized;
+  }
+  if (hasAnyLabSharedSettingsValue(normalized)) {
+    localStorage.setItem(
+      labSharedSettingsStorageKey,
+      JSON.stringify(normalized),
+    );
+  } else {
+    localStorage.removeItem(labSharedSettingsStorageKey);
+  }
   return normalized;
 }
 
@@ -5501,20 +5546,61 @@ function closeLabSharedSettingsModal() {
   document.getElementById("labSharedSettingsModal")?.classList.add("hidden");
 }
 
-function saveLabSharedSettingsModal() {
+async function saveLabSharedSettingsModal() {
   const modal = document.getElementById("labSharedSettingsModal");
   if (!modal) return;
+  const saveButton = modal.querySelector(".btn-save");
+  const cancelButton = modal.querySelector(".btn-cancel");
+  if (saveButton?.disabled) return;
   const fields = getLabSharedSettingsFormValueMap();
   const nextSettings = normalizeLabSharedSettings(
     Object.fromEntries(
       Object.entries(fields).map(([key, input]) => [key, input?.value || ""]),
     ),
   );
-  const savedSettings = setLabSharedSettings(nextSettings);
-  const frameId = modal.dataset.frameId || "createLabIframe";
-  postLabSharedSettingsToFrame(frameId, savedSettings);
-  closeLabSharedSettingsModal();
-  toast("Đã lưu cài đặt mặc định cho lab mới");
+  try {
+    if (saveButton) {
+      saveButton.disabled = true;
+      saveButton.textContent = "Đang lưu...";
+    }
+    if (cancelButton) cancelButton.disabled = true;
+    let savedSettings = nextSettings;
+    if (user?.id) {
+      const response = await fetch("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lab_shared_settings: nextSettings }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || "Không thể lưu cài đặt mặc định");
+      }
+      if (payload?.user) {
+        user = payload.user;
+      }
+      savedSettings = syncLabSharedSettingsStorageFromUser();
+    } else {
+      savedSettings = setLabSharedSettings(nextSettings);
+    }
+    const frameId = modal.dataset.frameId || "createLabIframe";
+    postLabSharedSettingsToFrame(frameId, savedSettings);
+    if (frameId !== "createLabIframe") {
+      postLabSharedSettingsToFrame("createLabIframe", savedSettings);
+    }
+    if (frameId !== "linksLabIframe") {
+      postLabSharedSettingsToFrame("linksLabIframe", savedSettings);
+    }
+    closeLabSharedSettingsModal();
+    toast("Đã lưu cài đặt mặc định cho lab mới", "ok");
+  } catch (error) {
+    toast(error?.message || "Không thể lưu cài đặt mặc định", "err");
+  } finally {
+    if (saveButton) {
+      saveButton.disabled = false;
+      saveButton.textContent = "Lưu mặc định";
+    }
+    if (cancelButton) cancelButton.disabled = false;
+  }
 }
 
 function syncCreateSubtabUI() {
@@ -12178,6 +12264,7 @@ window.addEventListener("hashchange", () => {
       user = d.user;
       showApp();
     } else {
+      syncLabSharedSettingsStorageFromUser();
       if (isDirectAppPath(location.pathname)) {
         redirectToLoginPage(location.pathname);
         return;
@@ -12185,6 +12272,7 @@ window.addEventListener("hashchange", () => {
       showAuthScreen(authMode);
     }
   } catch {
+    syncLabSharedSettingsStorageFromUser();
     if (isDirectAppPath(location.pathname)) {
       redirectToLoginPage(location.pathname);
       return;

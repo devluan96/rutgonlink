@@ -604,8 +604,21 @@ async function init() {
       if (Object.prototype.hasOwnProperty.call(profile, 'affiliate_tiktok_url')) {
         payload.affiliate_tiktok_url = profile.affiliate_tiktok_url || null;
       }
+      if (Object.prototype.hasOwnProperty.call(profile, 'lab_shared_settings_json')) {
+        payload.lab_shared_settings_json =
+          profile.lab_shared_settings_json &&
+          typeof profile.lab_shared_settings_json === 'object' &&
+          !Array.isArray(profile.lab_shared_settings_json)
+            ? profile.lab_shared_settings_json
+            : {};
+      }
       if (!Object.keys(payload).length) return;
       const { error } = await sb.from('users').update(payload).eq('id', userId);
+      if (isMissingColumnError(error, 'lab_shared_settings_json')) {
+        throw new Error(
+          'DB schema chưa cập nhật cột lab_shared_settings_json. Hãy chạy migration 20260718_add_user_lab_shared_settings.sql',
+        );
+      }
       check(error);
     },
 

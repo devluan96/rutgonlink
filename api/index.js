@@ -4087,6 +4087,23 @@ app.get("/api/debug", (req, res) =>
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 
+function normalizeUserLabSharedSettings(input = {}) {
+  const source =
+    input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  return {
+    popup3sUrl: String(source.popup3sUrl || "").trim(),
+    popup3sIosFbUrl: String(source.popup3sIosFbUrl || "").trim(),
+    overlayImage: String(source.overlayImage || "").trim(),
+    overlay20sImage: String(source.overlay20sImage || "").trim(),
+    overlay300sImage: String(source.overlay300sImage || "").trim(),
+    popup300sUrl: String(source.popup300sUrl || "").trim(),
+    groupLabel: String(source.groupLabel || "").trim(),
+    groupUrl: String(source.groupUrl || "").trim(),
+    backupLabel: String(source.backupLabel || "").trim(),
+    backupUrl: String(source.backupUrl || "").trim(),
+  };
+}
+
 function buildAuthUserPayload(user, isAdmin = false) {
   return {
     id: user.id,
@@ -4096,6 +4113,9 @@ function buildAuthUserPayload(user, isAdmin = false) {
     avatar_url: user.avatar_url || null,
     affiliate_shopee_url: user.affiliate_shopee_url || null,
     affiliate_tiktok_url: user.affiliate_tiktok_url || null,
+    lab_shared_settings: normalizeUserLabSharedSettings(
+      user.lab_shared_settings_json || {},
+    ),
     can_use_lab: isAdmin ? true : !!user.can_use_lab,
     plan: isAdmin ? "admin" : user.plan,
     role: isAdmin ? "admin" : user.role || "user",
@@ -7646,6 +7666,14 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
           .json({ error: "Link affiliate TikTok chưa hợp lệ" });
       }
       updates.affiliate_tiktok_url = tiktokAffiliateUrl;
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(body, "lab_shared_settings") ||
+      Object.prototype.hasOwnProperty.call(body, "lab_shared_settings_json")
+    ) {
+      updates.lab_shared_settings_json = normalizeUserLabSharedSettings(
+        body.lab_shared_settings_json || body.lab_shared_settings || {},
+      );
     }
     if (!Object.keys(updates).length) {
       return res
