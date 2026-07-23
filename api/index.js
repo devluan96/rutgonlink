@@ -99,6 +99,8 @@ const adminStatsResponseInFlight = new Map();
 const adminNotificationResponseCache = new Map();
 const adminNotificationResponseInFlight = new Map();
 const USER_STATS_RECENT_DAYS = 7;
+const DEFAULT_STATS_RANGE_DAYS = 1;
+const ALLOWED_STATS_RANGE_DAYS = new Set([1, 7, 14]);
 
 // ── Cloudinary config ────────────────────────────────────────────────────────
 const CLOUDINARY_OK = !!(
@@ -3464,6 +3466,101 @@ function buildStatsCacheKey(userId, guestSessionId) {
   return "guest:anonymous";
 }
 
+function buildYesterdayBreakdownFromAnalytics(
+  analytics = {},
+  currentTime = new Date(),
+) {
+  const todayKey = getAnalyticsDayKey(currentTime);
+  const yesterdayDate = new Date(currentTime);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterdayKey = getAnalyticsDayKey(yesterdayDate);
+  const rawTimeline = Array.isArray(analytics?.timeline) ? analytics.timeline : [];
+  const uniqueTimeline = Array.isArray(analytics?.unique_timeline)
+    ? analytics.unique_timeline
+    : [];
+  const rawDistribution = Array.isArray(analytics?.platforms?.distribution)
+    ? analytics.platforms.distribution
+    : [];
+  const rawTodayDistribution = Array.isArray(analytics?.platforms?.today_distribution)
+    ? analytics.platforms.today_distribution
+    : [];
+  const uniqueDistribution = Array.isArray(analytics?.platforms?.unique_distribution)
+    ? analytics.platforms.unique_distribution
+    : [];
+  const uniqueTodayDistribution = Array.isArray(
+    analytics?.platforms?.unique_today_distribution,
+  )
+    ? analytics.platforms.unique_today_distribution
+    : [];
+
+  const readYesterdayPlatform = (key) => {
+    const rawTotal = Number(
+      rawDistribution.find((item) => String(item?.key || "") === key)?.clicks || 0,
+    );
+    const rawToday = Number(
+      rawTodayDistribution.find((item) => String(item?.key || "") === key)
+        ?.clicks_today || 0,
+    );
+    const uniqueTotal = Number(
+      uniqueDistribution.find((item) => String(item?.key || "") === key)?.clicks || 0,
+    );
+    const uniqueToday = Number(
+      uniqueTodayDistribution.find((item) => String(item?.key || "") === key)
+        ?.clicks_today || 0,
+    );
+    return {
+      raw_clicks: Math.max(rawTotal - rawToday, 0),
+      unique_clicks: Math.max(uniqueTotal - uniqueToday, 0),
+    };
+  };
+
+  return {
+    date: yesterdayKey,
+    raw_clicks: Math.max(
+      Number(
+        rawTimeline.find((item) => String(item?.date || "") === yesterdayKey)
+          ?.clicks || 0,
+      ),
+      0,
+    ),
+    unique_clicks: Math.max(
+      Number(
+        uniqueTimeline.find((item) => String(item?.date || "") === yesterdayKey)
+          ?.clicks || 0,
+      ),
+      0,
+    ),
+    raw_clicks_today: Math.max(
+      Number(
+        rawTimeline.find((item) => String(item?.date || "") === todayKey)?.clicks || 0,
+      ),
+      0,
+    ),
+    unique_clicks_today: Math.max(
+      Number(
+        uniqueTimeline.find((item) => String(item?.date || "") === todayKey)
+          ?.clicks || 0,
+      ),
+      0,
+    ),
+    platforms: {
+      shopee: readYesterdayPlatform("shopee"),
+      tiktok: readYesterdayPlatform("tiktok"),
+    },
+  };
+}
+
+function normalizeStatsRangeDays(value, fallback = DEFAULT_STATS_RANGE_DAYS) {
+  const normalizedFallback = ALLOWED_STATS_RANGE_DAYS.has(Number(fallback))
+    ? Number(fallback)
+    : DEFAULT_STATS_RANGE_DAYS;
+  const normalizedValue = Number(value);
+  if (!ALLOWED_STATS_RANGE_DAYS.has(normalizedValue)) {
+    return normalizedFallback;
+  }
+  return normalizedValue;
+}
+
 function formatServerTimingHeader(timings = {}) {
   return Object.entries(timings)
     .filter(([, duration]) => Number.isFinite(duration))
@@ -6206,16 +6303,21 @@ function buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info) {
   const iosInAppUrl = String(
     resolvedTargets.appTarget || browserUrl,
   ).trim();
+  const iosStoreFallbackUrl = String(
+    stage?.direct_ios_fb_url || info?.ios_store || browserUrl,
+  ).trim();
 
   return {
     ...(info && typeof info === "object" ? info : {}),
-    deeplink: iosInAppUrl || browserUrl,
-    deeplink_ios: iosInAppUrl || browserUrl,
+    deeplink: iosStoreFallbackUrl || iosInAppUrl || browserUrl,
+    deeplink_ios: iosStoreFallbackUrl || iosInAppUrl || browserUrl,
     deeplink_android: browserUrl,
-    fallback: String(resolvedTargets.webFallback || browserUrl).trim(),
-    ios_inapp_browser_fallback: browserUrl,
-    popup20s_browser_url: browserUrl,
-    popup20s_ios_inapp_url: iosInAppUrl || browserUrl,
+    fallback: String(
+      iosStoreFallbackUrl || resolvedTargets.webFallback || browserUrl,
+    ).trim(),
+    ios_inapp_browser_fallback: iosStoreFallbackUrl || browserUrl,
+    popup20s_browser_url: iosStoreFallbackUrl || browserUrl,
+    popup20s_ios_inapp_url: iosStoreFallbackUrl || iosInAppUrl || browserUrl,
     universal_link: String(info?.universal_link || browserUrl).trim(),
     platform_name:
       String(
@@ -10254,8 +10356,7 @@ app.get("/api/stats/summary", async (req, res) => {
               userId,
               guestSessionId,
               {
-                days: USER_STATS_RECENT_DAYS,
-                limit: 96,
+                days: 1,
               },
             );
             if (analyticsSummary) {
@@ -10270,7 +10371,7 @@ app.get("/api/stats/summary", async (req, res) => {
               () =>
                 database.getClickAnalytics(userId, guestSessionId, {
                   limit: 5000,
-                  days: USER_STATS_RECENT_DAYS,
+                  days: 1,
                 }),
               timings,
             );
@@ -10287,7 +10388,7 @@ app.get("/api/stats/summary", async (req, res) => {
               "labStats",
               () =>
                 database.getArticleFunnelClickStats(userId, {
-                  days: USER_STATS_RECENT_DAYS,
+                  days: 1,
                   limit: 5000,
                 }),
               timings,
@@ -10361,7 +10462,8 @@ app.get("/api/stats/summary", async (req, res) => {
         clicksToday: uniqueClicksToday,
         uniqueClicksToday,
         rawClicksToday: Number(today.clicksToday || 0),
-        recentWindowDays: USER_STATS_RECENT_DAYS,
+        recentWindowDays: 1,
+        selectedRangeDays: 1,
         recent,
         alerts,
         plan: user?.plan || "guest",
@@ -10406,13 +10508,14 @@ app.get("/api/stats/summary", async (req, res) => {
 app.get("/api/stats", async (req, res) => {
   try {
     const database = await getDb();
+    const statsRangeDays = normalizeStatsRangeDays(req.query.days, 1);
     const [publicBaseUrl, user] = await Promise.all([
       getPublicBaseUrl(),
       resolveUser(req),
     ]);
     const userId = user?.id || null;
     const guestSessionId = user ? null : req.guestSessionId;
-    const cacheKey = buildStatsCacheKey(userId, guestSessionId);
+    const cacheKey = `${buildStatsCacheKey(userId, guestSessionId)}:days:${statsRangeDays}`;
     const cachedEntry = statsResponseCache.get(cacheKey);
     if (
       cachedEntry &&
@@ -10453,7 +10556,7 @@ app.get("/api/stats", async (req, res) => {
           "analyticsSummary",
           () =>
             database.getClickAnalyticsSummary(userId, guestSessionId, {
-              days: USER_STATS_RECENT_DAYS,
+              days: statsRangeDays,
             }),
           timings,
         ),
@@ -10462,7 +10565,7 @@ app.get("/api/stats", async (req, res) => {
               "labAnalyticsRows",
               () =>
                 database.getArticleFunnelClickAnalyticsRows(userId, {
-                  days: USER_STATS_RECENT_DAYS,
+                  days: statsRangeDays,
                   limit: 5000,
                 }),
               timings,
@@ -10502,7 +10605,7 @@ app.get("/api/stats", async (req, res) => {
           () =>
             database.getClickAnalytics(userId, guestSessionId, {
               limit: 5000,
-              days: USER_STATS_RECENT_DAYS,
+              days: statsRangeDays,
             }),
           timings,
         );
@@ -10524,10 +10627,59 @@ app.get("/api/stats", async (req, res) => {
           buildStatsAnalyticsWithRecentBuckets(mappedLabAnalyticsRows),
         );
       }
+      let analyticsForYesterday = analytics;
+      if (statsRangeDays === 1) {
+        let expandedLabAnalyticsRows = [];
+        let expandedAnalytics = await measureAsyncTiming(
+          "analyticsYesterdaySummary",
+          () =>
+            database.getClickAnalyticsSummary(userId, guestSessionId, {
+              days: 2,
+            }),
+          timings,
+        );
+        if (!expandedAnalytics) {
+          const expandedClickRows = await measureAsyncTiming(
+            "clicksYesterdayFallback",
+            () =>
+              database.getClickAnalytics(userId, guestSessionId, {
+                limit: 5000,
+                days: 2,
+              }),
+            timings,
+          );
+          expandedAnalytics = buildStatsAnalyticsWithRecentBuckets(
+            expandedClickRows,
+          );
+        }
+        if (userId) {
+          expandedLabAnalyticsRows = await measureAsyncTiming(
+            "labAnalyticsYesterdayRows",
+            () =>
+              database.getArticleFunnelClickAnalyticsRows(userId, {
+                days: 2,
+                limit: 5000,
+              }),
+            timings,
+          );
+        }
+        const mappedExpandedLabAnalyticsRows =
+          mapArticleFunnelClickRowsToAnalyticsRows(expandedLabAnalyticsRows);
+        if (mappedExpandedLabAnalyticsRows.length) {
+          expandedAnalytics = mergeStatsAnalytics(
+            expandedAnalytics,
+            buildStatsAnalyticsWithRecentBuckets(mappedExpandedLabAnalyticsRows),
+          );
+        }
+        analyticsForYesterday = expandedAnalytics || analytics;
+      }
       const todayKey = getAnalyticsDayKey(new Date());
       const uniqueClicksToday =
         (analytics.unique_timeline || []).find((item) => item.date === todayKey)
           ?.clicks || 0;
+      const yesterday = buildYesterdayBreakdownFromAnalytics(
+        analyticsForYesterday,
+      );
       const alerts = buildStatsAlertPayload({
         planName: user?.plan || "guest",
         linksToday: today.linksToday || 0,
@@ -10557,7 +10709,9 @@ app.get("/api/stats", async (req, res) => {
         clicksToday: Number(uniqueClicksToday || 0),
         uniqueClicksToday: Number(uniqueClicksToday || 0),
         rawClicksToday: Number(today.clicksToday || 0),
-        recentWindowDays: USER_STATS_RECENT_DAYS,
+        recentWindowDays: statsRangeDays,
+        selectedRangeDays: statsRangeDays,
+        yesterday,
         recent,
         analytics,
         alerts,

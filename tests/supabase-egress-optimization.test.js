@@ -63,6 +63,10 @@ test("user stats summary route exists for lightweight notification polling", () 
     apiSource,
     /app\.get\("\/api\/stats\/summary"[\s\S]{0,4000}?database\.getRecentLinks\(userId, guestSessionId\)/s,
   );
+  assert.match(
+    apiSource,
+    /getClickAnalyticsSummary\(\s*userId,\s*guestSessionId,\s*\{[\s\S]{0,80}?days:\s*1,/,
+  );
 });
 
 test("frontend notification polling uses lightweight admin summary endpoint", () => {
@@ -96,6 +100,25 @@ test("frontend notification polling uses lightweight user stats summary endpoint
   assert.doesNotMatch(
     appSource,
     /async function pollRealtimeNotifications\(\) \{[\s\S]{0,1200}?getStatsPayload\(\{ preferCache: true \}\)/s,
+  );
+});
+
+test("full stats route supports explicit day ranges and frontend requests them on demand", () => {
+  assert.match(
+    apiSource,
+    /const statsRangeDays = normalizeStatsRangeDays\(req\.query\.days, 1\);/,
+  );
+  assert.match(
+    apiSource,
+    /const cacheKey = `\$\{buildStatsCacheKey\(userId, guestSessionId\)\}:days:\$\{statsRangeDays\}`;/,
+  );
+  assert.match(
+    appSource,
+    /function setStatsRangeDays\(value\) \{/,
+  );
+  assert.match(
+    appSource,
+    /fetch\(`\/api\/stats\?days=\$\{requestedDays\}`\)/,
   );
 });
 

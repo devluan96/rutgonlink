@@ -22,6 +22,8 @@ const getUserAvatarUrl = (currentUser) =>
   String(currentUser?.avatar_url || "").trim() || "";
 const AUTO_ALIAS_MAX_LENGTH = 90;
 const RECENT_STATS_WINDOW_DAYS = 7;
+const DEFAULT_STATS_RANGE_DAYS = 1;
+const ALLOWED_STATS_RANGE_DAYS = new Set([1, 7, 14]);
 
 function stripVietnameseMarks(value) {
   return String(value || "")
@@ -97,6 +99,7 @@ let user = null; // { id, email, name, plan }
 let links = [];
 let chart = null;
 let chartDays = RECENT_STATS_WINDOW_DAYS;
+let statsRangeDays = DEFAULT_STATS_RANGE_DAYS;
 let adminOverviewChartInst = null;
 let adminOverviewRangeDays = 7;
 let adminOverviewTrendPayload = null;
@@ -147,11 +150,14 @@ let adminNotificationSnapshot = null;
 let notificationPollTimer = null;
 const STATS_PAYLOAD_CACHE_TTL_MS = 2000;
 let statsPayloadPromise = null;
+let statsPayloadPromiseDays = DEFAULT_STATS_RANGE_DAYS;
 let statsPayloadCache = null;
 let statsPayloadCacheAt = 0;
+let statsPayloadCacheDays = DEFAULT_STATS_RANGE_DAYS;
 let statsSummaryPayloadPromise = null;
 let statsSummaryPayloadCache = null;
 let statsSummaryPayloadCacheAt = 0;
+let statsSummaryPayloadCacheDays = DEFAULT_STATS_RANGE_DAYS;
 const labEmbedCacheBust = Date.now().toString(36);
 const labSharedSettingsStorageKey = "rutgonlink-lab-shared-settings-v1";
 let confirmModalResolver = null;
@@ -712,7 +718,6 @@ const KNOWN_APP_PAGES = new Set([
   "stats",
   "account",
   "payment",
-  "admin",
 ]);
 
 function normalizeAppPage(page) {
@@ -2382,11 +2387,14 @@ function pageNeedsFullStatsPayload(page = getActiveAppPage()) {
 
 function resetStatsDataCaches() {
   statsPayloadPromise = null;
+  statsPayloadPromiseDays = DEFAULT_STATS_RANGE_DAYS;
   statsPayloadCache = null;
   statsPayloadCacheAt = 0;
+  statsPayloadCacheDays = DEFAULT_STATS_RANGE_DAYS;
   statsSummaryPayloadPromise = null;
   statsSummaryPayloadCache = null;
   statsSummaryPayloadCacheAt = 0;
+  statsSummaryPayloadCacheDays = DEFAULT_STATS_RANGE_DAYS;
   notificationStatsSnapshot = null;
 }
 
@@ -8863,10 +8871,37 @@ function getDashboardPlatformMetrics() {
   };
 }
 
+function normalizeStatsRangeDays(value, fallback = DEFAULT_STATS_RANGE_DAYS) {
+  const normalizedFallback = ALLOWED_STATS_RANGE_DAYS.has(Number(fallback))
+    ? Number(fallback)
+    : DEFAULT_STATS_RANGE_DAYS;
+  const normalizedValue = Number(value);
+  if (!ALLOWED_STATS_RANGE_DAYS.has(normalizedValue)) {
+    return normalizedFallback;
+  }
+  return normalizedValue;
+}
+
+function getStatsRangeLabel(days = statsRangeDays) {
+  const normalizedDays = normalizeStatsRangeDays(days);
+  return normalizedDays === 1 ? "hôm nay" : `${normalizedDays} ngày`;
+}
+
+function syncStatsRangeControls() {
+  document.querySelectorAll("[data-stats-range]").forEach((button) => {
+    const buttonDays = normalizeStatsRangeDays(button.dataset.days, 0);
+    button.classList.toggle("active", buttonDays === statsRangeDays);
+  });
+}
+
 function rememberStatsPayloadCache(payload) {
   if (!payload || typeof payload !== "object") return;
   statsPayloadCache = payload;
   statsPayloadCacheAt = Date.now();
+  statsPayloadCacheDays = normalizeStatsRangeDays(
+    payload.selectedRangeDays,
+    statsRangeDays,
+  );
   rememberStatsSummaryPayloadCache(payload);
 }
 
@@ -8874,22 +8909,29 @@ function rememberStatsSummaryPayloadCache(payload) {
   if (!payload || typeof payload !== "object") return;
   statsSummaryPayloadCache = payload;
   statsSummaryPayloadCacheAt = Date.now();
+  statsSummaryPayloadCacheDays = normalizeStatsRangeDays(
+    payload.selectedRangeDays,
+    DEFAULT_STATS_RANGE_DAYS,
+  );
 }
 
-async function getStatsPayload({ preferCache = false } = {}) {
+async function getStatsPayload({ preferCache = false, days = statsRangeDays } = {}) {
+  const requestedDays = normalizeStatsRangeDays(days);
   const now = Date.now();
   if (
     preferCache &&
     statsPayloadCache &&
+    statsPayloadCacheDays === requestedDays &&
     now - statsPayloadCacheAt <= STATS_PAYLOAD_CACHE_TTL_MS
   ) {
     return statsPayloadCache;
   }
-  if (statsPayloadPromise) {
+  if (statsPayloadPromise && statsPayloadPromiseDays === requestedDays) {
     return statsPayloadPromise;
   }
+  statsPayloadPromiseDays = requestedDays;
   statsPayloadPromise = (async () => {
-    const response = await fetch("/api/stats");
+    const response = await fetch(`/api/stats?days=${requestedDays}`);
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       throw new Error(payload?.error || "Không thể tải thống kê");
@@ -8901,6 +8943,7 @@ async function getStatsPayload({ preferCache = false } = {}) {
     return await statsPayloadPromise;
   } finally {
     statsPayloadPromise = null;
+    statsPayloadPromiseDays = DEFAULT_STATS_RANGE_DAYS;
   }
 }
 
@@ -8909,6 +8952,7 @@ async function getStatsSummaryPayload({ preferCache = false } = {}) {
   if (
     preferCache &&
     statsSummaryPayloadCache &&
+    statsSummaryPayloadCacheDays === DEFAULT_STATS_RANGE_DAYS &&
     now - statsSummaryPayloadCacheAt <= STATS_PAYLOAD_CACHE_TTL_MS
   ) {
     return statsSummaryPayloadCache;
@@ -8932,15 +8976,25 @@ async function getStatsSummaryPayload({ preferCache = false } = {}) {
   }
 }
 
-async function loadData(prefetched = null) {
+async function loadData(prefetched = null, options = {}) {
   try {
-    const d = prefetched || (await getStatsPayload());
+    const requestedDays = normalizeStatsRangeDays(
+      options.days ?? prefetched?.selectedRangeDays ?? statsRangeDays,
+    );
+    const d =
+      prefetched || (await getStatsPayload({ days: requestedDays }));
     rememberStatsPayloadCache(d);
+    statsRangeDays = normalizeStatsRangeDays(
+      d.selectedRangeDays,
+      requestedDays,
+    );
+    chartDays = statsRangeDays;
+    syncStatsRangeControls();
     statsAnalytics = d.analytics || null;
     links = d.recent || [];
-    const recentWindowDays = Math.max(
-      Number(d.recentWindowDays) || RECENT_STATS_WINDOW_DAYS,
-      1,
+    const recentWindowDays = normalizeStatsRangeDays(
+      d.selectedRangeDays || d.recentWindowDays,
+      requestedDays,
     );
     const recentWindowLabel = `${recentWindowDays} ngày`;
     const displayTotalClicks = Number(
@@ -9022,6 +9076,207 @@ async function loadData(prefetched = null) {
     rememberStatsNotificationSnapshot(d);
   } catch {}
 }
+
+loadData = async function loadDataWithRange(prefetched = null, options = {}) {
+  try {
+    const requestedDays = normalizeStatsRangeDays(
+      options.days ?? prefetched?.selectedRangeDays ?? statsRangeDays,
+    );
+    const d =
+      prefetched || (await getStatsPayload({ days: requestedDays }));
+    rememberStatsPayloadCache(d);
+    statsRangeDays = normalizeStatsRangeDays(
+      d.selectedRangeDays,
+      requestedDays,
+    );
+    chartDays = statsRangeDays;
+    syncStatsRangeControls();
+    statsAnalytics = d.analytics || null;
+    links = d.recent || [];
+    const recentWindowDays = normalizeStatsRangeDays(
+      d.selectedRangeDays || d.recentWindowDays,
+      requestedDays,
+    );
+    const recentWindowLabel = getStatsRangeLabel(recentWindowDays);
+    const displayTotalClicks = Number(
+      d.uniqueTotalClicks ?? d.totalClicks ?? 0,
+    );
+    const displayClicksToday = Number(
+      d.uniqueClicksToday ?? d.clicksToday ?? 0,
+    );
+    const displayRawClicksToday = Number(
+      d.rawClicksToday ?? d.clicksToday ?? 0,
+    );
+    selectedLinkIds = new Set(
+      [...selectedLinkIds].filter((id) =>
+        links.some((link) => Number(link.id) === Number(id)),
+      ),
+    );
+
+    const dashboardClicksLabel = document.getElementById("dClicksLabel");
+    if (dashboardClicksLabel) {
+      dashboardClicksLabel.textContent =
+        recentWindowDays === 1
+          ? "Click unique hôm nay"
+          : `Click unique ${recentWindowLabel}`;
+    }
+    const dashboardClicksTodayLabel =
+      document.getElementById("dClicksTodayLabel");
+    if (dashboardClicksTodayLabel) {
+      dashboardClicksTodayLabel.textContent =
+        recentWindowDays === 1 ? "Click raw hôm nay" : "Click unique hôm nay";
+    }
+    const statsTotalClicksLabel = document.getElementById("stTotalClicksLabel");
+    if (statsTotalClicksLabel) {
+      statsTotalClicksLabel.textContent =
+        recentWindowDays === 1
+          ? "Click unique hôm nay"
+          : `Click unique ${recentWindowLabel}`;
+    }
+    const statsClicksTodayLabel = document.getElementById("stClicksTodayLabel");
+    if (statsClicksTodayLabel) {
+      statsClicksTodayLabel.textContent =
+        recentWindowDays === 1 ? "Click raw hôm nay" : "Click unique hôm nay";
+    }
+
+    document.getElementById("dClicks").textContent =
+      displayTotalClicks.toLocaleString();
+    if (document.getElementById("dLinks")) {
+      document.getElementById("dLinks").textContent = (
+        d.totalLinks || 0
+      ).toLocaleString();
+    }
+    if (document.getElementById("dClicksToday")) {
+      document.getElementById("dClicksToday").textContent = Number(
+        recentWindowDays === 1 ? displayRawClicksToday : displayClicksToday,
+      ).toLocaleString();
+    }
+    if (document.getElementById("dLinksToday")) {
+      document.getElementById("dLinksToday").textContent = (
+        d.linksToday || 0
+      ).toLocaleString();
+    }
+    if (document.getElementById("stTotalClicks")) {
+      document.getElementById("stTotalClicks").textContent =
+        displayTotalClicks.toLocaleString();
+    }
+    if (document.getElementById("stClicksToday")) {
+      document.getElementById("stClicksToday").textContent = Number(
+        recentWindowDays === 1 ? displayRawClicksToday : displayClicksToday,
+      ).toLocaleString();
+    }
+    if (document.getElementById("stTotalLinks")) {
+      document.getElementById("stTotalLinks").textContent = (
+        d.totalLinks || 0
+      ).toLocaleString();
+    }
+    if (document.getElementById("stLinksToday")) {
+      document.getElementById("stLinksToday").textContent = (
+        d.linksToday || 0
+      ).toLocaleString();
+    }
+    document.getElementById("navCount").textContent = d.totalLinks || 0;
+    document.getElementById("linkCountLabel").textContent = d.totalLinks || 0;
+
+    const dashboardPlatformMetrics = getDashboardPlatformMetrics();
+    document.getElementById("dClicksSub").textContent =
+      recentWindowDays === 1
+        ? `Raw clicks hôm nay: ${displayRawClicksToday.toLocaleString()}`
+        : `Raw clicks ${recentWindowLabel}: ${Number(
+            d.rawTotalClicks ?? statsAnalytics?.total_clicks ?? 0,
+          ).toLocaleString()}`;
+
+    const dashboardShopeeLabel = document.getElementById("dShopeeLabel");
+    if (dashboardShopeeLabel) {
+      dashboardShopeeLabel.textContent =
+        recentWindowDays === 1
+          ? "Click Shopee hôm nay"
+          : `Click Shopee ${recentWindowLabel}`;
+    }
+    document.getElementById("dShopee").textContent = Number(
+      dashboardPlatformMetrics.shopee.unique,
+    ).toLocaleString();
+    document.getElementById("dShopeeSub").textContent =
+      recentWindowDays === 1
+        ? `Raw clicks hôm nay: ${Number(
+            dashboardPlatformMetrics.shopee.rawToday,
+          ).toLocaleString()}`
+        : `Hôm nay: ${Number(
+            dashboardPlatformMetrics.shopee.uniqueToday,
+          ).toLocaleString()} · Raw clicks: ${Number(
+            dashboardPlatformMetrics.shopee.raw,
+          ).toLocaleString()}`;
+
+    const dashboardTiktokLabel = document.getElementById("dTiktokLabel");
+    if (dashboardTiktokLabel) {
+      dashboardTiktokLabel.textContent =
+        recentWindowDays === 1
+          ? "Click TikTok hôm nay"
+          : `Click TikTok ${recentWindowLabel}`;
+    }
+    document.getElementById("dTiktok").textContent = Number(
+      dashboardPlatformMetrics.tiktok.unique,
+    ).toLocaleString();
+    document.getElementById("dTiktokSub").textContent =
+      recentWindowDays === 1
+        ? `Raw clicks hôm nay: ${Number(
+            dashboardPlatformMetrics.tiktok.rawToday,
+          ).toLocaleString()}`
+        : `Hôm nay: ${Number(
+            dashboardPlatformMetrics.tiktok.uniqueToday,
+          ).toLocaleString()} · Raw clicks: ${Number(
+            dashboardPlatformMetrics.tiktok.raw,
+          ).toLocaleString()}`;
+
+    if (recentWindowDays === 1) {
+      document.getElementById("dClicksSub").textContent = `Hôm qua: ${Number(
+        d?.yesterday?.unique_clicks || 0,
+      ).toLocaleString()} click`;
+      document.getElementById("dShopeeSub").textContent = `Hôm qua: ${Number(
+        d?.yesterday?.platforms?.shopee?.unique_clicks || 0,
+      ).toLocaleString()} click`;
+      document.getElementById("dTiktokSub").textContent = `Hôm qua: ${Number(
+        d?.yesterday?.platforms?.tiktok?.unique_clicks || 0,
+      ).toLocaleString()} click`;
+    } else {
+      document.getElementById("dClicksSub").textContent =
+        recentWindowDays === 7 ? "7 ngày gần nhất" : `${recentWindowLabel} gần nhất`;
+      document.getElementById("dShopeeSub").textContent =
+        recentWindowDays === 7 ? "7 ngày gần nhất" : `${recentWindowLabel} gần nhất`;
+      document.getElementById("dTiktokSub").textContent =
+        recentWindowDays === 7 ? "7 ngày gần nhất" : `${recentWindowLabel} gần nhất`;
+    }
+
+    const dashboardChartTitle = document.getElementById("dashboardChartTitle");
+    if (dashboardChartTitle) {
+      dashboardChartTitle.textContent =
+        recentWindowDays === 1
+          ? "Lượt click hôm nay"
+          : `Lượt click ${recentWindowLabel} gần nhất`;
+    }
+    const statsChartTitle = document.getElementById("statsChartTitle");
+    if (statsChartTitle) {
+      statsChartTitle.textContent =
+        recentWindowDays === 1
+          ? "Lượt click hôm nay"
+          : `Lượt click ${recentWindowLabel} gần nhất`;
+    }
+
+    renderActivity(links, "dashActivity");
+    renderActivity(links, "createActivity");
+    renderChart();
+    if (document.getElementById("page-qr")?.classList.contains("active"))
+      renderQrPage();
+    if (document.getElementById("page-bio")?.classList.contains("active"))
+      renderBioPage();
+    if (document.getElementById("page-stats")?.classList.contains("active"))
+      renderStatsPage();
+    if (document.getElementById("page-links")?.classList.contains("active"))
+      applyLinkFilters();
+    enqueueStatsAlerts(d);
+    rememberStatsNotificationSnapshot(d);
+  } catch {}
+};
 
 function renderActivity(arr, id) {
   const el = document.getElementById(id);
@@ -9435,16 +9690,29 @@ function applyLinkFilters() {
 // ══════════════════════════════════════════════════
 //  CHART
 // ══════════════════════════════════════════════════
+function setStatsRangeDays(value) {
+  const requestedDays = normalizeStatsRangeDays(value, statsRangeDays);
+  if (requestedDays === statsRangeDays) {
+    syncStatsRangeControls();
+    renderChart();
+    if (document.getElementById("page-stats")?.classList.contains("active")) {
+      renderStatsPage();
+    }
+    return;
+  }
+  statsRangeDays = requestedDays;
+  chartDays = requestedDays;
+  syncStatsRangeControls();
+  void loadData(null, { days: requestedDays });
+}
+
 function setChartDays(n, btn) {
-  chartDays = RECENT_STATS_WINDOW_DAYS;
-  document.querySelectorAll(".cf").forEach((button) => {
-    const buttonDays = Number(
-      button.dataset.days || String(button.textContent || "").replace(/\D/g, ""),
-    );
-    button.classList.toggle("active", buttonDays === chartDays);
-  });
-  if (btn) btn.classList.add("active");
-  renderChart();
+  const requestedDays = normalizeStatsRangeDays(
+    n ?? btn?.dataset?.days ?? btn?.textContent,
+    statsRangeDays,
+  );
+  if (btn) btn.blur();
+  setStatsRangeDays(requestedDays);
 }
 
 function renderChart() {
@@ -12232,6 +12500,117 @@ document.addEventListener("click", (event) => {
   if (trigger.contains(event.target) || dropdown.contains(event.target)) return;
   closeTeamTemplateSourceDropdown();
 });
+
+const LEGACY_ADMIN_SUPPORT_SURFACES_REMOVED = true;
+
+function disableRemovedAdminSupportSurfaces() {
+  if (!LEGACY_ADMIN_SUPPORT_SURFACES_REMOVED) return;
+  const compatRoot = document.getElementById("removedAdminCompat");
+  if (compatRoot) compatRoot.hidden = true;
+  document.querySelectorAll("#supportWidgetLauncher, .support-fab").forEach((node) => {
+    node.hidden = true;
+    node.remove();
+  });
+  stopSupportSyncLoops();
+  supportWidgetOpen = false;
+  supportLoaded = false;
+  supportMessages = [];
+  supportThread = null;
+  adminSupportThreads = [];
+  adminSupportMessages = [];
+  adminSupportSelectedUserId = null;
+  adminSupportActiveUser = null;
+}
+
+guardAdminRoute = function guardAdminRouteRemoved() {
+  if (!user) {
+    redirectToAuth("login", "Cần đăng nhập để tiếp tục.");
+    return null;
+  }
+  toast("Khu vực admin đã được gỡ khỏi app.", "warn");
+  return "dashboard";
+};
+
+openZaloSupport = function openZaloSupportRemoved() {
+  return false;
+};
+
+renderSupportConversation = function renderSupportConversationRemoved() {
+  const launcher = document.getElementById("supportWidgetLauncher");
+  if (launcher) launcher.hidden = true;
+  supportWidgetOpen = false;
+  stopSupportSyncLoops();
+};
+
+loadSupportMessages = async function loadSupportMessagesRemoved() {
+  disableRemovedAdminSupportSurfaces();
+  return null;
+};
+
+sendSupportMessage = async function sendSupportMessageRemoved() {
+  disableRemovedAdminSupportSurfaces();
+  return null;
+};
+
+openSupportWidget = function openSupportWidgetRemoved() {
+  disableRemovedAdminSupportSurfaces();
+};
+
+closeSupportWidget = function closeSupportWidgetRemoved() {
+  disableRemovedAdminSupportSurfaces();
+};
+
+toggleSupportWidget = function toggleSupportWidgetRemoved() {
+  disableRemovedAdminSupportSurfaces();
+};
+
+pollSupportMessages = async function pollSupportMessagesRemoved() {
+  return null;
+};
+
+pollAdminSupportMessages = async function pollAdminSupportMessagesRemoved() {
+  return null;
+};
+
+startSupportPollingFallback = function startSupportPollingFallbackRemoved() {
+  stopSupportSyncLoops();
+};
+
+startAdminSupportPollingFallback = function startAdminSupportPollingFallbackRemoved() {
+  stopSupportSyncLoops();
+};
+
+connectUserSupportStream = function connectUserSupportStreamRemoved() {
+  stopSupportSyncLoops();
+};
+
+connectAdminSupportStream = function connectAdminSupportStreamRemoved() {
+  stopSupportSyncLoops();
+};
+
+startSupportSyncLoops = function startSupportSyncLoopsRemoved() {
+  stopSupportSyncLoops();
+};
+
+syncAdminSectionUI = function syncAdminSectionUIRemoved() {
+  adminSection = "overview";
+};
+
+setAdminSection = function setAdminSectionRemoved() {
+  adminSection = "overview";
+  stopSupportSyncLoops();
+};
+
+loadAdminData = async function loadAdminDataRemoved() {
+  disableRemovedAdminSupportSurfaces();
+  return null;
+};
+
+loadAdminRedirects = async function loadAdminRedirectsRemoved() {
+  return null;
+};
+
+disableRemovedAdminSupportSurfaces();
 
 window.addEventListener("popstate", () => {
   if (!document.getElementById("appScreen").classList.contains("show")) {

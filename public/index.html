@@ -1017,18 +1017,6 @@
           <button
             class="user-btn secondary"
             type="button"
-            id="popupAdminBtn"
-            onclick="
-              closeUserPopup();
-              navigate('admin');
-            "
-            style="display: none"
-          >
-            Quản trị
-          </button>
-          <button
-            class="user-btn secondary"
-            type="button"
             id="ddLogin"
             onclick="
               closeUserPopup();
@@ -1168,24 +1156,6 @@
               </svg>
               <span class="slabel">Làm việc nhóm</span>
             </div>
-            <div
-              class="sitem"
-              id="adminNavItem"
-              style="display: none"
-              onclick="navigate('admin', this)"
-            >
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-              <span class="slabel">Quản trị</span>
-            </div>
           </nav>
           <div class="sfooter" id="sidebarFooter">
             <div class="upgrade-box">
@@ -1208,13 +1178,28 @@
           <!-- DASHBOARD -->
           <div class="page active" id="page-dashboard">
             <div class="ph">
-              <h1>Bảng điều khiển</h1>
-              <p>Tổng quan nhanh, hành động tiếp theo và tín hiệu chính</p>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+                <div>
+                  <h1>Bảng điều khiển</h1>
+                  <p>Tổng quan nhanh, hành động tiếp theo và tín hiệu chính</p>
+                </div>
+                <div class="chart-filters">
+                  <button class="cf active" data-days="1" data-stats-range="1" onclick="setChartDays(1, this)">
+                    HN
+                  </button>
+                  <button class="cf" data-days="7" data-stats-range="7" onclick="setChartDays(7, this)">
+                    7N
+                  </button>
+                  <button class="cf" data-days="14" data-stats-range="14" onclick="setChartDays(14, this)">
+                    14N
+                  </button>
+                </div>
+              </div>
             </div>
             <div class="sg">
               <div class="sc">
                 <div class="sc-top">
-                  <span class="sc-lbl" id="dClicksLabel">Click unique 7 ngày</span>
+                  <span class="sc-lbl" id="dClicksLabel">Click unique hôm nay</span>
                   <div
                     class="sc-icon"
                     style="background: rgba(59, 130, 246, 0.12)"
@@ -1223,33 +1208,7 @@
                   </div>
                 </div>
                 <div class="sc-val" id="dClicks">0</div>
-                <div class="sc-sub" id="dClicksSub">Raw clicks 7 ngày: 0</div>
-              </div>
-              <div class="sc">
-                <div class="sc-top">
-                  <span class="sc-lbl">Click unique hôm nay</span>
-                  <div
-                    class="sc-icon"
-                    style="background: rgba(34, 197, 94, 0.12)"
-                  >
-                    🔥
-                  </div>
-                </div>
-                <div class="sc-val" id="dClicksToday">0</div>
-                <div class="sc-sub">Trong ngày</div>
-              </div>
-              <div class="sc">
-                <div class="sc-top">
-                  <span class="sc-lbl">Link đã tạo</span>
-                  <div
-                    class="sc-icon"
-                    style="background: rgba(139, 92, 246, 0.12)"
-                  >
-                    🔗
-                  </div>
-                </div>
-                <div class="sc-val" id="dLinks">0</div>
-                <div class="sc-sub">Tổng số liên kết</div>
+                <div class="sc-sub" id="dClicksSub">So với hôm qua</div>
               </div>
               <div class="sc">
                 <div class="sc-top">
@@ -1266,7 +1225,7 @@
               </div>
               <div class="sc">
                 <div class="sc-top">
-                  <span class="sc-lbl" id="dShopeeLabel">Click Shopee</span>
+                  <span class="sc-lbl" id="dShopeeLabel">Click Shopee hôm nay</span>
                   <div
                     class="sc-icon"
                     style="background: rgba(238, 77, 45, 0.1)"
@@ -1275,11 +1234,11 @@
                   </div>
                 </div>
                 <div class="sc-val" id="dShopee">0</div>
-                <div class="sc-sub" id="dShopeeSub">Raw clicks: 0</div>
+                <div class="sc-sub" id="dShopeeSub">So với hôm qua</div>
               </div>
               <div class="sc">
                 <div class="sc-top">
-                  <span class="sc-lbl" id="dTiktokLabel">Click TikTok</span>
+                  <span class="sc-lbl" id="dTiktokLabel">Click TikTok hôm nay</span>
                   <div
                     class="sc-icon"
                     style="background: rgba(105, 201, 208, 0.08)"
@@ -1288,7 +1247,7 @@
                   </div>
                 </div>
                 <div class="sc-val" id="dTiktok">0</div>
-                <div class="sc-sub" id="dTiktokSub">Raw clicks: 0</div>
+                <div class="sc-sub" id="dTiktokSub">So với hôm qua</div>
               </div>
             </div>
             <div class="dash-hero" style="margin-bottom: 18px">
@@ -1359,12 +1318,7 @@
             </div>
             <div class="chart-card">
               <div class="chart-head">
-                <h3>Lượt nhấp 7 ngày gần nhất</h3>
-                <div class="chart-filters">
-                  <button class="cf active" data-days="7" onclick="setChartDays(7, this)">
-                    7N
-                  </button>
-                </div>
+                <h3 id="dashboardChartTitle">Lượt nhấp hôm nay</h3>
               </div>
               <div class="ch-wrap"><canvas id="clickChart"></canvas></div>
             </div>
@@ -2001,13 +1955,28 @@
           <!-- STATS PAGE -->
           <div class="page" id="page-stats">
             <div class="ph">
-              <h1>Thống kê</h1>
-              <p>Phân tích lưu lượng chi tiết</p>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+                <div>
+                  <h1>Thống kê</h1>
+                  <p>Phân tích lưu lượng chi tiết</p>
+                </div>
+                <div class="chart-filters">
+                  <button class="cf active" data-days="1" data-stats-range="1" onclick="setChartDays(1, this)">
+                    HN
+                  </button>
+                  <button class="cf" data-days="7" data-stats-range="7" onclick="setChartDays(7, this)">
+                    7N
+                  </button>
+                  <button class="cf" data-days="14" data-stats-range="14" onclick="setChartDays(14, this)">
+                    14N
+                  </button>
+                </div>
+              </div>
             </div>
             <div class="sg">
               <div class="sc">
                 <div class="sc-top">
-                  <span class="sc-lbl">Click unique 7 ngày</span>
+                  <span class="sc-lbl" id="stTotalClicksLabel">Click unique hôm nay</span>
                   <div
                     class="sc-icon"
                     style="background: rgba(59, 130, 246, 0.12)"
@@ -2016,11 +1985,11 @@
                   </div>
                 </div>
                 <div class="sc-val" id="stTotalClicks">0</div>
-                <div class="sc-sub">7 ngày gần nhất</div>
+                <div class="sc-sub">Trong ngày</div>
               </div>
               <div class="sc">
                 <div class="sc-top">
-                  <span class="sc-lbl">Click hôm nay</span>
+                  <span class="sc-lbl" id="stClicksTodayLabel">Click raw hôm nay</span>
                   <div
                     class="sc-icon"
                     style="background: rgba(34, 197, 94, 0.12)"
@@ -2060,12 +2029,7 @@
             </div>
             <div class="chart-card">
               <div class="chart-head">
-                <h3>Lượt click 7 ngày gần nhất</h3>
-                <div class="chart-filters">
-                  <button class="cf active" data-days="7" onclick="setChartDays(7, this)">
-                    7N
-                  </button>
-                </div>
+                <h3 id="statsChartTitle">Lượt click hôm nay</h3>
               </div>
               <div class="ch-wrap"><canvas id="statsChart"></canvas></div>
             </div>
@@ -2666,558 +2630,10 @@
             </div>
           </div>
 
-          <!-- ADMIN PAGE -->
-          <div class="page" id="page-admin">
-            <div class="ph">
-              <h1>🛡️ Quản trị hệ thống</h1>
-              <p>
-                Quản lý người dùng, liên kết, domain và nhật ký vận hành toàn hệ
-                thống.
-              </p>
-            </div>
-            <div
-              class="admin-tabs"
-              role="tablist"
-              aria-label="Điều hướng quản trị"
-            >
-              <button
-                class="admin-tab-btn active"
-                type="button"
-                role="tab"
-                aria-selected="true"
-                aria-controls="adminPanelOverview"
-                data-admin-section="overview"
-                onclick="setAdminSection('overview')"
-              >
-                Tổng quan
-              </button>
-              <button
-                class="admin-tab-btn"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="adminPanelUsers"
-                data-admin-section="users"
-                onclick="setAdminSection('users')"
-              >
-                Người dùng
-              </button>
-              <button
-                class="admin-tab-btn"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="adminPanelPayments"
-                data-admin-section="payments"
-                onclick="setAdminSection('payments')"
-              >
-                Thanh toán
-              </button>
-              <button
-                class="admin-tab-btn"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="adminPanelSystem"
-                data-admin-section="system"
-                onclick="setAdminSection('system')"
-              >
-                Hệ thống
-              </button>
-              <button
-                class="admin-tab-btn"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="adminPanelLogs"
-                data-admin-section="logs"
-                onclick="setAdminSection('logs')"
-              >
-                Nhật ký
-              </button>
-            </div>
-
-            <section
-              class="admin-panel active"
-              id="adminPanelOverview"
-              data-admin-panel="overview"
-              role="tabpanel"
-            >
-              <div class="sg" id="adminStatsRow">
-                <div class="sc">
-                  <div class="sc-top">
-                    <span class="sc-lbl">Tổng người dùng</span>
-                    <div
-                      class="sc-icon"
-                      style="background: rgba(139, 92, 246, 0.12)"
-                    >
-                      👥
-                    </div>
-                  </div>
-                  <div class="sc-val" id="adTotalUsers">–</div>
-                </div>
-                <div class="sc">
-                  <div class="sc-top">
-                    <span class="sc-lbl">Người dùng mới hôm nay</span>
-                    <div
-                      class="sc-icon"
-                      style="background: rgba(16, 185, 129, 0.12)"
-                    >
-                      🆕
-                    </div>
-                  </div>
-                  <div class="sc-val" id="adUsersToday">–</div>
-                </div>
-                <div class="sc">
-                  <div class="sc-top">
-                    <span class="sc-lbl">Tổng link</span>
-                    <div
-                      class="sc-icon"
-                      style="background: rgba(59, 130, 246, 0.12)"
-                    >
-                      🔗
-                    </div>
-                  </div>
-                  <div class="sc-val" id="adTotalLinks">–</div>
-                </div>
-                <div class="sc">
-                  <div class="sc-top">
-                    <span class="sc-lbl">Link mới hôm nay</span>
-                    <div
-                      class="sc-icon"
-                      style="background: rgba(14, 165, 233, 0.12)"
-                    >
-                      ⚡
-                    </div>
-                  </div>
-                  <div class="sc-val" id="adLinksToday">–</div>
-                </div>
-                <div class="sc">
-                  <div class="sc-top">
-                    <span class="sc-lbl">Click unique hôm nay</span>
-                    <div
-                      class="sc-icon"
-                      style="background: rgba(34, 197, 94, 0.12)"
-                    >
-                      📊
-                    </div>
-                  </div>
-                  <div class="sc-val" id="adUniqueClicksToday">–</div>
-                  <div class="sc-sub" id="adTotalClicksSub">Tổng raw click: –</div>
-                </div>
-                <div class="sc">
-                  <div class="sc-top">
-                    <span class="sc-lbl">Thanh toán chờ duyệt</span>
-                    <div
-                      class="sc-icon"
-                      style="background: rgba(245, 158, 11, 0.14)"
-                    >
-                      💳
-                    </div>
-                  </div>
-                  <div class="sc-val" id="adPendingPayments">–</div>
-                  <div class="sc-sub" id="adAwaitingPaymentsSub">Đang chờ chuyển khoản: –</div>
-                </div>
-              </div>
-
-              <div class="admin-overview-grid">
-                <div class="tbl-card admin-overview-chart-card">
-                  <div class="tbl-head admin-overview-chart-head">
-                    <div>
-                      <h3>Xu hướng vận hành</h3>
-                      <p>User mới, click unique và yêu cầu thanh toán theo ngày</p>
-                    </div>
-                    <div class="admin-overview-range">
-                      <button
-                        class="admin-overview-range-btn active"
-                        type="button"
-                        id="adminOverviewRange7"
-                        onclick="setAdminOverviewRange(7)"
-                      >
-                        7 ngày
-                      </button>
-                      <button
-                        class="admin-overview-range-btn"
-                        type="button"
-                        id="adminOverviewRange30"
-                        onclick="setAdminOverviewRange(30)"
-                      >
-                        30 ngày
-                      </button>
-                    </div>
-                  </div>
-                  <div class="admin-overview-chart-meta" id="adminOverviewChartMeta">
-                    <span>User mới: –</span>
-                    <span>Click unique: –</span>
-                    <span>Thanh toán: –</span>
-                  </div>
-                  <div class="admin-overview-chart-wrap">
-                    <canvas id="adminOverviewChart"></canvas>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section
-              class="admin-panel"
-              id="adminPanelUsers"
-              data-admin-panel="users"
-              role="tabpanel"
-              hidden
-            >
-              <div class="admin-user-geo-grid">
-                <div class="stats-card">
-                  <div class="stats-card-head">
-                    <h4>Bản đồ người dùng</h4>
-                    <span id="adminUserGeoSummary">Chưa có dữ liệu địa lý</span>
-                  </div>
-                  <div id="adminUserGeoMap" class="stats-map-wrap"></div>
-                </div>
-                <div class="stats-card">
-                  <div class="stats-card-head">
-                    <h4>Top quốc gia</h4>
-                    <span id="adminUserGeoTopSummary">Theo login gần nhất</span>
-                  </div>
-                  <div class="admin-user-geo-list" id="adminUserGeoList">
-                    <div class="stats-map-empty">
-                      Chưa có dữ liệu địa lý để hiển thị.
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="tbl-card">
-                <div class="tbl-head">
-                  <h3>👥 Người dùng (<span id="adUserCount">0</span>)</h3>
-                  <div class="tbl-head-actions">
-                    <select
-                      class="tbl-select"
-                      id="adUserPlanFilter"
-                      onchange="setAdminUserPlanFilter(this.value)"
-                    >
-                      <option value="all">Tất cả gói</option>
-                      <option value="free">Free</option>
-                      <option value="pro">Pro</option>
-                      <option value="business">Business</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                    <input
-                      type="text"
-                      class="tbl-search"
-                      id="adUserSearch"
-                      placeholder="Tìm email..."
-                      oninput="filterAdminUsers(this.value)"
-                    />
-                  </div>
-                </div>
-                <div class="admin-bulkbar" id="adminUserBulkbar">
-                  <div class="admin-bulk-summary" id="adminUserBulkSummary">
-                    Chưa chọn người dùng nào.
-                  </div>
-                  <div class="admin-bulk-actions">
-                    <button
-                      class="user-btn secondary"
-                      type="button"
-                      onclick="toggleAllAdminUsersOnPage(true)"
-                    >
-                      Chọn trang này
-                    </button>
-                    <button
-                      class="user-btn secondary"
-                      type="button"
-                      onclick="selectAllAdminUsersFiltered()"
-                    >
-                      Chọn theo bộ lọc
-                    </button>
-                    <button
-                      class="user-btn secondary"
-                      type="button"
-                      onclick="clearAdminUserSelection()"
-                    >
-                      Bỏ chọn
-                    </button>
-                    <button
-                      class="user-btn danger"
-                      type="button"
-                      onclick="deleteSelectedAdminUsers()"
-                    >
-                      Xóa đã chọn
-                    </button>
-                  </div>
-                </div>
-                <div style="overflow-x: auto">
-                  <table class="mobile-card-table">
-                    <thead>
-                      <tr>
-                        <th class="td-check">
-                          <label class="tbl-check">
-                            <input
-                              type="checkbox"
-                              id="adminUserSelectPage"
-                              onchange="toggleAllAdminUsersOnPage(this.checked)"
-                            />
-                            <span></span>
-                          </label>
-                        </th>
-                        <th>ID</th>
-                        <th>Email</th>
-                        <th>Tên</th>
-                        <th>Gói hiện tại</th>
-                        <th>Role</th>
-                        <th>Lab</th>
-                        <th>Ngày tạo</th>
-                        <th>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody id="adUserBody">
-                      <tr>
-                        <td colspan="9" class="tbl-empty">⏳ Đang tải...</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="tbl-pagination" id="adUserPagination"></div>
-              </div>
-            </section>
-
-            <section
-              class="admin-panel"
-              id="adminPanelPayments"
-              data-admin-panel="payments"
-              role="tabpanel"
-              hidden
-            >
-              <div class="tbl-card">
-                <div class="tbl-head">
-                  <h3>
-                    💳 Yêu cầu thanh toán (<span id="adPaymentCount">0</span>)
-                  </h3>
-                  <div class="tbl-head-actions">
-                    <input
-                      type="text"
-                      class="tbl-search"
-                      id="adPaymentSearch"
-                      placeholder="Tìm theo mã thanh toán..."
-                      oninput="filterAdminPayments(this.value)"
-                    />
-                    <button
-                      class="user-btn secondary"
-                      type="button"
-                      onclick="loadAdminData()"
-                    >
-                      Tải lại
-                    </button>
-                  </div>
-                </div>
-                <div style="overflow-x: auto">
-                  <table class="mobile-card-table">
-                    <thead>
-                      <tr>
-                        <th>Mã</th>
-                        <th>User</th>
-                        <th>Gói</th>
-                        <th>Số tiền</th>
-                        <th>Trạng thái</th>
-                        <th>Chuyển lúc</th>
-                        <th>Ghi chú</th>
-                        <th>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody id="adPaymentBody">
-                      <tr>
-                        <td colspan="8" class="tbl-empty">
-                          ⏳ Đang tải yêu cầu thanh toán...
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="tbl-pagination" id="adPaymentPagination"></div>
-              </div>
-            </section>
-
-            <section
-              class="admin-panel"
-              id="adminPanelSystem"
-              data-admin-panel="system"
-              role="tabpanel"
-              hidden
-            >
-              <div class="tbl-card">
-                <div class="tbl-head">
-                  <h3>
-                    🌐 Tên miền hệ thống (<span id="adDomainCount">0</span>)
-                  </h3>
-                  <input
-                    type="text"
-                    class="tbl-search"
-                    id="adDomainSearch"
-                    placeholder="Tìm domain..."
-                    oninput="filterAdminDomains(this.value)"
-                  />
-                </div>
-                <div
-                  class="card-p"
-                  style="border-bottom: 1px solid var(--border)"
-                >
-                  <div class="fg" style="margin-bottom: 0">
-                    <div>
-                      <label class="fl">Hostname</label>
-                      <input
-                        type="text"
-                        class="fi"
-                        id="adminDomainHost"
-                        placeholder="go.boclink.click"
-                      />
-                    </div>
-                    <div>
-                      <label class="fl">Nhãn hiển thị</label>
-                      <input
-                        type="text"
-                        class="fi"
-                        id="adminDomainLabel"
-                        placeholder="Domain chính"
-                      />
-                    </div>
-                    <div>
-                      <label class="fl">Verify</label>
-                      <select class="fi" id="adminDomainVerify">
-                        <option value="verified">Verified</option>
-                        <option value="pending">Pending</option>
-                        <option value="failed">Failed</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label class="fl">Hết hạn</label>
-                      <input type="date" class="fi" id="adminDomainExpiry" />
-                    </div>
-                  </div>
-                  <div class="user-actions" style="margin-top: 10px">
-                    <label
-                      style="
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                        color: var(--text2);
-                        font-size: 13px;
-                      "
-                    >
-                      <input type="checkbox" id="adminDomainPrimary" />
-                      Đặt làm domain chính
-                    </label>
-                    <button
-                      class="user-btn primary"
-                      type="button"
-                      id="adminDomainAddBtn"
-                      onclick="addAdminDomain()"
-                    >
-                      Thêm domain
-                    </button>
-                  </div>
-                </div>
-                <div style="overflow-x: auto">
-                  <table class="mobile-card-table">
-                    <thead>
-                      <tr>
-                        <th>Domain</th>
-                        <th>Nhãn</th>
-                        <th>Chính</th>
-                        <th>Trạng thái</th>
-                        <th>Verify</th>
-                        <th>Hết hạn</th>
-                        <th>Ngày tạo</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody id="adDomainBody">
-                      <tr>
-                        <td colspan="8" class="tbl-empty">⏳ Đang tải...</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </section>
-
-            <section
-              class="admin-panel"
-              id="adminPanelLogs"
-              data-admin-panel="logs"
-              role="tabpanel"
-              hidden
-            >
-              <div class="tbl-card">
-                <div class="tbl-head">
-                  <div>
-                    <h3>
-                      🧭 Redirect gần đây (<span id="adRedirectCount">0</span>)
-                    </h3>
-                    <p
-                      style="
-                        margin: 6px 0 0;
-                        font-size: 12px;
-                        color: var(--text3);
-                      "
-                    >
-                      Nguồn log:
-                      <code id="adRedirectLogFile">logs/redirect.log</code>
-                    </p>
-                  </div>
-                  <button
-                    class="user-btn"
-                    type="button"
-                    id="adminRedirectReloadBtn"
-                    onclick="loadAdminRedirects(true)"
-                  >
-                    Tải lại
-                  </button>
-                </div>
-                <div style="overflow-x: auto">
-                  <table class="mobile-card-table">
-                    <thead>
-                      <tr>
-                        <th>Thời gian</th>
-                        <th>Mode</th>
-                        <th>Code</th>
-                        <th>UA</th>
-                        <th>Status</th>
-                        <th>Target</th>
-                        <th>Request</th>
-                      </tr>
-                    </thead>
-                    <tbody id="adRedirectBody">
-                      <tr>
-                        <td colspan="7" class="tbl-empty">⏳ Đang tải...</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="tbl-pagination" id="adRedirectPagination"></div>
-              </div>
-            </section>
-          </div>
         </div>
         <!-- /content -->
       </div>
       <!-- /app-body -->
-
-      <button
-        class="support-fab"
-        type="button"
-        id="supportWidgetLauncher"
-        onclick="openZaloSupport()"
-        aria-label="Liên hệ Zalo hỗ trợ"
-        hidden
-      >
-        <span class="support-fab-core" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
-            <path
-              d="M7 11.25h10M7 15.25h6m-5.4 5.05 1.85-3.35H18a3.2 3.2 0 0 0 3.2-3.2V6.95A3.2 3.2 0 0 0 18 3.75H6a3.2 3.2 0 0 0-3.2 3.2v6.8A3.2 3.2 0 0 0 6 16.95h1.6Z"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </span>
-      </button>
     </div>
     <!-- /appScreen -->
 
@@ -3674,44 +3090,13 @@
       </div>
     </div>
     <div
-      class="modal-backdrop hidden"
-      id="adminUserDetailModal"
-      onclick="if (event.target === this) closeAdminUserDetailModal();"
+      id="removedAdminCompat"
+      hidden
+      aria-hidden="true"
+      style="display: none"
     >
-      <div class="modal admin-user-detail-modal">
-        <div class="modal-head">
-          <h3>Thông tin người dùng</h3>
-          <div class="modal-close" onclick="closeAdminUserDetailModal()">✕</div>
-        </div>
-        <div class="admin-user-detail-hero">
-          <div class="admin-user-detail-avatar" id="adminUserDetailAvatar">U</div>
-          <div class="admin-user-detail-hero-copy">
-            <div class="admin-user-detail-title" id="adminUserDetailTitle">
-              Người dùng
-            </div>
-            <div
-              class="admin-user-detail-subtitle"
-              id="adminUserDetailSubtitle"
-            >
-              user@example.com
-            </div>
-            <div
-              class="admin-user-detail-summary"
-              id="adminUserDetailSummary"
-            ></div>
-          </div>
-        </div>
-        <div class="admin-user-detail-grid" id="adminUserDetailMeta"></div>
-        <div class="admin-user-detail-raw-wrap">
-          <div class="admin-user-detail-raw-label">Dữ liệu thô</div>
-          <pre class="admin-user-detail-raw" id="adminUserDetailRaw"></pre>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-cancel" onclick="closeAdminUserDetailModal()">
-            Đóng
-          </button>
-        </div>
-      </div>
+      <button id="popupAdminBtn" type="button" tabindex="-1"></button>
+      <div id="adminNavItem"><span class="slabel"></span></div>
     </div>
     <div class="toast" id="toast"></div>
 
