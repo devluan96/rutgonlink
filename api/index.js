@@ -101,6 +101,8 @@ const adminNotificationResponseInFlight = new Map();
 const USER_STATS_RECENT_DAYS = 7;
 const DEFAULT_STATS_RANGE_DAYS = 1;
 const ALLOWED_STATS_RANGE_DAYS = new Set([1, 7, 14]);
+const STATS_RECENT_LINK_LIMIT = 12;
+const STATS_FALLBACK_CLICK_LIMIT = 2500;
 
 // ── Cloudinary config ────────────────────────────────────────────────────────
 const CLOUDINARY_OK = !!(
@@ -10331,7 +10333,7 @@ app.get("/api/stats/summary", async (req, res) => {
       const timings = {};
       const startedAt = Date.now();
       const [
-        totals,
+        totalLinks,
         today,
         analyticsSummaryResult,
         articleFunnelStats,
@@ -10340,8 +10342,8 @@ app.get("/api/stats/summary", async (req, res) => {
         latestLink,
       ] = await Promise.all([
         measureAsyncTiming(
-          "totals",
-          () => database.getTotals(userId, guestSessionId),
+          "totalLinks",
+          () => database.countLinks(userId, guestSessionId),
           timings,
         ),
         measureAsyncTiming(
@@ -10370,7 +10372,7 @@ app.get("/api/stats/summary", async (req, res) => {
               "clicksFallback",
               () =>
                 database.getClickAnalytics(userId, guestSessionId, {
-                  limit: 5000,
+                  limit: STATS_FALLBACK_CLICK_LIMIT,
                   days: 1,
                 }),
               timings,
@@ -10413,7 +10415,10 @@ app.get("/api/stats/summary", async (req, res) => {
           : Promise.resolve(null),
         measureAsyncTiming(
           "latestLink",
-          () => database.getLatestLink(userId, guestSessionId),
+          () =>
+            database.getLatestLink(userId, guestSessionId, {
+              select: "stats",
+            }),
           timings,
         ),
       ]);
@@ -10448,13 +10453,13 @@ app.get("/api/stats/summary", async (req, res) => {
       const recent = latestLink
         ? [
             {
-              ...attachVideoOverlayPublicFields(latestLink),
+              ...latestLink,
               short_url: buildLinkShortUrl(latestLink, publicBaseUrl),
             },
           ]
         : [];
       const payload = {
-        ...totals,
+        totalLinks: Number(totalLinks || 0),
         ...today,
         totalClicks,
         uniqueTotalClicks: totalClicks,
@@ -10474,7 +10479,7 @@ app.get("/api/stats/summary", async (req, res) => {
           ...timings,
           analyticsSource: analyticsSummaryResult?.source || "unknown",
           totalClicks,
-          totalLinks: totals?.totalLinks || 0,
+          totalLinks: totalLinks || 0,
           hasUser: !!user,
         });
       }
@@ -10534,7 +10539,7 @@ app.get("/api/stats", async (req, res) => {
       const timings = {};
       const startedAt = Date.now();
       const [
-        totals,
+        totalLinks,
         today,
         analyticsSummary,
         labAnalyticsRows,
@@ -10543,8 +10548,8 @@ app.get("/api/stats", async (req, res) => {
         recentLinks,
       ] = await Promise.all([
         measureAsyncTiming(
-          "totals",
-          () => database.getTotals(userId, guestSessionId),
+          "totalLinks",
+          () => database.countLinks(userId, guestSessionId),
           timings,
         ),
         measureAsyncTiming(
@@ -10566,7 +10571,7 @@ app.get("/api/stats", async (req, res) => {
               () =>
                 database.getArticleFunnelClickAnalyticsRows(userId, {
                   days: statsRangeDays,
-                  limit: 5000,
+                  limit: STATS_FALLBACK_CLICK_LIMIT,
                 }),
               timings,
             )
@@ -10590,7 +10595,11 @@ app.get("/api/stats", async (req, res) => {
           : Promise.resolve(null),
         measureAsyncTiming(
           "recentLinks",
-          () => database.getRecentLinks(userId, guestSessionId),
+          () =>
+            database.getRecentLinks(userId, guestSessionId, {
+              limit: STATS_RECENT_LINK_LIMIT,
+              select: "stats",
+            }),
           timings,
         ),
       ]);
@@ -10604,7 +10613,7 @@ app.get("/api/stats", async (req, res) => {
           "clicksFallback",
           () =>
             database.getClickAnalytics(userId, guestSessionId, {
-              limit: 5000,
+              limit: STATS_FALLBACK_CLICK_LIMIT,
               days: statsRangeDays,
             }),
           timings,
@@ -10643,7 +10652,7 @@ app.get("/api/stats", async (req, res) => {
             "clicksYesterdayFallback",
             () =>
               database.getClickAnalytics(userId, guestSessionId, {
-                limit: 5000,
+                limit: STATS_FALLBACK_CLICK_LIMIT,
                 days: 2,
               }),
             timings,
@@ -10658,7 +10667,7 @@ app.get("/api/stats", async (req, res) => {
             () =>
               database.getArticleFunnelClickAnalyticsRows(userId, {
                 days: 2,
-                limit: 5000,
+                limit: STATS_FALLBACK_CLICK_LIMIT,
               }),
             timings,
           );
@@ -10697,11 +10706,11 @@ app.get("/api/stats", async (req, res) => {
         alerts.active.push(workspaceInviteAlert);
       }
       const recent = recentLinks.map((l) => ({
-        ...attachVideoOverlayPublicFields(l),
+        ...l,
         short_url: buildLinkShortUrl(l, publicBaseUrl),
       }));
       const payload = {
-        ...totals,
+        totalLinks: Number(totalLinks || 0),
         ...today,
         totalClicks: Number(analytics.unique_clicks || 0),
         uniqueTotalClicks: Number(analytics.unique_clicks || 0),
@@ -10727,6 +10736,7 @@ app.get("/api/stats", async (req, res) => {
             ? analytics.recent_buckets.length
             : 0,
           totalClicks: analytics?.total_clicks || 0,
+          totalLinks: totalLinks || 0,
           recentLinks: recentLinks.length,
           hasUser: !!user,
         });

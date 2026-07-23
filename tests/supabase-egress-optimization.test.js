@@ -53,7 +53,7 @@ test("user stats summary route exists for lightweight notification polling", () 
   );
   assert.match(
     apiSource,
-    /database\.getLatestLink\(userId, guestSessionId\)/,
+    /database\.getLatestLink\(userId,\s*guestSessionId,\s*\{[\s\S]{0,40}?select:\s*"stats"[\s\S]{0,20}?\}\s*\)/,
   );
   assert.match(
     apiSource,
@@ -66,6 +66,14 @@ test("user stats summary route exists for lightweight notification polling", () 
   assert.match(
     apiSource,
     /getClickAnalyticsSummary\(\s*userId,\s*guestSessionId,\s*\{[\s\S]{0,80}?days:\s*1,/,
+  );
+  assert.match(
+    apiSource,
+    /database\.countLinks\(userId, guestSessionId\)/,
+  );
+  assert.doesNotMatch(
+    apiSource,
+    /app\.get\("\/api\/stats\/summary"[\s\S]{0,2200}?database\.getTotals\(userId, guestSessionId\)/s,
   );
 });
 
@@ -119,6 +127,10 @@ test("full stats route supports explicit day ranges and frontend requests them o
   assert.match(
     appSource,
     /fetch\(`\/api\/stats\?days=\$\{requestedDays\}`\)/,
+  );
+  assert.match(
+    apiSource,
+    /database\.getRecentLinks\(userId, guestSessionId, \{\s*limit: STATS_RECENT_LINK_LIMIT,\s*select: "stats",\s*\}\)/s,
   );
 });
 

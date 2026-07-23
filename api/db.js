@@ -101,6 +101,9 @@ function getAnalyticsDayKey(
   return `${year}-${month}-${day}`;
 }
 
+const RECENT_LINKS_STATS_SELECT =
+  'id,original_url,link_type,clicks,created_at,short_code,alias,domain_hostname';
+
 function getClient() {
   if (_client) return _client;
   const url = process.env.SUPABASE_URL || '';
@@ -1777,24 +1780,38 @@ async function init() {
       return { counted: true, deduped: false };
     },
 
-    async getRecentLinks(userId, guestSessionId) {
-      let query = sb.from('links').select('*').order('created_at', { ascending: false });
+    async getRecentLinks(userId, guestSessionId, options = {}) {
+      const limit = Math.min(
+        Math.max(Number(options?.limit) || 100, 1),
+        100,
+      );
+      const selectExpr =
+        options?.select === 'stats' ? RECENT_LINKS_STATS_SELECT : '*';
+      let query = sb
+        .from('links')
+        .select(selectExpr)
+        .order('created_at', { ascending: false });
       if (userId) {
-        query = query.eq('user_id', userId).limit(100);
+        query = query.eq('user_id', userId).limit(limit);
       } else if (guestSessionId) {
-        query = query.eq('guest_session_id', guestSessionId).limit(100);
+        query = query.eq('guest_session_id', guestSessionId).limit(limit);
       } else {
-        query = query.is('user_id', null).is('guest_session_id', null).limit(20);
+        query = query
+          .is('user_id', null)
+          .is('guest_session_id', null)
+          .limit(Math.min(limit, 20));
       }
       const { data, error } = await query;
       check(error);
       return data || [];
     },
 
-    async getLatestLink(userId, guestSessionId) {
+    async getLatestLink(userId, guestSessionId, options = {}) {
+      const selectExpr =
+        options?.select === 'stats' ? RECENT_LINKS_STATS_SELECT : '*';
       let query = sb
         .from('links')
-        .select('*')
+        .select(selectExpr)
         .order('created_at', { ascending: false })
         .limit(1);
       if (userId) {
@@ -1807,6 +1824,20 @@ async function init() {
       const { data, error } = await query;
       check(error);
       return Array.isArray(data) && data.length ? data[0] : null;
+    },
+
+    async countLinks(userId, guestSessionId) {
+      let query = sb.from('links').select('*', { count: 'exact', head: true });
+      if (userId) {
+        query = query.eq('user_id', userId);
+      } else if (guestSessionId) {
+        query = query.eq('guest_session_id', guestSessionId);
+      } else {
+        query = query.is('user_id', null).is('guest_session_id', null);
+      }
+      const { count, error } = await query;
+      check(error, 'count_links');
+      return count || 0;
     },
 
     async getAllLinks() {
