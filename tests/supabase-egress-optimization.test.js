@@ -134,6 +134,33 @@ test("full stats route supports explicit day ranges and frontend requests them o
   );
 });
 
+test("stats routes use soft timeouts for slow analytics queries on live data", () => {
+  assert.match(
+    apiSource,
+    /const STATS_QUERY_TIMEOUT_MS = Math\.max\(\s*Number\(process\.env\.STATS_QUERY_TIMEOUT_MS\) \|\| 4000,\s*1000,\s*\);/s,
+  );
+  assert.match(
+    apiSource,
+    /async function measureAsyncTimingWithSoftTimeout\(/,
+  );
+  assert.match(
+    apiSource,
+    /measureAsyncTimingWithSoftTimeout\(\s*"analyticsSummaryRpc"/,
+  );
+  assert.match(
+    apiSource,
+    /measureAsyncTimingWithSoftTimeout\(\s*"analyticsYesterdaySummaryRpc"/,
+  );
+  assert.match(
+    apiSource,
+    /measureAsyncTimingWithSoftTimeout\(\s*"labAnalyticsRows"/,
+  );
+  assert.match(
+    apiSource,
+    /measureAsyncTimingWithSoftTimeout\(\s*"labAnalyticsYesterdayRows"/,
+  );
+});
+
 test("bio profile sync is lazy-loaded instead of preloading on app boot", () => {
   assert.match(
     appSource,

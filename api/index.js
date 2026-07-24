@@ -85,6 +85,10 @@ const STATS_RESPONSE_CACHE_TTL_MS = Math.max(
   Number(process.env.STATS_RESPONSE_CACHE_TTL_MS) || 10000,
   0,
 );
+const STATS_QUERY_TIMEOUT_MS = Math.max(
+  Number(process.env.STATS_QUERY_TIMEOUT_MS) || 4000,
+  1000,
+);
 const statsResponseCache = new Map();
 const statsResponseInFlight = new Map();
 const statsSummaryResponseCache = new Map();
@@ -3635,6 +3639,55 @@ async function measureAsyncTiming(label, run, timings) {
     return await run();
   } finally {
     timings[label] = Date.now() - startedAt;
+  }
+}
+
+function createStatsTimeoutError(label, timeoutMs) {
+  const error = new Error(
+    `${label} timed out after ${Math.max(Number(timeoutMs) || 0, 0)}ms`,
+  );
+  error.code = "STATS_TIMEOUT";
+  error.statsLabel = label;
+  error.timeoutMs = Math.max(Number(timeoutMs) || 0, 0);
+  return error;
+}
+
+async function measureAsyncTimingWithSoftTimeout(
+  label,
+  run,
+  timings,
+  {
+    timeoutMs = STATS_QUERY_TIMEOUT_MS,
+    fallbackValue = null,
+    warn = true,
+  } = {},
+) {
+  const normalizedTimeoutMs = Math.max(Number(timeoutMs) || 0, 1);
+  try {
+    return await measureAsyncTiming(label, async () => {
+      let timeoutId = null;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(createStatsTimeoutError(label, normalizedTimeoutMs));
+        }, normalizedTimeoutMs);
+      });
+      try {
+        return await Promise.race([run(), timeoutPromise]);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    }, timings);
+  } catch (error) {
+    if (error?.code !== "STATS_TIMEOUT") {
+      throw error;
+    }
+    timings[`${label}_timed_out`] = normalizedTimeoutMs;
+    if (warn) {
+      console.warn(`[stats] soft-timeout ${label}`, {
+        timeoutMs: normalizedTimeoutMs,
+      });
+    }
+    return fallbackValue;
   }
 }
 
@@ -10467,12 +10520,14 @@ app.get("/api/stats/summary", async (req, res) => {
         measureAsyncTiming(
           "analyticsSummary",
           async () => {
-            const analyticsSummary = await database.getClickAnalyticsSummary(
-              userId,
-              guestSessionId,
-              {
-                days: 1,
-              },
+            const analyticsSummary = await measureAsyncTimingWithSoftTimeout(
+              "analyticsSummaryRpc",
+              () =>
+                database.getClickAnalyticsSummary(userId, guestSessionId, {
+                  days: 1,
+                }),
+              timings,
+              { fallbackValue: null },
             );
             if (analyticsSummary) {
               return {
@@ -10499,7 +10554,7 @@ app.get("/api/stats/summary", async (req, res) => {
           timings,
         ),
         userId
-          ? measureAsyncTiming(
+          ? measureAsyncTimingWithSoftTimeout(
               "labStats",
               () =>
                 database.getArticleFunnelClickStats(userId, {
@@ -10507,6 +10562,7 @@ app.get("/api/stats/summary", async (req, res) => {
                   limit: 5000,
                 }),
               timings,
+              { fallbackValue: null },
             )
           : Promise.resolve(null),
         user
@@ -10673,13 +10729,19 @@ app.get("/api/stats", async (req, res) => {
         measureAsyncTiming(
           "analyticsSummary",
           () =>
-            database.getClickAnalyticsSummary(userId, guestSessionId, {
-              days: statsRangeDays,
-            }),
+            measureAsyncTimingWithSoftTimeout(
+              "analyticsSummaryRpc",
+              () =>
+                database.getClickAnalyticsSummary(userId, guestSessionId, {
+                  days: statsRangeDays,
+                }),
+              timings,
+              { fallbackValue: null },
+            ),
           timings,
         ),
         userId
-          ? measureAsyncTiming(
+          ? measureAsyncTimingWithSoftTimeout(
               "labAnalyticsRows",
               () =>
                 database.getArticleFunnelClickAnalyticsRows(userId, {
@@ -10687,6 +10749,7 @@ app.get("/api/stats", async (req, res) => {
                   limit: STATS_FALLBACK_CLICK_LIMIT,
                 }),
               timings,
+              { fallbackValue: [] },
             )
           : Promise.resolve([]),
         user
@@ -10755,9 +10818,15 @@ app.get("/api/stats", async (req, res) => {
         let expandedAnalytics = await measureAsyncTiming(
           "analyticsYesterdaySummary",
           () =>
-            database.getClickAnalyticsSummary(userId, guestSessionId, {
-              days: 2,
-            }),
+            measureAsyncTimingWithSoftTimeout(
+              "analyticsYesterdaySummaryRpc",
+              () =>
+                database.getClickAnalyticsSummary(userId, guestSessionId, {
+                  days: 2,
+                }),
+              timings,
+              { fallbackValue: null },
+            ),
           timings,
         );
         if (!expandedAnalytics) {
@@ -10775,7 +10844,7 @@ app.get("/api/stats", async (req, res) => {
           );
         }
         if (userId) {
-          expandedLabAnalyticsRows = await measureAsyncTiming(
+          expandedLabAnalyticsRows = await measureAsyncTimingWithSoftTimeout(
             "labAnalyticsYesterdayRows",
             () =>
               database.getArticleFunnelClickAnalyticsRows(userId, {
@@ -10783,6 +10852,7 @@ app.get("/api/stats", async (req, res) => {
                 limit: STATS_FALLBACK_CLICK_LIMIT,
               }),
             timings,
+            { fallbackValue: [] },
           );
         }
         const mappedExpandedLabAnalyticsRows =
