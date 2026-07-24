@@ -263,6 +263,8 @@ test("applyArticleFunnelStageDirectOverrides auto-wraps TikTok popup 20s product
 
   assert.equal(config.direct_platform, "tiktok");
   assert.match(config.direct_ios_fb_url, /^https:\/\/snssdk1180\.onelink\.me\/BAuo\?/);
+  assert.equal(config.direct_web_url, originalUrl);
+  assert.equal(config.direct_ios_browser_url, originalUrl);
   assert.match(config.direct_ios_fb_url, /requestParams=/);
   assert.match(config.direct_ios_fb_url, /1732847264020661556/);
 });

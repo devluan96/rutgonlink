@@ -5386,7 +5386,9 @@ function applyArticleFunnelStageDirectOverrides(
     const autoWrappedOneLink = buildTikTokPopup20sOneLink(
       config.direct_web_url || config.target_url || "",
     );
-    config.direct_ios_fb_url = iosInAppOverride || autoWrappedOneLink;
+    if (iosInAppOverride || autoWrappedOneLink) {
+      config.direct_ios_fb_url = iosInAppOverride || autoWrappedOneLink;
+    }
   }
 
   if (
