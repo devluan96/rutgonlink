@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("fs");
+const path = require("path");
 
 const { __testUtils } = require("../api/index");
 
@@ -294,6 +296,22 @@ test("resolveTikTokIosInAppTargets prefers BAuo override for popup 20s iOS in-ap
   assert.equal(
     resolved.browserFallback,
     "https://snssdk1180.onelink.me/BAuo?af_dp=snssdk1180%3A%2F%2Fec%2Fpdp",
+  );
+});
+
+test("article funnel go route sends TikTok popup 20s iOS in-app traffic straight to BAuo", () => {
+  const apiSource = fs.readFileSync(
+    path.join(__dirname, "..", "api", "index.js"),
+    "utf8",
+  );
+
+  assert.match(
+    apiSource,
+    /const isZaloInApp = \/ZaloApp\/i\.test\(ua\);[\s\S]*const isIosInApp = platform === "ios" && \(isFacebookInApp \|\| isZaloInApp\);/s,
+  );
+  assert.match(
+    apiSource,
+    /if \(\s+isIosInApp &&\s+info\.platform_name === "tiktok" &&\s+normalizedStageKey === "20s"\s+\) \{[\s\S]*mode: "article-funnel-go-tiktok-ios-inapp-direct"[\s\S]*return res\.redirect\(302, iosInAppTarget\);/s,
   );
 });
 

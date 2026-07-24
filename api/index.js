@@ -6748,6 +6748,8 @@ async function handleArticleFunnelStageDeeplinkRoute({
     normalizedStageKey,
   );
   const isFacebookInApp = isFacebookInAppBrowser(ua);
+  const isZaloInApp = /ZaloApp/i.test(ua);
+  const isIosInApp = platform === "ios" && (isFacebookInApp || isZaloInApp);
   const launchLink = {
     original_url: targetUrl,
     og_title: config.title || "Article preview",
@@ -6826,6 +6828,42 @@ async function handleArticleFunnelStageDeeplinkRoute({
       ...articleFunnelLogMeta,
     });
     return res.redirect(302, targetUrl);
+  }
+
+  if (
+    isIosInApp &&
+    info.platform_name === "tiktok" &&
+    normalizedStageKey === "20s"
+  ) {
+    const resolvedTargets = resolveTikTokIosInAppTargets(
+      stage,
+      targetUrl,
+      info,
+    );
+    const iosInAppTarget = String(
+      stage.direct_ios_fb_url ||
+        resolvedTargets.appTarget ||
+        resolvedTargets.browserFallback ||
+        info.fallback ||
+        targetUrl,
+    ).trim();
+    setRedirectDebugHeaders(res, {
+      mode: "article-funnel-go-tiktok-ios-inapp-direct",
+      platform: info.platform_name,
+    });
+    logRedirectDecision({
+      requestId: req.requestId,
+      linkId: 0,
+      code: `article-funnel-go:${normalizedStageKey}`,
+      mode: "article-funnel-go-tiktok-ios-inapp-direct",
+      platform: info.platform_name,
+      uaKind,
+      status: 302,
+      target: iosInAppTarget,
+      referer,
+      ...articleFunnelLogMeta,
+    });
+    return res.redirect(302, iosInAppTarget);
   }
 
   if (info.platform_name === "shopee") {
@@ -7334,7 +7372,7 @@ ${ogImageTag}
       ) {
         if (isIOSDevice()) {
           return isInAppBrowser()
-            ? (getNativePopupDirectAppLaunchUrl(stage) || stage.direct_ios_fb_url || stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '')
+            ? (stage.direct_ios_fb_url || getNativePopupDirectAppLaunchUrl(stage) || stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '')
             : (stage.direct_ios_browser_url || stage.direct_web_url || stage.target_url || '');
         }
         return stage.direct_web_url || stage.direct_android_url || stage.target_url || '';
@@ -7602,7 +7640,11 @@ ${ogImageTag}
           isInApp
             ? getNativePopupDirectAppLaunchUrl(stage)
             : '';
-        if (isInApp && directAppTarget) {
+        if (isTikTokPopup20s && isInApp && stage.direct_ios_fb_url) {
+          navigateWindowLocation(stage.direct_ios_fb_url, {
+            preferTopLevel: true,
+          });
+        } else if (isInApp && directAppTarget) {
           navigateWindowLocation(directAppTarget, {
             preferTopLevel: true,
           });
