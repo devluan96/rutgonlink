@@ -2857,7 +2857,7 @@
                     <h2>Link funnel và popup</h2>
                     <div class="section-copy">
                       Mỗi link một hàng riêng. Dùng 3 giây mặc định, rồi tùy
-                      chọn 15 giây và 300 giây.
+                      chọn 10 giây và 300 giây.
                     </div>
                   </div>
                   <div class="section-toggle" aria-hidden="true"></div>
@@ -2911,7 +2911,7 @@
                     </div>
 
                     <div class="field">
-                      <label for="popup20sInput">Popup 15 giây override</label>
+                      <label for="popup20sInput">Popup 10 giây override</label>
                       <div class="link-input-row">
                         <input id="popup20sInput" type="url" />
                         <button
@@ -2953,7 +2953,7 @@
 
                     <div class="field">
                       <label for="popup20sIosFbInput">
-                        TikTok iPhone/Facebook override
+                        TikTok iPhone/Facebook App Store / tracking link
                       </label>
                       <input id="popup20sIosFbInput" type="url" />
                       <div class="hint">
@@ -2976,7 +2976,7 @@
                       </div>
                       <div class="hint">
                         Tùy chọn. Để trống nếu bạn chỉ muốn giữ luồng 3 giây và
-                        15 giây.
+                        10 giây.
                       </div>
                       <div
                         class="field-status-note"
@@ -3030,7 +3030,7 @@
                       </div>
                     </div>
                     <div class="field">
-                      <label for="overlay20sImageInput">Ảnh popup 15s</label>
+                      <label for="overlay20sImageInput">Ảnh popup 10s</label>
                       <input id="overlay20sImageInput" type="url" />
                       <div class="upload-row">
                         <button
@@ -3260,7 +3260,7 @@
                       Hiện 3 giây
                     </button>
                     <button class="ghost-btn" type="button" id="show20sBtn">
-                      Hiện 15 giây
+                      Hiện 10 giây
                     </button>
                     <button class="ghost-btn" type="button" id="show300sBtn">
                       Hiện 300 giây
@@ -4372,20 +4372,20 @@
                 linkKicker: "Target links",
                 linkTitle: "Funnel links and popup images",
                 linkCopy:
-                  "Keep one link per row. Use 3s by default, then optional 15s and 300s.",
+                  "Keep one link per row. Use 3s by default, then optional 10s and 300s.",
                 baseLabel: "Default 3s funnel link",
                 baseHint:
-                  "Autofills from your saved Shopee affiliate link. If 15s and 300s are empty, they reuse this link.",
+                  "Autofills from your saved Shopee affiliate link. If 10s and 300s are empty, they reuse this link.",
                 baseReady: "Shopee autofill ready",
                 baseMissing: "No saved Shopee affiliate link",
-                popup20Label: "15s popup override",
+                popup20Label: "10s popup override",
                 popup20Hint: "Autofills from your saved TikTok affiliate link.",
                 popup20Ready: "TikTok autofill ready",
                 popup20Missing: "No saved TikTok affiliate link",
                 copyDeepLink: "Copy app deeplink",
                 popup300Label: "300s popup override",
                 popup300Hint:
-                  "Optional. Leave empty if you only want the 3s and 15s flow.",
+                  "Optional. Leave empty if you only want the 3s and 10s flow.",
                 checkLink: "Ki?m tra link",
                 settingsTitle: "Lab settings",
                 settingsCopy:
@@ -4415,20 +4415,20 @@
                 linkKicker: "Link đích",
                 linkTitle: "Link funnel và hình popup",
                 linkCopy:
-                  "Mỗi link một hàng riêng. Dùng 3 giây mặc định, rồi tùy chọn 15 giây và 300 giây.",
+                  "Mỗi link một hàng riêng. Dùng 3 giây mặc định, rồi tùy chọn 10 giây và 300 giây.",
                 baseLabel: "Link funnel 3 giây mặc định",
                 baseHint:
-                  "Tự điền từ link Shopee affiliate đã lưu. Nếu để trống ô 15 giây và 300 giây, hệ thống sẽ dùng lại link này.",
+                  "Tự điền từ link Shopee affiliate đã lưu. Nếu để trống ô 10 giây và 300 giây, hệ thống sẽ dùng lại link này.",
                 baseReady: "Shopee đã sẵn sàng để tự điền",
                 baseMissing: "Chưa có link Shopee affiliate đã lưu",
-                popup20Label: "Popup 15 giây override",
+                popup20Label: "Popup 10 giây override",
                 popup20Hint: "Tự điền từ link TikTok affiliate đã lưu.",
                 popup20Ready: "TikTok đã sẵn sàng để tự điền",
                 popup20Missing: "Chưa có link TikTok affiliate đã lưu",
                 copyDeepLink: "Copy deeplink app",
                 popup300Label: "Popup 300 giây override",
                 popup300Hint:
-                  "Tùy chọn. Để trống nếu bạn chỉ muốn giữ luồng 3 giây và 15 giây.",
+                  "Tùy chọn. Để trống nếu bạn chỉ muốn giữ luồng 3 giây và 10 giây.",
                 checkLink: "Kiểm tra link",
                 settingsTitle: "Cài đặt lab",
                 settingsCopy:
@@ -4457,7 +4457,8 @@
           setLabel("popup20sInput", copy.popup20Label);
           setLabel(
             "popup20sIosFbInput",
-            copy.popup20IosFbLabel || "TikTok iPhone/Facebook override",
+            copy.popup20IosFbLabel ||
+              "TikTok iPhone/Facebook App Store / tracking link",
           );
           setLabel("popup300sInput", copy.popup300Label);
           setHintNear("#sourceImportUrlInput", copy.sourceUrlHint);
@@ -4467,7 +4468,7 @@
           setHintNear(
             "#popup20sIosFbInput",
             copy.popup20IosFbHint ||
-              "Optional. Paste a better TikTok app-opening link for iPhone Facebook/Zalo, preferably vt.tiktok.com or onelink.",
+              "Optional. Paste an App Store campaign link or attribution link for TikTok on iPhone Facebook/Zalo to prioritize install/open tracking instead of app jump.",
           );
           setHintNear("#popup300sInput", copy.popup300Hint);
           document
@@ -4629,7 +4630,7 @@
           setText(".panel.editor .eyebrow", "Chỉ dành cho admin • Sandbox");
           setText(
             ".panel.editor > .subhead",
-            "Khu dựng thử riêng cho kiểu comment Facebook -> vào bài viết -> popup 3s / 15s / 300s -> nhảy app. Trang này chỉ dành cho admin và không chạm vào luồng rút gọn hiện tại.",
+            "Khu dựng thử riêng cho kiểu comment Facebook -> vào bài viết -> popup 3s / 10s / 300s -> nhảy app. Trang này chỉ dành cho admin và không chạm vào luồng rút gọn hiện tại.",
           );
 
           const sectionTitles = document.querySelectorAll(
@@ -4675,7 +4676,7 @@
           setLabel("descriptionInput", "Mô tả");
           setLabel("baseUrlInput", "Link gốc / popup 3s mặc định");
           setLabel("overlayImageInput", "Ảnh popup 3s");
-          setLabel("overlay20sImageInput", "Ảnh popup 15s");
+          setLabel("overlay20sImageInput", "Ảnh popup 10s");
           setLabel("overlay300sImageInput", "Ảnh popup 300s");
           setLabel("shareImageInput", "Ảnh share / hero đầu bài");
           setLabel("groupLabelInput", "Nhãn dòng 1");
@@ -4706,7 +4707,7 @@
           );
           setHintNear(
             "#baseUrlInput",
-            "Đây là link đích mặc định của popup 3s. Nếu popup 15s và 300s để trống, chúng cũng sẽ dùng link này.",
+            "Đây là link đích mặc định của popup 3s. Nếu popup 10s và 300s để trống, chúng cũng sẽ dùng link này.",
           );
 
           setText('[data-add-block="image"]', "+ Ảnh thường");
@@ -4725,7 +4726,7 @@
           }
           setText("#startTimersBtn", "Chạy timer");
           setText("#show3sBtn", "Hiện 3s");
-          setText("#show20sBtn", "Hiện 15s");
+          setText("#show20sBtn", "Hiện 10s");
           setText("#show300sBtn", "Hiện 300s");
           setText("#closeOverlayBtn", "Ẩn popup");
           setText(".comment-meta", "Bình luận mẫu để đặt link bài viết");
@@ -5769,6 +5770,73 @@
           return "generic";
         }
 
+        function extractTikTokProductId(targetUrl) {
+          try {
+            const url = new URL(String(targetUrl || "").trim());
+            const productMatch = url.pathname.match(/\/view\/product\/(\d+)/i);
+            const queryProductId =
+              url.searchParams.get("product_id") ||
+              url.searchParams.get("productId") ||
+              url.searchParams.get("item_id") ||
+              url.searchParams.get("itemId") ||
+              "";
+            return String(productMatch?.[1] || queryProductId || "").trim();
+          } catch (_) {
+            return "";
+          }
+        }
+
+        function isTikTokOneLinkUrl(targetUrl) {
+          try {
+            const hostname = new URL(String(targetUrl || "").trim()).hostname.toLowerCase();
+            return (
+              hostname === "snssdk1180.onelink.me" ||
+              hostname.endsWith(".onelink.me")
+            );
+          } catch (_) {
+            return false;
+          }
+        }
+
+        function buildTikTokPopup20sOneLink(targetUrl) {
+          const normalizedUrl = String(targetUrl || "").trim();
+          if (!normalizedUrl) return "";
+          if (detectTargetPlatform(normalizedUrl) !== "tiktok") {
+            return normalizedUrl;
+          }
+          if (isTikTokOneLinkUrl(normalizedUrl)) {
+            return normalizedUrl;
+          }
+          const productId = extractTikTokProductId(normalizedUrl);
+          if (!productId) {
+            return normalizedUrl;
+          }
+          const afDp =
+            "snssdk1180://ec/pdp" +
+            "?biz_type=0" +
+            "&gd_label=click_wap_pdp_bottom_bar_open_tiktok" +
+            "&need_mall=1" +
+            "&needlaunchlog=1" +
+            "&page_name=reflow_pdp" +
+            `&params_url=${encodeURIComponent(normalizedUrl)}`;
+          let oneLink =
+            "https://snssdk1180.onelink.me/BAuo" +
+            "?domain_source=tiktok" +
+            `&af_dp=${encodeURIComponent(afDp)}` +
+            "&refer=web";
+          oneLink += `&requestParams=${encodeURIComponent(
+            JSON.stringify({ product_id: [productId] }),
+          )}`;
+          oneLink += `&trackParams=${encodeURIComponent(
+            JSON.stringify({
+              enter_from_info: "product_share_outside",
+              source_page_type: "product_share",
+              enable_shop_tab_popup: 1,
+            }),
+          )}`;
+          return oneLink;
+        }
+
         async function resolveLaunchConfig(targetUrl) {
           const cacheKey = String(targetUrl || "").trim();
           if (!cacheKey) return null;
@@ -6048,12 +6116,17 @@
             const iosInAppOverride = String(
               state.popup20sIosFbUrl || "",
             ).trim();
-            if (iosInAppOverride) {
-              return {
-                ...configWithStageKey,
-                direct_ios_fb_url: iosInAppOverride,
-              };
-            }
+            const autoWrappedOneLink = buildTikTokPopup20sOneLink(
+              String(
+                launchConfig.direct_web_url ||
+                  launchConfig.target_url ||
+                  "",
+              ).trim(),
+            );
+            return {
+              ...configWithStageKey,
+              direct_ios_fb_url: iosInAppOverride || autoWrappedOneLink,
+            };
           }
           if (
             normalizedStageKey === "3s" &&
@@ -6235,7 +6308,8 @@
 
             if (isIOS) {
               const directAppTarget =
-                isInApp
+                isInApp &&
+                !(isPopup20s && isTikTokOneLinkUrl(launchConfig.direct_ios_fb_url))
                   ? getTikTokInAppDirectAppTarget(launchConfig)
                   : "";
               if (tiktokTarget) {
@@ -6596,8 +6670,8 @@
             overlay20sImage: {
               stateKey: "overlay20sImage",
               elementKey: "overlay20sImageInput",
-              pendingMessage: "Đang upload ảnh popup 15s...",
-              successMessage: "Đã tải ảnh popup 15 giây lên",
+              pendingMessage: "Đang upload ảnh popup 10s...",
+              successMessage: "Đã tải ảnh popup 10 giây lên",
             },
           }[assetKey];
 
@@ -6943,7 +7017,7 @@
           setText("#startTimersBtn", "Chạy hẹn giờ");
           setText("#closeOverlayBtn", "Ẩn popup");
           setText("#show3sBtn", "Hiện 3 giây");
-          setText("#show20sBtn", "Hiện 15 giây");
+          setText("#show20sBtn", "Hiện 10 giây");
           setText("#show300sBtn", "Hiện 300 giây");
           setText("#copyArticleUrlBtn", "Sao chép link comment");
           setText("#resetFeedBtn", "Đặt lại feed");
@@ -6972,7 +7046,7 @@
           setLabel("descriptionInput", "Mô tả");
           setLabel("baseUrlInput", "Link gốc / popup 3 giây mặc định");
           setLabel("overlayImageInput", "Ảnh popup 3 giây");
-          setLabel("overlay20sImageInput", "Ảnh popup 15 giây");
+          setLabel("overlay20sImageInput", "Ảnh popup 10 giây");
           setLabel("overlay300sImageInput", "Ảnh popup 300 giây");
           setLabel("shareImageInput", "Ảnh chia sẻ / ảnh đầu bài");
           setLabel("groupLabelInput", "Nhãn dòng 1");
@@ -6995,7 +7069,7 @@
           );
           setHintNear(
             "#baseUrlInput",
-            "Đây là link đích mặc định của popup 3 giây. Nếu popup 15 giây và 300 giây để trống, chúng cũng sẽ dùng link này.",
+            "Đây là link đích mặc định của popup 3 giây. Nếu popup 10 giây và 300 giây để trống, chúng cũng sẽ dùng link này.",
           );
           setHintNear(
             "#shareImageInput",
@@ -7081,7 +7155,7 @@
           setText("#startTimersBtn", "Chạy hẹn giờ");
           setText("#closeOverlayBtn", "Ẩn popup");
           setText("#show3sBtn", "Hiện 3 giây");
-          setText("#show20sBtn", "Hiện 15 giây");
+          setText("#show20sBtn", "Hiện 10 giây");
           setText("#show300sBtn", "Hiện 300 giây");
           setText("#resetFeedBtn", "Đặt lại feed");
           setText("#showNextBlockBtn", "Hiện thêm 1 khối");
@@ -7107,10 +7181,10 @@
           setLabel("titleInput", "Tiêu đề");
           setLabel("descriptionInput", "Mô tả");
           setLabel("baseUrlInput", "Link gốc / popup 3 giây mặc định");
-          setLabel("popup20sInput", "Popup 15 giây override");
+          setLabel("popup20sInput", "Popup 10 giây override");
           setLabel(
             "popup20sIosFbInput",
-            "TikTok iPhone/Facebook override",
+            "TikTok iPhone/Facebook App Store / tracking link",
           );
           setLabel("popup300sInput", "Popup 300 giây override");
           setHintNear(
@@ -7119,7 +7193,7 @@
           );
           setHintNear(
             "#baseUrlInput",
-            "Tự điền từ link Shopee affiliate đã lưu. Nếu để trống ô 15 giây và 300 giây, hệ thống sẽ dùng lại link này.",
+            "Tự điền từ link Shopee affiliate đã lưu. Nếu để trống ô 10 giây và 300 giây, hệ thống sẽ dùng lại link này.",
           );
           setHintNear(
             "#popup20sInput",
@@ -7131,7 +7205,7 @@
           );
           setHintNear(
             "#popup300sInput",
-            "Tùy chọn. Để trống nếu bạn chỉ muốn giữ luồng 3 giây và 15 giây.",
+            "Tùy chọn. Để trống nếu bạn chỉ muốn giữ luồng 3 giây và 10 giây.",
           );
         }
 
@@ -7560,10 +7634,10 @@
           resetTimers();
           closeOverlay();
           primeResolvedTargets();
-          showToast("Đã bắt đầu mô phỏng timer 3s / 15s / 300s");
+          showToast("Đã bắt đầu mô phỏng timer 3s / 10s / 300s");
           timer3s = setTimeout(() => openOverlay("3s"), 3000);
           if (state.popup20sUrl.trim()) {
-            timer20s = setTimeout(() => openOverlay("20s"), 15000);
+            timer20s = setTimeout(() => openOverlay("20s"), 10000);
           }
           if (state.popup300sUrl.trim()) {
             timer300s = setTimeout(() => openOverlay("300s"), 300000);

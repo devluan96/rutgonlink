@@ -27,7 +27,7 @@ test("admin article funnel lab prefers launch routes for TikTok popup 20s before
   );
   assert.match(
     templateHtml,
-    /const directAppTarget =\s+isInApp\s+\? getTikTokInAppDirectAppTarget\(launchConfig\)\s+: "";/s,
+    /const directAppTarget =\s+isInApp &&\s+!\(isPopup20s && isTikTokOneLinkUrl\(launchConfig\.direct_ios_fb_url\)\)\s+\? getTikTokInAppDirectAppTarget\(launchConfig\)\s+: "";/s,
   );
 });
 
@@ -189,6 +189,32 @@ test("admin article funnel lab keeps TikTok popup 20s on deeplink go helpers ins
   assert.match(
     templateHtml,
     /return `\$\{preview\.origin\}\/_lab\/article-funnel-\$\{routePrefix\}\/\$\{slug\}\/\$\{token\}\/\$\{normalizedStageKey\}`;/,
+  );
+});
+
+test("admin article funnel lab auto-wraps TikTok popup 20s links with BAuo and fires the timer at 10 seconds", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(templateHtml, /function buildTikTokPopup20sOneLink\(targetUrl\) \{/);
+  assert.match(templateHtml, /https:\/\/snssdk1180\.onelink\.me\/BAuo/);
+  assert.match(
+    templateHtml,
+    /const autoWrappedOneLink = buildTikTokPopup20sOneLink\(/,
+  );
+  assert.match(
+    templateHtml,
+    /direct_ios_fb_url: iosInAppOverride \|\| autoWrappedOneLink,/,
+  );
+  assert.match(
+    templateHtml,
+    /!\(isPopup20s && isTikTokOneLinkUrl\(launchConfig\.direct_ios_fb_url\)\)/,
+  );
+  assert.match(
+    templateHtml,
+    /timer20s = setTimeout\(\(\) => openOverlay\("20s"\), 10000\);/,
   );
 });
 

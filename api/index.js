@@ -2579,6 +2579,65 @@ function buildTikTokAppScheme(destinationUrl) {
   }
 }
 
+function extractTikTokProductId(destinationUrl) {
+  try {
+    const url = new URL(String(destinationUrl || "").trim());
+    const productMatch = url.pathname.match(/\/view\/product\/(\d+)/i);
+    const queryProductId =
+      url.searchParams.get("product_id") ||
+      url.searchParams.get("productId") ||
+      url.searchParams.get("item_id") ||
+      url.searchParams.get("itemId") ||
+      "";
+    return String(productMatch?.[1] || queryProductId || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function buildTikTokPopup20sOneLink(destinationUrl) {
+  try {
+    const normalizedUrl = String(destinationUrl || "").trim();
+    if (!normalizedUrl) return "";
+    const url = new URL(normalizedUrl);
+    if (!isTikTokProductUrl(url)) {
+      return normalizedUrl;
+    }
+    if (isTikTokOneLinkHostname(url.hostname)) {
+      return normalizedUrl;
+    }
+    const productId = extractTikTokProductId(normalizedUrl);
+    const afDp =
+      "snssdk1180://ec/pdp" +
+      "?biz_type=0" +
+      "&gd_label=click_wap_pdp_bottom_bar_open_tiktok" +
+      "&need_mall=1" +
+      "&needlaunchlog=1" +
+      "&page_name=reflow_pdp" +
+      `&params_url=${encodeURIComponent(normalizedUrl)}`;
+    let oneLink =
+      "https://snssdk1180.onelink.me/BAuo" +
+      "?domain_source=tiktok" +
+      `&af_dp=${encodeURIComponent(afDp)}` +
+      "&refer=web";
+    if (productId) {
+      oneLink += `&requestParams=${encodeURIComponent(
+        JSON.stringify({ product_id: [productId] }),
+      )}`;
+    }
+    oneLink += `&trackParams=${encodeURIComponent(
+      JSON.stringify({
+        enter_from_info: "product_share_outside",
+        source_page_type: "product_share",
+        enable_shop_tab_popup: 1,
+      }),
+    )}`;
+    return oneLink;
+  } catch {
+    return String(destinationUrl || "").trim();
+  }
+}
+
 function detectPlatformDeep(originalUrl, platform) {
   let hostname = "";
   try {
@@ -5324,9 +5383,10 @@ function applyArticleFunnelStageDirectOverrides(
         overlay.popup_20s_ios_fb_url ||
         "",
     ).trim();
-    if (iosInAppOverride) {
-      config.direct_ios_fb_url = iosInAppOverride;
-    }
+    const autoWrappedOneLink = buildTikTokPopup20sOneLink(
+      config.direct_web_url || config.target_url || "",
+    );
+    config.direct_ios_fb_url = iosInAppOverride || autoWrappedOneLink;
   }
 
   if (
@@ -6268,6 +6328,13 @@ function resolveTikTokIosInAppTargets(stage, targetUrl, info) {
       normalizedTargetUrl,
   ).trim();
   const iosOverrideUrl = String(stage?.direct_ios_fb_url || "").trim();
+  let iosOverrideHostname = "";
+  try {
+    iosOverrideHostname = new URL(iosOverrideUrl).hostname.toLowerCase();
+  } catch {}
+  const shouldPreferIosOverrideAsAppTarget =
+    normalizeArticleFunnelStageKey(stage?.stage_key || "") === "20s" &&
+    isTikTokOneLinkHostname(iosOverrideHostname);
   const nativeAppUrl = String(
     stage?.direct_ios_url ||
       stage?.direct_app_url ||
@@ -6280,7 +6347,9 @@ function resolveTikTokIosInAppTargets(stage, targetUrl, info) {
   ).trim();
 
   return {
-    appTarget: nativeAppUrl || browserFallbackUrl,
+    appTarget: shouldPreferIosOverrideAsAppTarget
+      ? iosOverrideUrl || nativeAppUrl || browserFallbackUrl
+      : nativeAppUrl || browserFallbackUrl,
     browserFallback: browserFallbackUrl || webFallbackUrl || normalizedTargetUrl,
     webFallback: webFallbackUrl || normalizedTargetUrl,
   };

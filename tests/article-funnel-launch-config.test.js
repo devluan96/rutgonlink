@@ -107,12 +107,12 @@ test("buildArticleFunnelPopup20sDirectBridgeInfo keeps HongHotDuong-style TikTok
   );
 
   assert.equal(bridgeInfo.platform_name, "tiktok");
-  assert.match(bridgeInfo.deeplink, /^snssdk1180:\/\/ec\/pdp/i);
-  assert.match(bridgeInfo.deeplink_ios, /^snssdk1180:\/\/ec\/pdp/i);
-  assert.match(bridgeInfo.popup20s_ios_inapp_url, /^snssdk1180:\/\/ec\/pdp/i);
+  assert.equal(bridgeInfo.deeplink, "https://vt.tiktok.com/ZTWEBFIRST/");
+  assert.equal(bridgeInfo.deeplink_ios, "https://vt.tiktok.com/ZTWEBFIRST/");
+  assert.equal(bridgeInfo.popup20s_ios_inapp_url, "https://vt.tiktok.com/ZTWEBFIRST/");
   assert.equal(bridgeInfo.popup20s_browser_url, "https://vt.tiktok.com/ZTWEBFIRST/");
   assert.equal(bridgeInfo.ios_inapp_browser_fallback, "https://vt.tiktok.com/ZTWEBFIRST/");
-  assert.equal(bridgeInfo.fallback, originalUrl);
+  assert.equal(bridgeInfo.fallback, "https://vt.tiktok.com/ZTWEBFIRST/");
 });
 
 test("buildArticleFunnelPopup20sTikTokBridgePage sends iOS in-app to override and others to browser url", () => {
@@ -247,6 +247,51 @@ test("resolveTikTokIosInAppTargets prefers app deeplink before TikTok override l
   assert.equal(
     resolved.webFallback,
     "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180",
+  );
+});
+
+test("applyArticleFunnelStageDirectOverrides auto-wraps TikTok popup 20s product links with BAuo OneLink", () => {
+  const originalUrl =
+    "https://www.tiktok.com/view/product/1732847264020661556?share_app_id=1180&unique_id=diemthichriviu";
+  const config = __testUtils.applyArticleFunnelStageDirectOverrides(
+    {
+      stage_key: "20s",
+    },
+    __testUtils.buildOverlayLaunchConfig(originalUrl),
+    {},
+  );
+
+  assert.equal(config.direct_platform, "tiktok");
+  assert.match(config.direct_ios_fb_url, /^https:\/\/snssdk1180\.onelink\.me\/BAuo\?/);
+  assert.match(config.direct_ios_fb_url, /requestParams=/);
+  assert.match(config.direct_ios_fb_url, /1732847264020661556/);
+});
+
+test("resolveTikTokIosInAppTargets prefers BAuo override for popup 20s iOS in-app flow", () => {
+  const originalUrl =
+    "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180";
+  const resolved = __testUtils.resolveTikTokIosInAppTargets(
+    {
+      stage_key: "20s",
+      direct_ios_fb_url:
+        "https://snssdk1180.onelink.me/BAuo?af_dp=snssdk1180%3A%2F%2Fec%2Fpdp",
+      direct_ios_browser_url: originalUrl,
+      direct_ios_url:
+        "snssdk1180://ec/pdp?biz_type=0&requestParams=%7B%22product_id%22%3A%5B%221731062681949079816%22%5D%7D",
+      direct_app_url:
+        "snssdk1180://ec/pdp?biz_type=0&requestParams=%7B%22product_id%22%3A%5B%221731062681949079816%22%5D%7D",
+    },
+    originalUrl,
+    __testUtils.detectPlatformDeep(originalUrl, "ios"),
+  );
+
+  assert.equal(
+    resolved.appTarget,
+    "https://snssdk1180.onelink.me/BAuo?af_dp=snssdk1180%3A%2F%2Fec%2Fpdp",
+  );
+  assert.equal(
+    resolved.browserFallback,
+    "https://snssdk1180.onelink.me/BAuo?af_dp=snssdk1180%3A%2F%2Fec%2Fpdp",
   );
 });
 
