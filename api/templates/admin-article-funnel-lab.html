@@ -5539,10 +5539,55 @@
             : button.dataset.idleLabel || button.textContent;
         }
 
+        function setPrimaryLabActionBusy(busy, options = {}) {
+          const createBtn = document.getElementById("createDbLabBtn");
+          const saveBtn = document.getElementById("saveDbLabBtn");
+          const createLabel = String(
+            options.createLabel ||
+              (selectedLabId ? "Đang lưu lab..." : "Đang tạo lab..."),
+          ).trim();
+          const saveLabel = String(
+            options.saveLabel ||
+              (selectedLabId ? "Đang lưu lab..." : "Đang tạo lab..."),
+          ).trim();
+          setActionButtonBusy(createBtn, busy, createLabel);
+          setActionButtonBusy(saveBtn, busy, saveLabel);
+        }
+
+        function isSlugConflictMessage(message) {
+          const normalized = String(message || "").trim().toLowerCase();
+          if (!normalized || !normalized.includes("slug")) return false;
+          return (
+            normalized.includes("đang được dùng") ||
+            normalized.includes("dang duoc dung") ||
+            normalized.includes("đã được dùng") ||
+            normalized.includes("da duoc dung") ||
+            normalized.includes("route hệ thống") ||
+            normalized.includes("route he thong")
+          );
+        }
+
+        function applySlugConflictFeedback(message, options = {}) {
+          const normalizedMessage =
+            String(message || "").trim() ||
+            "Slug bài viết đang bị trùng. Hãy đổi slug khác rồi thử lại.";
+          setFieldStatus("slugInput", normalizedMessage, "danger");
+          if (!options.silentToast) {
+            showToast(normalizedMessage);
+          }
+        }
+
         async function saveDbLab(options = {}) {
           const isCreating = !selectedLabId;
           const suppressSuccessToast = Boolean(options?.suppressSuccessToast);
           const suppressErrorToast = Boolean(options?.suppressErrorToast);
+          const manageBusyState = options?.manageBusyState !== false;
+          if (manageBusyState) {
+            setPrimaryLabActionBusy(true, {
+              createLabel: isCreating ? "Đang tạo lab..." : "Đang lưu lab...",
+              saveLabel: isCreating ? "Đang tạo lab..." : "Đang lưu lab...",
+            });
+          }
           try {
             const name =
               els.labNameInput.value.trim() || state.title.trim() || "Lab mới";
@@ -5568,6 +5613,7 @@
               );
               els.labNameInput.value = activeLab?.name || name;
             }
+            setFieldStatus("slugInput", "");
             if (!suppressSuccessToast) {
               showToast(
                 isCreating
@@ -5585,6 +5631,10 @@
               );
             }
             return { ok: false, isCreating };
+          } finally {
+            if (manageBusyState) {
+              setPrimaryLabActionBusy(false);
+            }
           }
         }
 
@@ -7734,17 +7784,21 @@
             generatedPublishedDomainNote = String(
               data.domain_note || "",
             ).trim();
+            setFieldStatus("slugInput", "");
             renderPreviewShell();
             if (!silent) {
               showToast("Đã xuất bản link ngắn");
             }
             return Boolean(generatedPublishedUrl);
           } catch (error) {
+            const message =
+              String(error?.message || "").trim() ||
+              "Không xuất bản được link ngắn";
+            if (isSlugConflictMessage(message)) {
+              applySlugConflictFeedback(message, { silentToast: silent });
+            }
             if (!silent) {
-              showToast(
-                String(error?.message || "").trim() ||
-                  "Không xuất bản được link ngắn",
-              );
+              showToast(message);
             }
             return false;
           }
@@ -7782,17 +7836,22 @@
             generatedPublishedDomainNote = String(
               data.domain_note || "",
             ).trim();
+            setFieldStatus("slugInput", "");
             renderPreviewShell();
             return {
               ok: Boolean(generatedPublishedUrl),
               error: "",
             };
           } catch (error) {
+            const message =
+              String(error?.message || "").trim() ||
+              "Không xuất bản được link ngắn";
+            if (isSlugConflictMessage(message)) {
+              applySlugConflictFeedback(message, { silentToast: true });
+            }
             return {
               ok: false,
-              error:
-                String(error?.message || "").trim() ||
-                "Không xuất bản được link ngắn",
+              error: message,
             };
           }
         }
@@ -8092,38 +8151,49 @@
         document
           .getElementById("createDbLabBtn")
           .addEventListener("click", async (event) => {
+            if (event.currentTarget.disabled) return;
             if (embedMode) {
-              const button = event.currentTarget;
               const isCreating = !selectedLabId;
-              const pendingLabel = selectedLabId
-                ? "Đang lưu lab..."
-                : "Đang tạo lab...";
-              setActionButtonBusy(button, true, pendingLabel);
+              setPrimaryLabActionBusy(true, {
+                createLabel: isCreating ? "Đang tạo lab..." : "Đang lưu lab...",
+                saveLabel: isCreating ? "Đang tạo lab..." : "Đang lưu lab...",
+              });
               try {
                 const result = await saveDbLab({
                   suppressSuccessToast: true,
+                  manageBusyState: false,
                 });
                 if (result?.ok) {
                   const publishResult = await publishShortLinkSilently();
                   const hasCommentLink =
                     publishResult?.ok ||
                     Boolean(generatedPublishedUrl || generatedPreviewUrl);
+                  const publishErrorMessage = String(
+                    publishResult?.error || "",
+                  ).trim();
+                  const slugConflict = isSlugConflictMessage(
+                    publishErrorMessage,
+                  );
                   showToast(
                     isCreating
                       ? hasCommentLink
                         ? "Đã tạo lab thành công, có thể copy link comment"
-                        : publishResult?.error
-                          ? `Đã tạo lab nhưng chưa publish được: ${publishResult.error}`
+                        : publishErrorMessage
+                          ? slugConflict
+                            ? `Đã tạo lab nhưng slug bài viết đang bị trùng nên chưa publish được. ${publishErrorMessage}`
+                            : `Đã tạo lab nhưng chưa publish được: ${publishErrorMessage}`
                           : "Đã tạo lab thành công"
                       : hasCommentLink
                         ? "Đã lưu lab, có thể copy link comment"
-                        : publishResult?.error
-                          ? `Đã lưu lab nhưng chưa publish được: ${publishResult.error}`
+                        : publishErrorMessage
+                          ? slugConflict
+                            ? `Đã lưu lab nhưng slug bài viết đang bị trùng nên chưa publish được. ${publishErrorMessage}`
+                            : `Đã lưu lab nhưng chưa publish được: ${publishErrorMessage}`
                           : "Đã lưu thay đổi của lab",
                   );
                 }
               } finally {
-                setActionButtonBusy(button, false);
+                setPrimaryLabActionBusy(false);
               }
               return;
             }
@@ -8131,7 +8201,10 @@
           });
         document
           .getElementById("saveDbLabBtn")
-          .addEventListener("click", saveDbLab);
+          .addEventListener("click", (event) => {
+            if (event.currentTarget.disabled) return;
+            saveDbLab();
+          });
         document
           .getElementById("deleteDbLabBtn")
           .addEventListener("click", deleteDbLab);

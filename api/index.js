@@ -7169,10 +7169,10 @@ ${ogImageTag}
   function setPopupDismissCookie(stageKey) {
     var minutes =
       String(stageKey || '') === '300s'
-        ? 180
+        ? 360
         : String(stageKey || '') === '20s'
-          ? 60
-          : 30;
+          ? 180
+          : 60;
     var expiresAt = new Date();
     expiresAt.setTime(expiresAt.getTime() + minutes * 60 * 1000);
     document.cookie =
