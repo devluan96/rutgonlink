@@ -12522,15 +12522,6 @@ function disableRemovedAdminSupportSurfaces() {
   adminSupportActiveUser = null;
 }
 
-guardAdminRoute = function guardAdminRouteRemoved() {
-  if (!user) {
-    redirectToAuth("login", "Cần đăng nhập để tiếp tục.");
-    return null;
-  }
-  toast("Khu vực admin đã được gỡ khỏi app.", "warn");
-  return "dashboard";
-};
-
 openZaloSupport = function openZaloSupportRemoved() {
   return false;
 };
