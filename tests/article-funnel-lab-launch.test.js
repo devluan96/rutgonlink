@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
 
-test("admin article funnel lab prefers launch routes for TikTok popup 20s before inline fallback", () => {
+test("admin article funnel lab keeps TikTok popup 20s on direct launch instead of route-first handling", () => {
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
     "utf8",
@@ -11,7 +11,7 @@ test("admin article funnel lab prefers launch routes for TikTok popup 20s before
 
   assert.match(
     templateHtml,
-    /function shouldUseOverlayLaunchRoute\(stageKey, targetUrl, routeLaunchUrl\) \{\s+return \(\s+String\(stageKey \|\| ""\)\.trim\(\) === "20s" &&\s+detectTargetPlatform\(targetUrl\) === "tiktok" &&\s+Boolean\(String\(routeLaunchUrl \|\| ""\)\.trim\(\)\)\s+\);\s+\}/s,
+    /function shouldUseOverlayLaunchRoute\(stageKey, targetUrl, routeLaunchUrl\) \{\s+return false;\s+\}/s,
   );
   assert.match(
     templateHtml,
@@ -160,7 +160,7 @@ test("admin article funnel lab routes popup X button through the same launch flo
   );
 });
 
-test("admin article funnel lab keeps TikTok popup 20s on deeplink go helpers instead of bridge urls", () => {
+test("admin article funnel lab keeps TikTok popup 20s on direct launch urls instead of go helpers", () => {
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
     "utf8",
@@ -176,7 +176,7 @@ test("admin article funnel lab keeps TikTok popup 20s on deeplink go helpers ins
   );
   assert.match(
     templateHtml,
-    /function shouldUseOverlayGoRoute\(stageKey, targetUrl\) \{\s+return \(\s+String\(stageKey \|\| ""\)\.trim\(\) === "20s" &&\s+detectTargetPlatform\(targetUrl\) === "tiktok"\s+\);\s+\}/s,
+    /function shouldUseOverlayGoRoute\(stageKey, targetUrl\) \{\s+return false;\s+\}/s,
   );
   assert.match(
     templateHtml,
@@ -189,6 +189,10 @@ test("admin article funnel lab keeps TikTok popup 20s on deeplink go helpers ins
   assert.match(
     templateHtml,
     /return `\$\{preview\.origin\}\/_lab\/article-funnel-\$\{routePrefix\}\/\$\{slug\}\/\$\{token\}\/\$\{normalizedStageKey\}`;/,
+  );
+  assert.match(
+    templateHtml,
+    /function shouldUseOverlayLaunchRoute\(stageKey, targetUrl, routeLaunchUrl\) \{\s+return false;\s+\}/s,
   );
 });
 

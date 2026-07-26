@@ -7479,18 +7479,11 @@
         }
 
         function shouldUseOverlayGoRoute(stageKey, targetUrl) {
-          return (
-            String(stageKey || "").trim() === "20s" &&
-            detectTargetPlatform(targetUrl) === "tiktok"
-          );
+          return false;
         }
 
         function shouldUseOverlayLaunchRoute(stageKey, targetUrl, routeLaunchUrl) {
-          return (
-            String(stageKey || "").trim() === "20s" &&
-            detectTargetPlatform(targetUrl) === "tiktok" &&
-            Boolean(String(routeLaunchUrl || "").trim())
-          );
+          return false;
         }
 
         function shouldRenderEditorContent() {
