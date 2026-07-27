@@ -2628,8 +2628,7 @@ function updateTopbar() {
       ? "Hồ sơ cá nhân"
       : "Đăng nhập để quản lý";
   }
-  const canOpenSupportInbox =
-    plan === "admin" || role === "admin" || role === "support";
+  const canOpenSupportInbox = plan === "admin" || role === "admin";
   document.getElementById("popupAdminBtn").style.display =
     canOpenSupportInbox ? "" : "none";
   document.getElementById("popupAdminBtn").textContent =
@@ -4847,8 +4846,7 @@ function updateTopbar() {
       ? "Hồ sơ cá nhân"
       : "Đăng nhập để quản lý";
   }
-  const canOpenSupportInbox =
-    plan === "admin" || role === "admin" || role === "support";
+  const canOpenSupportInbox = plan === "admin" || role === "admin";
   document.getElementById("popupAdminBtn").style.display =
     canOpenSupportInbox ? "" : "none";
   document.getElementById("popupAdminBtn").textContent =
@@ -4997,11 +4995,19 @@ function syncRouteFromLocation() {
   navigate(finalPage, el);
 }
 
+function getSidebarNavItem(page) {
+  return document.querySelector(`.sitem[onclick*="navigate('${page}'"]`);
+}
+
 function navigate(page, el) {
+  const requestedPage = page;
   if (page === "admin") {
     const allowed = guardAdminRoute();
     if (!allowed) return;
     page = allowed;
+  }
+  if (!el || page !== requestedPage) {
+    el = getSidebarNavItem(page);
   }
   closeUserPopup();
   closeNotificationDropdown();
@@ -12577,28 +12583,6 @@ connectUserSupportStream = function connectUserSupportStreamRemoved() {
 
 connectAdminSupportStream = function connectAdminSupportStreamRemoved() {
   stopSupportSyncLoops();
-};
-
-startSupportSyncLoops = function startSupportSyncLoopsRemoved() {
-  stopSupportSyncLoops();
-};
-
-syncAdminSectionUI = function syncAdminSectionUIRemoved() {
-  adminSection = "overview";
-};
-
-setAdminSection = function setAdminSectionRemoved() {
-  adminSection = "overview";
-  stopSupportSyncLoops();
-};
-
-loadAdminData = async function loadAdminDataRemoved() {
-  disableRemovedAdminSupportSurfaces();
-  return null;
-};
-
-loadAdminRedirects = async function loadAdminRedirectsRemoved() {
-  return null;
 };
 
 disableRemovedAdminSupportSurfaces();
