@@ -2467,8 +2467,13 @@ async function pollRealtimeNotifications() {
     }
 
     if (isAdminUser()) {
+      const shouldIncludeRedirects =
+        adminSection === "logs" &&
+        !!document.getElementById("page-admin")?.classList.contains("active");
       const adminNotificationResponse = await fetch(
-        "/api/admin/notification-summary",
+        shouldIncludeRedirects
+          ? "/api/admin/notification-summary?include_redirects=1"
+          : "/api/admin/notification-summary",
       );
       const adminNotificationPayload = await adminNotificationResponse
         .json()
@@ -2541,7 +2546,7 @@ function startRealtimeNotificationLoop({ immediate = true } = {}) {
   notificationPollTimer = setInterval(() => {
     if (document.hidden) return;
     void pollRealtimeNotifications();
-  }, 30000);
+  }, NOTIFICATION_POLL_INTERVAL_MS);
 }
 
 function setAvatarNode(target, currentUser, fallbackText) {
@@ -3221,279 +3226,41 @@ function openZaloSupport() {
 function renderSupportConversation() {
   const launcher = document.getElementById("supportWidgetLauncher");
   const widget = document.getElementById("supportWidget");
-  const statusEl = document.getElementById("supportWidgetStatus");
-  const badgeEl = document.getElementById("supportFabBadge");
-  const dotEl = document.getElementById("supportFabDot");
-  const noteEl = document.getElementById("supportComposerNote");
-  const btn = document.getElementById("supportSendBtn");
-  const canShowSupport = !!user;
-  const adminPageActive = !!document
-    .getElementById("page-admin")
-    ?.classList.contains("active");
-  const canOpenSupportPopup = canShowSupport && !isSupportAgentUser();
-  const showLauncher =
-    canShowSupport && !(window.innerWidth <= 768 && adminPageActive);
-
-  if (launcher) launcher.hidden = !showLauncher;
+  if (launcher) launcher.hidden = true;
   if (widget) widget.hidden = true;
   supportWidgetOpen = false;
-  launcher?.classList.remove("has-unread");
-  return;
-  if (widget) {
-    widget.hidden = !canOpenSupportPopup;
-    widget.classList.toggle("show", canOpenSupportPopup && supportWidgetOpen);
-    widget.setAttribute(
-      "aria-hidden",
-      canOpenSupportPopup && supportWidgetOpen ? "false" : "true",
-    );
-  }
-  if (!showLauncher) {
-    supportWidgetOpen = false;
-  }
-  if (!canShowSupport) {
-    supportWidgetOpen = false;
-    return;
-  }
-  if (!canOpenSupportPopup) {
-    supportWidgetOpen = false;
-    if (statusEl) {
-      statusEl.textContent =
-        "Nhân viên hỗ trợ có thể bấm icon này để mở nhanh tab Tin nhắn.";
-    }
-    if (badgeEl) {
-      badgeEl.hidden = true;
-      badgeEl.textContent = "0";
-    }
-    if (dotEl) dotEl.hidden = true;
-    launcher?.classList.remove("has-unread");
-    return;
-  }
-
-  renderSupportTimeline("supportConversationList", supportMessages, {
-    viewerRole: "user",
-    ownLabel: "Bạn",
-    otherLabel: "Đội hỗ trợ",
-    emptyText:
-      "Chưa có cuộc trò chuyện nào. Hãy gửi tin nhắn đầu tiên cho đội hỗ trợ.",
-  });
-
-  if (statusEl) {
-    if (supportLoading) {
-      statusEl.textContent = "Đang tải hội thoại...";
-    } else if (!supportLoaded) {
-      statusEl.textContent = "Bấm để mở popup chat trực tiếp với đội hỗ trợ.";
-    } else if (supportThread?.unread_for_user) {
-      statusEl.textContent = `${supportThread.unread_for_user} phản hồi mới từ đội hỗ trợ.`;
-    } else if (supportThread?.total_messages) {
-      statusEl.textContent = "Hội thoại đã sẵn sàng, bạn có thể nhắn ngay.";
-    } else {
-      statusEl.textContent = "Chưa có hội thoại, hãy gửi tin nhắn đầu tiên.";
-    }
-  }
-
-  if (badgeEl) {
-    const unreadCount = supportWidgetOpen
-      ? 0
-      : Number(supportThread?.unread_for_user || 0);
-    badgeEl.hidden = unreadCount < 1;
-    badgeEl.textContent = String(unreadCount);
-    launcher?.classList.toggle("has-unread", unreadCount > 0);
-    if (dotEl) dotEl.hidden = unreadCount < 1;
-  }
-
-  if (noteEl) {
-    noteEl.textContent =
-      supportNotice ||
-      (supportThread?.last_message_at
-        ? `Tin nhắn gần nhất: ${formatSupportTimelineTime(supportThread.last_message_at)}`
-        : "Đội hỗ trợ sẽ thấy tin nhắn này trong tab Tin nhắn.");
-  }
-
-  if (btn) {
-    btn.disabled = !user || supportSending;
-    btn.textContent = supportSending ? "Đang gửi..." : "Gửi hỗ trợ";
-  }
 }
 
 async function loadSupportMessages(options = {}) {
-  if (!user?.id || supportSyncInFlight) return;
-  const peekOnly = !!options.peek;
-  const silent = !!options.silent;
-  const hadLoaded = supportLoaded;
-  const previousMessageKey = String(
-    supportMessages.at(-1)?.id ||
-      supportMessages.at(-1)?.created_at ||
-      supportThread?.last_message_at ||
-      "",
-  );
-  supportSyncInFlight = true;
-  if (!silent) {
-    supportLoading = true;
-    supportNotice = peekOnly
-      ? "Đang cập nhật tin nhắn mới..."
-      : "Đang đồng bộ hội thoại...";
-    renderSupportConversation();
-  }
-  try {
-    const response = await fetch(
-      peekOnly ? "/api/support/messages?peek=1" : "/api/support/messages",
-    );
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data.error || "Không thể tải hội thoại hỗ trợ");
-    }
-    supportMessages = Array.isArray(data.messages) ? data.messages : [];
-    supportThread = data.thread || null;
-    supportLoaded = true;
-    const nextMessage = supportMessages.at(-1) || null;
-    const nextMessageKey = String(
-      nextMessage?.id || nextMessage?.created_at || supportThread?.last_message_at || "",
-    );
-    const lastSenderRole = String(
-      supportThread?.last_sender_role || nextMessage?.sender_role || "",
-    ).toLowerCase();
-    if (
-      hadLoaded &&
-      nextMessageKey &&
-      nextMessageKey !== previousMessageKey &&
-      lastSenderRole === "admin"
-    ) {
-      triggerSupportReplyAlert();
-    }
-    if (!silent) {
-      supportNotice = "";
-    }
-  } catch (error) {
-    if (!silent || !supportLoaded) {
-      supportNotice = error.message || "Không thể tải hội thoại hỗ trợ";
-    }
-  } finally {
-    supportSyncInFlight = false;
-    if (!silent) {
-      supportLoading = false;
-    }
-    renderSupportConversation();
-  }
+  return null;
 }
 
 async function sendSupportMessage() {
-  if (!user?.id || supportSending) return;
-  const input = document.getElementById("supportMessageInput");
-  const message = String(input?.value || "").trim();
-  if (!message) {
-    toast("Nhập nội dung trước khi gửi cho đội hỗ trợ", "warn");
-    input?.focus();
-    return;
-  }
-  supportSending = true;
-  supportNotice = "Đang gửi tin nhắn tới đội hỗ trợ...";
-  renderSupportConversation();
-  try {
-    const response = await fetch("/api/support/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data.error || "Không thể gửi tin nhắn");
-    }
-    const created = data.message || null;
-    if (created) {
-      supportMessages = [...supportMessages, created];
-      supportLoaded = true;
-      supportThread = {
-        ...(supportThread || { user_id: user.id, unread_for_user: 0 }),
-        total_messages: Number(supportThread?.total_messages || 0) + 1,
-        unread_for_admin: Number(supportThread?.unread_for_admin || 0) + 1,
-        unread_for_user: 0,
-        last_message: created.message || message,
-        last_message_at: created.created_at || new Date().toISOString(),
-        last_sender_role: "user",
-      };
-    }
-    if (input) input.value = "";
-    supportNotice = "Tin nhắn đã được chuyển tới đội hỗ trợ.";
-    toast("Đã gửi tin nhắn tới đội hỗ trợ", "ok");
-    void loadSupportMessages({ silent: true });
-  } catch (error) {
-    supportNotice = error.message || "Không thể gửi tin nhắn";
-    toast(supportNotice, "err");
-  } finally {
-    supportSending = false;
-    renderSupportConversation();
-  }
+  return null;
 }
 
 function openSupportWidget() {
-  if (!user) return;
-  openZaloSupport();
   return;
-  if (isSupportAgentUser()) {
-    navigate("admin", document.getElementById("adminNavItem"));
-    setAdminSection("support");
-    void refreshAdminSupport();
-    return;
-  }
-  supportWidgetOpen = true;
-  renderSupportConversation();
-  startSupportSyncLoops();
-  if (!supportLoaded && !supportLoading) {
-    void loadSupportMessages();
-  }
 }
 
 function closeSupportWidget() {
-  supportWidgetOpen = false;
-  renderSupportConversation();
-  startSupportSyncLoops();
+  return;
 }
 
 function toggleSupportWidget() {
-  if (supportWidgetOpen) {
-    closeSupportWidget();
-    return;
-  }
-  openSupportWidget();
+  return;
 }
 
 async function pollSupportMessages() {
-  if (!user?.id || isSupportAgentUser() || supportSending) return;
-  await loadSupportMessages({
-    peek: !supportWidgetOpen,
-    silent: true,
-  });
+  return null;
 }
 
 async function pollAdminSupportMessages() {
-  if (!user?.id || !isSupportAgentUser() || adminSupportSending) return;
-  const adminPageActive = !!document
-    .getElementById("page-admin")
-    ?.classList.contains("active");
-  await refreshAdminSupport({
-    silent: true,
-    includeConversation: adminPageActive && adminSection === "support",
-  });
+  return null;
 }
 
 function stopSupportSyncLoops() {
-  if (supportEventSource) {
-    supportEventSource.close();
-    supportEventSource = null;
-    supportEventSourceMode = "";
-  }
-  if (adminSupportEventSource) {
-    adminSupportEventSource.close();
-    adminSupportEventSource = null;
-  }
-  if (supportPollTimer) {
-    clearInterval(supportPollTimer);
-    supportPollTimer = null;
-  }
-  if (adminSupportPollTimer) {
-    clearInterval(adminSupportPollTimer);
-    adminSupportPollTimer = null;
-  }
+  return;
 }
 
 function syncTopbarSearchPlaceholder(placeholder) {
@@ -3511,120 +3278,35 @@ function syncTopbarSearchPlaceholder(placeholder) {
 }
 
 function startSupportPollingFallback() {
-  if (supportPollTimer) return;
-  void pollSupportMessages();
-  supportPollTimer = setInterval(() => {
-    if (document.hidden || !user?.id || isSupportAgentUser()) return;
-    void pollSupportMessages();
-  }, SUPPORT_POLL_INTERVAL_MS);
+  return;
 }
 
 function startAdminSupportPollingFallback() {
-  if (adminSupportPollTimer) return;
-  void pollAdminSupportMessages();
-  adminSupportPollTimer = setInterval(() => {
-    if (document.hidden || !user?.id || !isSupportAgentUser()) return;
-    void pollAdminSupportMessages();
-  }, SUPPORT_POLL_INTERVAL_MS);
+  return;
 }
 
 function isAdminSupportPageActive() {
-  return (
-    !!user?.id &&
-    isSupportAgentUser() &&
-    adminSection === "support" &&
-    !!document.getElementById("page-admin")?.classList.contains("active")
-  );
+  return false;
 }
 
 function shouldUseUserSupportRealtime() {
-  return !!user?.id && !isSupportAgentUser() && supportWidgetOpen && !document.hidden;
+  return false;
 }
 
 function shouldUseAdminSupportRealtime() {
-  return isAdminSupportPageActive() && !document.hidden;
+  return false;
 }
 
 function connectUserSupportStream() {
-  if (!window.EventSource) {
-    startSupportPollingFallback();
-    return;
-  }
-  if (supportEventSourceMode === "user" && supportEventSource) {
-    return;
-  }
-  supportEventSource?.close();
-  supportEventSource = new EventSource("/api/support/stream");
-  supportEventSourceMode = "user";
-  supportEventSource.onopen = () => {
-    if (supportPollTimer) {
-      clearInterval(supportPollTimer);
-      supportPollTimer = null;
-    }
-  };
-  supportEventSource.addEventListener("ready", () => {
-    if (!supportLoaded && !supportSyncInFlight) {
-      void loadSupportMessages({ peek: !supportWidgetOpen, silent: true });
-    }
-  });
-  supportEventSource.addEventListener("support:update", () => {
-    void loadSupportMessages({
-      peek: !supportWidgetOpen,
-      silent: true,
-    });
-  });
-  supportEventSource.onerror = () => {
-    if (!user?.id || isSupportAgentUser()) return;
-    startSupportPollingFallback();
-  };
+  return;
 }
 
 function connectAdminSupportStream() {
-  if (!window.EventSource) {
-    startAdminSupportPollingFallback();
-    return;
-  }
-  if (adminSupportEventSource) {
-    return;
-  }
-  adminSupportEventSource = new EventSource("/api/admin/support/stream");
-  adminSupportEventSource.onopen = () => {
-    if (adminSupportPollTimer) {
-      clearInterval(adminSupportPollTimer);
-      adminSupportPollTimer = null;
-    }
-  };
-  adminSupportEventSource.addEventListener("ready", () => {
-    void refreshAdminSupport({
-      silent: true,
-      includeConversation: false,
-    });
-  });
-  adminSupportEventSource.addEventListener("support:update", () => {
-    const adminPageActive = !!document
-      .getElementById("page-admin")
-      ?.classList.contains("active");
-    void refreshAdminSupport({
-      silent: true,
-      includeConversation: adminPageActive && adminSection === "support",
-    });
-  });
-  adminSupportEventSource.onerror = () => {
-    if (!user?.id || !isSupportAgentUser()) return;
-    startAdminSupportPollingFallback();
-  };
+  return;
 }
 
 function startSupportSyncLoops() {
-  stopSupportSyncLoops();
   return;
-  if (shouldUseAdminSupportRealtime()) {
-    connectAdminSupportStream();
-    return;
-  }
-  if (shouldUseUserSupportRealtime()) {
-    connectUserSupportStream();
-  }
 }
 
 document.addEventListener("visibilitychange", () => {
@@ -4440,7 +4122,27 @@ function syncAdminSectionUI() {
 function setAdminSection(section) {
   adminSection = section || "overview";
   syncAdminSectionUI();
+  void loadAdminData();
   startSupportSyncLoops();
+}
+
+function markAdminSectionLoaded(section) {
+  if (!section) return;
+  adminSectionLoadedAt[section] = Date.now();
+}
+
+function shouldFetchAdminSection(section, force = false) {
+  if (force) return true;
+  const lastLoadedAt = Number(adminSectionLoadedAt[section] || 0);
+  if (!lastLoadedAt) return true;
+  return Date.now() - lastLoadedAt >= ADMIN_SECTION_CACHE_TTL_MS;
+}
+
+function getAdminSectionsForLoad(section = adminSection) {
+  const normalizedSection = String(section || "overview").trim().toLowerCase();
+  return normalizedSection === "overview"
+    ? ["overview"]
+    : ["overview", normalizedSection];
 }
 
 function renderAdminOverview(payload = {}) {
@@ -4690,50 +4392,82 @@ function renderAdminOverviewTrend() {
 async function loadAdminData() {
   if (!isAdminUser()) return;
   try {
-    const [sr, dr, ur, rr, pr] = await Promise.all([
-      fetch("/api/admin/stats"),
-      fetch("/api/admin/domains"),
-      fetch("/api/admin/users"),
-      fetch("/api/admin/redirects?limit=500"),
-      fetch("/api/admin/payments"),
-    ]);
     let statsPayload = null;
     let redirectPayload = null;
-    if (sr.ok) {
-      statsPayload = await sr.json();
-      renderAdminOverview(statsPayload);
-      enqueueAdminAlerts(statsPayload);
+    const sectionsToFetch = getAdminSectionsForLoad().filter((section) =>
+      shouldFetchAdminSection(section),
+    );
+    const tasks = [];
+    if (sectionsToFetch.includes("overview")) {
+      tasks.push(
+        fetch("/api/admin/stats").then(async (response) => {
+          if (!response.ok) return;
+          statsPayload = await response.json();
+          renderAdminOverview(statsPayload);
+          enqueueAdminAlerts(statsPayload);
+          markAdminSectionLoaded("overview");
+        }),
+      );
     }
-    if (dr.ok) {
-      const d = await dr.json();
-      adminDomains = d.domains || [];
-      renderAdminDomains(adminDomains);
-      syncAvailableDomainsFromAdmin(adminDomains);
+    if (sectionsToFetch.includes("system")) {
+      tasks.push(
+        fetch("/api/admin/domains").then(async (response) => {
+          if (!response.ok) return;
+          const payload = await response.json();
+          adminDomains = payload.domains || [];
+          renderAdminDomains(adminDomains);
+          syncAvailableDomainsFromAdmin(adminDomains);
+          markAdminSectionLoaded("system");
+        }),
+      );
     }
-    if (ur.ok) {
-      const u = await ur.json();
-      adminUsers = u.users || [];
-      adminUserLocationAnalytics = u.locationAnalytics || null;
-      adminSelectedUserIds = new Set(
-        [...adminSelectedUserIds].filter((id) =>
-          adminUsers.some((userItem) => Number(userItem.id) === Number(id)),
+    if (sectionsToFetch.includes("users")) {
+      tasks.push(
+        fetch("/api/admin/users?include_location=1").then(async (response) => {
+          if (!response.ok) return;
+          const payload = await response.json();
+          adminUsers = payload.users || [];
+          adminUserLocationAnalytics = payload.locationAnalytics || null;
+          adminSelectedUserIds = new Set(
+            [...adminSelectedUserIds].filter((id) =>
+              adminUsers.some((userItem) => Number(userItem.id) === Number(id)),
+            ),
+          );
+          renderAdminUserLocationAnalytics();
+          renderAdminUsers();
+          markAdminSectionLoaded("users");
+        }),
+      );
+    }
+    if (sectionsToFetch.includes("logs")) {
+      tasks.push(
+        fetch(`/api/admin/redirects?limit=${ADMIN_REDIRECT_FETCH_LIMIT}`).then(
+          async (response) => {
+            if (!response.ok) return;
+            redirectPayload = await response.json();
+            adminRedirects = redirectPayload.events || [];
+            renderAdminRedirects(
+              adminRedirects,
+              redirectPayload.file || "logs/redirect.log",
+            );
+            markAdminSectionLoaded("logs");
+          },
         ),
       );
-      renderAdminUserLocationAnalytics();
-      renderAdminUsers();
     }
-    if (rr.ok) {
-      redirectPayload = await rr.json();
-      adminRedirects = redirectPayload.events || [];
-      renderAdminRedirects(
-        adminRedirects,
-        redirectPayload.file || "logs/redirect.log",
+    if (sectionsToFetch.includes("payments")) {
+      tasks.push(
+        fetch("/api/admin/payments").then(async (response) => {
+          if (!response.ok) return;
+          const payload = await response.json();
+          adminPayments = payload.requests || [];
+          renderAdminPayments();
+          markAdminSectionLoaded("payments");
+        }),
       );
     }
-    if (pr.ok) {
-      const paymentsPayload = await pr.json();
-      adminPayments = paymentsPayload.requests || [];
-      renderAdminPayments();
+    if (tasks.length) {
+      await Promise.all(tasks);
     }
     if (statsPayload || redirectPayload) {
       rememberAdminNotificationSnapshot(
@@ -4876,8 +4610,6 @@ document.addEventListener("click", (e) => {
   const userDropdown = document.getElementById("userDropdown");
   const notificationToggle = document.getElementById("notificationBellBtn");
   const notificationDropdown = document.getElementById("notificationDropdown");
-  const supportLauncher = document.getElementById("supportWidgetLauncher");
-  const supportWidget = document.getElementById("supportWidget");
   if (
     userToggle &&
     userDropdown &&
@@ -4893,15 +4625,6 @@ document.addEventListener("click", (e) => {
     !notificationDropdown.contains(e.target)
   ) {
     closeNotificationDropdown();
-  }
-  if (
-    supportWidgetOpen &&
-    supportLauncher &&
-    supportWidget &&
-    !supportLauncher.contains(e.target) &&
-    !supportWidget.contains(e.target)
-  ) {
-    closeSupportWidget();
   }
 });
 
@@ -5029,7 +4752,7 @@ function navigate(page, el) {
   if (page === "payment") renderPaymentPage();
   if (page === "admin") {
     syncAdminSectionUI();
-    loadAdminData();
+    void loadAdminData();
   }
   if (page === "stats") renderStatsPage();
   if (pageNeedsFullStatsPayload(page)) {
@@ -10284,32 +10007,20 @@ let billingDataLoadedUserId = 0;
 let paymentRequestDraft = null;
 let paymentSelectedPlan = "pro";
 let paymentQrStyler = null;
-let supportMessages = [];
-let supportThread = null;
-let supportLoading = false;
-let supportSending = false;
-let supportNotice = "";
 let supportWidgetOpen = false;
-let supportLoaded = false;
-let supportSyncInFlight = false;
-let supportPollTimer = null;
-let supportEventSource = null;
-let supportEventSourceMode = "";
-let supportReplySoundAt = 0;
-let adminSupportThreads = [];
-let adminSupportMessages = [];
-let adminSupportSelectedUserId = null;
-let adminSupportActiveUser = null;
-let adminSupportLoading = false;
-let adminSupportSending = false;
-let adminSupportNotice = "";
-let adminSupportSyncInFlight = false;
-let adminSupportConversationSyncInFlight = false;
-let adminSupportPollTimer = null;
-let adminSupportEventSource = null;
 const ADMIN_PAGE_SIZE = 20;
-const SUPPORT_POLL_INTERVAL_MS = 20000;
+const SUPPORT_POLL_INTERVAL_MS = 60000;
+const NOTIFICATION_POLL_INTERVAL_MS = 120000;
+const ADMIN_SECTION_CACHE_TTL_MS = 120000;
+const ADMIN_REDIRECT_FETCH_LIMIT = 100;
 const SIDEBAR_DRAWER_BREAKPOINT_PX = 1024;
+const adminSectionLoadedAt = {
+  overview: 0,
+  users: 0,
+  payments: 0,
+  system: 0,
+  logs: 0,
+};
 
 function shouldUseSidebarDrawerViewport() {
   if (typeof window === "undefined") return false;
@@ -10346,7 +10057,27 @@ function syncAdminSectionUI() {
 function setAdminSection(section) {
   adminSection = section || "overview";
   syncAdminSectionUI();
+  void loadAdminData();
   startSupportSyncLoops();
+}
+
+function markAdminSectionLoaded(section) {
+  if (!section) return;
+  adminSectionLoadedAt[section] = Date.now();
+}
+
+function shouldFetchAdminSection(section, force = false) {
+  if (force) return true;
+  const lastLoadedAt = Number(adminSectionLoadedAt[section] || 0);
+  if (!lastLoadedAt) return true;
+  return Date.now() - lastLoadedAt >= ADMIN_SECTION_CACHE_TTL_MS;
+}
+
+function getAdminSectionsForLoad(section = adminSection) {
+  const normalizedSection = String(section || "overview").trim().toLowerCase();
+  return normalizedSection === "overview"
+    ? ["overview"]
+    : ["overview", normalizedSection];
 }
 
 function paginateAdminRows(rows, page = 1, pageSize = ADMIN_PAGE_SIZE) {
@@ -10429,285 +10160,35 @@ function filterAdminPayments(value) {
 }
 
 function getAdminSupportSelectedThread() {
-  return adminSupportThreads.find(
-    (thread) => Number(thread.user_id) === Number(adminSupportSelectedUserId),
-  );
+  return null;
 }
 
 function sortAdminSupportThreads() {
-  adminSupportThreads = [...adminSupportThreads].sort(
-    (a, b) =>
-      new Date(b.last_message_at || 0).getTime() -
-      new Date(a.last_message_at || 0).getTime(),
-  );
+  return;
 }
 
 function renderAdminSupportThreadList() {
-  const listEl = document.getElementById("adminSupportThreadList");
-  const countEl = document.getElementById("adminSupportThreadCount");
-  if (countEl) countEl.textContent = String(adminSupportThreads.length);
-  if (!listEl) return;
-  if (!adminSupportThreads.length) {
-    listEl.innerHTML =
-      '<div class="support-empty">Chưa có cuộc trò chuyện nào từ người dùng.</div>';
-    return;
-  }
-  listEl.innerHTML = adminSupportThreads
-    .map((thread) => {
-      const threadUser = thread.user || {};
-      const isActive =
-        Number(thread.user_id || 0) === Number(adminSupportSelectedUserId || 0);
-      const threadName =
-        threadUser.name || threadUser.email || `User #${thread.user_id}`;
-      const plan = String(threadUser.plan || "free").toUpperCase();
-      return `<button
-        class="support-thread-item ${isActive ? "active" : ""}"
-        type="button"
-        onclick="selectAdminSupportThread(${Number(thread.user_id)})"
-      >
-        <div class="support-thread-top">
-          <div class="support-thread-name">${esc(threadName)}</div>
-          ${
-            thread.unread_for_admin
-              ? `<span class="support-thread-badge">${esc(String(thread.unread_for_admin))}</span>`
-              : ""
-          }
-        </div>
-        <div class="support-thread-email">${esc(threadUser.email || `ID #${thread.user_id}`)}</div>
-        <div class="support-thread-preview">${esc(
-          thread.last_message || "Chưa có tin nhắn nào.",
-        )}</div>
-        <div class="support-thread-meta">
-          <span class="support-thread-time">${esc(
-            formatSupportTimelineTime(thread.last_message_at),
-          )}</span>
-          <span class="support-thread-email">${esc(
-            `${plan} • ${thread.last_sender_role === "admin" ? "hỗ trợ" : "user"}`,
-          )}</span>
-        </div>
-      </button>`;
-    })
-    .join("");
+  return;
 }
 
 function renderAdminSupportConversation() {
-  const selectedThread = getAdminSupportSelectedThread();
-  const metaEl = document.getElementById("adminSupportThreadMeta");
-  const noteEl = document.getElementById("adminSupportComposerNote");
-  const btn = document.getElementById("adminSupportSendBtn");
-  const activeUser = adminSupportActiveUser || selectedThread?.user || null;
-  if (metaEl) {
-    if (!selectedThread && !activeUser) {
-      metaEl.textContent = "Chọn một hội thoại để xem chi tiết.";
-    } else {
-      const title = activeUser?.name || activeUser?.email || `User #${selectedThread?.user_id || "?"}`;
-      const email = activeUser?.email || "Chưa có email";
-      const role = String(activeUser?.role || "user").toUpperCase();
-      const plan = String(activeUser?.plan || "free").toUpperCase();
-      metaEl.textContent = `${title} • ${email} • ${plan} • ${role}`;
-    }
-  }
-  renderSupportTimeline("adminSupportConversationList", adminSupportMessages, {
-    viewerRole: "admin",
-    ownLabel: isAdminUser() ? "Admin" : "Hỗ trợ",
-    otherLabel:
-      activeUser?.name || activeUser?.email || `User #${selectedThread?.user_id || ""}`,
-    emptyText: selectedThread
-      ? "Chưa có tin nhắn nào trong hội thoại này."
-      : "Chọn một hội thoại để xem chi tiết.",
-  });
-  if (noteEl) {
-    noteEl.textContent =
-      adminSupportNotice ||
-      (selectedThread?.unread_for_admin
-        ? `${selectedThread.unread_for_admin} tin nhắn từ user chưa được mở trước đó.`
-        : "Chọn thread ở cột trái rồi gửi phản hồi.");
-  }
-  if (btn) {
-    btn.disabled = !adminSupportSelectedUserId || adminSupportSending;
-    btn.textContent = adminSupportSending ? "Đang gửi..." : "Gửi phản hồi";
-  }
+  return;
 }
 
 async function refreshAdminSupport(options = {}) {
-  if (!isSupportAgentUser() || adminSupportSyncInFlight) return;
-  const silent = !!options.silent;
-  const includeConversation = options.includeConversation !== false;
-  adminSupportSyncInFlight = true;
-  if (!silent) {
-    adminSupportLoading = true;
-    adminSupportNotice = "Đang tải hộp thư hỗ trợ...";
-    renderAdminSupportThreadList();
-    renderAdminSupportConversation();
-  }
-  try {
-    const response = await fetch("/api/admin/support");
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data.error || "Không thể tải hộp thư hỗ trợ");
-    }
-    adminSupportThreads = Array.isArray(data.threads) ? data.threads : [];
-    sortAdminSupportThreads();
-    if (
-      adminSupportSelectedUserId &&
-      !adminSupportThreads.some(
-        (thread) =>
-          Number(thread.user_id) === Number(adminSupportSelectedUserId),
-      )
-    ) {
-      adminSupportSelectedUserId = null;
-      adminSupportMessages = [];
-      adminSupportActiveUser = null;
-    }
-    if (!adminSupportSelectedUserId && adminSupportThreads.length) {
-      adminSupportSelectedUserId = Number(adminSupportThreads[0].user_id);
-    }
-    if (!silent) {
-      adminSupportNotice = "";
-    }
-    renderAdminSupportThreadList();
-    renderAdminSupportConversation();
-    if (includeConversation && adminSupportSelectedUserId) {
-      await loadAdminSupportConversation(adminSupportSelectedUserId, {
-        silent: true,
-        peek: silent,
-      });
-    }
-  } catch (error) {
-    if (!silent || !adminSupportThreads.length) {
-      adminSupportNotice = error.message || "Không thể tải hộp thư hỗ trợ";
-    }
-    renderAdminSupportThreadList();
-    renderAdminSupportConversation();
-  } finally {
-    adminSupportSyncInFlight = false;
-    if (!silent) {
-      adminSupportLoading = false;
-    }
-  }
+  return null;
 }
 
 async function loadAdminSupportConversation(userId, options = {}) {
-  if (adminSupportConversationSyncInFlight) return;
-  const normalizedUserId = Number(userId);
-  if (!Number.isInteger(normalizedUserId) || normalizedUserId < 1) return;
-  adminSupportSelectedUserId = normalizedUserId;
-  const silent = !!options.silent;
-  const peekOnly = !!options.peek;
-  adminSupportConversationSyncInFlight = true;
-  if (!silent) {
-    adminSupportNotice = "Đang tải hội thoại...";
-    renderAdminSupportThreadList();
-    renderAdminSupportConversation();
-  }
-  try {
-    const response = await fetch(
-      peekOnly
-        ? `/api/admin/support/${normalizedUserId}/messages?peek=1`
-        : `/api/admin/support/${normalizedUserId}/messages`,
-    );
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data.error || "Không thể tải hội thoại");
-    }
-    adminSupportMessages = Array.isArray(data.messages) ? data.messages : [];
-    adminSupportActiveUser = data.user || getAdminSupportSelectedThread()?.user || null;
-    adminSupportThreads = adminSupportThreads.map((thread) =>
-      Number(thread.user_id) === normalizedUserId
-        ? {
-            ...(thread || {}),
-            ...(data.thread || {}),
-            user: data.user || thread.user,
-            unread_for_admin: 0,
-          }
-        : thread,
-    );
-    sortAdminSupportThreads();
-    if (!silent) {
-      adminSupportNotice = "";
-    }
-  } catch (error) {
-    if (!silent || !adminSupportMessages.length) {
-      adminSupportNotice = error.message || "Không thể tải hội thoại";
-    }
-  } finally {
-    adminSupportConversationSyncInFlight = false;
-    renderAdminSupportThreadList();
-    renderAdminSupportConversation();
-  }
+  return null;
 }
 
 function selectAdminSupportThread(userId) {
-  adminSupportSelectedUserId = Number(userId) || null;
-  void loadAdminSupportConversation(adminSupportSelectedUserId);
+  return;
 }
 
 async function sendAdminSupportMessage() {
-  if (!adminSupportSelectedUserId || adminSupportSending) return;
-  const input = document.getElementById("adminSupportMessageInput");
-  const message = String(input?.value || "").trim();
-  if (!message) {
-    toast("Nhập phản hồi trước khi gửi cho user", "warn");
-    input?.focus();
-    return;
-  }
-  adminSupportSending = true;
-  adminSupportNotice = "Đang gửi phản hồi...";
-  renderAdminSupportConversation();
-  try {
-    const response = await fetch(
-      `/api/admin/support/${adminSupportSelectedUserId}/messages`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      },
-    );
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data.error || "Không thể gửi phản hồi");
-    }
-    const created = data.message || null;
-    adminSupportActiveUser = data.user || adminSupportActiveUser;
-    if (created) {
-      adminSupportMessages = [...adminSupportMessages, created];
-      const existingThread = getAdminSupportSelectedThread();
-      const nextThread = {
-        ...(existingThread || {
-          user_id: adminSupportSelectedUserId,
-          user: adminSupportActiveUser,
-          total_messages: 0,
-          unread_for_admin: 0,
-          unread_for_user: 0,
-        }),
-        user: adminSupportActiveUser || existingThread?.user || null,
-        total_messages: Number(existingThread?.total_messages || 0) + 1,
-        unread_for_admin: 0,
-        unread_for_user: Number(existingThread?.unread_for_user || 0) + 1,
-        last_message: created.message || message,
-        last_message_at: created.created_at || new Date().toISOString(),
-        last_sender_role: "admin",
-      };
-      adminSupportThreads = [
-        nextThread,
-        ...adminSupportThreads.filter(
-          (thread) =>
-            Number(thread.user_id) !== Number(adminSupportSelectedUserId),
-        ),
-      ];
-      sortAdminSupportThreads();
-    }
-    if (input) input.value = "";
-    adminSupportNotice = "Phản hồi đã được gửi cho user.";
-    toast("Đã gửi phản hồi cho user", "ok");
-  } catch (error) {
-    adminSupportNotice = error.message || "Không thể gửi phản hồi";
-    toast(adminSupportNotice, "err");
-  } finally {
-    adminSupportSending = false;
-    renderAdminSupportThreadList();
-    renderAdminSupportConversation();
-  }
+  return null;
 }
 
 function setAdminUserPlanFilter(value) {
@@ -10741,53 +10222,85 @@ function syncAdminUserSelectionUI(filteredUsers, pageRows) {
   }
 }
 
-async function loadAdminData() {
+async function loadAdminData(force = false) {
   if (!isAdminUser()) return;
   try {
-    const [sr, dr, ur, rr, pr] = await Promise.all([
-      fetch("/api/admin/stats"),
-      fetch("/api/admin/domains"),
-      fetch("/api/admin/users"),
-      fetch("/api/admin/redirects?limit=500"),
-      fetch("/api/admin/payments"),
-    ]);
     let statsPayload = null;
     let redirectPayload = null;
-    if (sr.ok) {
-      statsPayload = await sr.json();
-      renderAdminOverview(statsPayload);
-      enqueueAdminAlerts(statsPayload);
+    const sectionsToFetch = getAdminSectionsForLoad().filter((section) =>
+      shouldFetchAdminSection(section, force),
+    );
+    const tasks = [];
+    if (sectionsToFetch.includes("overview")) {
+      tasks.push(
+        fetch("/api/admin/stats").then(async (response) => {
+          if (!response.ok) return;
+          statsPayload = await response.json();
+          renderAdminOverview(statsPayload);
+          enqueueAdminAlerts(statsPayload);
+          markAdminSectionLoaded("overview");
+        }),
+      );
     }
-    if (dr.ok) {
-      const d = await dr.json();
-      adminDomains = d.domains || [];
-      renderAdminDomains(adminDomains);
-      syncAvailableDomainsFromAdmin(adminDomains);
+    if (sectionsToFetch.includes("system")) {
+      tasks.push(
+        fetch("/api/admin/domains").then(async (response) => {
+          if (!response.ok) return;
+          const payload = await response.json();
+          adminDomains = payload.domains || [];
+          renderAdminDomains(adminDomains);
+          syncAvailableDomainsFromAdmin(adminDomains);
+          markAdminSectionLoaded("system");
+        }),
+      );
     }
-    if (ur.ok) {
-      const u = await ur.json();
-      adminUsers = u.users || [];
-      adminUserLocationAnalytics = u.locationAnalytics || null;
-      adminSelectedUserIds = new Set(
-        [...adminSelectedUserIds].filter((id) =>
-          adminUsers.some((userItem) => Number(userItem.id) === Number(id)),
+    if (sectionsToFetch.includes("users")) {
+      tasks.push(
+        fetch("/api/admin/users?include_location=1").then(async (response) => {
+          if (!response.ok) return;
+          const payload = await response.json();
+          adminUsers = payload.users || [];
+          adminUserLocationAnalytics = payload.locationAnalytics || null;
+          adminSelectedUserIds = new Set(
+            [...adminSelectedUserIds].filter((id) =>
+              adminUsers.some((userItem) => Number(userItem.id) === Number(id)),
+            ),
+          );
+          renderAdminUserLocationAnalytics();
+          renderAdminUsers();
+          markAdminSectionLoaded("users");
+        }),
+      );
+    }
+    if (sectionsToFetch.includes("logs")) {
+      tasks.push(
+        fetch(`/api/admin/redirects?limit=${ADMIN_REDIRECT_FETCH_LIMIT}`).then(
+          async (response) => {
+            if (!response.ok) return;
+            redirectPayload = await response.json();
+            adminRedirects = redirectPayload.events || [];
+            renderAdminRedirects(
+              adminRedirects,
+              redirectPayload.file || "logs/redirect.log",
+            );
+            markAdminSectionLoaded("logs");
+          },
         ),
       );
-      renderAdminUserLocationAnalytics();
-      renderAdminUsers();
     }
-    if (rr.ok) {
-      redirectPayload = await rr.json();
-      adminRedirects = redirectPayload.events || [];
-      renderAdminRedirects(
-        adminRedirects,
-        redirectPayload.file || "logs/redirect.log",
+    if (sectionsToFetch.includes("payments")) {
+      tasks.push(
+        fetch("/api/admin/payments").then(async (response) => {
+          if (!response.ok) return;
+          const payload = await response.json();
+          adminPayments = payload.requests || [];
+          renderAdminPayments();
+          markAdminSectionLoaded("payments");
+        }),
       );
     }
-    if (pr.ok) {
-      const paymentsPayload = await pr.json();
-      adminPayments = paymentsPayload.requests || [];
-      renderAdminPayments();
+    if (tasks.length) {
+      await Promise.all(tasks);
     }
     if (statsPayload || redirectPayload) {
       rememberAdminNotificationSnapshot(
@@ -10876,7 +10389,9 @@ async function loadAdminRedirects(showToast = false) {
     btn.textContent = "Đang tải...";
   }
   try {
-    const response = await fetch("/api/admin/redirects?limit=500");
+    const response = await fetch(
+      `/api/admin/redirects?limit=${ADMIN_REDIRECT_FETCH_LIMIT}`,
+    );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       toast(data.error || "Không thể tải redirect log", "err");
@@ -10884,6 +10399,7 @@ async function loadAdminRedirects(showToast = false) {
     }
     adminRedirects = data.events || [];
     adminRedirectPage = 1;
+    markAdminSectionLoaded("logs");
     rememberAdminNotificationSnapshot(
       { totalUsers: adminNotificationSnapshot?.totalUsers || 0 },
       data,
@@ -11682,7 +11198,7 @@ async function adminDeleteUser(userId, email) {
         page: "admin",
       });
       toast("🗑️ Đã xóa người dùng", "ok");
-      loadAdminData();
+      loadAdminData(true);
     } else {
       const d = await r.json();
       toast(d.error || "Lỗi", "err");
@@ -11722,7 +11238,7 @@ async function deleteSelectedAdminUsers() {
         page: "admin",
       });
       toast("🗑️ Đã xóa các người dùng đã chọn", "ok");
-      loadAdminData();
+      loadAdminData(true);
     } else {
       const d = await r.json();
       toast(d.error || "Lỗi", "err");
@@ -11929,7 +11445,7 @@ async function saveEditLink() {
     toast("✅ Đã lưu thay đổi!", "ok");
     closeEditModal();
     loadData();
-    if (adminLinks.length) loadAdminData();
+    if (adminLinks.length) loadAdminData(true);
   } catch {
     errEl.textContent = "Lỗi kết nối";
     errEl.classList.add("show");
@@ -12517,73 +12033,8 @@ function disableRemovedAdminSupportSurfaces() {
     node.hidden = true;
     node.remove();
   });
-  stopSupportSyncLoops();
   supportWidgetOpen = false;
-  supportLoaded = false;
-  supportMessages = [];
-  supportThread = null;
-  adminSupportThreads = [];
-  adminSupportMessages = [];
-  adminSupportSelectedUserId = null;
-  adminSupportActiveUser = null;
 }
-
-openZaloSupport = function openZaloSupportRemoved() {
-  return false;
-};
-
-renderSupportConversation = function renderSupportConversationRemoved() {
-  const launcher = document.getElementById("supportWidgetLauncher");
-  if (launcher) launcher.hidden = true;
-  supportWidgetOpen = false;
-  stopSupportSyncLoops();
-};
-
-loadSupportMessages = async function loadSupportMessagesRemoved() {
-  disableRemovedAdminSupportSurfaces();
-  return null;
-};
-
-sendSupportMessage = async function sendSupportMessageRemoved() {
-  disableRemovedAdminSupportSurfaces();
-  return null;
-};
-
-openSupportWidget = function openSupportWidgetRemoved() {
-  disableRemovedAdminSupportSurfaces();
-};
-
-closeSupportWidget = function closeSupportWidgetRemoved() {
-  disableRemovedAdminSupportSurfaces();
-};
-
-toggleSupportWidget = function toggleSupportWidgetRemoved() {
-  disableRemovedAdminSupportSurfaces();
-};
-
-pollSupportMessages = async function pollSupportMessagesRemoved() {
-  return null;
-};
-
-pollAdminSupportMessages = async function pollAdminSupportMessagesRemoved() {
-  return null;
-};
-
-startSupportPollingFallback = function startSupportPollingFallbackRemoved() {
-  stopSupportSyncLoops();
-};
-
-startAdminSupportPollingFallback = function startAdminSupportPollingFallbackRemoved() {
-  stopSupportSyncLoops();
-};
-
-connectUserSupportStream = function connectUserSupportStreamRemoved() {
-  stopSupportSyncLoops();
-};
-
-connectAdminSupportStream = function connectAdminSupportStreamRemoved() {
-  stopSupportSyncLoops();
-};
 
 disableRemovedAdminSupportSurfaces();
 
@@ -12609,23 +12060,26 @@ window.addEventListener("hashchange", () => {
       window.location.replace("/");
       return;
     }
-    updateIntegrationUI();
-    await loadAvailableDomains();
     const authMode = getAuthRouteMode();
     const r = await fetch("/api/auth/me");
     const d = await r.json();
     if (d.user) {
       user = d.user;
+      updateIntegrationUI();
+      await loadAvailableDomains();
       showApp();
     } else {
       syncLabSharedSettingsStorageFromUser();
+      updateIntegrationUI();
+      await loadAvailableDomains();
       if (isDirectAppPath(location.pathname)) {
         redirectToLoginPage(location.pathname);
         return;
       }
       showAuthScreen(authMode);
     }
-  } catch {
+  } catch (error) {
+    console.error("app-shell bootstrap failed", error);
     syncLabSharedSettingsStorageFromUser();
     if (isDirectAppPath(location.pathname)) {
       redirectToLoginPage(location.pathname);

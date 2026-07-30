@@ -775,9 +775,24 @@ async function init() {
     },
 
     async getPaymentRequestById(requestId) {
+      const paymentRequestColumns = [
+        'id',
+        'user_id',
+        'plan',
+        'amount',
+        'status',
+        'reference_code',
+        'transfer_note',
+        'payer_note',
+        'admin_note',
+        'submitted_at',
+        'reviewed_at',
+        'reviewed_by',
+        'created_at',
+      ].join(',');
       const { data, error } = await sb
         .from('payment_requests')
-        .select('*')
+        .select(paymentRequestColumns)
         .eq('id', requestId)
         .maybeSingle();
       check(error, 'payment_request_get');
@@ -786,9 +801,24 @@ async function init() {
 
     async listPaymentRequestsByUser(userId, limit = 20) {
       const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+      const paymentRequestColumns = [
+        'id',
+        'user_id',
+        'plan',
+        'amount',
+        'status',
+        'reference_code',
+        'transfer_note',
+        'payer_note',
+        'admin_note',
+        'submitted_at',
+        'reviewed_at',
+        'reviewed_by',
+        'created_at',
+      ].join(',');
       const { data, error } = await sb
         .from('payment_requests')
-        .select('*')
+        .select(paymentRequestColumns)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(safeLimit);
@@ -797,9 +827,24 @@ async function init() {
     },
 
     async getLatestActivePaymentRequestByUser(userId) {
+      const paymentRequestColumns = [
+        'id',
+        'user_id',
+        'plan',
+        'amount',
+        'status',
+        'reference_code',
+        'transfer_note',
+        'payer_note',
+        'admin_note',
+        'submitted_at',
+        'reviewed_at',
+        'reviewed_by',
+        'created_at',
+      ].join(',');
       const { data, error } = await sb
         .from('payment_requests')
-        .select('*')
+        .select(paymentRequestColumns)
         .eq('user_id', userId)
         .in('status', ['awaiting_payment', 'submitted'])
         .order('created_at', { ascending: false })
@@ -811,80 +856,30 @@ async function init() {
 
     async listPaymentRequests(limit = 200) {
       const safeLimit = Math.min(Math.max(Number(limit) || 200, 1), 500);
+      const paymentRequestColumns = [
+        'id',
+        'user_id',
+        'user_email',
+        'user_name',
+        'plan',
+        'amount',
+        'status',
+        'reference_code',
+        'transfer_note',
+        'payer_note',
+        'admin_note',
+        'submitted_at',
+        'reviewed_at',
+        'reviewed_by',
+        'created_at',
+      ].join(',');
       const { data, error } = await sb
         .from('payment_requests')
-        .select('*')
+        .select(paymentRequestColumns)
         .order('created_at', { ascending: false })
         .limit(safeLimit);
       check(error, 'payment_request_list');
       return data || [];
-    },
-
-    async createSupportMessage(payload = {}) {
-      const insertPayload = {
-        user_id: payload.user_id,
-        sender_user_id: payload.sender_user_id || null,
-        sender_role: payload.sender_role || 'user',
-        message: payload.message || '',
-        is_read_by_user:
-          Object.prototype.hasOwnProperty.call(payload, 'is_read_by_user')
-            ? !!payload.is_read_by_user
-            : payload.sender_role === 'admin',
-        is_read_by_admin:
-          Object.prototype.hasOwnProperty.call(payload, 'is_read_by_admin')
-            ? !!payload.is_read_by_admin
-            : payload.sender_role !== 'admin',
-      };
-      const { data, error } = await sb
-        .from('support_messages')
-        .insert(insertPayload)
-        .select('*')
-        .single();
-      check(error, 'support_message_create');
-      return data;
-    },
-
-    async listSupportMessagesByUser(userId, limit = 200) {
-      const safeLimit = Math.min(Math.max(Number(limit) || 200, 1), 500);
-      const { data, error } = await sb
-        .from('support_messages')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: true })
-        .limit(safeLimit);
-      check(error, 'support_message_user_list');
-      return data || [];
-    },
-
-    async listSupportMessages(limit = 500) {
-      const safeLimit = Math.min(Math.max(Number(limit) || 500, 1), 1000);
-      const { data, error } = await sb
-        .from('support_messages')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(safeLimit);
-      check(error, 'support_message_list');
-      return data || [];
-    },
-
-    async markSupportMessagesReadByUser(userId) {
-      const { error } = await sb
-        .from('support_messages')
-        .update({ is_read_by_user: true })
-        .eq('user_id', userId)
-        .eq('sender_role', 'admin')
-        .eq('is_read_by_user', false);
-      check(error, 'support_message_mark_user_read');
-    },
-
-    async markSupportMessagesReadByAdmin(userId) {
-      const { error } = await sb
-        .from('support_messages')
-        .update({ is_read_by_admin: true })
-        .eq('user_id', userId)
-        .eq('sender_role', 'user')
-        .eq('is_read_by_admin', false);
-      check(error, 'support_message_mark_admin_read');
     },
 
     async getWorkspaceByOwnerUserId(ownerUserId) {
@@ -2200,9 +2195,19 @@ async function init() {
     },
 
     async getDomains() {
+      const domainColumns = [
+        'id',
+        'hostname',
+        'label',
+        'is_primary',
+        'is_active',
+        'verification_status',
+        'expires_at',
+        'created_at',
+      ].join(',');
       const { data, error } = await sb
         .from('domains')
-        .select('*')
+        .select(domainColumns)
         .order('is_primary', { ascending: false })
         .order('created_at', { ascending: false });
       check(error);
@@ -2210,9 +2215,19 @@ async function init() {
     },
 
     async getActiveDomains() {
+      const domainColumns = [
+        'id',
+        'hostname',
+        'label',
+        'is_primary',
+        'is_active',
+        'verification_status',
+        'expires_at',
+        'created_at',
+      ].join(',');
       const { data, error } = await sb
         .from('domains')
-        .select('*')
+        .select(domainColumns)
         .eq('is_active', true)
         .order('is_primary', { ascending: false })
         .order('created_at', { ascending: false });
@@ -2221,9 +2236,19 @@ async function init() {
     },
 
     async getPrimaryDomain() {
+      const domainColumns = [
+        'id',
+        'hostname',
+        'label',
+        'is_primary',
+        'is_active',
+        'verification_status',
+        'expires_at',
+        'created_at',
+      ].join(',');
       const { data } = await sb
         .from('domains')
-        .select('*')
+        .select(domainColumns)
         .eq('is_active', true)
         .eq('is_primary', true)
         .maybeSingle();

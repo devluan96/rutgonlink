@@ -42,6 +42,9 @@ const BASE_URL =
   (process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : "http://localhost:3000");
+const LOCAL_CANONICAL_HOST = (
+  process.env.LOCAL_CANONICAL_HOST || "localhost"
+).trim().toLowerCase();
 const JWT_SECRET =
   process.env.JWT_SECRET ||
   (process.env.NODE_ENV === "production"
@@ -240,6 +243,31 @@ const DEFAULT_OG_IMAGE_URL = `${BASE_URL}/og-card.png`;
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 app.use(cookieParser());
+app.use((req, res, next) => {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  const protocol = forwardedProto || req.protocol || "http";
+  const hostHeader = String(req.headers.host || "").trim();
+  const hostname = String(req.hostname || "")
+    .trim()
+    .toLowerCase();
+  const isLocalAliasRequest =
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname === "::1";
+
+  if (isLocalAliasRequest) {
+    const portMatch = hostHeader.match(/:(\d+)$/);
+    const portSuffix = portMatch ? `:${portMatch[1]}` : "";
+    return res.redirect(
+      302,
+      `${protocol}://${LOCAL_CANONICAL_HOST}${portSuffix}${req.originalUrl || "/"}`,
+    );
+  }
+  next();
+});
 app.use((req, res, next) => {
   const incomingRequestId = String(req.headers["x-request-id"] || "").trim();
   req.requestId = incomingRequestId || nanoid(12);
@@ -2284,38 +2312,6 @@ async function requireArticleFunnelLab(req, res, next) {
     const user = await resolveUserFromTokenPayload(payload);
     if (!user || !canUseArticleFunnelLab(user)) {
       return res.status(403).json({ error: "Không có quyền dùng lab" });
-    }
-    req._tokenPayload = payload;
-    req.currentUser = user;
-    next();
-  } catch {
-    return res.status(401).json({ error: "Token không hợp lệ" });
-  }
-}
-
-function isSupportRole(role) {
-  return String(role || "")
-    .trim()
-    .toLowerCase() === "support";
-}
-
-function canAccessSupportInbox(user) {
-  if (!user) return false;
-  return (
-    user.role === "admin" || isAdminEmail(user.email) || isSupportRole(user.role)
-  );
-}
-
-async function requireSupportInbox(req, res, next) {
-  const token = parseToken(req);
-  if (!token) return res.status(401).json({ error: "Chưa đăng nhập" });
-  try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    const user = await resolveUserFromTokenPayload(payload);
-    if (!user || !canAccessSupportInbox(user)) {
-      return res
-        .status(403)
-        .json({ error: "Không có quyền truy cập hộp thư hỗ trợ" });
     }
     req._tokenPayload = payload;
     req.currentUser = user;
@@ -4682,229 +4678,6 @@ function getPaymentConfig() {
     contact: PAYMENT_CONTACT,
     plans: Object.values(BILLING_PLANS),
   };
-}
-
-function normalizeSupportMessageBody(input) {
-  return String(input || "")
-    .replace(/\r\n/g, "\n")
-    .trim()
-    .slice(0, 2000);
-}
-
-function buildSupportUserSummary(user) {
-  if (!user) return null;
-  return {
-    id: user.id,
-    email: user.email,
-    name: user.name || null,
-    plan: user.plan || "free",
-    role: user.role || "user",
-    created_at: user.created_at || null,
-  };
-}
-
-function buildSupportThreadSummaryEntry(userId, user, messages = []) {
-  const safeMessages = Array.isArray(messages) ? messages : [];
-  const lastMessage = safeMessages.length
-    ? safeMessages.reduce((latest, entry) => {
-        if (!latest) return entry;
-        return new Date(entry.created_at || 0).getTime() >
-          new Date(latest.created_at || 0).getTime()
-          ? entry
-          : latest;
-      }, null)
-    : null;
-  return {
-    user_id: userId,
-    user: buildSupportUserSummary(user) || {
-      id: userId,
-      email: "",
-      name: null,
-      plan: "free",
-      role: "user",
-      created_at: null,
-    },
-    total_messages: safeMessages.length,
-    unread_for_admin: safeMessages.filter(
-      (entry) => entry.sender_role === "user" && !entry.is_read_by_admin,
-    ).length,
-    unread_for_user: safeMessages.filter(
-      (entry) => entry.sender_role === "admin" && !entry.is_read_by_user,
-    ).length,
-    last_message: lastMessage?.message || "",
-    last_message_at: lastMessage?.created_at || null,
-    last_sender_role: lastMessage?.sender_role || "",
-  };
-}
-
-function buildSupportThreadSummaries(messages = [], users = []) {
-  const grouped = new Map();
-  for (const message of Array.isArray(messages) ? messages : []) {
-    const userId = Number(message?.user_id || 0);
-    if (!Number.isInteger(userId) || userId < 1) continue;
-    if (!grouped.has(userId)) grouped.set(userId, []);
-    grouped.get(userId).push(message);
-  }
-  const userMap = new Map(
-    (Array.isArray(users) ? users : [])
-      .filter((user) => Number.isInteger(Number(user?.id || 0)))
-      .map((user) => [Number(user.id), user]),
-  );
-  return [...grouped.entries()]
-    .map(([userId, threadMessages]) =>
-      buildSupportThreadSummaryEntry(userId, userMap.get(userId), threadMessages),
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.last_message_at || 0).getTime() -
-        new Date(a.last_message_at || 0).getTime(),
-    );
-}
-
-const supportUserStreamClients = new Map();
-const supportAdminStreamClients = new Set();
-
-function initSupportStream(res) {
-  res.status(200);
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders?.();
-  res.socket?.setTimeout?.(0);
-  res.socket?.setNoDelay?.(true);
-  res.socket?.setKeepAlive?.(true);
-  res.write("retry: 3000\n\n");
-}
-
-function writeSupportStreamEvent(res, eventName, payload = {}) {
-  try {
-    res.write(`event: ${eventName}\n`);
-    res.write(`data: ${JSON.stringify(payload)}\n\n`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function removeSupportStreamClient(collection, res, key = null) {
-  if (collection instanceof Map) {
-    const clients = collection.get(key);
-    if (!clients) return;
-    clients.delete(res);
-    if (!clients.size) {
-      collection.delete(key);
-    }
-    return;
-  }
-  collection.delete(res);
-}
-
-function registerSupportUserStreamClient(userId, res) {
-  const normalizedUserId = Number(userId);
-  if (!Number.isInteger(normalizedUserId) || normalizedUserId < 1) {
-    return () => {};
-  }
-  if (!supportUserStreamClients.has(normalizedUserId)) {
-    supportUserStreamClients.set(normalizedUserId, new Set());
-  }
-  const clients = supportUserStreamClients.get(normalizedUserId);
-  clients.add(res);
-  const heartbeat = setInterval(() => {
-    try {
-      res.write(`: ping ${Date.now()}\n\n`);
-    } catch {}
-  }, 25000);
-  const cleanup = () => {
-    clearInterval(heartbeat);
-    removeSupportStreamClient(
-      supportUserStreamClients,
-      res,
-      normalizedUserId,
-    );
-  };
-  res.on("close", cleanup);
-  res.on("finish", cleanup);
-  return cleanup;
-}
-
-function registerSupportAdminStreamClient(res) {
-  supportAdminStreamClients.add(res);
-  const heartbeat = setInterval(() => {
-    try {
-      res.write(`: ping ${Date.now()}\n\n`);
-    } catch {}
-  }, 25000);
-  const cleanup = () => {
-    clearInterval(heartbeat);
-    removeSupportStreamClient(supportAdminStreamClients, res);
-  };
-  res.on("close", cleanup);
-  res.on("finish", cleanup);
-  return cleanup;
-}
-
-function broadcastSupportUserStreamEvent(userId, eventName, payload = {}) {
-  const normalizedUserId = Number(userId);
-  if (!Number.isInteger(normalizedUserId) || normalizedUserId < 1) return;
-  const clients = supportUserStreamClients.get(normalizedUserId);
-  if (!clients?.size) return;
-  for (const client of [...clients]) {
-    if (!writeSupportStreamEvent(client, eventName, payload)) {
-      removeSupportStreamClient(
-        supportUserStreamClients,
-        client,
-        normalizedUserId,
-      );
-    }
-  }
-}
-
-function broadcastSupportAdminStreamEvent(eventName, payload = {}) {
-  if (!supportAdminStreamClients.size) return;
-  for (const client of [...supportAdminStreamClients]) {
-    if (!writeSupportStreamEvent(client, eventName, payload)) {
-      removeSupportStreamClient(supportAdminStreamClients, client);
-    }
-  }
-}
-
-async function broadcastSupportRealtimeUpdate(
-  userId,
-  {
-    reason = "updated",
-    thread = null,
-    notifyUser = false,
-    notifyAdmins = true,
-  } = {},
-) {
-  const normalizedUserId = Number(userId);
-  if (!Number.isInteger(normalizedUserId) || normalizedUserId < 1) return;
-  let nextThread = thread || null;
-  if (!nextThread) {
-    const database = await getDb();
-    const [targetUser, messages] = await Promise.all([
-      database.getUserById(normalizedUserId),
-      database.listSupportMessagesByUser(normalizedUserId, 200),
-    ]);
-    nextThread = buildSupportThreadSummaryEntry(
-      normalizedUserId,
-      targetUser,
-      messages,
-    );
-  }
-  const payload = {
-    reason,
-    user_id: normalizedUserId,
-    thread: nextThread,
-    emitted_at: new Date().toISOString(),
-  };
-  if (notifyUser) {
-    broadcastSupportUserStreamEvent(normalizedUserId, "support:update", payload);
-  }
-  if (notifyAdmins) {
-    broadcastSupportAdminStreamEvent("support:update", payload);
-  }
 }
 
 function normalizeWorkspaceRole(input) {
@@ -8623,65 +8396,6 @@ app.patch("/api/billing/requests/:id/submit", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/support/messages", requireAuth, async (req, res) => {
-  try {
-    const user = await resolveUser(req);
-    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
-    const peekOnly =
-      String(req.query?.peek || "")
-        .trim()
-        .toLowerCase() === "1";
-    const database = await getDb();
-    if (!peekOnly) {
-      await database.markSupportMessagesReadByUser(user.id);
-    }
-    const messages = await database.listSupportMessagesByUser(user.id, 200);
-    const thread = buildSupportThreadSummaryEntry(user.id, user, messages);
-    if (!peekOnly) {
-      void broadcastSupportRealtimeUpdate(user.id, {
-        reason: "user_read",
-        thread,
-        notifyAdmins: true,
-      });
-    }
-    res.json({
-      messages,
-      thread,
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post("/api/support/messages", requireAuth, async (req, res) => {
-  try {
-    const user = await resolveUser(req);
-    if (!user) return res.status(401).json({ error: "Chưa đăng nhập" });
-    const message = normalizeSupportMessageBody(req.body?.message);
-    if (!message) {
-      return res
-        .status(400)
-        .json({ error: "Nội dung tin nhắn không được để trống" });
-    }
-    const database = await getDb();
-    const created = await database.createSupportMessage({
-      user_id: user.id,
-      sender_user_id: user.id,
-      sender_role: "user",
-      message,
-      is_read_by_user: true,
-      is_read_by_admin: false,
-    });
-    void broadcastSupportRealtimeUpdate(user.id, {
-      reason: "user_message",
-      notifyAdmins: true,
-    });
-    res.status(201).json({ message: created });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 app.get("/api/team/workspace", requireAuth, async (req, res) => {
   try {
     const user = await resolveUser(req);
@@ -9366,46 +9080,37 @@ async function checkAdmin(req, res) {
   return user;
 }
 
-async function checkSupportInboxAccess(req, res) {
-  const user = await resolveUser(req);
-  if (!user || !canAccessSupportInbox(user)) {
-    res.status(403).json({ error: "Không có quyền truy cập hộp thư hỗ trợ" });
-    return null;
-  }
-  if (isAdminEmail(user.email) && user.role !== "admin") {
-    const database = await getDb();
-    await database.updateUserRole(user.id, "admin");
-    await database.updateUserPlan(user.id, "admin");
-    user.role = "admin";
-    user.plan = "admin";
-  }
-  return user;
-}
-
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
+    const includeLocationAnalytics = req.query.include_location === "1";
     const [users, locationAnalytics] = await Promise.all([
       database.getAllUsers(),
-      database.getAdminUserLocationAnalytics(5000),
+      includeLocationAnalytics
+        ? database.getAdminUserLocationAnalytics(5000)
+        : Promise.resolve(null),
     ]);
-    const countries = (locationAnalytics?.countries || []).map((country) => ({
-      ...country,
-      country_name_en: getCountryEnglishNameFromCode(country.country_code),
-    }));
+    const countries = includeLocationAnalytics
+      ? (locationAnalytics?.countries || []).map((country) => ({
+          ...country,
+          country_name_en: getCountryEnglishNameFromCode(country.country_code),
+        }))
+      : [];
     res.json({
       users,
-      locationAnalytics: {
-        total_users_with_location: Number(
-          locationAnalytics?.total_users_with_location || 0,
-        ),
-        total_users_without_location: Number(
-          locationAnalytics?.total_users_without_location || 0,
-        ),
-        countries,
-        top_countries: countries.slice(0, 8),
-      },
+      locationAnalytics: includeLocationAnalytics
+        ? {
+            total_users_with_location: Number(
+              locationAnalytics?.total_users_with_location || 0,
+            ),
+            total_users_without_location: Number(
+              locationAnalytics?.total_users_without_location || 0,
+            ),
+            countries,
+            top_countries: countries.slice(0, 8),
+          }
+        : null,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -9415,7 +9120,10 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
 app.get("/api/admin/notification-summary", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
-    const cacheKey = "admin-notifications";
+    const includeRedirects = req.query.include_redirects === "1";
+    const cacheKey = includeRedirects
+      ? "admin-notifications:redirects"
+      : "admin-notifications:base";
     const cachedEntry = adminNotificationResponseCache.get(cacheKey);
     if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
       return res.json(cachedEntry.payload);
@@ -9430,7 +9138,9 @@ app.get("/api/admin/notification-summary", requireAdmin, async (req, res) => {
       const [totalUsers, domains, redirectEvents] = await Promise.all([
         database.countUsers(),
         database.getDomains(),
-        readRecentRedirectLogEntries(3),
+        includeRedirects
+          ? readRecentRedirectLogEntries(1)
+          : Promise.resolve([]),
       ]);
       return {
         totalUsers: Number(totalUsers || 0),
@@ -9465,101 +9175,6 @@ app.get("/api/admin/payments", requireAdmin, async (req, res) => {
     const database = await getDb();
     const requests = await database.listPaymentRequests(300);
     res.json({ requests, config: getPaymentConfig() });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get("/api/admin/support", requireSupportInbox, async (req, res) => {
-  if (!(await checkSupportInboxAccess(req, res))) return;
-  try {
-    const database = await getDb();
-    const [messages, users] = await Promise.all([
-      database.listSupportMessages(800),
-      database.getAllUsers(),
-    ]);
-    res.json({
-      threads: buildSupportThreadSummaries(messages, users),
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get("/api/admin/support/:userId/messages", requireSupportInbox, async (req, res) => {
-  if (!(await checkSupportInboxAccess(req, res))) return;
-  try {
-    const targetUserId = Number(req.params.userId);
-    if (!Number.isInteger(targetUserId) || targetUserId < 1) {
-      return res.status(400).json({ error: "User không hợp lệ" });
-    }
-    const database = await getDb();
-    const targetUser = await database.getUserById(targetUserId);
-    if (!targetUser) {
-      return res.status(404).json({ error: "Không tìm thấy người dùng" });
-    }
-    const peekOnly =
-      String(req.query?.peek || "")
-        .trim()
-        .toLowerCase() === "1";
-    if (!peekOnly) {
-      await database.markSupportMessagesReadByAdmin(targetUserId);
-    }
-    const messages = await database.listSupportMessagesByUser(targetUserId, 200);
-    const thread = buildSupportThreadSummaryEntry(targetUserId, targetUser, messages);
-    if (!peekOnly) {
-      void broadcastSupportRealtimeUpdate(targetUserId, {
-        reason: "admin_read",
-        thread,
-        notifyAdmins: true,
-      });
-    }
-    res.json({
-      user: buildSupportUserSummary(targetUser),
-      messages,
-      thread,
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post("/api/admin/support/:userId/messages", requireSupportInbox, async (req, res) => {
-  const supportUser = await checkSupportInboxAccess(req, res);
-  if (!supportUser) return;
-  try {
-    const targetUserId = Number(req.params.userId);
-    if (!Number.isInteger(targetUserId) || targetUserId < 1) {
-      return res.status(400).json({ error: "User không hợp lệ" });
-    }
-    const message = normalizeSupportMessageBody(req.body?.message);
-    if (!message) {
-      return res
-        .status(400)
-        .json({ error: "Nội dung tin nhắn không được để trống" });
-    }
-    const database = await getDb();
-    const targetUser = await database.getUserById(targetUserId);
-    if (!targetUser) {
-      return res.status(404).json({ error: "Không tìm thấy người dùng" });
-    }
-    const created = await database.createSupportMessage({
-      user_id: targetUserId,
-      sender_user_id: supportUser.id,
-      sender_role: "admin",
-      message,
-      is_read_by_user: false,
-      is_read_by_admin: true,
-    });
-    void broadcastSupportRealtimeUpdate(targetUserId, {
-      reason: "admin_message",
-      notifyUser: true,
-      notifyAdmins: true,
-    });
-    res.status(201).json({
-      message: created,
-      user: buildSupportUserSummary(targetUser),
-    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
