@@ -103,6 +103,46 @@ function getAnalyticsDayKey(
 
 const RECENT_LINKS_STATS_SELECT =
   'id,original_url,link_type,clicks,created_at,short_code,alias,domain_hostname';
+const USER_AUTH_SELECT = [
+  'id',
+  'email',
+  'password',
+  'name',
+  'phone',
+  'avatar_url',
+  'affiliate_shopee_url',
+  'affiliate_tiktok_url',
+  'lab_shared_settings_json',
+  'can_use_lab',
+  'plan',
+  'role',
+  'two_factor_enabled',
+  'two_factor_secret',
+  'two_factor_pending_secret',
+  'two_factor_enabled_at',
+  'session_revoked_after',
+  'created_at',
+].join(',');
+const LINK_DETAIL_SELECT = [
+  'id',
+  'short_code',
+  'original_url',
+  'alias',
+  'link_type',
+  'og_title',
+  'og_desc',
+  'og_image',
+  'video_url',
+  'video_overlay_text',
+  'domain_hostname',
+  'workspace_id',
+  'template_id',
+  'created_from_template',
+  'user_id',
+  'guest_session_id',
+  'created_at',
+  'clicks',
+].join(',');
 
 function getClient() {
   if (_client) return _client;
@@ -553,12 +593,20 @@ async function init() {
     },
 
     async getUserByEmail(email) {
-      const { data } = await sb.from('users').select('*').eq('email', email).maybeSingle();
+      const { data } = await sb
+        .from('users')
+        .select(USER_AUTH_SELECT)
+        .eq('email', email)
+        .maybeSingle();
       return data;
     },
 
     async getUserById(id) {
-      const { data } = await sb.from('users').select('*').eq('id', id).maybeSingle();
+      const { data } = await sb
+        .from('users')
+        .select(USER_AUTH_SELECT)
+        .eq('id', id)
+        .maybeSingle();
       return data;
     },
 
@@ -1701,18 +1749,29 @@ async function init() {
     },
 
     async getLinkByCode(code) {
-      const { data } = await sb.from('links').select('*').eq('short_code', code).maybeSingle();
+      const { data } = await sb
+        .from('links')
+        .select(LINK_DETAIL_SELECT)
+        .eq('short_code', code)
+        .maybeSingle();
       return data;
     },
 
     async getLinkByAlias(alias) {
       if (!alias) return null;
-      const { data } = await sb.from('links').select('*').eq('alias', alias).maybeSingle();
+      const { data } = await sb
+        .from('links')
+        .select(LINK_DETAIL_SELECT)
+        .eq('alias', alias)
+        .maybeSingle();
       return data;
     },
 
     async getLinkByUrl(url, userId, guestSessionId) {
-      let query = sb.from('links').select('*').eq('original_url', url);
+      let query = sb
+        .from('links')
+        .select(LINK_DETAIL_SELECT)
+        .eq('original_url', url);
       if (userId) {
         query = query.eq('user_id', userId);
       } else if (guestSessionId) {
@@ -1725,7 +1784,11 @@ async function init() {
     },
 
     async getLinkById(id) {
-      const { data } = await sb.from('links').select('*').eq('id', id).maybeSingle();
+      const { data } = await sb
+        .from('links')
+        .select(LINK_DETAIL_SELECT)
+        .eq('id', id)
+        .maybeSingle();
       return data;
     },
 

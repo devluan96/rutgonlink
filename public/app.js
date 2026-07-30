@@ -716,8 +716,10 @@ const KNOWN_APP_PAGES = new Set([
   "team",
   "pricing",
   "stats",
+  "integrations",
   "account",
   "payment",
+  "admin",
 ]);
 
 function normalizeAppPage(page) {
@@ -4158,12 +4160,6 @@ function renderAdminOverview(payload = {}) {
 
   setText("adTotalUsers", Number(cards.total_users || 0).toLocaleString());
   setText("adUsersToday", Number(cards.users_today || 0).toLocaleString());
-  setText("adTotalLinks", Number(cards.total_links || 0).toLocaleString());
-  setText("adLinksToday", Number(cards.links_today || 0).toLocaleString());
-  setText(
-    "adUniqueClicksToday",
-    Number(cards.unique_clicks_today || 0).toLocaleString(),
-  );
   setText(
     "adPendingPayments",
     Number(cards.pending_payments || 0).toLocaleString(),
@@ -4387,97 +4383,6 @@ function renderAdminOverviewTrend() {
       },
     },
   });
-}
-
-async function loadAdminData() {
-  if (!isAdminUser()) return;
-  try {
-    let statsPayload = null;
-    let redirectPayload = null;
-    const sectionsToFetch = getAdminSectionsForLoad().filter((section) =>
-      shouldFetchAdminSection(section),
-    );
-    const tasks = [];
-    if (sectionsToFetch.includes("overview")) {
-      tasks.push(
-        fetch("/api/admin/stats").then(async (response) => {
-          if (!response.ok) return;
-          statsPayload = await response.json();
-          renderAdminOverview(statsPayload);
-          enqueueAdminAlerts(statsPayload);
-          markAdminSectionLoaded("overview");
-        }),
-      );
-    }
-    if (sectionsToFetch.includes("system")) {
-      tasks.push(
-        fetch("/api/admin/domains").then(async (response) => {
-          if (!response.ok) return;
-          const payload = await response.json();
-          adminDomains = payload.domains || [];
-          renderAdminDomains(adminDomains);
-          syncAvailableDomainsFromAdmin(adminDomains);
-          markAdminSectionLoaded("system");
-        }),
-      );
-    }
-    if (sectionsToFetch.includes("users")) {
-      tasks.push(
-        fetch("/api/admin/users?include_location=1").then(async (response) => {
-          if (!response.ok) return;
-          const payload = await response.json();
-          adminUsers = payload.users || [];
-          adminUserLocationAnalytics = payload.locationAnalytics || null;
-          adminSelectedUserIds = new Set(
-            [...adminSelectedUserIds].filter((id) =>
-              adminUsers.some((userItem) => Number(userItem.id) === Number(id)),
-            ),
-          );
-          renderAdminUserLocationAnalytics();
-          renderAdminUsers();
-          markAdminSectionLoaded("users");
-        }),
-      );
-    }
-    if (sectionsToFetch.includes("logs")) {
-      tasks.push(
-        fetch(`/api/admin/redirects?limit=${ADMIN_REDIRECT_FETCH_LIMIT}`).then(
-          async (response) => {
-            if (!response.ok) return;
-            redirectPayload = await response.json();
-            adminRedirects = redirectPayload.events || [];
-            renderAdminRedirects(
-              adminRedirects,
-              redirectPayload.file || "logs/redirect.log",
-            );
-            markAdminSectionLoaded("logs");
-          },
-        ),
-      );
-    }
-    if (sectionsToFetch.includes("payments")) {
-      tasks.push(
-        fetch("/api/admin/payments").then(async (response) => {
-          if (!response.ok) return;
-          const payload = await response.json();
-          adminPayments = payload.requests || [];
-          renderAdminPayments();
-          markAdminSectionLoaded("payments");
-        }),
-      );
-    }
-    if (tasks.length) {
-      await Promise.all(tasks);
-    }
-    if (statsPayload || redirectPayload) {
-      rememberAdminNotificationSnapshot(
-        statsPayload || {},
-        redirectPayload || { events: adminRedirects },
-      );
-    }
-  } catch (e) {
-    console.error("loadAdminData", e);
-  }
 }
 
 async function showApp() {
