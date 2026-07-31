@@ -5413,6 +5413,24 @@ function detectImportedSensitiveMediaType(
   return normalizedType;
 }
 
+function isImportedVideoEmbedUrl(candidate = "") {
+  const normalized = String(candidate || "").trim();
+  if (!normalized) return false;
+  try {
+    const parsed = new URL(normalized);
+    const hostname = String(parsed.hostname || "").toLowerCase();
+    const pathname = String(parsed.pathname || "").toLowerCase();
+    return (
+      (hostname === "player.vimeo.com" && pathname.startsWith("/video/")) ||
+      ((hostname === "www.youtube.com" || hostname === "youtube.com") &&
+        pathname.startsWith("/embed/")) ||
+      (hostname === "www.youtube-nocookie.com" && pathname.startsWith("/embed/"))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function extractOrderedArticleMedia(html = "", baseUrl = "") {
   const items = [];
   const pushItem = (type, src, caption = "") => {
@@ -5424,6 +5442,15 @@ function extractOrderedArticleMedia(html = "", baseUrl = "") {
       caption: stripHtmlTags(caption),
     });
   };
+
+  const iframeRegex = /<iframe\b[^>]*>/gi;
+  for (const match of String(html || "").matchAll(iframeRegex)) {
+    const tag = String(match?.[0] || "");
+    const src = pickImportedAttributeValue(tag, ["src", "data-src"]);
+    const absoluteSrc = absolutizeImportedUrl(src, baseUrl);
+    if (!isImportedVideoEmbedUrl(absoluteSrc)) continue;
+    pushItem("video-embed", absoluteSrc);
+  }
 
   const videoBlockRegex = /<video\b[\s\S]*?<\/video>/gi;
   for (const match of String(html || "").matchAll(videoBlockRegex)) {
@@ -5525,7 +5552,13 @@ function extractArticleFunnelImportPayload(html = "", baseUrl = "") {
     contentHtml === safeHtml ? [] : extractOrderedArticleMedia(safeHtml, baseUrl);
   const videos = dedupeUrls([
     ...orderedMedia.filter((item) => item.type === "video").map((item) => item.src),
+    ...orderedMedia
+      .filter((item) => item.type === "video-embed")
+      .map((item) => item.src),
     ...fallbackOrderedMedia.filter((item) => item.type === "video").map((item) => item.src),
+    ...fallbackOrderedMedia
+      .filter((item) => item.type === "video-embed")
+      .map((item) => item.src),
     ...metaVideos,
   ]);
   const images = dedupeUrls([
@@ -5666,6 +5699,7 @@ function normalizeArticleFunnelBlocks(blocks) {
   const allowedTypes = new Set([
     "image",
     "video",
+    "video-embed",
     "sensitive-image",
     "sensitive-video",
     "paragraph",

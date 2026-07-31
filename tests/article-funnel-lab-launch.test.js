@@ -252,3 +252,33 @@ test("admin article funnel lab uploads sensitive video blocks through the video 
     /showToast\(\s+isVideoBlockType\(block\.type\) \? "Đã tải video lên" : "Đã tải ảnh lên",\s+\);/s,
   );
 });
+
+test("admin article funnel lab renders iframe embeds separately from direct video blocks", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(templateHtml, /block\.type === "video-embed"/);
+  assert.match(templateHtml, /URL video embed/);
+  assert.match(
+    templateHtml,
+    /<iframe[^>]*src="\$\{escapeAttr\(block\.src \|\| ""\)\}"[^>]*allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"[^>]*><\/iframe>/s,
+  );
+  assert.doesNotMatch(
+    templateHtml,
+    /function isVideoBlockType\(blockType\) \{\s+return blockType === "video" \|\| blockType === "sensitive-video" \|\| blockType === "video-embed";\s+\}/s,
+  );
+});
+
+test("admin article funnel lab preserves video-embed blocks when reopening saved state", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(
+    templateHtml,
+    /const allowedTypes = new Set\(\[\s*"paragraph",\s*"image",\s*"sensitive-image",\s*"video",\s*"video-embed",\s*"sensitive-video",\s*\]\);/s,
+  );
+});

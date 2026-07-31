@@ -2186,6 +2186,15 @@
         height: auto;
       }
 
+      .article-media iframe {
+        display: block;
+        width: 100%;
+        min-height: 420px;
+        border: 0;
+        aspect-ratio: 9 / 16;
+        background: #000;
+      }
+
       .article-caption {
         padding: 10px 0 0;
         color: #64748b;
@@ -4941,6 +4950,7 @@
             "image",
             "sensitive-image",
             "video",
+            "video-embed",
             "sensitive-video",
           ]);
           const type = allowedTypes.has(String(block.type || ""))
@@ -6781,14 +6791,46 @@
         function renderBlockEditorLegacy() {
           els.blockList.innerHTML = state.blocks
             .map((block, index) => {
+              const isDirectVideoBlock =
+                block.type === "video" || block.type === "sensitive-video";
+              const isEmbedVideoBlock = block.type === "video-embed";
               const typeLabel =
                 block.type === "paragraph"
                   ? "Đoạn text"
                   : block.type === "image"
                     ? "Ảnh thường"
+                    : block.type === "video-embed"
+                      ? "Video nhúng"
                     : block.type === "sensitive-image"
                       ? "Ảnh mờ"
                       : "Video";
+              if (isEmbedVideoBlock) {
+                return `
+                  <div class="block-item">
+                    <div class="block-head">
+                      <span class="block-chip">${index + 1}. ${typeLabel}</span>
+                      <div class="block-head-actions">
+                        <button class="icon-btn" type="button" data-move-up="${block.id}" title="Äáº©y lÃªn">â†‘</button>
+                        <button class="icon-btn" type="button" data-move-down="${block.id}" title="Äáº©y xuá»‘ng">â†“</button>
+                        <button class="icon-btn danger" type="button" data-remove-block="${block.id}" title="XÃ³a">âœ•</button>
+                      </div>
+                    </div>
+                    <div class="field-grid">
+                      <div class="field">
+                        <label>URL video embed</label>
+                        <input type="url" value="${escapeAttr(block.src || "")}" data-field="src" data-block-id="${block.id}" />
+                        <div class="upload-row">
+                          <span class="upload-status" data-upload-status="${block.id}">Dán URL nhúng từ Vimeo hoặc YouTube. Block này không upload tệp trực tiếp.</span>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label>ChÃº thÃ­ch</label>
+                        <input type="text" value="${escapeAttr(block.caption || "")}" data-field="caption" data-block-id="${block.id}" />
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }
               return `
                 <div class="block-item">
                   <div class="block-head">
@@ -6878,6 +6920,21 @@
                 return `
                   <figure class="article-media">
                     <video controls preload="metadata" src="${escapeAttr(block.src || "")}"></video>
+                    ${block.caption ? `<figcaption class="article-caption">${escapeHtml(block.caption)}</figcaption>` : ""}
+                  </figure>
+                `;
+              }
+              if (block.type === "video-embed") {
+                return `
+                  <figure class="article-media">
+                    <iframe
+                      src="${escapeAttr(block.src || "")}"
+                      title="Embedded video"
+                      loading="lazy"
+                      referrerpolicy="strict-origin-when-cross-origin"
+                      allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+                      allowfullscreen
+                    ></iframe>
                     ${block.caption ? `<figcaption class="article-caption">${escapeHtml(block.caption)}</figcaption>` : ""}
                   </figure>
                 `;
