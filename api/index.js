@@ -7519,7 +7519,10 @@ ${ogImageTag}
       } else {
         openViaAnchor(tiktokTarget, isInApp ? '_blank' : '_self', 'noopener');
       }
-      if (isInApp) {
+      var shouldScheduleTikTokInAppFallback =
+        isInApp &&
+        !(isIOS && isTikTokPopup20s && stage.direct_ios_fb_url);
+      if (shouldScheduleTikTokInAppFallback) {
         scheduleLaunchFallback(
           tiktokBrowserTarget || stage.direct_web_url,
           1500,

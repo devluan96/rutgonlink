@@ -264,6 +264,36 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through the launch helper 
   );
 });
 
+test("buildArticleFunnelPreviewPage skips inline fallback for TikTok popup 20s iOS in-app OneLink launches", () => {
+  const html = __testUtils.buildArticleFunnelPreviewPage(
+    {
+      title: "Demo",
+      stages: [
+        {
+          stage_key: "20s",
+          direct_platform: "tiktok",
+          direct_web_url: "https://www.tiktok.com/view/product/123",
+          direct_ios_fb_url: "https://snssdk1180.onelink.me/BAuo?af_dp=snssdk1180%3A%2F%2Fec%2Fpdp",
+        },
+      ],
+    },
+    "https://example.com/demo",
+    "/demo/launch",
+    { routeSlug: "demo", showPopupTestButton: true },
+    "/demo/bridge",
+    "/demo/go",
+  );
+
+  assert.match(
+    html,
+    /var shouldScheduleTikTokInAppFallback =\s+isInApp &&\s+!\(isIOS && isTikTokPopup20s && stage\.direct_ios_fb_url\);/s,
+  );
+  assert.match(
+    html,
+    /if \(shouldScheduleTikTokInAppFallback\) \{\s+scheduleLaunchFallback\(\s+tiktokBrowserTarget \|\| stage\.direct_web_url,\s+1500,\s+\{ preferTopLevel: true \},\s+\);\s+\}/s,
+  );
+});
+
 test("buildArticleFunnelPopupTestUrl produces a usable signed test url", () => {
   const testUrl = __testUtils.buildArticleFunnelPopupTestUrl(
     "demo-post",
