@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 const { __testUtils } = require("../api/index");
 
-test("shouldUseArticleFunnelInlineLaunch keeps only Shopee 3s on inline launch", () => {
+test("shouldUseArticleFunnelInlineLaunch keeps Shopee 3s and TikTok 20s on inline launch", () => {
   assert.equal(
     __testUtils.shouldUseArticleFunnelInlineLaunch({
       stage_key: "3s",
@@ -16,7 +16,7 @@ test("shouldUseArticleFunnelInlineLaunch keeps only Shopee 3s on inline launch",
       stage_key: "20s",
       direct_platform: "tiktok",
     }),
-    false,
+    true,
   );
   assert.equal(
     __testUtils.shouldUseArticleFunnelInlineLaunch({
@@ -130,6 +130,39 @@ test("buildArticleFunnelPreviewPage emits a parseable inline script", () => {
   });
 });
 
+test("buildArticleFunnelPreviewPage renders video-embed blocks as iframe instead of image", () => {
+  const html = __testUtils.buildArticleFunnelPreviewPage(
+    {
+      title: "Demo embed",
+      blocks: [
+        {
+          type: "video-embed",
+          src: "https://player.vimeo.com/video/1214443665?dnt=1&app_id=122963",
+          caption: "Vimeo embed",
+        },
+      ],
+    },
+    "https://example.com/demo-embed",
+    "/demo-embed/launch",
+    { routeSlug: "demo-embed" },
+    "/demo-embed/bridge",
+  );
+
+  assert.match(html, /\.article-media iframe\{/);
+  assert.match(
+    html,
+    /if \(block\.type === 'video-embed'\)/,
+  );
+  assert.match(
+    html,
+    /allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"/,
+  );
+  assert.doesNotMatch(
+    html,
+    /<figure class="article-media"><img src="\'+escHtml\(block\.src\|\|''\)\+'" alt=""><\/figure>/,
+  );
+});
+
 test("buildArticleFunnelPreviewPage keeps popup test button hidden for non-admin viewers", () => {
   const html = __testUtils.buildArticleFunnelPreviewPage(
     {
@@ -176,7 +209,7 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through the launch helper 
 
   assert.match(
     html,
-    /"stage_key":"20s","direct_platform":"tiktok","direct_web_url":"https:\/\/vt\.tiktok\.com\/demo\/","use_inline_launch":false,"use_deeplink_route":true/,
+    /"stage_key":"20s","direct_platform":"tiktok","direct_web_url":"https:\/\/vt\.tiktok\.com\/demo\/","use_inline_launch":true,"use_deeplink_route":false/,
   );
   assert.match(html, /var bridgeBasePath = "\/demo\/bridge"/);
   assert.match(html, /var deeplinkBasePath = "\/demo\/go"/);

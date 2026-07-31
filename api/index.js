@@ -6865,6 +6865,7 @@ ${ogImageTag}
   .article-paragraph{margin:0;font-size:18px;line-height:1.6;color:#000;white-space:pre-wrap}
   .article-media{margin:0}
   .article-media img,.article-media video{display:block;width:100%;height:auto;background:#111}
+  .article-media iframe{display:block;width:100%;min-height:420px;border:0;aspect-ratio:9/16;background:#000}
   .article-caption{padding:10px 0 0;color:rgba(0,0,0,.66);font-size:13px;line-height:1.5}
   .sensitive-wrap{position:relative;overflow:hidden;background:#101010}
   .sensitive-wrap[data-sensitive-kind="video"]{background:#000;aspect-ratio:var(--sensitive-ratio,auto)}
@@ -7008,6 +7009,9 @@ ${ogImageTag}
       }
       if (block.type === 'video') {
         return '<figure class="article-media"><video controls preload="metadata" src="'+escHtml(block.src||'')+'"></video>'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
+      }
+      if (block.type === 'video-embed') {
+        return '<figure class="article-media"><iframe src="'+escHtml(block.src||'')+'" title="Embedded video" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share" allowfullscreen></iframe>'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
       }
       if (block.type === 'sensitive-video') {
         return '<figure class="article-media"><div class="sensitive-wrap" data-sensitive-wrap data-sensitive-kind="video"><video preload="auto" playsinline muted src="'+escHtml(block.src||'')+'"></video><button class="reveal-btn" type="button" data-reveal-sensitive>Video nhạy cảm, muốn xem thì nhấn vào?</button></div>'+(block.caption?'<figcaption class="article-caption">'+escHtml(block.caption)+'</figcaption>':'')+'</figure>';
