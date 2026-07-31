@@ -367,6 +367,52 @@ test("buildDirectBridgePage emits a parseable script for long TikTok popup 20s u
   });
 });
 
+test("buildArticleFunnelPopup20sTikTokBridgePage suppresses web fallback after the page has already been left once", () => {
+  const html = __testUtils.buildArticleFunnelPopup20sTikTokBridgePage(
+    {
+      original_url:
+        "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180",
+      og_title: "Demo",
+      og_desc: "Bridge demo",
+      og_image: "",
+    },
+    "https://example.com/demo/bridge/20s",
+    {
+      popup20s_browser_url: "https://vt.tiktok.com/ZTBROWSER123/",
+      popup20s_ios_inapp_url:
+        "https://snssdk1180.onelink.me/demo?af_dp=snssdk1180%3A%2F%2Fec%2Fpdp",
+      bridge_debug: {
+        enabled: true,
+        request_id: "req_tiktok_popup20_bridge_1",
+        mode: "article-funnel-launch-tiktok-popup20s-direct-bridge",
+        stage_key: "20s",
+        route_slug: "demo-post",
+        target_url:
+          "https://snssdk1180.onelink.me/demo?af_dp=snssdk1180%3A%2F%2Fec%2Fpdp",
+        fallback_url: "https://vt.tiktok.com/ZTBROWSER123/",
+        debug_api_url: "/api/article-funnel/bridge-debug",
+      },
+    },
+  );
+
+  assert.match(html, /var didLeavePage = false;/);
+  assert.match(
+    html,
+    /function markLeft\(\) \{\s+didLeavePage = true;\s+emitBridgeDebug\('mark_left'/s,
+  );
+  assert.match(html, /window\.addEventListener\('pagehide', markLeft, true\);/);
+  assert.match(html, /window\.addEventListener\('blur', onBlur, true\);/);
+  assert.match(html, /window\.addEventListener\('focus', onFocus, true\);/);
+  assert.match(
+    html,
+    /document\.addEventListener\('visibilitychange', onVisibilityChange, true\);/s,
+  );
+  assert.match(
+    html,
+    /if \(!didLeavePage && !document\.hidden && fallbackUrl\) \{/s,
+  );
+});
+
 test("buildOverlayLaunchConfig builds Shopee Android intent config", () => {
   const originalUrl = "https://shopee.vn/product/37251933/591989399";
   const config = __testUtils.buildOverlayLaunchConfig(originalUrl);

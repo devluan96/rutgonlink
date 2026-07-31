@@ -11852,6 +11852,8 @@ ${ogImageTag}
   var isFacebook = /FBAN|FBAV|FB_IAB|FBIOS|FB4A/i.test(ua);
   var isZalo = /ZaloApp/i.test(ua);
   var isInApp = isFacebook || isZalo;
+  var didLeavePage = false;
+  var blurTimer = null;
 
   function updateStatusText(text) {
     if (bridgeStatusText && text) bridgeStatusText.textContent = text;
@@ -11919,17 +11921,55 @@ ${ogImageTag}
     is_ios: isIOS ? '1' : '0',
     is_inapp: isInApp ? '1' : '0'
   });
+
+  function markLeft() {
+    didLeavePage = true;
+    emitBridgeDebug('mark_left', {
+      hidden: document.hidden ? '1' : '0'
+    });
+  }
+
+  function clearBlurTimer() {
+    if (!blurTimer) return;
+    clearTimeout(blurTimer);
+    blurTimer = null;
+  }
+
+  function onVisibilityChange() {
+    if (document.hidden) {
+      clearBlurTimer();
+      markLeft();
+    }
+    emitBridgeDebug('visibility_' + (document.hidden ? 'hidden' : 'visible'), {});
+  }
+
+  function onBlur() {
+    clearBlurTimer();
+    blurTimer = setTimeout(function() {
+      blurTimer = null;
+      if (document.hidden || !document.hasFocus()) {
+        markLeft();
+      }
+    }, 800);
+  }
+
+  function onFocus() {
+    clearBlurTimer();
+    emitBridgeDebug('focus', {});
+  }
+
   window.addEventListener('error', function(event) {
     emitBridgeDebug('window_error', {
       message: event && event.message ? event.message : ''
     });
   });
+  window.addEventListener('pagehide', markLeft, true);
   window.addEventListener('pagehide', function() {
     emitBridgeDebug('pagehide', { hidden: document.hidden ? '1' : '0' });
   }, true);
-  document.addEventListener('visibilitychange', function() {
-    emitBridgeDebug('visibility_' + (document.hidden ? 'hidden' : 'visible'), {});
-  }, true);
+  window.addEventListener('blur', onBlur, true);
+  window.addEventListener('focus', onFocus, true);
+  document.addEventListener('visibilitychange', onVisibilityChange, true);
 
   function openSameWindow(targetUrl) {
     if (!targetUrl) return false;
@@ -11948,7 +11988,7 @@ ${ogImageTag}
     openSameWindow(iosInAppUrl || browserUrl || fallbackUrl);
     emitBridgeDebug('schedule_fallback', { fallback_url: fallbackUrl, delay_ms: String(iosInAppPromptFallbackDelayMs) });
     setTimeout(function() {
-      if (!document.hidden && fallbackUrl) {
+      if (!didLeavePage && !document.hidden && fallbackUrl) {
         updateStatusText('TikTok app khong mo duoc, dang chuyen sang web...');
         emitBridgeDebug('fallback_to_web', { fallback_url: fallbackUrl });
         window.location.replace(fallbackUrl);
