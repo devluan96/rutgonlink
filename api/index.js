@@ -10400,7 +10400,7 @@ app.get("/api/stats", async (req, res) => {
           timings,
         ),
         userId
-          ? measureAsyncTimingWithSoftTimeout(
+          ? measureAsyncTiming(
               "labAnalyticsRows",
               () =>
                 database.getArticleFunnelClickAnalyticsRows(userId, {
@@ -10408,7 +10408,6 @@ app.get("/api/stats", async (req, res) => {
                   unlimited: true,
                 }),
               timings,
-              { fallbackValue: [] },
             )
           : Promise.resolve([]),
         user
@@ -10503,7 +10502,7 @@ app.get("/api/stats", async (req, res) => {
           );
         }
         if (userId) {
-          expandedLabAnalyticsRows = await measureAsyncTimingWithSoftTimeout(
+          expandedLabAnalyticsRows = await measureAsyncTiming(
             "labAnalyticsYesterdayRows",
             () =>
               database.getArticleFunnelClickAnalyticsRows(userId, {
@@ -10511,7 +10510,6 @@ app.get("/api/stats", async (req, res) => {
                 unlimited: true,
               }),
             timings,
-            { fallbackValue: [] },
           );
         }
         const mappedExpandedLabAnalyticsRows =
@@ -10573,6 +10571,7 @@ app.get("/api/stats", async (req, res) => {
           analyticsSource,
           route: "/api/stats",
           selectedRangeDays: statsRangeDays,
+          labAnalyticsRows: mappedLabAnalyticsRows.length,
         },
       };
       timings.total = Date.now() - startedAt;
