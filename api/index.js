@@ -10399,7 +10399,7 @@ app.get("/api/stats", async (req, res) => {
               () =>
                 database.getArticleFunnelClickAnalyticsRows(userId, {
                   days: statsRangeDays,
-                  limit: STATS_FALLBACK_CLICK_LIMIT,
+                  unlimited: true,
                 }),
               timings,
               { fallbackValue: [] },
@@ -10442,8 +10442,8 @@ app.get("/api/stats", async (req, res) => {
           "clicksFallback",
           () =>
             database.getClickAnalytics(userId, guestSessionId, {
-              limit: STATS_FALLBACK_CLICK_LIMIT,
               days: statsRangeDays,
+              unlimited: true,
             }),
           timings,
         );
@@ -10487,8 +10487,8 @@ app.get("/api/stats", async (req, res) => {
             "clicksYesterdayFallback",
             () =>
               database.getClickAnalytics(userId, guestSessionId, {
-                limit: STATS_FALLBACK_CLICK_LIMIT,
                 days: 2,
+                unlimited: true,
               }),
             timings,
           );
@@ -10502,7 +10502,7 @@ app.get("/api/stats", async (req, res) => {
             () =>
               database.getArticleFunnelClickAnalyticsRows(userId, {
                 days: 2,
-                limit: STATS_FALLBACK_CLICK_LIMIT,
+                unlimited: true,
               }),
             timings,
             { fallbackValue: [] },

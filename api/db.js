@@ -74,17 +74,21 @@ function normalizeClickAnalyticsOptions(input, fallbackLimit = 5000) {
     return {
       limit: Math.max(Number(input) || 0, 0) || fallbackLimit,
       days: 0,
+      unlimited: false,
     };
   }
   if (input && typeof input === 'object') {
+    const unlimited = Boolean(input.unlimited);
     return {
-      limit: Math.max(Number(input.limit) || 0, 0) || fallbackLimit,
+      limit: unlimited ? null : Math.max(Number(input.limit) || 0, 0) || fallbackLimit,
       days: Math.max(Number(input.days) || 0, 0),
+      unlimited,
     };
   }
   return {
     limit: fallbackLimit,
     days: 0,
+    unlimited: false,
   };
 }
 
@@ -205,18 +209,21 @@ function normalizeLegacyAdminUserRow(row = {}) {
 }
 
 async function fetchPaginatedRows(fetchPage, limit = 1000, pageSize = 1000) {
-  const safeLimit = Math.max(Number(limit) || 0, 0);
-  if (!safeLimit) return { data: [], error: null };
+  const unlimited = limit == null;
+  const safeLimit = unlimited ? 0 : Math.max(Number(limit) || 0, 0);
+  if (!unlimited && !safeLimit) return { data: [], error: null };
 
-  const safePageSize = Math.max(
-    1,
-    Math.min(Number(pageSize) || 1000, safeLimit, 1000),
-  );
+  const safePageSize = unlimited
+    ? Math.max(1, Math.min(Number(pageSize) || 1000, 1000))
+    : Math.max(
+        1,
+        Math.min(Number(pageSize) || 1000, safeLimit, 1000),
+      );
   const rows = [];
   let from = 0;
 
-  while (rows.length < safeLimit) {
-    const remaining = safeLimit - rows.length;
+  while (unlimited || rows.length < safeLimit) {
+    const remaining = unlimited ? safePageSize : safeLimit - rows.length;
     const currentPageSize = Math.min(safePageSize, remaining);
     const result = await fetchPage(from, from + currentPageSize - 1);
     if (result?.error) {
@@ -512,8 +519,9 @@ async function init() {
     limit = 5000,
   } = {}) {
     if (!includeAll && !userId) return [];
-    const safeLimit = Math.max(Number(limit) || 0, 0);
-    if (!safeLimit) return [];
+    const unlimited = limit == null;
+    const safeLimit = unlimited ? null : Math.max(Number(limit) || 0, 0);
+    if (!unlimited && !safeLimit) return [];
     const sinceIso = days > 0 ? getRollingWindowStartUtc(days) : null;
     const selectExpr = includeAll
       ? 'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at'
@@ -2438,6 +2446,7 @@ module.exports = {
     CLICK_DEDUP_WINDOW_MS,
     buildArticleFunnelClickStats,
     fetchPaginatedRows,
+    normalizeClickAnalyticsOptions,
     finalizeClickAnalyticsSummaryPayload,
   },
 };
