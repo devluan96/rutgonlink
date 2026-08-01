@@ -158,6 +158,8 @@ let statsSummaryPayloadPromise = null;
 let statsSummaryPayloadCache = null;
 let statsSummaryPayloadCacheAt = 0;
 let statsSummaryPayloadCacheDays = DEFAULT_STATS_RANGE_DAYS;
+let statsLoadSequence = 0;
+let statsLoadAppliedSequence = 0;
 const labEmbedCacheBust = Date.now().toString(36);
 const labSharedSettingsStorageKey = "rutgonlink-lab-shared-settings-v1";
 let confirmModalResolver = null;
@@ -8549,6 +8551,35 @@ function rememberStatsSummaryPayloadCache(payload) {
   );
 }
 
+function getStatsDebugMeta(payload = {}) {
+  return payload && typeof payload === "object" && payload.debug
+    ? payload.debug
+    : {};
+}
+
+function logStatsRender(stage, payload = {}, extra = {}) {
+  try {
+    const debug = getStatsDebugMeta(payload);
+    console.debug("[stats-render]", {
+      stage,
+      sequence: extra.sequence || 0,
+      appliedSequence: statsLoadAppliedSequence,
+      requestedDays: extra.requestedDays || payload.selectedRangeDays || null,
+      uniqueTotalClicks: Number(
+        payload.uniqueTotalClicks ?? payload.totalClicks ?? 0,
+      ),
+      uniqueClicksToday: Number(
+        payload.uniqueClicksToday ?? payload.clicksToday ?? 0,
+      ),
+      rawClicksToday: Number(payload.rawClicksToday ?? 0),
+      analyticsSource: debug.analyticsSource || "unknown",
+      requestId: debug.requestId || null,
+      generatedAt: debug.generatedAt || null,
+      route: debug.route || null,
+    });
+  } catch (_) {}
+}
+
 async function getStatsPayload({ preferCache = false, days = statsRangeDays } = {}) {
   const requestedDays = normalizeStatsRangeDays(days);
   const now = Date.now();
@@ -8712,12 +8743,21 @@ async function loadData(prefetched = null, options = {}) {
 }
 
 loadData = async function loadDataWithRange(prefetched = null, options = {}) {
+  const loadSequence = ++statsLoadSequence;
   try {
     const requestedDays = normalizeStatsRangeDays(
       options.days ?? prefetched?.selectedRangeDays ?? statsRangeDays,
     );
     const d =
       prefetched || (await getStatsPayload({ days: requestedDays }));
+    if (loadSequence !== statsLoadSequence) {
+      logStatsRender("ignored-stale-response", d, {
+        sequence: loadSequence,
+        requestedDays,
+      });
+      return;
+    }
+    statsLoadAppliedSequence = loadSequence;
     rememberStatsPayloadCache(d);
     statsRangeDays = normalizeStatsRangeDays(
       d.selectedRangeDays,
@@ -8908,8 +8948,17 @@ loadData = async function loadDataWithRange(prefetched = null, options = {}) {
     if (document.getElementById("page-links")?.classList.contains("active"))
       applyLinkFilters();
     enqueueStatsAlerts(d);
+    logStatsRender("applied", d, {
+      sequence: loadSequence,
+      requestedDays,
+    });
     rememberStatsNotificationSnapshot(d);
-  } catch {}
+  } catch (error) {
+    console.error("[stats-render] loadData failed", {
+      sequence: loadSequence,
+      message: error?.message || String(error || ""),
+    });
+  }
 };
 
 function renderActivity(arr, id) {
