@@ -1,7 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const rawTimeZoneOffset = Number(process.env.APP_TIME_ZONE_OFFSET_MINUTES);
 const APP_TIME_ZONE_OFFSET_MINUTES = Number.isFinite(rawTimeZoneOffset) ? rawTimeZoneOffset : 420;
-const CLICK_DEDUP_WINDOW_MS = 30000;
+const CLICK_DEDUP_WINDOW_MS = 5 * 60 * 1000;
 const ANALYTICS_TIME_ZONE = (process.env.APP_TIME_ZONE || 'Asia/Ho_Chi_Minh').trim();
 const regionNamesVi =
   typeof Intl.DisplayNames === 'function'
@@ -2435,6 +2435,7 @@ async function init() {
 module.exports = {
   init,
   __testUtils: {
+    CLICK_DEDUP_WINDOW_MS,
     buildArticleFunnelClickStats,
     fetchPaginatedRows,
     finalizeClickAnalyticsSummaryPayload,
