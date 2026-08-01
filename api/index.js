@@ -10470,65 +10470,11 @@ app.get("/api/stats", async (req, res) => {
           buildStatsAnalyticsWithRecentBuckets(mappedLabAnalyticsRows),
         );
       }
-      let analyticsForYesterday = analytics;
-      if (statsRangeDays === 1) {
-        let expandedLabAnalyticsRows = [];
-        let expandedAnalytics = await measureAsyncTiming(
-          "analyticsYesterdaySummary",
-          () =>
-            measureAsyncTimingWithSoftTimeout(
-              "analyticsYesterdaySummaryRpc",
-              () =>
-                database.getClickAnalyticsSummary(userId, guestSessionId, {
-                  days: 2,
-                }),
-              timings,
-              { fallbackValue: null },
-            ),
-          timings,
-        );
-        if (!expandedAnalytics) {
-          const expandedClickRows = await measureAsyncTiming(
-            "clicksYesterdayFallback",
-            () =>
-              database.getClickAnalytics(userId, guestSessionId, {
-                days: 2,
-                unlimited: true,
-              }),
-            timings,
-          );
-          expandedAnalytics = buildStatsAnalyticsWithRecentBuckets(
-            expandedClickRows,
-          );
-        }
-        if (userId) {
-          expandedLabAnalyticsRows = await measureAsyncTiming(
-            "labAnalyticsYesterdayRows",
-            () =>
-              database.getArticleFunnelClickAnalyticsRows(userId, {
-                days: 2,
-                unlimited: true,
-              }),
-            timings,
-          );
-        }
-        const mappedExpandedLabAnalyticsRows =
-          mapArticleFunnelClickRowsToAnalyticsRows(expandedLabAnalyticsRows);
-        if (mappedExpandedLabAnalyticsRows.length) {
-          expandedAnalytics = mergeStatsAnalytics(
-            expandedAnalytics,
-            buildStatsAnalyticsWithRecentBuckets(mappedExpandedLabAnalyticsRows),
-          );
-        }
-        analyticsForYesterday = expandedAnalytics || analytics;
-      }
       const todayKey = getAnalyticsDayKey(new Date());
       const uniqueClicksToday =
         (analytics.unique_timeline || []).find((item) => item.date === todayKey)
           ?.clicks || 0;
-      const yesterday = buildYesterdayBreakdownFromAnalytics(
-        analyticsForYesterday,
-      );
+      const yesterday = null;
       const alerts = buildStatsAlertPayload({
         planName: user?.plan || "guest",
         linksToday: today.linksToday || 0,
@@ -10572,6 +10518,7 @@ app.get("/api/stats", async (req, res) => {
           route: "/api/stats",
           selectedRangeDays: statsRangeDays,
           labAnalyticsRows: mappedLabAnalyticsRows.length,
+          includesYesterdayBreakdown: false,
         },
       };
       timings.total = Date.now() - startedAt;

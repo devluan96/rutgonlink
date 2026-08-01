@@ -8902,7 +8902,7 @@ loadData = async function loadDataWithRange(prefetched = null, options = {}) {
             dashboardPlatformMetrics.tiktok.raw,
           ).toLocaleString()}`;
 
-    if (recentWindowDays === 1) {
+    if (recentWindowDays === 1 && d?.yesterday && typeof d.yesterday === "object") {
       document.getElementById("dClicksSub").textContent = `Hôm qua: ${Number(
         d?.yesterday?.unique_clicks || 0,
       ).toLocaleString()} click`;
