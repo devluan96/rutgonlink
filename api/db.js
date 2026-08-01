@@ -1292,7 +1292,7 @@ async function init() {
       const normalizedIp = String(ip || '').trim();
       const normalizedUa = String(ua || '').trim();
       if (normalizedIp && normalizedUa) {
-        const duplicateSince = new Date(Date.now() - CLICK_DEDUP_WINDOW_MS).toISOString();
+        const duplicateSince = new Date(Date.now() - UNIQUE_CLICK_WINDOW_MS).toISOString();
         const { count, error: duplicateError } = await sb
           .from('article_funnel_clicks')
           .select('*', { count: 'exact', head: true })
