@@ -5215,6 +5215,9 @@ function applyArticleFunnelStageDirectOverrides(
     if (iosInAppOverride || autoWrappedOneLink) {
       config.direct_ios_fb_url = iosInAppOverride || autoWrappedOneLink;
     }
+    if (autoWrappedOneLink) {
+      config.direct_android_url = autoWrappedOneLink;
+    }
   }
 
   if (
@@ -6959,28 +6962,12 @@ ${ogImageTag}
     return isFacebookInAppBrowser() || /ZaloApp/i.test(getUserAgent());
   }
 
-  function getPopupDismissScopeKey() {
-    return String(launchBasePath || location.pathname || 'lab')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 80) || 'lab';
-  }
-
   function getPopupDismissCookieName(stageKey) {
-    return 'popup_closed_' +
-      getPopupDismissScopeKey() +
-      '_' +
-      encodeURIComponent(String(stageKey || ''));
+    return 'popup_closed_' + encodeURIComponent(String(stageKey || ''));
   }
 
   function setPopupDismissCookie(stageKey) {
-    var minutes =
-      String(stageKey || '') === '300s'
-        ? 360
-        : String(stageKey || '') === '20s'
-          ? 180
-          : 60;
+    var minutes = 1440;
     var expiresAt = new Date();
     expiresAt.setTime(expiresAt.getTime() + minutes * 60 * 1000);
     document.cookie =
@@ -7482,7 +7469,9 @@ ${ogImageTag}
                     ? (stage.direct_ios_fb_url || tiktokBrowserTarget)
                     : tiktokBrowserTarget
                 )
-              : tiktokBrowserTarget
+              : isAndroid
+                ? (stage.direct_android_url || stage.direct_app_url || tiktokBrowserTarget)
+                : tiktokBrowserTarget
           )
         : (
             isIOS
@@ -12709,7 +12698,9 @@ body{overflow-x:hidden}
                     ? (stage.direct_ios_fb_url || tiktokBrowserTarget)
                     : tiktokBrowserTarget
                 )
-              : tiktokBrowserTarget
+              : isAndroid
+                ? (stage.direct_android_url || stage.direct_app_url || tiktokBrowserTarget)
+                : tiktokBrowserTarget
           )
         : (
             isIOS

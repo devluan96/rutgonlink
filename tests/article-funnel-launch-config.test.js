@@ -91,6 +91,7 @@ test("applyArticleFunnelStageDirectOverrides lets TikTok 20s use a dedicated iPh
   assert.equal(config.direct_web_url, originalUrl);
   assert.equal(config.direct_ios_fb_url, overrideUrl);
   assert.equal(config.direct_ios_browser_url, originalUrl);
+  assert.match(config.direct_android_url, /^https:\/\/snssdk1180\.onelink\.me\/BAuo\?/);
 });
 
 test("buildArticleFunnelPopup20sDirectBridgeInfo keeps HongHotDuong-style TikTok targets for popup 20s", () => {
@@ -265,10 +266,13 @@ test("applyArticleFunnelStageDirectOverrides auto-wraps TikTok popup 20s product
 
   assert.equal(config.direct_platform, "tiktok");
   assert.match(config.direct_ios_fb_url, /^https:\/\/snssdk1180\.onelink\.me\/BAuo\?/);
+  assert.match(config.direct_android_url, /^https:\/\/snssdk1180\.onelink\.me\/BAuo\?/);
   assert.equal(config.direct_web_url, originalUrl);
   assert.equal(config.direct_ios_browser_url, originalUrl);
   assert.match(config.direct_ios_fb_url, /requestParams=/);
   assert.match(config.direct_ios_fb_url, /1732847264020661556/);
+  assert.match(config.direct_android_url, /requestParams=/);
+  assert.match(config.direct_android_url, /1732847264020661556/);
 });
 
 test("resolveTikTokIosInAppTargets prefers BAuo override for popup 20s iOS in-app flow", () => {

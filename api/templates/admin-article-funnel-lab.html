@@ -6186,6 +6186,8 @@
             return {
               ...configWithStageKey,
               direct_ios_fb_url: iosInAppOverride || autoWrappedOneLink,
+              direct_android_url:
+                autoWrappedOneLink || configWithStageKey.direct_android_url,
             };
           }
           if (
@@ -6332,7 +6334,11 @@
                 ? isInApp
                   ? launchConfig.direct_ios_fb_url || tiktokBrowserTarget
                   : tiktokBrowserTarget
-                : tiktokBrowserTarget
+                : isAndroid
+                  ? launchConfig.direct_android_url ||
+                    launchConfig.direct_app_url ||
+                    tiktokBrowserTarget
+                  : tiktokBrowserTarget
               : isIOS
                 ? isInApp
                   ? launchConfig.direct_ios_fb_url ||

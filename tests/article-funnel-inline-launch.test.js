@@ -294,6 +294,74 @@ test("buildArticleFunnelPreviewPage skips inline fallback for TikTok popup 20s i
   );
 });
 
+test("buildArticleFunnelPreviewPage prefers Android app targets for TikTok popup 20s while preserving iOS web-first handling", () => {
+  const html = __testUtils.buildArticleFunnelPreviewPage(
+    {
+      title: "Demo",
+      stages: [
+        {
+          stage_key: "20s",
+          direct_platform: "tiktok",
+          direct_web_url: "https://vt.tiktok.com/demo/",
+          direct_app_url: "snssdk1180://ec/pdp?demo=1",
+          direct_android_url: "snssdk1180://ec/pdp?demo=android",
+          direct_ios_fb_url:
+            "https://snssdk1180.onelink.me/BAuo?af_dp=snssdk1180%3A%2F%2Fec%2Fpdp",
+        },
+      ],
+    },
+    "https://example.com/demo",
+    "/demo/launch",
+    { routeSlug: "demo", showPopupTestButton: true },
+    "/demo/bridge",
+    "/demo/go",
+  );
+
+  assert.match(
+    html,
+    /var tiktokTarget = isTikTokPopup20s\s+\?\s+\(\s+isIOS\s+\?\s+\(\s+isInApp\s+\?\s+\(stage\.direct_ios_fb_url \|\| tiktokBrowserTarget\)\s+:\s+tiktokBrowserTarget\s+\)\s+:\s+isAndroid\s+\?\s+\(stage\.direct_android_url \|\| stage\.direct_app_url \|\| tiktokBrowserTarget\)\s+:\s+tiktokBrowserTarget\s+\)/s,
+  );
+  assert.match(
+    html,
+    /if \(isTikTokPopup20s && isInApp && stage\.direct_ios_fb_url\) \{/,
+  );
+});
+
+test("buildArticleFunnelPreviewPage uses domain-wide popup dismiss cookies with one-day TTL for every stage", () => {
+  const html = __testUtils.buildArticleFunnelPreviewPage(
+    {
+      title: "Demo",
+      stages: [
+        {
+          stage_key: "3s",
+          direct_platform: "shopee",
+          direct_web_url: "https://shopee.vn/product/37251933/591989399",
+        },
+        {
+          stage_key: "20s",
+          direct_platform: "tiktok",
+          direct_web_url: "https://vt.tiktok.com/demo/",
+        },
+      ],
+    },
+    "https://example.com/demo",
+    "/demo/launch",
+    { routeSlug: "demo", showPopupTestButton: true },
+    "/demo/bridge",
+    "/demo/go",
+  );
+
+  assert.match(
+    html,
+    /function getPopupDismissCookieName\(stageKey\) \{\s+return 'popup_closed_' \+ encodeURIComponent\(String\(stageKey \|\| ''\)\);\s+\}/s,
+  );
+  assert.match(
+    html,
+    /function setPopupDismissCookie\(stageKey\) \{\s+var minutes = 1440;/s,
+  );
+  assert.doesNotMatch(html, /function getPopupDismissScopeKey\(/);
+});
+
 test("buildArticleFunnelPopupTestUrl produces a usable signed test url", () => {
   const testUrl = __testUtils.buildArticleFunnelPopupTestUrl(
     "demo-post",

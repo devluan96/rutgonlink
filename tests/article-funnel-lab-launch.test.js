@@ -194,6 +194,10 @@ test("admin article funnel lab keeps TikTok popup 20s on direct launch urls inst
     templateHtml,
     /function shouldUseOverlayLaunchRoute\(stageKey, targetUrl, routeLaunchUrl\) \{\s+return false;\s+\}/s,
   );
+  assert.match(
+    templateHtml,
+    /const tiktokTarget = isPopup20s\s+\?\s+isIOS\s+\?\s+isInApp\s+\?\s+launchConfig\.direct_ios_fb_url \|\| tiktokBrowserTarget\s+:\s+tiktokBrowserTarget\s+:\s+isAndroid\s+\?\s+launchConfig\.direct_android_url \|\|\s+launchConfig\.direct_app_url \|\|\s+tiktokBrowserTarget\s+:\s+tiktokBrowserTarget/s,
+  );
 });
 
 test("admin article funnel lab auto-wraps TikTok popup 20s links with BAuo and fires the timer at 10 seconds", () => {
