@@ -9114,33 +9114,35 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
     const database = await getDb();
-    const includeLocationAnalytics = req.query.include_location === "1";
-    const [users, locationAnalytics] = await Promise.all([
-      database.getAllUsers(),
-      includeLocationAnalytics
-        ? database.getAdminUserLocationAnalytics(5000)
-        : Promise.resolve(null),
-    ]);
-    const countries = includeLocationAnalytics
-      ? (locationAnalytics?.countries || []).map((country) => ({
-          ...country,
-          country_name_en: getCountryEnglishNameFromCode(country.country_code),
-        }))
-      : [];
+    const users = await database.getAllUsers();
     res.json({
       users,
-      locationAnalytics: includeLocationAnalytics
-        ? {
-            total_users_with_location: Number(
-              locationAnalytics?.total_users_with_location || 0,
-            ),
-            total_users_without_location: Number(
-              locationAnalytics?.total_users_without_location || 0,
-            ),
-            countries,
-            top_countries: countries.slice(0, 8),
-          }
-        : null,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/admin/users/location-analytics", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
+  try {
+    const database = await getDb();
+    const locationAnalytics = await database.getAdminUserLocationAnalytics(5000);
+    const countries = (locationAnalytics?.countries || []).map((country) => ({
+      ...country,
+      country_name_en: getCountryEnglishNameFromCode(country.country_code),
+    }));
+    res.json({
+      locationAnalytics: {
+        total_users_with_location: Number(
+          locationAnalytics?.total_users_with_location || 0,
+        ),
+        total_users_without_location: Number(
+          locationAnalytics?.total_users_without_location || 0,
+        ),
+        countries,
+        top_countries: countries.slice(0, 8),
+      },
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -9954,6 +9956,33 @@ app.post("/api/shorten", async (req, res) => {
   }
 });
 
+app.get("/api/links", async (req, res) => {
+  try {
+    const database = await getDb();
+    const publicBaseUrl = await getPublicBaseUrl();
+    const user = await resolveUser(req);
+    const userId = user?.id || null;
+    const guestSessionId = user ? null : req.guestSessionId;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 100);
+    const [totalLinks, recentLinks] = await Promise.all([
+      database.countLinks(userId, guestSessionId),
+      database.getRecentLinks(userId, guestSessionId, {
+        limit,
+        select: "stats",
+      }),
+    ]);
+    res.json({
+      totalLinks: Number(totalLinks || 0),
+      recent: recentLinks.map((link) => ({
+        ...link,
+        short_url: buildLinkShortUrl(link, publicBaseUrl),
+      })),
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/api/links/:id", async (req, res) => {
   try {
     const database = await getDb();
@@ -10144,10 +10173,10 @@ app.get("/api/stats/summary", async (req, res) => {
         totalLinks,
         today,
         analyticsSummaryResult,
-        articleFunnelStats,
+        labAnalyticsRows,
         latestLoginEvent,
         workspaceSelection,
-        latestLink,
+        recentLinks,
       ] = await Promise.all([
         measureAsyncTiming(
           "totalLinks",
@@ -10196,17 +10225,16 @@ app.get("/api/stats/summary", async (req, res) => {
           timings,
         ),
         userId
-          ? measureAsyncTimingWithSoftTimeout(
-              "labStats",
+          ? measureAsyncTiming(
+              "labAnalyticsRows",
               () =>
-                database.getArticleFunnelClickStats(userId, {
+                database.getArticleFunnelClickAnalyticsRows(userId, {
                   days: 1,
                   unlimited: true,
                 }),
               timings,
-              { fallbackValue: null },
             )
-          : Promise.resolve(null),
+          : Promise.resolve([]),
         user
           ? measureAsyncTiming(
               "latestLogin",
@@ -10225,34 +10253,53 @@ app.get("/api/stats/summary", async (req, res) => {
             )
           : Promise.resolve(null),
         measureAsyncTiming(
-          "latestLink",
+          "recentLinks",
           () =>
-            database.getLatestLink(userId, guestSessionId, {
+            database.getRecentLinks(userId, guestSessionId, {
+              limit: Math.min(STATS_RECENT_LINK_LIMIT, 5),
               select: "stats",
             }),
           timings,
         ),
       ]);
-      const analytics = analyticsSummaryResult?.analytics || null;
-      const alertRows = analyticsSummaryResult?.alertRows || [];
+      const mappedLabAnalyticsRows =
+        mapArticleFunnelClickRowsToAnalyticsRows(labAnalyticsRows);
+      let analytics = analyticsSummaryResult?.analytics || null;
+      let clickRows = [];
+      let analyticsSource = analyticsSummaryResult?.source || "unknown";
+      if (!analytics) {
+        clickRows = await measureAsyncTiming(
+          "clicksFallback",
+          () =>
+            database.getClickAnalytics(userId, guestSessionId, {
+              days: 1,
+              unlimited: true,
+            }),
+          timings,
+        );
+        analytics = buildStatsAnalyticsWithRecentBuckets([
+          ...clickRows,
+          ...mappedLabAnalyticsRows,
+        ]);
+        analyticsSource = "node-fallback";
+      } else if (mappedLabAnalyticsRows.length) {
+        analytics = mergeStatsAnalytics(
+          analytics,
+          buildStatsAnalyticsWithRecentBuckets(mappedLabAnalyticsRows),
+        );
+      }
       const todayKey = getAnalyticsDayKey(new Date());
-      const baseUniqueClicksToday =
+      const uniqueClicksToday =
         (analytics?.unique_timeline || []).find((item) => item.date === todayKey)
           ?.clicks || 0;
-      const totalClicks =
-        Number(analytics?.unique_clicks || 0) +
-        Number(articleFunnelStats?.uniqueClicks || 0);
-      const uniqueClicksToday =
-        Number(baseUniqueClicksToday || 0) +
-        Number(articleFunnelStats?.uniqueClicksToday || 0);
-      const rawTotalClicks =
-        Number(analytics?.total_clicks || 0) +
-        Number(articleFunnelStats?.totalClicks || 0);
       const alerts = buildStatsAlertPayload({
         planName: user?.plan || "guest",
         linksToday: today.linksToday || 0,
         hasAccount: !!user,
-        clickRows: alertRows,
+        clickRows:
+          analyticsSource === "rpc"
+            ? analytics?.recent_buckets || []
+            : clickRows,
         latestLoginEvent,
       });
       const workspaceInviteAlert =
@@ -10261,42 +10308,42 @@ app.get("/api/stats/summary", async (req, res) => {
         alerts.active = Array.isArray(alerts.active) ? alerts.active : [];
         alerts.active.push(workspaceInviteAlert);
       }
-      const recent = latestLink
-        ? [
-            {
-              ...latestLink,
-              short_url: buildLinkShortUrl(latestLink, publicBaseUrl),
-            },
-          ]
-        : [];
+      const recent = recentLinks.map((link) => ({
+        ...link,
+        short_url: buildLinkShortUrl(link, publicBaseUrl),
+      }));
       const payload = {
         totalLinks: Number(totalLinks || 0),
         ...today,
-        totalClicks,
-        uniqueTotalClicks: totalClicks,
-        rawTotalClicks,
+        totalClicks: Number(analytics?.unique_clicks || 0),
+        uniqueTotalClicks: Number(analytics?.unique_clicks || 0),
+        rawTotalClicks: Number(analytics?.total_clicks || 0),
         clicksToday: uniqueClicksToday,
         uniqueClicksToday,
         rawClicksToday: Number(today.clicksToday || 0),
         recentWindowDays: 1,
         selectedRangeDays: 1,
         recent,
+        analytics,
         alerts,
         plan: user?.plan || "guest",
         debug: {
           requestId: req.requestId || null,
           generatedAt: new Date().toISOString(),
-          analyticsSource: analyticsSummaryResult?.source || "unknown",
+          analyticsSource,
           route: "/api/stats/summary",
+          labAnalyticsRows: mappedLabAnalyticsRows.length,
         },
       };
       timings.total = Date.now() - startedAt;
       if (timings.total >= 1000) {
         console.log("[stats-summary] slow request", {
           ...timings,
-          analyticsSource: analyticsSummaryResult?.source || "unknown",
-          totalClicks,
+          analyticsSource,
+          clickRows: clickRows.length,
+          totalClicks: analytics?.unique_clicks || 0,
           totalLinks: totalLinks || 0,
+          recentLinks: recent.length,
           hasUser: !!user,
         });
       }

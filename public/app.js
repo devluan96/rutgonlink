@@ -158,6 +158,9 @@ let statsSummaryPayloadPromise = null;
 let statsSummaryPayloadCache = null;
 let statsSummaryPayloadCacheAt = 0;
 let statsSummaryPayloadCacheDays = DEFAULT_STATS_RANGE_DAYS;
+let linksPayloadPromise = null;
+let linksPayloadCache = null;
+let linksPayloadCacheAt = 0;
 let statsLoadSequence = 0;
 let statsLoadAppliedSequence = 0;
 const labEmbedCacheBust = Date.now().toString(36);
@@ -2384,13 +2387,11 @@ function getActiveAppPage() {
 }
 
 function pageNeedsFullStatsPayload(page = getActiveAppPage()) {
-  return ["dashboard", "stats", "links"].includes(
-    String(page || "").trim(),
-  );
+  return ["stats"].includes(String(page || "").trim());
 }
 
 function pageNeedsRealtimeFullStatsPayload(page = getActiveAppPage()) {
-  return ["dashboard", "stats"].includes(String(page || "").trim());
+  return ["stats"].includes(String(page || "").trim());
 }
 
 function resetStatsDataCaches() {
@@ -2403,6 +2404,9 @@ function resetStatsDataCaches() {
   statsSummaryPayloadCache = null;
   statsSummaryPayloadCacheAt = 0;
   statsSummaryPayloadCacheDays = DEFAULT_STATS_RANGE_DAYS;
+  linksPayloadPromise = null;
+  linksPayloadCache = null;
+  linksPayloadCacheAt = 0;
   notificationStatsSnapshot = null;
 }
 
@@ -2463,7 +2467,10 @@ async function pollRealtimeNotifications() {
           });
         }
       }
-      if (pageNeedsRealtimeFullStatsPayload()) {
+      const activePage = getActiveAppPage();
+      if (activePage === "dashboard") {
+        await loadDashboardData({ prefetched: statsPayload });
+      } else if (pageNeedsRealtimeFullStatsPayload(activePage)) {
         await loadData();
       }
       if (
@@ -4148,9 +4155,7 @@ function shouldFetchAdminSection(section, force = false) {
 
 function getAdminSectionsForLoad(section = adminSection) {
   const normalizedSection = String(section || "overview").trim().toLowerCase();
-  return normalizedSection === "overview"
-    ? ["overview"]
-    : ["overview", normalizedSection];
+  return [normalizedSection];
 }
 
 function renderAdminOverview(payload = {}) {
@@ -4666,7 +4671,11 @@ function navigate(page, el) {
     void loadAdminData();
   }
   if (page === "stats") renderStatsPage();
-  if (pageNeedsFullStatsPayload(page)) {
+  if (page === "dashboard") {
+    void loadDashboardData();
+  } else if (page === "links") {
+    void loadLinksData();
+  } else if (pageNeedsFullStatsPayload(page)) {
     void loadData();
   }
   const sidebar = document.getElementById("sidebar");
@@ -7297,7 +7306,7 @@ async function closeTeamTemplateModal(confirmed) {
       await navigator.clipboard.writeText(data.short_url);
       copied = true;
     } catch {}
-    await loadData();
+    await refreshActiveStatsData();
     if (document.getElementById("page-team")?.classList.contains("active")) {
       await loadTeamWorkspace({ silent: true });
       renderTeamWorkspaceSummary();
@@ -8435,7 +8444,7 @@ async function doShorten(cid, confirmAffiliate = false) {
       applyPendingTeamTemplateDraft(cid);
     }
     toast("✅ Tạo link thành công!", "ok");
-    loadData();
+    refreshActiveStatsData();
   } catch {
     errEl.textContent = "Lỗi kết nối";
     errEl.classList.add("show");
@@ -8643,6 +8652,72 @@ async function getStatsSummaryPayload({ preferCache = false } = {}) {
   } finally {
     statsSummaryPayloadPromise = null;
   }
+}
+
+async function getLinksPayload({ preferCache = false } = {}) {
+  const now = Date.now();
+  if (
+    preferCache &&
+    linksPayloadCache &&
+    now - linksPayloadCacheAt <= STATS_PAYLOAD_CACHE_TTL_MS
+  ) {
+    return linksPayloadCache;
+  }
+  if (linksPayloadPromise) {
+    return linksPayloadPromise;
+  }
+  linksPayloadPromise = (async () => {
+    const response = await fetch("/api/links?limit=100");
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(payload?.error || "Khong the tai danh sach lien ket");
+    }
+    linksPayloadCache = payload || {};
+    linksPayloadCacheAt = Date.now();
+    return payload || {};
+  })();
+  try {
+    return await linksPayloadPromise;
+  } finally {
+    linksPayloadPromise = null;
+  }
+}
+
+async function loadDashboardData({ preferCache = false, prefetched = null } = {}) {
+  const summaryPayload =
+    prefetched || (await getStatsSummaryPayload({ preferCache }));
+  return loadData(summaryPayload, { days: DEFAULT_STATS_RANGE_DAYS });
+}
+
+async function loadLinksData({ preferCache = false, prefetched = null } = {}) {
+  const payload = prefetched || (await getLinksPayload({ preferCache }));
+  links = Array.isArray(payload?.recent) ? payload.recent : [];
+  selectedLinkIds = new Set(
+    [...selectedLinkIds].filter((id) =>
+      links.some((link) => Number(link.id) === Number(id)),
+    ),
+  );
+  const totalLinks = Number(payload?.totalLinks || links.length || 0);
+  const navCount = document.getElementById("navCount");
+  if (navCount) navCount.textContent = totalLinks.toLocaleString();
+  const countLabel = document.getElementById("linkCountLabel");
+  if (countLabel) countLabel.textContent = totalLinks.toLocaleString();
+  applyLinkFilters();
+  return payload;
+}
+
+async function refreshActiveStatsData(options = {}) {
+  const activePage = getActiveAppPage();
+  if (activePage === "dashboard") {
+    return loadDashboardData(options);
+  }
+  if (activePage === "links") {
+    return loadLinksData(options);
+  }
+  if (pageNeedsFullStatsPayload(activePage)) {
+    return loadData(null, options);
+  }
+  return null;
 }
 
 async function loadData(prefetched = null, options = {}) {
@@ -9176,7 +9251,7 @@ async function bulkDeleteSelectedLinks() {
         : `Đã xóa ${deletedCount} link`,
       "ok",
     );
-    loadData();
+    refreshActiveStatsData();
   } catch {
     toast("Lỗi kết nối", "err");
   }
@@ -9933,7 +10008,7 @@ async function deleteMyLink(id, shortDisplay) {
     }
     selectedLinkIds.delete(Number(id));
     toast("🗑️ Đã xóa link", "ok");
-    loadData();
+    refreshActiveStatsData();
   } catch {
     toast("Lỗi kết nối", "err");
   }
@@ -9945,6 +10020,7 @@ async function deleteMyLink(id, shortDisplay) {
 let adminLinks = [];
 let adminUsers = [];
 let adminUserLocationAnalytics = null;
+let adminUserLocationLoadedAt = 0;
 let adminDomains = [];
 let adminRedirects = [];
 let adminPayments = [];
@@ -10022,9 +10098,20 @@ function markAdminSectionLoaded(section) {
   adminSectionLoadedAt[section] = Date.now();
 }
 
+function markAdminUserLocationLoaded() {
+  adminUserLocationLoadedAt = Date.now();
+}
+
 function shouldFetchAdminSection(section, force = false) {
   if (force) return true;
   const lastLoadedAt = Number(adminSectionLoadedAt[section] || 0);
+  if (!lastLoadedAt) return true;
+  return Date.now() - lastLoadedAt >= ADMIN_SECTION_CACHE_TTL_MS;
+}
+
+function shouldFetchAdminUserLocation(force = false) {
+  if (force) return true;
+  const lastLoadedAt = Number(adminUserLocationLoadedAt || 0);
   if (!lastLoadedAt) return true;
   return Date.now() - lastLoadedAt >= ADMIN_SECTION_CACHE_TTL_MS;
 }
@@ -10212,21 +10299,32 @@ async function loadAdminData(force = false) {
     }
     if (sectionsToFetch.includes("users")) {
       tasks.push(
-        fetch("/api/admin/users?include_location=1").then(async (response) => {
+        fetch("/api/admin/users").then(async (response) => {
           if (!response.ok) return;
           const payload = await response.json();
           adminUsers = payload.users || [];
-          adminUserLocationAnalytics = payload.locationAnalytics || null;
           adminSelectedUserIds = new Set(
             [...adminSelectedUserIds].filter((id) =>
               adminUsers.some((userItem) => Number(userItem.id) === Number(id)),
             ),
           );
-          renderAdminUserLocationAnalytics();
           renderAdminUsers();
           markAdminSectionLoaded("users");
         }),
       );
+      if (shouldFetchAdminUserLocation(force)) {
+        tasks.push(
+          fetch("/api/admin/users/location-analytics").then(async (response) => {
+            if (!response.ok) return;
+            const payload = await response.json();
+            adminUserLocationAnalytics = payload.locationAnalytics || null;
+            renderAdminUserLocationAnalytics();
+            markAdminUserLocationLoaded();
+          }),
+        );
+      } else {
+        renderAdminUserLocationAnalytics();
+      }
     }
     if (sectionsToFetch.includes("logs")) {
       tasks.push(
@@ -10867,7 +10965,7 @@ async function setPrimaryDomain(domainId, hostname = "") {
     adminDomains = d.domains || [];
     renderAdminDomains(adminDomains);
     syncAvailableDomainsFromAdmin(adminDomains);
-    loadData();
+    refreshActiveStatsData();
     addNotification({
       key: `domain-primary-${domainId}-${Date.now()}`,
       title: "Domain chính đã thay đổi",
@@ -10908,7 +11006,7 @@ async function toggleDomainActive(domainId, isActive, hostname = "") {
     adminDomains = d.domains || [];
     renderAdminDomains(adminDomains);
     syncAvailableDomainsFromAdmin(adminDomains);
-    loadData();
+    refreshActiveStatsData();
     addNotification({
       key: `domain-toggle-${domainId}-${Date.now()}`,
       title: willEnable
@@ -10945,7 +11043,7 @@ async function deleteAdminDomain(domainId, hostname) {
     adminDomains = d.domains || [];
     renderAdminDomains(adminDomains);
     syncAvailableDomainsFromAdmin(adminDomains);
-    loadData();
+    refreshActiveStatsData();
     addNotification({
       key: `domain-delete-${domainId}-${Date.now()}`,
       title: "Đã xóa domain",
@@ -11400,7 +11498,7 @@ async function saveEditLink() {
     }
     toast("✅ Đã lưu thay đổi!", "ok");
     closeEditModal();
-    loadData();
+    refreshActiveStatsData();
     if (adminLinks.length) loadAdminData(true);
   } catch {
     errEl.textContent = "Lỗi kết nối";
