@@ -24,7 +24,7 @@ const AUTO_ALIAS_MAX_LENGTH = 90;
 const RECENT_STATS_WINDOW_DAYS = 7;
 const DEFAULT_STATS_RANGE_DAYS = 1;
 const ALLOWED_STATS_RANGE_DAYS = new Set([1, 7, 14]);
-const LINKS_PAGE_FETCH_LIMIT = 30;
+const LINKS_PAGE_FETCH_LIMIT = 10;
 const BILLING_DATA_CACHE_TTL_MS = 60000;
 const ACCOUNT_LOGIN_EVENTS_CACHE_TTL_MS = 60000;
 
@@ -109,6 +109,7 @@ let adminOverviewTrendPayload = null;
 let statsAnalytics = null;
 let linkSearchQuery = "";
 let linkTypeFilter = "all";
+let linkViewFilter = "all";
 const createSubtabStorageKey = "rutgonlink-create-subtab";
 const linksSubtabStorageKey = "rutgonlink-links-subtab";
 let createSubtab =
@@ -116,6 +117,9 @@ let createSubtab =
 let linksSubtab =
   localStorage.getItem(linksSubtabStorageKey) === "lab" ? "lab" : "standard";
 let currentFilteredLinks = [];
+let standardLinks = [];
+let linkLabs = [];
+let unifiedLinkRows = [];
 let selectedLinkIds = new Set();
 let expandedOriginalLinkIds = new Set();
 let availableDomains = [];
@@ -8708,17 +8712,22 @@ async function loadDashboardData({ preferCache = false, prefetched = null } = {}
 
 async function loadLinksData({ preferCache = false, prefetched = null } = {}) {
   const payload = prefetched || (await getLinksPayload({ preferCache }));
-  links = Array.isArray(payload?.recent) ? payload.recent : [];
+  standardLinks = Array.isArray(payload?.recent) ? payload.recent : [];
+  linkLabs = Array.isArray(payload?.labs) ? payload.labs : [];
+  links = standardLinks.slice();
+  unifiedLinkRows = buildUnifiedLinkRows(standardLinks, linkLabs);
   selectedLinkIds = new Set(
     [...selectedLinkIds].filter((id) =>
-      links.some((link) => Number(link.id) === Number(id)),
+      standardLinks.some((link) => Number(link.id) === Number(id)),
     ),
   );
-  const totalLinks = Number(payload?.totalLinks || links.length || 0);
+  const totalLinks =
+    Number(payload?.totalLinks || standardLinks.length || 0) + linkLabs.length;
   const navCount = document.getElementById("navCount");
   if (navCount) navCount.textContent = totalLinks.toLocaleString();
   const countLabel = document.getElementById("linkCountLabel");
   if (countLabel) countLabel.textContent = totalLinks.toLocaleString();
+  renderLinksOverview();
   applyLinkFilters();
   return payload;
 }
@@ -9274,6 +9283,175 @@ async function bulkDeleteSelectedLinks() {
   }
 }
 
+function renderOriginalLinkCell(link, platformKey, linkKey) {
+  const originalUrl = String(link?.original_url || "").trim();
+  if (!originalUrl) return '<span style="color:var(--text3)">—</span>';
+  if (platformKey === "shopee" || platformKey === "tiktok") {
+    return esc(originalUrl);
+  }
+  if (originalUrl.length <= 72) {
+    return esc(originalUrl);
+  }
+  const normalizedKey = String(linkKey || "").trim();
+  const isExpanded = expandedOriginalLinkIds.has(normalizedKey);
+  return `<div class="td-orig-wrap ${isExpanded ? "is-expanded" : "is-clamped"}">
+    <span class="td-orig-text">${esc(originalUrl)}</span>
+    <button class="td-orig-toggle" type="button" onclick="toggleOriginalLinkExpand('${esc(normalizedKey)}')">${isExpanded ? "Thu gọn" : "Xem thêm"}</button>
+  </div>`;
+}
+
+function renderTable(arr) {
+  const tb = document.getElementById("tblBody");
+  currentFilteredLinks = Array.isArray(arr) ? arr.slice() : [];
+  if (!tb) return;
+  if (!arr.length) {
+    tb.innerHTML =
+      '<tr><td colspan="8" class="tbl-empty">Chưa có liên kết phù hợp. <span style="color:var(--brand);cursor:pointer" onclick="navigate(\'create\')">Tạo ngay →</span></td></tr>';
+    syncMobileCardTableLabels(tb);
+    syncLinkBulkToolbar(currentFilteredLinks);
+    return;
+  }
+  const labels = { shopee: "Shopee", tiktok: "TikTok", generic: "Khác" };
+  tb.innerHTML = arr
+    .map((link) => {
+      const isLab = (link?._kind || "") === "lab";
+      const platformKey = getUnifiedLinkRowPlatform(link);
+      const shortUrl = String(link?.short_url || link?.original_url || "").trim();
+      const shortLabel = shortUrl.replace(/^https?:\/\//, "");
+      const date = String(link?.created_at || "").substring(0, 10);
+      const linkId = Number(link?.id || 0);
+      const rowKey = String(link?._rowKey || `${isLab ? "lab" : "link"}-${linkId || shortLabel}`);
+      const isSelected = !isLab && selectedLinkIds.has(linkId);
+      const displayTitle =
+        String(link?.og_title || link?.name || shortLabel || (isLab ? `Lab ${linkId}` : `Link ${linkId}`)).trim();
+      return `<tr data-row-key="${rowKey}" data-link-id="${isLab ? "" : linkId}" class="${isSelected ? "is-selected" : ""}${isLab ? " is-lab-row" : ""}">
+        <td class="td-check">
+          <label class="tbl-check">
+            <input type="checkbox" ${isLab ? "disabled" : ""} ${isSelected ? "checked" : ""} onchange="toggleLinkSelection(${linkId}, this.checked)"/>
+            <span></span>
+          </label>
+        </td>
+        <td><span class="links-kind-badge ${isLab ? "lab" : "standard"}">${getUnifiedLinkRowKindLabel(link?._kind)}</span></td>
+        <td><div class="td-link-meta"><a class="td-link" href="${shortUrl || "#"}" target="_blank">${shortLabel || "—"}</a><small>${esc(displayTitle)}</small></div></td>
+        <td class="td-orig" title="${link?.original_url || ""}">${renderOriginalLinkCell(link, platformKey, rowKey)}</td>
+        <td><span class="pill ${platformKey}">${labels[platformKey] || "Khác"}</span></td>
+        <td style="font-weight:700;color:var(--text)">${Number(link?.clicks || 0).toLocaleString()}</td>
+        <td style="color:var(--text3)">${date || "—"}</td>
+        <td class="td-actions links-actions"><div class="links-actions-grid">
+          <button class="btn-cp" onclick="copyClip('${shortUrl}')" title="Copy link">📋</button>
+          ${
+            isLab
+              ? link?.published_test_20s_url
+                ? `<button class="btn-cp" onclick="copyClip('${link.published_test_20s_url}')" title="Copy link test 20s">20s</button>`
+                : `<button class="btn-cp" disabled title="Chưa có link test 20s">20s</button>`
+              : `<button class="btn-cp" onclick="openEditModal(${linkId})" style="color:var(--brand)" title="Chỉnh sửa">✏️</button>`
+          }
+          ${
+            isLab
+              ? `<button class="btn-cp" onclick="openExistingLabInCreateEditor(${linkId})" style="color:var(--brand)" title="Sửa lab">✏️</button>`
+              : `<button class="btn-del" onclick="deleteMyLink(${linkId},'${shortLabel}')" title="Xóa">🗑️</button>`
+          }
+          ${
+            isLab
+              ? `<button class="btn-del" onclick="deleteLabLink(${linkId},'${esc(displayTitle)}')" title="Xóa lab">🗑️</button>`
+              : ""
+          }
+        </div></td>
+      </tr>`;
+    })
+    .join("");
+  syncMobileCardTableLabels(tb);
+  syncLinkBulkToolbar(currentFilteredLinks);
+}
+
+function toggleOriginalLinkExpand(linkKey) {
+  const normalizedKey = String(linkKey || "").trim();
+  if (!normalizedKey) return;
+  if (expandedOriginalLinkIds.has(normalizedKey)) {
+    expandedOriginalLinkIds.delete(normalizedKey);
+  } else {
+    expandedOriginalLinkIds.add(normalizedKey);
+  }
+  renderTable(currentFilteredLinks);
+}
+
+function syncLinkBulkToolbar(arr = currentFilteredLinks) {
+  const visibleLinks = Array.isArray(arr) ? arr : [];
+  currentFilteredLinks = visibleLinks.slice();
+  const visibleStandardLinks = visibleLinks.filter(
+    (link) => (link?._kind || "standard") === "standard",
+  );
+  const visibleIds = visibleStandardLinks
+    .map((link) => Number(link.id))
+    .filter((id) => Number.isFinite(id));
+  const visibleSelectedCount = visibleIds.filter((id) =>
+    selectedLinkIds.has(id),
+  ).length;
+  const totalSelectedCount = selectedLinkIds.size;
+  const bar = document.getElementById("linkBulkBar");
+  const status = document.getElementById("linkBulkStatus");
+  const clearBtn = document.getElementById("linkClearSelectionBtn");
+  const deleteBtn = document.getElementById("linkBulkDeleteBtn");
+  const selectAll = document.getElementById("tblSelectAll");
+  const visibleLabCount = visibleLinks.length - visibleStandardLinks.length;
+
+  if (bar) bar.classList.toggle("active", totalSelectedCount > 0);
+  if (status) {
+    if (totalSelectedCount > 0) {
+      status.textContent =
+        visibleSelectedCount === totalSelectedCount
+          ? `Đã chọn ${totalSelectedCount} link thường`
+          : `Đã chọn ${totalSelectedCount} link thường, ${visibleSelectedCount} link đang hiện trong bộ lọc`;
+    } else {
+      status.textContent = `Đang hiển thị ${visibleLinks.length} liên kết • ${visibleStandardLinks.length} thường • ${visibleLabCount} lab`;
+    }
+  }
+  if (clearBtn) clearBtn.disabled = totalSelectedCount === 0;
+  if (deleteBtn) deleteBtn.disabled = totalSelectedCount === 0;
+  if (selectAll) {
+    selectAll.checked =
+      visibleIds.length > 0 && visibleSelectedCount === visibleIds.length;
+    selectAll.indeterminate =
+      visibleSelectedCount > 0 && visibleSelectedCount < visibleIds.length;
+  }
+}
+
+function toggleSelectAllVisibleLinks(checked) {
+  currentFilteredLinks.forEach((link) => {
+    if ((link?._kind || "standard") !== "standard") return;
+    const normalizedId = Number(link.id);
+    if (!Number.isFinite(normalizedId)) return;
+    if (checked) selectedLinkIds.add(normalizedId);
+    else selectedLinkIds.delete(normalizedId);
+  });
+  renderTable(currentFilteredLinks);
+}
+
+async function deleteLabLink(id, label) {
+  const confirmed = await showConfirmDialog({
+    title: "Xóa link lab",
+    message: `Xóa lab "${label || `Lab ${id}`}"?`,
+    note: "Hành động này không thể hoàn tác.",
+    confirmLabel: "Xóa lab",
+    tone: "danger",
+  });
+  if (!confirmed) return;
+  try {
+    const response = await fetch(`/api/admin/article-funnel-labs/${Number(id)}`, {
+      method: "DELETE",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      toast(data.error || "Xóa lab thất bại", "err");
+      return;
+    }
+    toast("Đã xóa link lab", "ok");
+    refreshActiveStatsData();
+  } catch {
+    toast("Lỗi kết nối", "err");
+  }
+}
+
 function filterTable(q) {
   linkSearchQuery = (q || "").toLowerCase();
   applyLinkFilters();
@@ -9434,33 +9612,138 @@ function updateBioPreview() {
   renderBioManager();
 }
 
+function getUnifiedLinkRowKindLabel(kind = "") {
+  return kind === "lab" ? "Lab" : "Thường";
+}
+
+function getUnifiedLinkRowPlatform(link) {
+  if ((link?._kind || "") === "lab") {
+    return String(link?.platform_key || "generic").trim() || "generic";
+  }
+  return pt(link?.original_url);
+}
+
+function sortUnifiedLinkRows(rows = []) {
+  return rows.slice().sort((a, b) => {
+    const bTime = new Date(b?.created_at || b?.updated_at || 0).getTime() || 0;
+    const aTime = new Date(a?.created_at || a?.updated_at || 0).getTime() || 0;
+    if (bTime !== aTime) return bTime - aTime;
+    return String(b?._rowKey || "").localeCompare(String(a?._rowKey || ""));
+  });
+}
+
+function buildUnifiedLinkRows(recentLinks = [], labs = []) {
+  const standardRows = (Array.isArray(recentLinks) ? recentLinks : []).map((link) => ({
+    ...link,
+    _kind: "standard",
+    _rowKey: `link-${Number(link.id)}`,
+    platform_key: pt(link.original_url),
+  }));
+  const labRows = (Array.isArray(labs) ? labs : []).map((lab) => ({
+    id: Number(lab.id || 0),
+    short_url: String(lab.published_url || "").trim(),
+    original_url: String(lab.reference_source_url || lab.title || lab.name || "").trim(),
+    og_title: String(lab.title || lab.name || "").trim(),
+    clicks: Math.max(Number(lab.affiliate_clicks) || 0, 0),
+    created_at: lab.created_at || lab.updated_at || "",
+    updated_at: lab.updated_at || lab.created_at || "",
+    published_test_20s_url: String(lab.published_test_20s_url || "").trim(),
+    platform_key: String(lab.platform_key || "generic").trim() || "generic",
+    name: String(lab.name || "").trim(),
+    _kind: "lab",
+    _rowKey: `lab-${Number(lab.id)}`,
+  }));
+  return sortUnifiedLinkRows([...standardRows, ...labRows]);
+}
+
+function renderLinksOverview() {
+  const visibleCountEl = document.getElementById("linksVisibleCount");
+  const summaryMetaEl = document.getElementById("linksSummaryMeta");
+  const filterStateEl = document.getElementById("linksFilterState");
+  if (visibleCountEl) {
+    visibleCountEl.textContent = Number(unifiedLinkRows.length || 0).toLocaleString();
+  }
+  if (summaryMetaEl) {
+    summaryMetaEl.textContent = `${standardLinks.length.toLocaleString()} link thường • ${linkLabs.length.toLocaleString()} link lab`;
+  }
+  if (filterStateEl) {
+    const kindLabel =
+      linkViewFilter === "lab"
+        ? "Chỉ link lab"
+        : linkViewFilter === "standard"
+          ? "Chỉ link thường"
+          : "Tất cả liên kết";
+    filterStateEl.textContent = kindLabel;
+  }
+}
+
 function matchesLinkFilter(link, filter) {
-  const p = pt(link.original_url);
+  const p = getUnifiedLinkRowPlatform(link);
   if (filter === "all") return true;
-  if (filter === "video") return (link.link_type || "") === "video";
+  if (filter === "video") {
+    return (link._kind || "") === "standard" && (link.link_type || "") === "video";
+  }
   return p === filter;
 }
 
-function setLinkFilter(filter, el) {
-  linkTypeFilter = filter;
+function matchesLinkViewFilter(link) {
+  if (linkViewFilter === "all") return true;
+  return (link?._kind || "standard") === linkViewFilter;
+}
+
+function setLinkViewFilter(filter, el) {
+  linkViewFilter = filter === "lab" ? "lab" : filter === "standard" ? "standard" : "all";
   document
-    .querySelectorAll(".chip[data-filter]")
+    .querySelectorAll(".chip[data-kind-filter]")
     .forEach((chip) => chip.classList.remove("active"));
-  el.classList.add("active");
+  el?.classList.add("active");
+  renderLinksOverview();
+  applyLinkFilters();
+}
+
+function setLinkFilter(filter, el) {
+  linkTypeFilter = String(filter || "all").trim() || "all";
+  const select = document.getElementById("linksPlatformFilter");
+  if (select && select.value !== linkTypeFilter) {
+    select.value = linkTypeFilter;
+  }
   applyLinkFilters();
 }
 
 function applyLinkFilters() {
-  const filtered = links.filter(
+  const filtered = unifiedLinkRows.filter(
     (l) =>
+      matchesLinkViewFilter(l) &&
       matchesLinkFilter(l, linkTypeFilter) &&
       (!linkSearchQuery ||
         (l.short_url || "").toLowerCase().includes(linkSearchQuery) ||
         (l.original_url || "").toLowerCase().includes(linkSearchQuery) ||
-        (l.og_title || "").toLowerCase().includes(linkSearchQuery)),
+        (l.og_title || "").toLowerCase().includes(linkSearchQuery) ||
+        (l.name || "").toLowerCase().includes(linkSearchQuery)),
   );
   const countEl = document.getElementById("linkCountLabel");
   if (countEl) countEl.textContent = filtered.length;
+  const visibleCountEl = document.getElementById("linksVisibleCount");
+  if (visibleCountEl) {
+    visibleCountEl.textContent = Number(filtered.length || 0).toLocaleString();
+  }
+  const filterStateEl = document.getElementById("linksFilterState");
+  if (filterStateEl) {
+    const filterText =
+      linkTypeFilter === "all"
+        ? "Tất cả nền tảng"
+        : linkTypeFilter === "generic"
+          ? "Nền tảng khác"
+          : linkTypeFilter === "video"
+            ? "Video overlay"
+            : linkTypeFilter === "shopee"
+              ? "Shopee"
+              : "TikTok";
+    filterStateEl.textContent =
+      linkViewFilter === "all"
+        ? filterText
+        : `${linkViewFilter === "lab" ? "Link lab" : "Link thường"} • ${filterText}`;
+  }
   renderTable(filtered);
 }
 

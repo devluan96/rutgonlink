@@ -2239,152 +2239,133 @@
               <h1>Quản lý liên kết</h1>
               <p>Tất cả link đã tạo</p>
             </div>
-            <div class="page-subtabs" role="tablist" aria-label="Quản lý liên kết">
-              <button
-                class="page-subtab-btn active"
-                type="button"
-                data-links-subtab="standard"
-                onclick="setLinksSubtab('standard', this)"
-              >
-                Danh sách liên kết
-              </button>
-              <button
-                class="page-subtab-btn"
-                type="button"
-                data-links-subtab="lab"
-                data-lab-tab-only
-                hidden
-                onclick="setLinksSubtab('lab', this)"
-              >
-                Danh sách liên kết lab
-              </button>
+            <div class="links-overview-strip">
+              <div class="links-overview-card">
+                <span>Tổng hiển thị</span>
+                <strong id="linksVisibleCount">0</strong>
+                <small id="linksSummaryMeta">0 link thường • 0 link lab</small>
+              </div>
+              <div class="links-overview-card">
+                <span>Nhịp lọc</span>
+                <strong id="linksFilterState">Tất cả liên kết</strong>
+                <small>Sắp xếp mới nhất trước, trộn chung theo ngày tạo.</small>
+              </div>
             </div>
-            <div class="page-subpanel active" data-links-panel="standard">
-              <div class="tbl-card">
-                <div class="tbl-head">
+            <div class="tbl-card links-unified-card">
+              <div class="tbl-head links-unified-head">
+                <div>
+                  <div class="tool-kicker">Link Inventory</div>
                   <h3>Danh sách liên kết (<span id="linkCountLabel">0</span>)</h3>
-                  <input
-                    type="text"
-                    class="tbl-search"
-                    id="tblSearch"
-                    placeholder="Tìm kiếm..."
-                    oninput="filterTable(this.value)"
-                  />
+                  <p class="links-unified-subcopy">
+                    Gồm cả link thường và link lab trong cùng một luồng quản lý.
+                  </p>
                 </div>
-                <div class="link-filters">
+                <input
+                  type="text"
+                  class="tbl-search"
+                  id="tblSearch"
+                  placeholder="Tìm kiếm link, tiêu đề hoặc URL nguồn..."
+                  oninput="filterTable(this.value)"
+                />
+              </div>
+              <div class="links-filter-stack">
+                <div class="links-filter-row">
+                <div class="links-filter-group" aria-label="Lọc theo loại link">
                   <button
                     class="chip active"
                     type="button"
-                    data-filter="all"
-                    onclick="setLinkFilter('all', this)"
+                    data-kind-filter="all"
+                    onclick="setLinkViewFilter('all', this)"
                   >
-                    Tất cả
+                    Tất cả liên kết
                   </button>
                   <button
                     class="chip"
                     type="button"
-                    data-filter="shopee"
-                    onclick="setLinkFilter('shopee', this)"
+                    data-kind-filter="standard"
+                    onclick="setLinkViewFilter('standard', this)"
                   >
-                    Shopee
+                    Link thường
                   </button>
                   <button
                     class="chip"
                     type="button"
-                    data-filter="tiktok"
-                    onclick="setLinkFilter('tiktok', this)"
+                    data-kind-filter="lab"
+                    onclick="setLinkViewFilter('lab', this)"
                   >
-                    TikTok
-                  </button>
-                  <button
-                    class="chip"
-                    type="button"
-                    data-filter="video"
-                    onclick="setLinkFilter('video', this)"
-                  >
-                    Video
-                  </button>
-                  <button
-                    class="chip"
-                    type="button"
-                    data-filter="generic"
-                    onclick="setLinkFilter('generic', this)"
-                  >
-                    Khác
+                    Link lab
                   </button>
                 </div>
-                <div class="link-bulkbar" id="linkBulkBar">
-                  <div class="link-bulk-status" id="linkBulkStatus">
-                    Đang hiển thị 0 link
-                  </div>
-                  <div class="link-bulk-actions">
-                    <button
-                      class="btn-cp"
-                      id="linkClearSelectionBtn"
-                      type="button"
-                      onclick="clearSelectedLinks()"
-                      disabled
-                    >
-                      Bỏ chọn
-                    </button>
-                    <button
-                      class="btn-del"
-                      id="linkBulkDeleteBtn"
-                      type="button"
-                      onclick="bulkDeleteSelectedLinks()"
-                      disabled
-                    >
-                      Xóa đã chọn
-                    </button>
-                  </div>
+                <div class="links-filter-select-wrap" aria-label="Lọc theo nền tảng">
+                  <label class="links-filter-select-label" for="linksPlatformFilter">Nền tảng</label>
+                  <select
+                    id="linksPlatformFilter"
+                    class="links-filter-select"
+                    onchange="setLinkFilter(this.value)"
+                  >
+                    <option value="all">Mọi nền tảng</option>
+                    <option value="shopee">Shopee</option>
+                    <option value="tiktok">TikTok</option>
+                    <option value="video">Video</option>
+                    <option value="generic">Khác</option>
+                  </select>
                 </div>
-                <div style="overflow-x: auto">
-                  <table class="mobile-card-table">
-                    <thead>
-                      <tr>
-                        <th>
-                          <label class="tbl-check">
-                            <input
-                              type="checkbox"
-                              id="tblSelectAll"
-                              onchange="toggleSelectAllVisibleLinks(this.checked)"
-                            />
-                            <span></span>
-                          </label>
-                        </th>
-                        <th>Link rút gọn</th>
-                        <th>Link gốc</th>
-                        <th>Nền tảng</th>
-                        <th>OG Meta</th>
-                        <th>Clicks</th>
-                        <th>Ngày tạo</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody id="tblBody">
-                      <tr>
-                        <td colspan="8" class="tbl-empty">⏳ Đang tải...</td>
-                      </tr>
-                    </tbody>
-                  </table>
                 </div>
               </div>
-            </div>
-            <div class="page-subpanel" data-links-panel="lab" hidden>
-              <div class="lab-embed-shell" data-surface="links" data-lab-tab-only>
-                <div class="lab-embed-head">
-                  <div class="lab-embed-actions">
-                    <button class="btn-cp" type="button" onclick="refreshLabEmbed('linksLabIframe')">Tải lại danh sách</button>
-                  </div>
+              <div class="link-bulkbar" id="linkBulkBar">
+                <div class="link-bulk-status" id="linkBulkStatus">
+                  Đang hiển thị 0 liên kết
                 </div>
-                <iframe
-                  id="linksLabIframe"
-                  class="lab-embed-frame"
-                  title="Danh sách liên kết lab"
-                  loading="lazy"
-                  data-lab-view="list"
-                  data-lab-embed-id="links"
-                ></iframe>
+                <div class="link-bulk-actions">
+                  <button
+                    class="btn-cp"
+                    id="linkClearSelectionBtn"
+                    type="button"
+                    onclick="clearSelectedLinks()"
+                    disabled
+                  >
+                    Bỏ chọn
+                  </button>
+                  <button
+                    class="btn-del"
+                    id="linkBulkDeleteBtn"
+                    type="button"
+                    onclick="bulkDeleteSelectedLinks()"
+                    disabled
+                  >
+                    Xóa đã chọn
+                  </button>
+                </div>
+              </div>
+              <div style="overflow-x: auto">
+                <table class="mobile-card-table">
+                  <thead>
+                    <tr>
+                      <th>
+                        <label class="tbl-check">
+                          <input
+                            type="checkbox"
+                            id="tblSelectAll"
+                            onchange="toggleSelectAllVisibleLinks(this.checked)"
+                          />
+                          <span></span>
+                        </label>
+                      </th>
+                      <th>Loại</th>
+                      <th>Link hiển thị</th>
+                      <th>URL nguồn</th>
+                      <th>Nền tảng</th>
+                      <th>Clicks</th>
+                      <th>Ngày tạo</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="tblBody">
+                    <tr>
+                      <td colspan="8" class="tbl-empty">⏳ Đang tải...</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

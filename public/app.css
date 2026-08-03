@@ -4340,6 +4340,151 @@
         gap: 6px;
         margin-top: 10px;
       }
+      .links-overview-strip {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+      .links-overview-card {
+        display: grid;
+        gap: 6px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background:
+          radial-gradient(circle at top right, rgba(59, 130, 246, 0.14), transparent 36%),
+          linear-gradient(180deg, rgba(59, 130, 246, 0.04), transparent 80%),
+          var(--bg2);
+        box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12);
+      }
+      .links-overview-card span {
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text3);
+      }
+      .links-overview-card strong {
+        font-size: 28px;
+        line-height: 1;
+        color: var(--text);
+      }
+      .links-overview-card small {
+        color: var(--text2);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+      .links-unified-head {
+        align-items: flex-start;
+      }
+      .links-unified-subcopy {
+        margin: 8px 0 0;
+        color: var(--text3);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .links-filter-stack {
+        display: grid;
+        gap: 10px;
+        margin-top: 10px;
+        margin-bottom: 14px;
+      }
+      .links-filter-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .links-filter-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .links-filter-select-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-left: auto;
+      }
+      .links-filter-select-label {
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text3);
+      }
+      .links-filter-select {
+        min-width: 168px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--bg3);
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .links-filter-select:focus {
+        outline: none;
+        border-color: rgba(59, 130, 246, 0.38);
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+      }
+      .links-kind-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 72px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--bg3);
+        color: var(--text2);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      .links-kind-badge.standard {
+        border-color: rgba(59, 130, 246, 0.2);
+        background: rgba(59, 130, 246, 0.08);
+        color: #93c5fd;
+      }
+      .links-kind-badge.lab {
+        border-color: rgba(249, 115, 22, 0.24);
+        background: rgba(249, 115, 22, 0.1);
+        color: #fdba74;
+      }
+      .pill.lab {
+        background: rgba(249, 115, 22, 0.1);
+        border-color: rgba(249, 115, 22, 0.24);
+        color: #fdba74;
+      }
+      .td-link-meta {
+        display: grid;
+        gap: 4px;
+      }
+      .td-link-meta small {
+        color: var(--text3);
+        font-size: 11px;
+        line-height: 1.4;
+      }
+      .links-actions-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 46px);
+        gap: 6px;
+        align-content: start;
+      }
+      .links-actions-grid .btn-cp,
+      .links-actions-grid .btn-del {
+        width: 46px;
+        min-width: 46px;
+        justify-content: center;
+      }
+      .links-actions-grid .btn-placeholder {
+        visibility: hidden;
+        pointer-events: none;
+      }
       .link-bulkbar {
         display: flex;
         align-items: center;
@@ -5831,6 +5976,20 @@
         .link-bulkbar.active {
           flex-direction: column;
           align-items: stretch;
+        }
+        .links-overview-strip {
+          grid-template-columns: 1fr;
+        }
+        .links-filter-row {
+          align-items: stretch;
+        }
+        .links-filter-select-wrap {
+          width: 100%;
+          margin-left: 0;
+          justify-content: space-between;
+        }
+        .links-filter-select {
+          width: 100%;
         }
         .tbl-search {
           width: 100%;

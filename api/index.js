@@ -9964,12 +9964,18 @@ app.get("/api/links", async (req, res) => {
     const userId = user?.id || null;
     const guestSessionId = user ? null : req.guestSessionId;
     const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 100);
-    const [totalLinks, recentLinks] = await Promise.all([
+    const includeLabs = !!user && canUseArticleFunnelLab(user);
+    const [totalLinks, recentLinks, recentLabs] = await Promise.all([
       database.countLinks(userId, guestSessionId),
       database.getRecentLinks(userId, guestSessionId, {
         limit,
         select: "stats",
       }),
+      includeLabs
+        ? database.listArticleFunnelLabs({
+            createdByUserId: user.id,
+          })
+        : Promise.resolve([]),
     ]);
     res.json({
       totalLinks: Number(totalLinks || 0),
@@ -9977,6 +9983,47 @@ app.get("/api/links", async (req, res) => {
         ...link,
         short_url: buildLinkShortUrl(link, publicBaseUrl),
       })),
+      labs: recentLabs.slice(0, limit).map((item) => {
+        const configJson =
+          item.config_json && typeof item.config_json === "object"
+            ? item.config_json
+            : {};
+        const referenceSourceUrl = String(
+          configJson.reference_source_url ||
+            configJson.referenceSourceUrl ||
+            configJson.original_url ||
+            "",
+        ).trim();
+        const platformKey =
+          inferAffiliatePlatformFromUrl(referenceSourceUrl) || "generic";
+        return {
+          id: item.id,
+          name: item.name || `Lab ${item.id}`,
+          title: item.title || "",
+          published_route_slug: item.published_route_slug || "",
+          published_url: item.published_route_slug
+            ? buildArticleFunnelPublicUrl(
+                item.published_route_slug,
+                normalizeDomainHost(configJson.source_domain),
+                publicBaseUrl,
+              )
+            : "",
+          published_test_20s_url:
+            item.published_route_slug && hasArticleFunnelStage(configJson, "20s")
+              ? buildArticleFunnelPopupTestUrl(
+                  item.published_route_slug,
+                  normalizeDomainHost(configJson.source_domain),
+                  publicBaseUrl,
+                  "20s",
+                )
+              : "",
+          affiliate_clicks: Math.max(Number(item.affiliate_clicks) || 0, 0),
+          reference_source_url: referenceSourceUrl,
+          platform_key: platformKey,
+          created_at: item.created_at || null,
+          updated_at: item.updated_at || item.created_at || null,
+        };
+      }),
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
