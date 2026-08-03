@@ -148,7 +148,7 @@ let unreadNotificationCount = 0;
 let notificationStatsSnapshot = null;
 let adminNotificationSnapshot = null;
 let notificationPollTimer = null;
-const STATS_PAYLOAD_CACHE_TTL_MS = 2000;
+const STATS_PAYLOAD_CACHE_TTL_MS = 15000;
 let statsPayloadPromise = null;
 let statsPayloadPromiseDays = DEFAULT_STATS_RANGE_DAYS;
 let statsPayloadCache = null;
@@ -2384,9 +2384,13 @@ function getActiveAppPage() {
 }
 
 function pageNeedsFullStatsPayload(page = getActiveAppPage()) {
-  return !["account", "payment", "team", "admin"].includes(
+  return ["dashboard", "stats", "links"].includes(
     String(page || "").trim(),
   );
+}
+
+function pageNeedsRealtimeFullStatsPayload(page = getActiveAppPage()) {
+  return ["dashboard", "stats"].includes(String(page || "").trim());
 }
 
 function resetStatsDataCaches() {
@@ -2459,7 +2463,7 @@ async function pollRealtimeNotifications() {
           });
         }
       }
-      if (pageNeedsFullStatsPayload()) {
+      if (pageNeedsRealtimeFullStatsPayload()) {
         await loadData();
       }
       if (
@@ -8727,7 +8731,6 @@ async function loadData(prefetched = null, options = {}) {
       dashboardPlatformMetrics.tiktok.raw,
     ).toLocaleString()}`;
     renderActivity(links, "dashActivity");
-    renderActivity(links, "createActivity");
     renderChart();
     if (document.getElementById("page-qr")?.classList.contains("active"))
       renderQrPage();
@@ -8937,7 +8940,6 @@ loadData = async function loadDataWithRange(prefetched = null, options = {}) {
     }
 
     renderActivity(links, "dashActivity");
-    renderActivity(links, "createActivity");
     renderChart();
     if (document.getElementById("page-qr")?.classList.contains("active"))
       renderQrPage();

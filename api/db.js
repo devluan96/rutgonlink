@@ -475,6 +475,24 @@ function finalizeClickAnalyticsSummaryPayload(summary = {}) {
 async function init() {
   const sb = getClient();
 
+  function getArticleFunnelClickSelectExpr({
+    includeAll = false,
+    fieldsMode = 'full',
+  } = {}) {
+    const baseColumnsByMode = {
+      full:
+        'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at',
+      analytics_min:
+        'article_funnel_id,route_slug,stage_key,ip,user_agent,clicked_at',
+      stats_min: 'article_funnel_id,stage_key,ip,user_agent,clicked_at',
+    };
+    const baseColumns =
+      baseColumnsByMode[fieldsMode] || baseColumnsByMode.full;
+    return includeAll
+      ? baseColumns
+      : `${baseColumns},article_funnels!inner(created_by_user_id)`;
+  }
+
   async function countArticleFunnelClicks({
     userId = null,
     includeAll = false,
@@ -517,15 +535,17 @@ async function init() {
     includeAll = false,
     days = 0,
     limit = 5000,
+    fieldsMode = 'full',
   } = {}) {
     if (!includeAll && !userId) return [];
     const unlimited = limit == null;
     const safeLimit = unlimited ? null : Math.max(Number(limit) || 0, 0);
     if (!unlimited && !safeLimit) return [];
     const sinceIso = days > 0 ? getRollingWindowStartUtc(days) : null;
-    const selectExpr = includeAll
-      ? 'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at'
-      : 'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at,article_funnels!inner(created_by_user_id)';
+    const selectExpr = getArticleFunnelClickSelectExpr({
+      includeAll,
+      fieldsMode,
+    });
     const result = await fetchPaginatedRows((from, to) => {
       let query = sb
         .from('article_funnel_clicks')
@@ -546,6 +566,9 @@ async function init() {
     }
     check(result.error, 'article_funnel_click_rows');
     const rows = Array.isArray(result.data) ? result.data : [];
+    if (fieldsMode === 'stats_min') {
+      return rows;
+    }
     const articleFunnelIds = [...new Set(
       rows
         .map((row) => Number(row?.article_funnel_id || 0))
@@ -2089,6 +2112,7 @@ async function init() {
         userId,
         days,
         limit,
+        fieldsMode: 'stats_min',
       });
       return buildArticleFunnelClickStats(rows);
     },
@@ -2099,6 +2123,7 @@ async function init() {
         userId,
         days,
         limit,
+        fieldsMode: 'analytics_min',
       });
     },
 
@@ -2108,6 +2133,7 @@ async function init() {
         includeAll: true,
         days,
         limit,
+        fieldsMode: 'stats_min',
       });
       return buildArticleFunnelClickStats(rows);
     },
@@ -2118,6 +2144,7 @@ async function init() {
         includeAll: true,
         days,
         limit,
+        fieldsMode: 'analytics_min',
       });
     },
 

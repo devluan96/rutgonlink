@@ -85,7 +85,7 @@ const regionNamesEn =
     : null;
 let redirectLogWriteQueue = Promise.resolve();
 const STATS_RESPONSE_CACHE_TTL_MS = Math.max(
-  Number(process.env.STATS_RESPONSE_CACHE_TTL_MS) || 10000,
+  Number(process.env.STATS_RESPONSE_CACHE_TTL_MS) || 30000,
   0,
 );
 const STATS_QUERY_TIMEOUT_MS = Math.max(
