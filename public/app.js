@@ -24,6 +24,9 @@ const AUTO_ALIAS_MAX_LENGTH = 90;
 const RECENT_STATS_WINDOW_DAYS = 7;
 const DEFAULT_STATS_RANGE_DAYS = 1;
 const ALLOWED_STATS_RANGE_DAYS = new Set([1, 7, 14]);
+const LINKS_PAGE_FETCH_LIMIT = 30;
+const BILLING_DATA_CACHE_TTL_MS = 60000;
+const ACCOUNT_LOGIN_EVENTS_CACHE_TTL_MS = 60000;
 
 function stripVietnameseMarks(value) {
   return String(value || "")
@@ -168,6 +171,8 @@ const labSharedSettingsStorageKey = "rutgonlink-lab-shared-settings-v1";
 let confirmModalResolver = null;
 let accountLoginEvents = [];
 let accountLoginEventsLoading = false;
+let accountLoginEventsLoadedAt = 0;
+let accountLoginEventsLoadedUserId = 0;
 let accountTwoFactorSetup = null;
 let accountTwoFactorMode = "";
 let accountTwoFactorQr = null;
@@ -2136,6 +2141,13 @@ async function doLogout() {
   syncLabSharedSettingsStorageFromUser();
   resetStatsDataCaches();
   accountLoginEvents = [];
+  accountLoginEventsLoadedAt = 0;
+  accountLoginEventsLoadedUserId = 0;
+  billingConfig = null;
+  billingRequests = [];
+  billingDataPromise = null;
+  billingDataLoadedUserId = 0;
+  billingDataLoadedAt = 0;
   accountTwoFactorSetup = null;
   accountTwoFactorMode = "";
   document.getElementById("userDropdown").classList.remove("show");
@@ -3075,9 +3087,15 @@ function renderAccountAffiliateSettings(options = {}) {
 }
 
 async function loadAccountLoginEvents(force = false) {
-  if (!user?.id) return;
+  const activeUserId = Number(user?.id || 0);
+  if (!activeUserId) return;
   if (accountLoginEventsLoading) return;
-  if (accountLoginEvents.length && !force) {
+  if (
+    !force &&
+    accountLoginEventsLoadedUserId === activeUserId &&
+    accountLoginEvents.length &&
+    Date.now() - accountLoginEventsLoadedAt <= ACCOUNT_LOGIN_EVENTS_CACHE_TTL_MS
+  ) {
     renderAccountDevices();
     return;
   }
@@ -3090,6 +3108,8 @@ async function loadAccountLoginEvents(force = false) {
       throw new Error(data.error || "Không thể tải lịch sử đăng nhập");
     }
     accountLoginEvents = Array.isArray(data.events) ? data.events : [];
+    accountLoginEventsLoadedAt = Date.now();
+    accountLoginEventsLoadedUserId = activeUserId;
   } catch (error) {
     toast(error.message || "Không thể tải lịch sử đăng nhập", "err");
   } finally {
@@ -3122,11 +3142,7 @@ function renderAccountPage() {
   void loadBillingData();
   renderAccountAffiliateSettings();
   renderAccountTwoFactorState();
-  if (!accountLoginEvents.length) {
-    void loadAccountLoginEvents();
-  } else {
-    renderAccountDevices();
-  }
+  void loadAccountLoginEvents();
 }
 
 function renderPaymentPage() {
@@ -3148,9 +3164,7 @@ function renderPaymentPage() {
     paymentPageRole.textContent = String(user.role || "user").toUpperCase();
   }
   renderAccountBillingHistory();
-  if (!billingRequests.length) {
-    void loadBillingData();
-  }
+  void loadBillingData();
 }
 
 function formatSupportTimelineTime(value) {
@@ -3540,7 +3554,11 @@ async function logoutAllDevices() {
     billingRequests = [];
     billingDataPromise = null;
     billingDataLoadedUserId = 0;
+    billingDataLoadedAt = 0;
     paymentRequestDraft = null;
+    accountLoginEvents = [];
+    accountLoginEventsLoadedAt = 0;
+    accountLoginEventsLoadedUserId = 0;
     closeUserPopup();
     showAuth();
     toast("✅ Đã thu hồi toàn bộ phiên đăng nhập", "ok");
@@ -3580,8 +3598,11 @@ async function deleteAccount() {
     billingRequests = [];
     billingDataPromise = null;
     billingDataLoadedUserId = 0;
+    billingDataLoadedAt = 0;
     paymentRequestDraft = null;
     accountLoginEvents = [];
+    accountLoginEventsLoadedAt = 0;
+    accountLoginEventsLoadedUserId = 0;
     closeUserPopup();
     showAuth();
     toast("✅ Tài khoản đã được xóa", "ok");
@@ -3788,9 +3809,14 @@ async function loadBillingData() {
     billingRequests = [];
     billingDataPromise = null;
     billingDataLoadedUserId = 0;
+    billingDataLoadedAt = 0;
     return;
   }
-  if (billingDataLoadedUserId === activeUserId && !billingDataPromise) {
+  if (
+    billingDataLoadedUserId === activeUserId &&
+    !billingDataPromise &&
+    Date.now() - billingDataLoadedAt <= BILLING_DATA_CACHE_TTL_MS
+  ) {
     return;
   }
   if (billingDataPromise) {
@@ -3804,6 +3830,7 @@ async function loadBillingData() {
       billingConfig = data.config || null;
       billingRequests = Array.isArray(data.requests) ? data.requests : [];
       billingDataLoadedUserId = activeUserId;
+      billingDataLoadedAt = Date.now();
       renderPaymentPlanPills();
       renderAccountBillingHistory();
       updateTopbar();
@@ -6087,6 +6114,22 @@ function setTeamWorkspaceData(payload) {
   return teamWorkspaceData;
 }
 
+function renderTeamWorkspaceViews({
+  summary = true,
+  members = true,
+  templates = true,
+} = {}) {
+  if (summary) renderTeamWorkspaceSummary();
+  if (members) renderTeamMembers(teamWorkspaceData?.members || []);
+  if (templates) renderTeamTemplates(teamWorkspaceData?.templates || []);
+}
+
+function applyTeamWorkspacePayload(payload, renderOptions) {
+  const nextState = setTeamWorkspaceData(payload);
+  renderTeamWorkspaceViews(renderOptions);
+  return nextState;
+}
+
 function getTeamSeatLimit() {
   const explicitLimit = Number(teamWorkspaceData?.workspace?.seat_limit || 0);
   if (Number.isInteger(explicitLimit) && explicitLimit > 0)
@@ -6689,9 +6732,7 @@ async function renderTeamPage() {
       '<tr><td colspan="6" class="tbl-empty">⏳ Đang tải mẫu link chung...</td></tr>';
   }
   await loadTeamWorkspace({ silent: true });
-  renderTeamWorkspaceSummary();
-  renderTeamMembers(teamWorkspaceData?.members || []);
-  renderTeamTemplates(teamWorkspaceData?.templates || []);
+  renderTeamWorkspaceViews();
 }
 
 async function inviteTeamMember() {
@@ -6724,10 +6765,7 @@ async function inviteTeamMember() {
     if (!response.ok) {
       throw new Error(data.error || "Không thể mời thành viên");
     }
-    setTeamWorkspaceData(data);
-    renderTeamWorkspaceSummary();
-    renderTeamMembers(teamWorkspaceData?.members || []);
-    renderTeamTemplates(teamWorkspaceData?.templates || []);
+    applyTeamWorkspacePayload(data);
     if (emailInput) emailInput.value = "";
     toast("✅ Đã thêm lời mời vào workspace.", "ok");
   } catch (error) {
@@ -6751,10 +6789,7 @@ async function acceptTeamInvitation() {
     if (!response.ok) {
       throw new Error(data.error || "Không thể chấp nhận lời mời");
     }
-    setTeamWorkspaceData(data);
-    renderTeamWorkspaceSummary();
-    renderTeamMembers(teamWorkspaceData?.members || []);
-    renderTeamTemplates(teamWorkspaceData?.templates || []);
+    applyTeamWorkspacePayload(data);
     toast("✅ Bạn đã tham gia workspace.", "ok");
   } catch (error) {
     toast(error.message || "Không thể chấp nhận lời mời", "warn");
@@ -6784,10 +6819,7 @@ function declineTeamInvitation() {
       if (!response.ok) {
         throw new Error(data.error || "Không thể từ chối lời mời");
       }
-      setTeamWorkspaceData(data);
-      renderTeamWorkspaceSummary();
-      renderTeamMembers(teamWorkspaceData?.members || []);
-      renderTeamTemplates(teamWorkspaceData?.templates || []);
+      applyTeamWorkspacePayload(data);
       toast("Đã từ chối lời mời workspace.", "ok");
     } catch (error) {
       toast(error.message || "Không thể từ chối lời mời", "warn");
@@ -6810,10 +6842,7 @@ async function cycleTeamMemberStatus(memberId, nextStatus) {
     if (!response.ok) {
       throw new Error(data.error || "Không thể cập nhật thành viên");
     }
-    setTeamWorkspaceData(data);
-    renderTeamWorkspaceSummary();
-    renderTeamMembers(teamWorkspaceData?.members || []);
-    renderTeamTemplates(teamWorkspaceData?.templates || []);
+    applyTeamWorkspacePayload(data);
     toast("✅ Đã cập nhật trạng thái thành viên.", "ok");
   } catch (error) {
     toast(error.message || "Không thể cập nhật thành viên", "warn");
@@ -6844,10 +6873,7 @@ function removeTeamMember(memberId) {
       if (!response.ok) {
         throw new Error(data.error || "Không thể gỡ thành viên");
       }
-      setTeamWorkspaceData(data);
-      renderTeamWorkspaceSummary();
-      renderTeamMembers(teamWorkspaceData?.members || []);
-      renderTeamTemplates(teamWorkspaceData?.templates || []);
+      applyTeamWorkspacePayload(data);
       toast("🗑️ Đã gỡ thành viên khỏi workspace.", "ok");
     } catch (error) {
       toast(error.message || "Không thể gỡ thành viên", "warn");
@@ -6990,10 +7016,7 @@ async function createTeamTemplate() {
     if (!response.ok) {
       throw new Error(data.error || "Không thể tạo mẫu chung");
     }
-    setTeamWorkspaceData(data);
-    renderTeamWorkspaceSummary();
-    renderTeamMembers(teamWorkspaceData?.members || []);
-    renderTeamTemplates(teamWorkspaceData?.templates || []);
+    applyTeamWorkspacePayload(data);
     if (nameInput) nameInput.value = "";
     selectedTeamTemplateSourceIds = [];
     selectedTeamTemplateMediaLinkId = null;
@@ -7124,10 +7147,7 @@ async function deleteTeamTemplate(templateId) {
     if (!response.ok) {
       throw new Error(data.error || "Không thể xóa mẫu chung");
     }
-    setTeamWorkspaceData(data);
-    renderTeamWorkspaceSummary();
-    renderTeamMembers(teamWorkspaceData?.members || []);
-    renderTeamTemplates(teamWorkspaceData?.templates || []);
+    applyTeamWorkspacePayload(data);
     if (Number(editingTeamTemplateId || 0) === Number(templateId)) {
       cancelEditTeamTemplate(true);
     }
@@ -7261,10 +7281,7 @@ async function closeTeamTemplateModal(confirmed) {
       if (!response.ok) {
         throw new Error(data.error || "Không thể cập nhật mẫu chung");
       }
-      setTeamWorkspaceData(data);
-      renderTeamWorkspaceSummary();
-      renderTeamMembers(teamWorkspaceData?.members || []);
-      renderTeamTemplates(teamWorkspaceData?.templates || []);
+      applyTeamWorkspacePayload(data);
       toast("Đã cập nhật mẫu chung.", "ok");
     } catch (error) {
       toast(error.message || "Không thể cập nhật mẫu chung", "warn");
@@ -8667,7 +8684,7 @@ async function getLinksPayload({ preferCache = false } = {}) {
     return linksPayloadPromise;
   }
   linksPayloadPromise = (async () => {
-    const response = await fetch("/api/links?limit=100");
+    const response = await fetch(`/api/links?limit=${LINKS_PAGE_FETCH_LIMIT}`);
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       throw new Error(payload?.error || "Khong the tai danh sach lien ket");
@@ -10036,6 +10053,7 @@ let billingConfig = null;
 let billingRequests = [];
 let billingDataPromise = null;
 let billingDataLoadedUserId = 0;
+let billingDataLoadedAt = 0;
 let paymentRequestDraft = null;
 let paymentSelectedPlan = "pro";
 let paymentQrStyler = null;
@@ -10044,7 +10062,7 @@ const ADMIN_PAGE_SIZE = 20;
 const SUPPORT_POLL_INTERVAL_MS = 60000;
 const NOTIFICATION_POLL_INTERVAL_MS = 120000;
 const ADMIN_SECTION_CACHE_TTL_MS = 120000;
-const ADMIN_REDIRECT_FETCH_LIMIT = 100;
+const ADMIN_REDIRECT_FETCH_LIMIT = 30;
 const SIDEBAR_DRAWER_BREAKPOINT_PX = 1024;
 const adminSectionLoadedAt = {
   overview: 0,
@@ -10118,9 +10136,7 @@ function shouldFetchAdminUserLocation(force = false) {
 
 function getAdminSectionsForLoad(section = adminSection) {
   const normalizedSection = String(section || "overview").trim().toLowerCase();
-  return normalizedSection === "overview"
-    ? ["overview"]
-    : ["overview", normalizedSection];
+  return normalizedSection === "overview" ? ["overview"] : [normalizedSection];
 }
 
 function paginateAdminRows(rows, page = 1, pageSize = ADMIN_PAGE_SIZE) {
@@ -11914,9 +11930,7 @@ async function renderTeamPage() {
     templateBody.innerHTML = '<tr><td colspan="1" class="tbl-empty">Đang tải mẫu link chung...</td></tr>';
   }
   await loadTeamWorkspace({ silent: true });
-  renderTeamWorkspaceSummary();
-  renderTeamMembers(teamWorkspaceData?.members || []);
-  renderTeamTemplates(teamWorkspaceData?.templates || []);
+  renderTeamWorkspaceViews();
 }
 
 function toggleTeamTemplateSourceSelection(linkId) {
@@ -11975,16 +11989,13 @@ async function createTeamTemplate() {
     if (!response.ok) {
       throw new Error(data.error || "Không thể tạo mẫu chung");
     }
-    setTeamWorkspaceData(data);
+    applyTeamWorkspacePayload(data);
     if (nameInput) nameInput.value = "";
     selectedTeamTemplateSourceIds = [];
     selectedTeamTemplateMediaLinkId = null;
     uploadedTeamTemplateMedia = null;
     editingTeamTemplateId = null;
     closeTeamTemplateSourceDropdown();
-    renderTeamWorkspaceSummary();
-    renderTeamMembers(teamWorkspaceData?.members || []);
-    renderTeamTemplates(teamWorkspaceData?.templates || []);
     syncTeamTemplateComposer();
     toast("Đã tạo mẫu chung cho workspace.", "ok");
   } catch (error) {
