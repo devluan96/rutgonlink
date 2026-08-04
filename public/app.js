@@ -5152,12 +5152,17 @@ function postLabEditorMessage(frameId, payload) {
       frame.contentWindow?.postMessage(payload, window.location.origin);
     } catch (_) {}
   };
-  if (frame.contentWindow) {
+  const scheduleMessageBurst = () => {
     sendMessage();
-    setTimeout(sendMessage, 180);
+    [180, 420, 900].forEach((delay) => {
+      setTimeout(sendMessage, delay);
+    });
+  };
+  frame.addEventListener("load", scheduleMessageBurst, { once: true });
+  if (frame.contentWindow) {
+    scheduleMessageBurst();
     return;
   }
-  frame.addEventListener("load", sendMessage, { once: true });
 }
 
 function openExistingLabInCreateEditor(labId) {
@@ -5294,9 +5299,25 @@ async function saveLabSharedSettingsModal() {
 function syncCreateSubtabUI() {
   const allowLab = canUseLabTabs();
   const activeTab = allowLab && createSubtab === "lab" ? "lab" : "standard";
+  const createStudioHead = document.querySelector(".create-studio-head");
+  const createModeSwitch = document.querySelector(".create-mode-switch");
+  const createModeStatus = document.querySelector("[data-create-mode-status]");
   if (activeTab !== createSubtab) {
     createSubtab = activeTab;
     localStorage.setItem(createSubtabStorageKey, createSubtab);
+  }
+  if (createStudioHead) {
+    createStudioHead.classList.toggle("is-single-mode", !allowLab);
+  }
+  if (createModeSwitch) {
+    createModeSwitch.classList.toggle("is-single-mode", !allowLab);
+  }
+  if (createModeStatus) {
+    createModeStatus.textContent = !allowLab
+      ? "Chế độ hiện tại: Link thường"
+      : activeTab === "lab"
+        ? "Đang ở chế độ: Link lab"
+        : "Đang ở chế độ: Link thường";
   }
   document.querySelectorAll("[data-create-subtab]").forEach((button) => {
     const isActive = button.dataset.createSubtab === activeTab;
@@ -5652,6 +5673,7 @@ function renderForm(containerId) {
   ["shopee", "tiktok"].forEach((platform) =>
     syncAffiliatePresetActionState(containerId, platform),
   );
+  enhanceCreateFormLayout(containerId);
   [
     `${containerId}_video_popup_url_3s`,
     `${containerId}_video_popup_url_5s`,
@@ -5746,6 +5768,85 @@ function syncVideoOptionAvailability(cid) {
     setCreateUrlHint(cid, "");
   }
   syncVideoOverlayRoleHint(cid);
+}
+
+function enhanceCreateFormLayout(containerId) {
+  const mount = document.getElementById(containerId);
+  if (!mount) return;
+  const card = mount.querySelector(".sf-card");
+  if (!card || card.dataset.layoutEnhanced === "1") return;
+
+  const templateNotice = card.querySelector(`#${containerId}_templateNotice`);
+  const affiliatePreset = templateNotice?.nextElementSibling || null;
+  const urlBar = card.querySelector(".url-bar");
+  const urlHint = card.querySelector(`#${containerId}_urlhint`);
+  const detectBadge = card.querySelector(`#${containerId}_det`);
+  const aliasDomainBlock = card.querySelector(".create-form-grid--alias-domain");
+  const linkTypeSelect = card.querySelector(`#${containerId}_ltype`);
+  const linkTypeBlock = linkTypeSelect?.closest("div") || null;
+  const anchor = templateNotice || affiliatePreset || urlBar;
+
+  if (!urlBar || !aliasDomainBlock || !linkTypeBlock) return;
+
+  const shell = document.createElement("div");
+  shell.className = "create-composer-shell";
+  card.insertBefore(shell, anchor);
+
+  const urlCard = document.createElement("div");
+  urlCard.className = "create-composer-card create-composer-url-card";
+  urlCard.innerHTML = `
+    <div class="create-composer-head">
+      <div>
+        <div class="create-composer-step">Bước 1</div>
+        <h4>URL đích</h4>
+        <p>Dán link gốc một lần, hệ thống sẽ tự nhận diện Shopee, TikTok hoặc URL thường.</p>
+      </div>
+    </div>
+  `;
+
+  const essentialsGrid = document.createElement("div");
+  essentialsGrid.className = "create-essentials-grid";
+
+  const identityCard = document.createElement("div");
+  identityCard.className = "create-essentials-card";
+  identityCard.innerHTML = `
+    <div class="create-essentials-head">
+      <div class="create-composer-step">Bước 2</div>
+      <h4>Định danh link</h4>
+    </div>
+  `;
+
+  const routingCard = document.createElement("div");
+  routingCard.className = "create-essentials-card";
+  routingCard.innerHTML = `
+    <div class="create-essentials-head">
+      <div class="create-composer-step">Bước 3</div>
+      <h4>Cách mở link</h4>
+    </div>
+  `;
+
+  if (templateNotice) shell.appendChild(templateNotice);
+  if (affiliatePreset) shell.appendChild(affiliatePreset);
+  shell.appendChild(urlCard);
+  shell.appendChild(essentialsGrid);
+  urlCard.appendChild(urlBar);
+  if (urlHint) urlCard.appendChild(urlHint);
+  if (detectBadge) {
+    detectBadge.style.marginBottom = "0";
+    urlCard.appendChild(detectBadge);
+  }
+  identityCard.appendChild(aliasDomainBlock);
+  aliasDomainBlock.classList.add("create-form-grid--alias-domain-tight");
+  routingCard.appendChild(linkTypeBlock);
+  linkTypeSelect.classList.add("create-linktype-select");
+  const routingCaption = document.createElement("div");
+  routingCaption.className = "create-type-caption";
+  routingCaption.textContent =
+    "Chọn cách người xem sẽ mở link rút gọn. Các tùy chọn nâng cao như video hoặc preview sẽ hiện bên dưới khi cần.";
+  routingCard.appendChild(routingCaption);
+  essentialsGrid.appendChild(identityCard);
+  essentialsGrid.appendChild(routingCard);
+  card.dataset.layoutEnhanced = "1";
 }
 
 function onUrlInput(cid) {

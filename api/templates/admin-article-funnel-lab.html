@@ -2023,6 +2023,14 @@
         box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
       }
 
+      .link-preview.link-preview-comment {
+        display: grid;
+        grid-template-columns: 168px minmax(0, 1fr);
+        gap: 14px;
+        align-items: stretch;
+        padding: 14px;
+      }
+
       .link-preview.compact {
         display: flex;
         align-items: center;
@@ -2036,6 +2044,14 @@
         background: #dbe4ef center/cover no-repeat;
       }
 
+      .link-preview.link-preview-comment .link-preview-image {
+        aspect-ratio: auto;
+        width: 168px;
+        min-height: 112px;
+        border-radius: 14px;
+        overflow: hidden;
+      }
+
       .link-preview.compact .link-preview-image {
         display: none;
       }
@@ -2046,6 +2062,14 @@
 
       .link-preview.compact .link-preview-copy {
         padding: 0;
+      }
+
+      .link-preview.link-preview-comment .link-preview-copy {
+        padding: 0;
+        display: grid;
+        gap: 8px;
+        align-content: center;
+        min-width: 0;
       }
 
       .link-preview-domain {
@@ -2061,6 +2085,51 @@
         line-height: 1.14;
         letter-spacing: -0.03em;
         color: #0f172a;
+      }
+
+      .link-preview.link-preview-comment .link-preview-title {
+        margin-top: 0;
+        font-size: 24px;
+        line-height: 1.12;
+      }
+
+      .link-preview-description {
+        color: #475569;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .comment-link-inline {
+        display: block;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.45;
+        text-decoration: none;
+        word-break: break-all;
+      }
+
+      .comment-link-inline:hover {
+        color: #2563eb;
+        text-decoration: underline;
+      }
+
+      .link-preview.link-preview-comment.compact {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .link-preview.link-preview-comment.compact .link-preview-copy {
+        padding: 0;
+      }
+
+      @media (max-width: 720px) {
+        .link-preview.link-preview-comment {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .link-preview.link-preview-comment .link-preview-image {
+          width: 100%;
+          min-height: 148px;
+        }
       }
 
       .phone {
@@ -3300,14 +3369,10 @@
                   </div>
 
                   <div class="comment-bubble">
-                    <a
-                      class="comment-link"
-                      id="commentUrlPreview"
-                      href="#"
-                      target="_blank"
-                      rel="noopener"
-                    ></a>
-                    <div class="link-preview" id="commentLinkPreview">
+                    <div
+                      class="link-preview link-preview-comment"
+                      id="commentLinkPreview"
+                    >
                       <div
                         class="link-preview-image"
                         id="commentShareImage"
@@ -3316,11 +3381,23 @@
                         <div
                           class="link-preview-domain"
                           id="commentDomainPreview"
+                          hidden
                         ></div>
                         <div
                           class="link-preview-title"
                           id="commentTitlePreview"
                         ></div>
+                        <div
+                          class="link-preview-description"
+                          id="commentDescriptionPreview"
+                        ></div>
+                        <a
+                          class="comment-link-inline"
+                          id="commentUrlPreview"
+                          href="#"
+                          target="_blank"
+                          rel="noopener"
+                        ></a>
                       </div>
                     </div>
                   </div>
@@ -3659,6 +3736,9 @@
           commentLinkPreview: document.getElementById("commentLinkPreview"),
           commentDomainPreview: document.getElementById("commentDomainPreview"),
           commentTitlePreview: document.getElementById("commentTitlePreview"),
+          commentDescriptionPreview: document.getElementById(
+            "commentDescriptionPreview",
+          ),
           commentShareImage: document.getElementById("commentShareImage"),
           previewTitle: document.getElementById("previewTitle"),
           previewDescription: document.getElementById("previewDescription"),
@@ -4182,12 +4262,7 @@
             els.sourceImportUrlInput.value = state.referenceSourceUrl;
             state.title = String(imported.title || state.title || "").trim();
             state.description = String(imported.description || "").trim();
-            if (
-              state.referenceSourceUrl !== previousSourceUrl ||
-              !String(imported.share_image || "").trim()
-            ) {
-              state.shareImage = "";
-            }
+            state.shareImage = String(imported.share_image || "").trim();
             const blocks = Array.isArray(imported.blocks)
               ? imported.blocks
               : [];
@@ -4834,7 +4909,10 @@
           return {
             ...base,
             sourceDomain: String(
-              source.sourceDomain || fromUrl.domain || base.sourceDomain,
+              source.sourceDomain ||
+                source.source_domain ||
+                fromUrl.domain ||
+                base.sourceDomain,
             ),
             slug: String(source.slug || fromUrl.slug || base.slug),
             title: String(source.title || base.title),
@@ -5023,6 +5101,14 @@
           return state.overlayImage.trim() || state.shareImage.trim();
         }
 
+        function getCurrentDescriptionValue() {
+          const liveValue =
+            els.descriptionInput && typeof els.descriptionInput.value === "string"
+              ? els.descriptionInput.value
+              : state.description;
+          return String(liveValue || "").trim();
+        }
+
         function getExportPayload() {
           return {
             type: "article_funnel_lab",
@@ -5031,7 +5117,7 @@
             article_url: getArticleUrl(),
             reference_source_url: String(state.referenceSourceUrl || "").trim(),
             title: state.title.trim(),
-            description: state.description.trim(),
+            description: getCurrentDescriptionValue(),
             share_image: state.shareImage.trim(),
             group_label: state.groupLabel.trim(),
             group_url: state.groupUrl.trim(),
@@ -7054,6 +7140,18 @@
           ).toUpperCase();
           els.commentTitlePreview.textContent =
             state.title.trim() || "Tiêu đề bài viết";
+          const commentDescription = getCurrentDescriptionValue();
+          const commentParsedUrl = commentTarget ? new URL(commentTarget) : null;
+          els.commentDescriptionPreview.textContent =
+            commentDescription ||
+            "Mô tả ngắn của bài viết sẽ hiển thị ở đây.";
+          els.commentDescriptionPreview.style.display = "block";
+          els.commentUrlPreview.textContent = commentParsedUrl
+            ? `${commentParsedUrl.hostname}${commentParsedUrl.pathname}`.replace(
+                /\/+$/,
+                "",
+              )
+            : "Chưa có slug comment";
           const hasShareImage = Boolean(state.shareImage.trim());
           const shouldShowCommentImage = Boolean(
             commentTarget && hasShareImage,
@@ -7067,8 +7165,8 @@
             : "none";
           els.previewTitle.textContent =
             state.title.trim() || "Tiêu đề bài viết";
-          els.previewDescription.textContent = state.description.trim();
-          els.previewDescription.style.display = state.description.trim()
+          els.previewDescription.textContent = commentDescription;
+          els.previewDescription.style.display = commentDescription
             ? "block"
             : "none";
           els.followGroupLabel.textContent =
@@ -7429,6 +7527,18 @@
           ).toUpperCase();
           els.commentTitlePreview.textContent =
             state.title.trim() || "Tiêu đề bài viết";
+          const commentDescription = getCurrentDescriptionValue();
+          const commentParsedUrl = commentTarget ? new URL(commentTarget) : null;
+          els.commentDescriptionPreview.textContent =
+            commentDescription ||
+            "Mô tả ngắn của bài viết sẽ hiển thị ở đây.";
+          els.commentDescriptionPreview.style.display = "block";
+          els.commentUrlPreview.textContent = commentParsedUrl
+            ? `${commentParsedUrl.hostname}${commentParsedUrl.pathname}`.replace(
+                /\/+$/,
+                "",
+              )
+            : "Chưa có slug comment";
           const hasShareImage = Boolean(state.shareImage.trim());
           const shouldShowCommentImage = Boolean(
             commentTarget && hasShareImage,
@@ -7442,8 +7552,8 @@
             : "none";
           els.previewTitle.textContent =
             state.title.trim() || "Tiêu đề bài viết";
-          els.previewDescription.textContent = state.description.trim();
-          els.previewDescription.style.display = state.description.trim()
+          els.previewDescription.textContent = commentDescription;
+          els.previewDescription.style.display = commentDescription
             ? "block"
             : "none";
           els.followGroupLabel.textContent =
@@ -8480,7 +8590,20 @@
         });
 
         window.addEventListener("message", (event) => {
-          if (event.origin !== window.location.origin) return;
+          let parentOrigin = "";
+          try {
+            parentOrigin = document.referrer
+              ? new URL(document.referrer).origin
+              : "";
+          } catch (_) {
+            parentOrigin = "";
+          }
+          if (
+            event.origin !== window.location.origin &&
+            (!parentOrigin || event.origin !== parentOrigin)
+          ) {
+            return;
+          }
           const data = event.data || {};
           if (data.type === "article-funnel-lab:load-lab") {
             const nextLabId = Number(data.labId || 0);

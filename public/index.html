@@ -1414,58 +1414,99 @@
               <h1>Tạo liên kết</h1>
               <p>Rút gọn với deeplink tự động & custom preview</p>
             </div>
-            <div class="page-subtabs" role="tablist" aria-label="Tạo liên kết">
-              <button
-                class="page-subtab-btn active"
-                type="button"
-                data-create-subtab="standard"
-                onclick="setCreateSubtab('standard', this)"
-              >
-                Deeplink thường
-              </button>
-              <button
-                class="page-subtab-btn"
-                type="button"
-                data-create-subtab="lab"
-                data-lab-tab-only
-                hidden
-                onclick="setCreateSubtab('lab', this)"
-              >
-                Deeplink lab
-              </button>
-            </div>
-            <div class="page-subpanel active" data-create-panel="standard">
-              <div class="tool-grid create-grid">
-                <div id="createFormArea"></div>
-                <div class="create-side-stack">
-                  <div class="tool-preview create-preview">
-                    <div class="tool-head" style="margin-bottom: 12px">
-                      <div>
-                        <h3>Link mới tạo</h3>
-                        <p>Link vừa rút gọn xong để copy nhanh hoặc mở ngay.</p>
-                      </div>
-                    </div>
-                    <div id="createLatestResultMount"></div>
+            <div class="create-studio-shell">
+              <div class="create-studio-head">
+                <div class="create-studio-copy">
+                  <div class="tool-kicker">Link Studio</div>
+                  <h3>Chọn chế độ tạo link</h3>
+                  <p>Tạo link thường hoặc chuyển sang lab ngay tại đây.</p>
+                </div>
+                <div class="create-mode-rail">
+                  <div
+                    class="create-mode-switch"
+                    role="tablist"
+                    aria-label="Tạo liên kết"
+                  >
+                    <button
+                      class="page-subtab-btn create-mode-btn active"
+                      type="button"
+                      data-create-subtab="standard"
+                      onclick="setCreateSubtab('standard', this)"
+                    >
+                      Link thường
+                    </button>
+                    <button
+                      class="page-subtab-btn create-mode-btn"
+                      type="button"
+                      data-create-subtab="lab"
+                      data-lab-tab-only
+                      hidden
+                      onclick="setCreateSubtab('lab', this)"
+                    >
+                      Link lab
+                    </button>
+                  </div>
+                  <div class="create-mode-meta">
+                    <span class="create-mode-status" data-create-mode-status>
+                      Chế độ hiện tại: Link thường
+                    </span>
                   </div>
                 </div>
               </div>
-            </div>
-            <div class="page-subpanel" data-create-panel="lab" hidden>
-              <div class="lab-embed-shell" data-surface="create" data-lab-tab-only>
-                <div class="lab-embed-head">
-                  <div class="lab-embed-actions">
-                    <button class="btn-cp" type="button" onclick="refreshLabEmbed('createLabIframe')">Tải lại</button>
-                    <button class="btn-cp" type="button" aria-label="Mở cài đặt mặc định lab" title="Cài đặt mặc định cho lab mới" onclick="openLabSharedSettingsModal('createLabIframe')">Cài đặt mặc định</button>
+
+              <div class="page-subpanel active" data-create-panel="standard">
+                <div class="tool-grid create-grid">
+                  <div id="createFormArea"></div>
+                  <div class="create-side-stack">
+                    <div class="tool-preview create-preview">
+                      <div class="tool-head" style="margin-bottom: 12px">
+                        <div>
+                          <h3>Link mới tạo</h3>
+                          <p>
+                            Link vừa rút gọn xong để copy nhanh hoặc mở ngay.
+                          </p>
+                        </div>
+                      </div>
+                      <div id="createLatestResultMount"></div>
+                    </div>
                   </div>
                 </div>
-                <iframe
-                  id="createLabIframe"
-                  class="lab-embed-frame"
-                  title="Deeplink lab"
-                  loading="lazy"
-                  data-lab-view="editor"
-                  data-lab-embed-id="create"
-                ></iframe>
+              </div>
+              <div class="page-subpanel" data-create-panel="lab" hidden>
+                <div
+                  class="lab-embed-shell create-lab-shell"
+                  data-surface="create"
+                  data-lab-tab-only
+                >
+                  <div class="lab-embed-head create-lab-head">
+                    <div class="lab-embed-actions">
+                      <button
+                        class="btn-cp"
+                        type="button"
+                        onclick="refreshLabEmbed('createLabIframe')"
+                      >
+                        Tải lại
+                      </button>
+                      <button
+                        class="btn-cp"
+                        type="button"
+                        aria-label="Mở cài đặt mặc định lab"
+                        title="Cài đặt mặc định cho lab mới"
+                        onclick="openLabSharedSettingsModal('createLabIframe')"
+                      >
+                        Cài đặt mặc định
+                      </button>
+                    </div>
+                  </div>
+                  <iframe
+                    id="createLabIframe"
+                    class="lab-embed-frame"
+                    title="Deeplink lab"
+                    loading="lazy"
+                    data-lab-view="editor"
+                    data-lab-embed-id="create"
+                  ></iframe>
+                </div>
               </div>
             </div>
           </div>

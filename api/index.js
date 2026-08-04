@@ -5597,6 +5597,7 @@ function extractArticleFunnelImportPayload(html = "", baseUrl = "") {
     reference_source_url: baseUrl,
     title,
     description,
+    share_image: String(images[0] || metaImages[0] || "").trim(),
     blocks,
     image_count: images.length,
     video_count: videos.length,
