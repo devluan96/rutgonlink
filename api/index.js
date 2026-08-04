@@ -4422,7 +4422,68 @@ function normalizeUserLabSharedSettings(input = {}) {
   };
 }
 
+function normalizeUserAffiliateShopeeSources(input = []) {
+  const sourceList = Array.isArray(input) ? input : [];
+  const normalized = sourceList
+    .map((item, index) => {
+      const source = item && typeof item === "object" ? item : {};
+      const normalizedUrl = normalizeAffiliatePresetUrl(
+        String(source.url || "").trim(),
+        "shopee",
+      );
+      if (!normalizedUrl) return null;
+      const label = String(
+        source.label || source.name || `Acc ${index + 1}`,
+      ).trim();
+      const normalizedOpaanlpUrl = normalizeAffiliatePresetUrl(
+        String(
+          source.opaanlp_url || source.opaanlpUrl || source.open_app_url || "",
+        ).trim(),
+        "shopee",
+      );
+      return {
+        id:
+          String(source.id || "").trim() ||
+          `shopee-${Date.now()}-${index + 1}`,
+        label: label || `Acc ${index + 1}`,
+        url: normalizedUrl,
+        opaanlp_url: normalizedOpaanlpUrl || "",
+        is_default: Boolean(source.is_default),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 10);
+  if (!normalized.length) return [];
+  let defaultAssigned = false;
+  normalized.forEach((item, index) => {
+    if (!defaultAssigned && item.is_default) {
+      defaultAssigned = true;
+      item.is_default = true;
+      return;
+    }
+    item.is_default = !defaultAssigned && index === 0;
+  });
+  if (!normalized.some((item) => item.is_default)) {
+    normalized[0].is_default = true;
+  }
+  return normalized;
+}
+
+function normalizeUserSettingsBundle(input = {}) {
+  const source =
+    input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  return {
+    ...normalizeUserLabSharedSettings(source),
+    affiliate_shopee_sources: normalizeUserAffiliateShopeeSources(
+      source.affiliate_shopee_sources || source.affiliateShopeeSources || [],
+    ),
+  };
+}
+
 function buildAuthUserPayload(user, isAdmin = false) {
+  const settingsBundle = normalizeUserSettingsBundle(
+    user.lab_shared_settings_json || {},
+  );
   return {
     id: user.id,
     email: user.email,
@@ -4431,9 +4492,8 @@ function buildAuthUserPayload(user, isAdmin = false) {
     avatar_url: user.avatar_url || null,
     affiliate_shopee_url: user.affiliate_shopee_url || null,
     affiliate_tiktok_url: user.affiliate_tiktok_url || null,
-    lab_shared_settings: normalizeUserLabSharedSettings(
-      user.lab_shared_settings_json || {},
-    ),
+    affiliate_shopee_sources: settingsBundle.affiliate_shopee_sources,
+    lab_shared_settings: normalizeUserLabSharedSettings(settingsBundle),
     can_use_lab: isAdmin ? true : !!user.can_use_lab,
     plan: isAdmin ? "admin" : user.plan,
     role: isAdmin ? "admin" : user.role || "user",
@@ -8053,11 +8113,42 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
     }
     if (
       Object.prototype.hasOwnProperty.call(body, "lab_shared_settings") ||
-      Object.prototype.hasOwnProperty.call(body, "lab_shared_settings_json")
+      Object.prototype.hasOwnProperty.call(body, "lab_shared_settings_json") ||
+      Object.prototype.hasOwnProperty.call(body, "affiliate_shopee_sources")
     ) {
-      updates.lab_shared_settings_json = normalizeUserLabSharedSettings(
-        body.lab_shared_settings_json || body.lab_shared_settings || {},
+      const existingSettings = normalizeUserSettingsBundle(
+        user.lab_shared_settings_json || {},
       );
+      const nextSettings = {
+        ...existingSettings,
+      };
+      if (
+        Object.prototype.hasOwnProperty.call(body, "lab_shared_settings") ||
+        Object.prototype.hasOwnProperty.call(body, "lab_shared_settings_json")
+      ) {
+        Object.assign(
+          nextSettings,
+          normalizeUserLabSharedSettings(
+            body.lab_shared_settings_json || body.lab_shared_settings || {},
+          ),
+        );
+      }
+      if (Object.prototype.hasOwnProperty.call(body, "affiliate_shopee_sources")) {
+        nextSettings.affiliate_shopee_sources = normalizeUserAffiliateShopeeSources(
+          body.affiliate_shopee_sources || [],
+        );
+        if (
+          !Object.prototype.hasOwnProperty.call(body, "affiliate_shopee_url") &&
+          nextSettings.affiliate_shopee_sources.length
+        ) {
+          const defaultSource =
+            nextSettings.affiliate_shopee_sources.find(
+              (item) => item.is_default,
+            ) || nextSettings.affiliate_shopee_sources[0];
+          updates.affiliate_shopee_url = defaultSource?.url || null;
+        }
+      }
+      updates.lab_shared_settings_json = nextSettings;
     }
     if (!Object.keys(updates).length) {
       return res

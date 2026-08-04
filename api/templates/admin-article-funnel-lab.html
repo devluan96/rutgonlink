@@ -711,6 +711,13 @@
         font-size: 12px;
       }
 
+      .quick-fill-select {
+        min-width: 220px;
+        min-height: 36px;
+        padding-top: 7px;
+        padding-bottom: 7px;
+      }
+
       .quick-fill-note {
         color: var(--muted);
         font-size: 12px;
@@ -2957,6 +2964,13 @@
                         </button>
                       </div>
                       <div class="quick-fill">
+                        <label class="quick-fill-label" for="shopeeAffiliateSourceSelect">
+                          Tài khoản Shopee
+                        </label>
+                        <select
+                          class="fi quick-fill-select"
+                          id="shopeeAffiliateSourceSelect"
+                        ></select>
                         <button
                           class="ghost-btn"
                           type="button"
@@ -3649,7 +3663,7 @@
         let labItems = [];
         let selectedLabIds = new Set();
         let availableDomains = [];
-        let affiliatePresets = { shopee: "", tiktok: "" };
+        let affiliatePresets = { shopee: "", tiktok: "", shopeeSources: [] };
         let lastAutoSlug = "";
         let slugEditedManually = false;
         let confirmDialogResolver = null;
@@ -3719,6 +3733,9 @@
           popup20sInput: document.getElementById("popup20sInput"),
           popup20sIosFbInput: document.getElementById("popup20sIosFbInput"),
           popup300sInput: document.getElementById("popup300sInput"),
+          shopeeAffiliateSourceSelect: document.getElementById(
+            "shopeeAffiliateSourceSelect",
+          ),
           overlayImageInput: document.getElementById("overlayImageInput"),
           overlay20sImageInput: document.getElementById("overlay20sImageInput"),
           overlay300sImageInput: document.getElementById(
@@ -3940,15 +3957,46 @@
         }
 
         function syncAffiliatePresetButtons() {
+          const shopeeSources = Array.isArray(affiliatePresets.shopeeSources)
+            ? affiliatePresets.shopeeSources.filter((item) =>
+                String(item?.url || "").trim(),
+              )
+            : [];
+          const effectiveShopeeSources = shopeeSources.length
+            ? shopeeSources
+            : String(affiliatePresets.shopee || "").trim()
+              ? [
+                  {
+                    id: "default-shopee-source",
+                    label: "Nguồn mặc định",
+                    url: String(affiliatePresets.shopee || "").trim(),
+                    opaanlp_url: "",
+                    is_default: true,
+                  },
+                ]
+              : [];
+          if (els.shopeeAffiliateSourceSelect) {
+            els.shopeeAffiliateSourceSelect.innerHTML = effectiveShopeeSources.length
+              ? effectiveShopeeSources
+                  .map(
+                    (source, index) => `<option value="${esc(String(source.id || ""))}" ${source.is_default ? "selected" : index === 0 ? "selected" : ""}>${esc(String(source.label || `Acc ${index + 1}`))}${source.opaanlp_url ? " • có opaanlp" : ""}</option>`,
+                  )
+                  .join("")
+              : `<option value="">Chọn nguồn Shopee</option>`;
+            els.shopeeAffiliateSourceSelect.disabled = !effectiveShopeeSources.length;
+          }
           document
             .querySelectorAll("[data-affiliate-fill]")
             .forEach((button) => {
               const platform = String(button.dataset.affiliateFill || "")
                 .trim()
                 .toLowerCase();
-              const hasValue = Boolean(
-                String(affiliatePresets[platform] || "").trim(),
-              );
+              const hasValue =
+                platform === "shopee"
+                  ? effectiveShopeeSources.some((item) =>
+                      String(item?.url || "").trim(),
+                    )
+                  : Boolean(String(affiliatePresets[platform] || "").trim());
               button.disabled = !hasValue;
               button.title = hasValue ? "" : "Chưa có link đã lưu";
             });
@@ -4023,6 +4071,25 @@
             }
             changed = true;
           });
+          if (
+            !String(state.popup3sIosFbUrl || "").trim() &&
+            Array.isArray(affiliatePresets.shopeeSources)
+          ) {
+            const defaultShopeeSource =
+              affiliatePresets.shopeeSources.find((item) => item.is_default) ||
+              affiliatePresets.shopeeSources[0] ||
+              null;
+            const opaanlpUrl = String(
+              defaultShopeeSource?.opaanlp_url || "",
+            ).trim();
+            if (opaanlpUrl) {
+              state.popup3sIosFbUrl = opaanlpUrl;
+              if (els.popup3sIosFbInput) {
+                els.popup3sIosFbInput.value = opaanlpUrl;
+              }
+              changed = true;
+            }
+          }
           if (!changed) return;
           clearGeneratedPreviewLink();
           clearGeneratedPublishedLink();
@@ -4186,9 +4253,31 @@
           els.sourceImportMeta.className = `quick-fill-note${tone ? ` ${tone}` : ""}`;
         }
 
+        function mapAffiliatePresetsFromUser(user = {}) {
+          return {
+            shopee: String(user.affiliate_shopee_url || "").trim(),
+            tiktok: String(user.affiliate_tiktok_url || "").trim(),
+            shopeeSources: Array.isArray(user.affiliate_shopee_sources)
+              ? user.affiliate_shopee_sources
+                  .map((item) => ({
+                    id: String(item?.id || "").trim(),
+                    label: String(item?.label || item?.name || "").trim(),
+                    url: String(item?.url || "").trim(),
+                    opaanlp_url: String(
+                      item?.opaanlp_url || item?.opaanlpUrl || "",
+                    ).trim(),
+                    is_default: Boolean(item?.is_default),
+                  }))
+                  .filter((item) => item.url)
+              : [],
+          };
+        }
+
         async function loadAffiliatePresets() {
           try {
-            const response = await fetch("/api/auth/me");
+            const response = await fetch("/api/auth/me", {
+              credentials: "include",
+            });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
               throw new Error(data.error || "Không thể tải affiliate preset");
@@ -4197,30 +4286,80 @@
             affiliatePresets = {
               shopee: String(user.affiliate_shopee_url || "").trim(),
               tiktok: String(user.affiliate_tiktok_url || "").trim(),
+              shopeeSources: Array.isArray(user.affiliate_shopee_sources)
+                ? user.affiliate_shopee_sources
+                    .map((item) => ({
+                      id: String(item?.id || "").trim(),
+                      label: String(item?.label || item?.name || "").trim(),
+                      url: String(item?.url || "").trim(),
+                      opaanlp_url: String(
+                        item?.opaanlp_url || item?.opaanlpUrl || "",
+                      ).trim(),
+                      is_default: Boolean(item?.is_default),
+                    }))
+                    .filter((item) => item.url)
+                : [],
             };
           } catch (_) {
-            affiliatePresets = { shopee: "", tiktok: "" };
+            affiliatePresets = { shopee: "", tiktok: "", shopeeSources: [] };
           }
           syncAffiliatePresetButtons();
           hydrateAffiliateDefaults();
           applyUiLanguage();
         }
 
+        function applySelectedShopeeSourceToLab() {
+          if (
+            !els.shopeeAffiliateSourceSelect ||
+            els.shopeeAffiliateSourceSelect.disabled
+          ) {
+            return;
+          }
+          applyAffiliatePresetToField("baseUrlInput", "shopee");
+        }
+
         function applyAffiliatePresetToField(fieldKey, platform) {
           const input = els[fieldKey];
-          const value = String(
-            affiliatePresets[
-              String(platform || "")
-                .trim()
-                .toLowerCase()
-            ] || "",
-          ).trim();
+          const normalizedPlatform = String(platform || "")
+            .trim()
+            .toLowerCase();
+          let value = String(affiliatePresets[normalizedPlatform] || "").trim();
+          let selectedShopeeSource = null;
+          if (normalizedPlatform === "shopee") {
+            const sourceList = Array.isArray(affiliatePresets.shopeeSources)
+              ? affiliatePresets.shopeeSources
+              : [];
+            const selectedId = String(
+              els.shopeeAffiliateSourceSelect?.value || "",
+            ).trim();
+            selectedShopeeSource =
+              sourceList.find((item) => item.id === selectedId) ||
+              sourceList.find((item) => item.is_default) ||
+              sourceList[0] ||
+              null;
+            value = String(selectedShopeeSource?.url || value).trim();
+          }
           if (!input || !value) {
             showToast("Chưa có link affiliate đã lưu");
             return;
           }
           input.value = value;
           input.dispatchEvent(new Event("input", { bubbles: true }));
+          if (
+            normalizedPlatform === "shopee" &&
+            fieldKey === "baseUrlInput" &&
+            els.popup3sIosFbInput
+          ) {
+            const opaanlpUrl = String(
+              selectedShopeeSource?.opaanlp_url || "",
+            ).trim();
+            if (opaanlpUrl) {
+              els.popup3sIosFbInput.value = opaanlpUrl;
+              els.popup3sIosFbInput.dispatchEvent(
+                new Event("input", { bubbles: true }),
+              );
+            }
+          }
           showToast(`Đã điền link ${platform} vào ô đang chọn`);
         }
 
@@ -6509,6 +6648,10 @@
             .replace(/"/g, "&quot;");
         }
 
+        function esc(value) {
+          return escapeHtml(value);
+        }
+
         function escapeAttr(value) {
           return escapeHtml(value).replace(/'/g, "&#39;");
         }
@@ -8173,6 +8316,9 @@
           const file = input.files?.[0];
           await handleAssetFileSelection(assetKey, file);
           input.value = "";
+        });
+        els.shopeeAffiliateSourceSelect?.addEventListener("change", () => {
+          applySelectedShopeeSourceToLab();
         });
 
         [

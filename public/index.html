@@ -1483,7 +1483,7 @@
                       <button
                         class="btn-cp"
                         type="button"
-                        onclick="refreshLabEmbed('createLabIframe')"
+                        onclick="resetCreateLabEmbed()"
                       >
                         Tải lại
                       </button>
@@ -2935,6 +2935,16 @@
                             Kiểm tra
                           </button>
                           <span class="account-inline-status" id="accountAffiliateShopeeStatus">Chưa kiểm tra</span>
+                        </div>
+                        <div class="account-note">
+                          Có thể dùng trực tiếp link mặc định này, hoặc lưu nhiều nguồn aff Shopee ở bên dưới để chọn nhanh khi tạo link.
+                        </div>
+                      </div>
+                      <div class="fg full">
+                        <label class="fl">Nguồn aff Shopee đã lưu</label>
+                        <div id="accountAffiliateShopeeSources"></div>
+                        <div class="account-note">
+                          Chọn một nguồn làm mặc định. Tab Tạo liên kết sẽ cho chọn nhanh từng nguồn này để đổ vào link gốc.
                         </div>
                       </div>
                       <div class="fg full">
