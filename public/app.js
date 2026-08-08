@@ -5408,6 +5408,7 @@ function buildLabEmbedSrcdoc(frameId, forceRefresh = false) {
   if (!frame || !template) return "";
   const view = String(frame.dataset.labView || "").trim().toLowerCase() || "editor";
   const embedId = String(frame.dataset.labEmbedId || "").trim() || frameId;
+  const initialLabId = Math.max(Number(frame.dataset.pendingLabId || 0) || 0, 0);
   const affiliateShopeeSources = getUserAffiliateShopeeSources().map((item) => ({
     id: String(item?.id || "").trim(),
     label: String(item?.label || "").trim(),
@@ -5419,6 +5420,7 @@ function buildLabEmbedSrcdoc(frameId, forceRefresh = false) {
     embed: true,
     view,
     embedId,
+    initialLabId,
     refreshToken: forceRefresh ? Date.now().toString(36) : labEmbedCacheBust,
   })};<\/script>`;
   const bootstrapScript = `<script>window.__ARTICLE_FUNNEL_LAB_BOOTSTRAP__ = ${JSON.stringify({
@@ -5452,6 +5454,8 @@ function refreshLabEmbed(frameId) {
 }
 
 function resetCreateLabEmbed() {
+  const frame = document.getElementById("createLabIframe");
+  if (frame) frame.dataset.pendingLabId = "0";
   localStorage.removeItem(articleFunnelLabDraftStorageKey);
   refreshLabEmbed("createLabIframe");
   postLabEditorMessage("createLabIframe", {
@@ -5493,6 +5497,13 @@ function openExistingLabInCreateEditor(labId) {
   createSubtab = "lab";
   localStorage.setItem(createSubtabStorageKey, createSubtab);
   syncCreateSubtabUI();
+  const frame = document.getElementById("createLabIframe");
+  if (frame) {
+    frame.dataset.pendingLabId = String(
+      Number.isInteger(normalizedId) && normalizedId > 0 ? normalizedId : 0,
+    );
+    refreshLabEmbed("createLabIframe");
+  }
   if (normalizedId > 0) {
     postLabEditorMessage("createLabIframe", {
       type: "article-funnel-lab:load-lab",

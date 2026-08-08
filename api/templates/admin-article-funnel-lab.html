@@ -3558,6 +3558,14 @@
               ? embedConfig.embedId || ""
               : pageParams.get("embed_id") || "",
           ).trim() || "lab";
+        const initialEmbedLabId = Math.max(
+          Number(
+            embedConfig
+              ? embedConfig.initialLabId || 0
+              : pageParams.get("lab_id") || 0,
+          ) || 0,
+          0,
+        );
         const clone = (value) => JSON.parse(JSON.stringify(value));
         const applyAppTheme = (themeValue) => {
           const nextTheme = themeValue === "light" ? "light" : "dark";
@@ -8862,6 +8870,9 @@
           }
           if (embedView === "editor") {
             openLabEditor();
+            if (initialEmbedLabId > 0) {
+              loadDbLab(initialEmbedLabId);
+            }
           } else {
             openLabHome();
           }
