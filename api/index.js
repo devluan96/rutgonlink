@@ -692,6 +692,11 @@ app.get("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (re
         : "";
     return res.json({
       ok: true,
+      debug: {
+        requestId: req.requestId || null,
+        requestedLabId: Number(req.params.id) || 0,
+        responseLabId: row.id || null,
+      },
       item: {
         id: row.id,
         name: row.name || `Lab ${row.id}`,

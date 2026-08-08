@@ -477,6 +477,39 @@
         background: rgba(34, 28, 18, 0.44);
       }
 
+      .lab-debug-panel {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border: 1px dashed rgba(96, 165, 250, 0.35);
+        border-radius: 16px;
+        background: rgba(8, 15, 28, 0.42);
+        display: grid;
+        gap: 8px;
+      }
+
+      .lab-debug-panel strong {
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #cbd5e1;
+      }
+
+      .lab-debug-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 8px 12px;
+        font-size: 12px;
+        color: #94a3b8;
+      }
+
+      .lab-debug-grid code {
+        display: block;
+        margin-top: 4px;
+        color: #e2e8f0;
+        word-break: break-word;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
       a {
         color: inherit;
       }
@@ -2771,6 +2804,10 @@
                     <input id="labNameInput" type="text" />
                   </div>
                 </div>
+                <div class="lab-debug-panel" id="labDebugPanel">
+                  <strong>Lab Debug</strong>
+                  <div class="lab-debug-grid" id="labDebugGrid"></div>
+                </div>
                 <div class="action-bar compact" id="workspaceActionBar">
                   <div class="action-row primary-actions">
                     <button class="btn alt" type="button" id="createDbLabBtn">
@@ -3536,6 +3573,7 @@
         const STORAGE_KEY = "rgl-admin-article-funnel-lab-v2";
         const PENDING_OPEN_LAB_ID_STORAGE_KEY =
           "rutgonlink-lab-pending-open-id";
+        const LAB_DEBUG_STORAGE_KEY = "rutgonlink-lab-debug";
         const APP_LANGUAGE_STORAGE_KEY = "rutgonlink-lang";
         const APP_THEME_STORAGE_KEY = "rutgonlink-theme";
         const LAB_SHARED_SETTINGS_STORAGE_KEY =
@@ -3674,6 +3712,7 @@
         let generatedPublishedDomainNote = "";
         let selectedLabId = 0;
         let latestLabLoadRequestId = 0;
+        let labDebugState = {};
         let sourceManagedDeepMode = false;
         let labItems = [];
         let selectedLabIds = new Set();
@@ -3731,6 +3770,8 @@
           labNameInput: document.getElementById("labNameInput"),
           labMeta: document.getElementById("labMeta"),
           workspaceStatusStrip: document.getElementById("workspaceStatusStrip"),
+          labDebugPanel: document.getElementById("labDebugPanel"),
+          labDebugGrid: document.getElementById("labDebugGrid"),
           previewStatusCard: document.getElementById("previewStatusCard"),
           publishedStatusCard: document.getElementById("publishedStatusCard"),
           slugInput: document.getElementById("slugInput"),
@@ -5203,6 +5244,59 @@
           }
         }
 
+        function loadLabDebugState() {
+          try {
+            const parsed = JSON.parse(
+              localStorage.getItem(LAB_DEBUG_STORAGE_KEY) || "{}",
+            );
+            labDebugState =
+              parsed && typeof parsed === "object" && !Array.isArray(parsed)
+                ? parsed
+                : {};
+          } catch {
+            labDebugState = {};
+          }
+        }
+
+        function updateLabDebugState(patch = {}) {
+          labDebugState = {
+            ...labDebugState,
+            ...patch,
+            updatedAt: new Date().toISOString(),
+          };
+          try {
+            localStorage.setItem(
+              LAB_DEBUG_STORAGE_KEY,
+              JSON.stringify(labDebugState),
+            );
+          } catch {}
+          renderLabDebugState();
+        }
+
+        function renderLabDebugState() {
+          if (!els.labDebugGrid) return;
+          const rows = [
+            ["source", labDebugState.source || ""],
+            ["clickedLabId", labDebugState.clickedLabId ?? ""],
+            ["handoffLabId", labDebugState.handoffLabId ?? ""],
+            ["consumedLabId", labDebugState.consumedLabId ?? ""],
+            ["requestedLabId", labDebugState.requestedLabId ?? ""],
+            ["responseLabId", labDebugState.responseLabId ?? ""],
+            ["selectedLabId", selectedLabId || 0],
+            ["requestId", labDebugState.requestId || ""],
+            ["error", labDebugState.error || ""],
+            ["updatedAt", labDebugState.updatedAt || ""],
+          ];
+          els.labDebugGrid.innerHTML = rows
+            .map(
+              ([label, value]) =>
+                `<div><span>${escapeHtml(label)}</span><code>${escapeHtml(
+                  String(value ?? ""),
+                )}</code></div>`,
+            )
+            .join("");
+        }
+
         function normalizeBlock(block) {
           const allowedTypes = new Set([
             "paragraph",
@@ -5749,8 +5843,17 @@
         async function loadDbLab(labId) {
           const normalizedId = Number(labId || 0);
           const requestId = ++latestLabLoadRequestId;
+          updateLabDebugState({
+            source: "loadDbLab:start",
+            requestedLabId: normalizedId,
+            error: "",
+          });
           if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
             selectedLabId = 0;
+            updateLabDebugState({
+              source: "loadDbLab:invalid",
+              requestedLabId: normalizedId,
+            });
             renderLabOptions();
             return;
           }
@@ -5770,6 +5873,12 @@
             }
             const item = data.item || null;
             if (!item) throw new Error("lab_missing");
+            updateLabDebugState({
+              source: "loadDbLab:response",
+              requestedLabId: normalizedId,
+              responseLabId: Number(item.id || 0) || 0,
+              requestId: String(data?.debug?.requestId || ""),
+            });
             const nextState = normalizeImportedState(
               parseLabConfigPayload(item.config_json),
             );
@@ -5795,9 +5904,20 @@
             openLabEditor();
             render();
             saveState();
+            updateLabDebugState({
+              source: "loadDbLab:applied",
+              requestedLabId: normalizedId,
+              responseLabId: Number(item.id || 0) || 0,
+              selectedLabId: Number(item.id || 0) || 0,
+            });
             showToast("Đã mở lab để chỉnh sửa");
           } catch (error) {
             if (requestId !== latestLabLoadRequestId) return;
+            updateLabDebugState({
+              source: "loadDbLab:error",
+              requestedLabId: normalizedId,
+              error: String(error?.message || "unknown"),
+            });
             createDbLab();
             showToast(
               error?.message
@@ -5824,6 +5944,12 @@
           renderLabOptions();
           openLabEditor();
           render();
+          updateLabDebugState({
+            source: "createDbLab",
+            responseLabId: 0,
+            selectedLabId: 0,
+            error: "",
+          });
           saveState();
           showToast("Đã mở lab mới");
         }
@@ -7961,6 +8087,7 @@
           normalizeStaticVietnameseCopy();
           syncEditorModeUI();
           applySourceManagedEditorMode();
+          renderLabDebugState();
 
           if (!shouldRenderEditorContent()) {
             scheduleEmbedHeightSync();
@@ -8905,6 +9032,12 @@
         if (embedMode) {
           const pendingOpenLabId = consumePendingOpenLabId();
           const startupLabId = pendingOpenLabId || initialEmbedLabId;
+          loadLabDebugState();
+          updateLabDebugState({
+            source: "embed:startup",
+            consumedLabId: pendingOpenLabId || 0,
+            requestedLabId: startupLabId || 0,
+          });
           document.body.classList.add("embed-mode");
           if (embedView === "list") {
             document.body.classList.add("embed-list-view");
