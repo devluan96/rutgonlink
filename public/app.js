@@ -2453,7 +2453,7 @@ function rememberAdminNotificationSnapshot(
 }
 
 async function pollRealtimeNotifications() {
-  if (!document.getElementById("appScreen")?.classList.contains("show")) return;
+  if (!shouldPollRealtimeNotifications()) return;
   try {
     const statsPayload = await getStatsSummaryPayload({ preferCache: true });
     if (statsPayload) {
@@ -2561,6 +2561,21 @@ async function pollRealtimeNotifications() {
   } catch {}
 }
 
+function shouldPollRealtimeNotifications() {
+  if (!document.getElementById("appScreen")?.classList.contains("show")) {
+    return false;
+  }
+  if (document.hidden) return false;
+  const activePage = getActiveAppPage();
+  const dropdownOpen = !!document
+    .getElementById("notificationDropdown")
+    ?.classList.contains("show");
+  return (
+    dropdownOpen ||
+    ["dashboard", "stats", "links", "account", "admin"].includes(activePage)
+  );
+}
+
 function stopRealtimeNotificationLoop() {
   if (notificationPollTimer) {
     clearInterval(notificationPollTimer);
@@ -2576,7 +2591,6 @@ function startRealtimeNotificationLoop({ immediate = true } = {}) {
     void pollRealtimeNotifications();
   }
   notificationPollTimer = setInterval(() => {
-    if (document.hidden) return;
     void pollRealtimeNotifications();
   }, NOTIFICATION_POLL_INTERVAL_MS);
 }
@@ -10747,7 +10761,7 @@ let paymentQrStyler = null;
 let supportWidgetOpen = false;
 const ADMIN_PAGE_SIZE = 20;
 const SUPPORT_POLL_INTERVAL_MS = 60000;
-const NOTIFICATION_POLL_INTERVAL_MS = 120000;
+const NOTIFICATION_POLL_INTERVAL_MS = 300000;
 const ADMIN_SECTION_CACHE_TTL_MS = 120000;
 const ADMIN_REDIRECT_FETCH_LIMIT = 30;
 const SIDEBAR_DRAWER_BREAKPOINT_PX = 1024;

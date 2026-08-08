@@ -62,6 +62,32 @@ test("article funnel lab list scopes admins to their own labs", () => {
   );
 });
 
+test("article funnel lab APIs normalize legacy string config_json payloads", () => {
+  const indexJs = fs.readFileSync(
+    path.join(__dirname, "..", "api", "index.js"),
+    "utf8",
+  );
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(indexJs, /function normalizeArticleFunnelLabConfigJson\(rawConfig\)/);
+  assert.match(
+    indexJs,
+    /const configJson = normalizeArticleFunnelLabConfigJson\(item\.config_json\);/,
+  );
+  assert.match(
+    indexJs,
+    /const configJson = normalizeArticleFunnelLabConfigJson\(row\.config_json\);/,
+  );
+  assert.match(templateHtml, /function parseLabConfigPayload\(input\)/);
+  assert.match(
+    templateHtml,
+    /normalizeImportedState\(\s*parseLabConfigPayload\(item\.config_json\),\s*\)/s,
+  );
+});
+
 test("lab shared settings persist on the user profile instead of local-only storage", () => {
   const schemaSql = fs.readFileSync(
     path.join(__dirname, "..", "supabase", "schema.sql"),

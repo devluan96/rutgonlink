@@ -5161,6 +5161,22 @@
           };
         }
 
+        function parseLabConfigPayload(input) {
+          if (input && typeof input === "object" && !Array.isArray(input)) {
+            return input;
+          }
+          const serialized = String(input || "").trim();
+          if (!serialized) return {};
+          try {
+            const parsed = JSON.parse(serialized);
+            return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+              ? parsed
+              : {};
+          } catch {
+            return {};
+          }
+        }
+
         function normalizeBlock(block) {
           const allowedTypes = new Set([
             "paragraph",
@@ -5715,7 +5731,9 @@
             const data = await response.json();
             const item = data.item || null;
             if (!item) throw new Error("lab_missing");
-            const nextState = normalizeImportedState(item.config_json || {});
+            const nextState = normalizeImportedState(
+              parseLabConfigPayload(item.config_json),
+            );
             Object.keys(state).forEach((key) => delete state[key]);
             Object.assign(state, nextState);
             sourceManagedDeepMode = false;

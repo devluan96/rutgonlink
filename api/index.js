@@ -311,7 +311,7 @@ function escapeXml(value) {
 }
 
 function serveLanding(_req, res) {
-  res.set("Cache-Control", "no-store");
+  res.set("Cache-Control", "public, max-age=300, s-maxage=3600");
   const html = renderHtmlTemplate(
     path.join(__dirname, "..", "public", "landing.html"),
     {
@@ -324,14 +324,17 @@ function serveLanding(_req, res) {
 
 function servePublicTemplate(templatePath, replacements = {}, options = {}) {
   return (_req, res) => {
-    res.set("Cache-Control", options.cacheControl || "no-store");
+    res.set(
+      "Cache-Control",
+      options.cacheControl || "public, max-age=300, s-maxage=3600",
+    );
     const html = renderHtmlTemplate(templatePath, replacements);
     res.type("html").send(html);
   };
 }
 
 function serveAppShell(_req, res) {
-  res.set("Cache-Control", "no-store");
+  res.set("Cache-Control", "private, max-age=60, must-revalidate");
   res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   res.sendFile(path.join(__dirname, "..", "public", "index.html"));
 }
@@ -475,7 +478,7 @@ for (const page of publicResourcePages) {
 }
 app.get(appShellRoutes, requireAppShellSession, serveAppShell);
 const serveAuthHtml = (templatePath) => (_req, res) => {
-  res.set("Cache-Control", "no-store");
+  res.set("Cache-Control", "private, max-age=60, must-revalidate");
   res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   const html = renderHtmlTemplate(templatePath, {
     "__GOOGLE_CLIENT_ID__": GOOGLE_CLIENT_ID,
@@ -667,10 +670,7 @@ app.get("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (re
     if (!canManageArticleFunnelLab(req.currentUser, row)) {
       return res.status(403).json({ error: "Khong co quyen xem lab nay" });
     }
-    const configJson =
-      row.config_json && typeof row.config_json === "object"
-        ? row.config_json
-        : {};
+    const configJson = normalizeArticleFunnelLabConfigJson(row.config_json);
     const publishedUrl =
       row.published_route_slug
         ? buildArticleFunnelPublicUrl(
@@ -1530,12 +1530,33 @@ app.get("/:slug", async (req, res, next) => {
 });
 app.get("/favicon.ico", (_req, res) => {
   res.type("image/svg+xml");
+  res.set("Cache-Control", "public, max-age=86400");
   res.sendFile(path.join(__dirname, "..", "public", "favicon.svg"));
 });
 
 app.use(
   express.static(path.join(__dirname, "..", "public"), {
     index: false,
+    setHeaders: (res, filePath) => {
+      const extension = path.extname(String(filePath || "")).toLowerCase();
+      if (
+        [
+          ".js",
+          ".css",
+          ".svg",
+          ".png",
+          ".jpg",
+          ".jpeg",
+          ".webp",
+          ".gif",
+          ".ico",
+          ".woff",
+          ".woff2",
+        ].includes(extension)
+      ) {
+        res.setHeader("Cache-Control", "public, max-age=86400");
+      }
+    },
   }),
 );
 
@@ -2284,6 +2305,22 @@ function canManageArticleFunnelLab(user, labRow) {
   if (isAdminUserRecord(user)) return true;
   const ownerUserId = Number(labRow?.created_by_user_id || 0);
   return ownerUserId > 0 && ownerUserId === Number(user?.id || 0);
+}
+
+function normalizeArticleFunnelLabConfigJson(rawConfig) {
+  if (rawConfig && typeof rawConfig === "object" && !Array.isArray(rawConfig)) {
+    return rawConfig;
+  }
+  const serialized = String(rawConfig || "").trim();
+  if (!serialized) return {};
+  try {
+    const parsed = JSON.parse(serialized);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 async function requireAdmin(req, res, next) {
@@ -10076,10 +10113,7 @@ app.get("/api/links", async (req, res) => {
         short_url: buildLinkShortUrl(link, publicBaseUrl),
       })),
       labs: recentLabs.slice(0, limit).map((item) => {
-        const configJson =
-          item.config_json && typeof item.config_json === "object"
-            ? item.config_json
-            : {};
+        const configJson = normalizeArticleFunnelLabConfigJson(item.config_json);
         const referenceSourceUrl = String(
           configJson.reference_source_url ||
             configJson.referenceSourceUrl ||
