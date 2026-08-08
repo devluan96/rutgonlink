@@ -611,6 +611,7 @@ app.post("/api/admin/article-funnel-lab/import-url", requireArticleFunnelLab, as
 });
 app.get("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, res) => {
   try {
+    res.set("Cache-Control", "private, no-store");
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
     const rows = await database.listArticleFunnelLabs({
@@ -661,6 +662,7 @@ app.get("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, r
 });
 app.get("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (req, res) => {
   try {
+    res.set("Cache-Control", "private, no-store");
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
     const row = await database.getArticleFunnelLabById(req.params.id);

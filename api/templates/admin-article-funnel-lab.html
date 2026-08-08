@@ -3667,6 +3667,7 @@
         let generatedPublishedUpdatedAt = "";
         let generatedPublishedDomainNote = "";
         let selectedLabId = 0;
+        let latestLabLoadRequestId = 0;
         let sourceManagedDeepMode = false;
         let labItems = [];
         let selectedLabIds = new Set();
@@ -5726,6 +5727,7 @@
 
         async function loadDbLab(labId) {
           const normalizedId = Number(labId || 0);
+          const requestId = ++latestLabLoadRequestId;
           if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
             selectedLabId = 0;
             renderLabOptions();
@@ -5734,14 +5736,23 @@
           try {
             const response = await fetch(
               `/api/admin/article-funnel-labs/${normalizedId}`,
+              {
+                cache: "no-store",
+              },
             );
-            if (!response.ok) throw new Error("lab_load_failed");
-            const data = await response.json();
+            const data = await response.json().catch(() => ({}));
+            if (requestId !== latestLabLoadRequestId) return;
+            if (!response.ok) {
+              throw new Error(
+                String(data?.error || "lab_load_failed").trim() || "lab_load_failed",
+              );
+            }
             const item = data.item || null;
             if (!item) throw new Error("lab_missing");
             const nextState = normalizeImportedState(
               parseLabConfigPayload(item.config_json),
             );
+            if (requestId !== latestLabLoadRequestId) return;
             Object.keys(state).forEach((key) => delete state[key]);
             Object.assign(state, nextState);
             sourceManagedDeepMode = false;
@@ -5764,12 +5775,19 @@
             render();
             saveState();
             showToast("Đã mở lab để chỉnh sửa");
-          } catch {
-            showToast("Không tải được lab này");
+          } catch (error) {
+            if (requestId !== latestLabLoadRequestId) return;
+            createDbLab();
+            showToast(
+              error?.message
+                ? `Không tải được lab này: ${error.message}`
+                : "Không tải được lab này",
+            );
           }
         }
 
         async function createDbLab() {
+          latestLabLoadRequestId += 1;
           Object.keys(state).forEach((key) => delete state[key]);
           Object.assign(state, clone(defaultState));
           sourceManagedDeepMode = false;
