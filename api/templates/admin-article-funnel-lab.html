@@ -3534,6 +3534,8 @@
     <script>
       (() => {
         const STORAGE_KEY = "rgl-admin-article-funnel-lab-v2";
+        const PENDING_OPEN_LAB_ID_STORAGE_KEY =
+          "rutgonlink-lab-pending-open-id";
         const APP_LANGUAGE_STORAGE_KEY = "rutgonlink-lang";
         const APP_THEME_STORAGE_KEY = "rutgonlink-theme";
         const LAB_SHARED_SETTINGS_STORAGE_KEY =
@@ -5187,6 +5189,17 @@
               : {};
           } catch {
             return {};
+          }
+        }
+
+        function consumePendingOpenLabId() {
+          try {
+            const raw = localStorage.getItem(PENDING_OPEN_LAB_ID_STORAGE_KEY);
+            localStorage.removeItem(PENDING_OPEN_LAB_ID_STORAGE_KEY);
+            const nextLabId = Number(raw || 0);
+            return Number.isInteger(nextLabId) && nextLabId > 0 ? nextLabId : 0;
+          } catch {
+            return 0;
           }
         }
 
@@ -8890,14 +8903,16 @@
         setupEmbedEditorToolbar();
         syncAutoSlugFromTitle();
         if (embedMode) {
+          const pendingOpenLabId = consumePendingOpenLabId();
+          const startupLabId = pendingOpenLabId || initialEmbedLabId;
           document.body.classList.add("embed-mode");
           if (embedView === "list") {
             document.body.classList.add("embed-list-view");
           }
           if (embedView === "editor") {
             openLabEditor();
-            if (initialEmbedLabId > 0) {
-              loadDbLab(initialEmbedLabId);
+            if (startupLabId > 0) {
+              loadDbLab(startupLabId);
             }
           } else {
             openLabHome();

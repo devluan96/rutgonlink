@@ -112,6 +112,8 @@ let linkTypeFilter = "all";
 let linkViewFilter = "all";
 const createSubtabStorageKey = "rutgonlink-create-subtab";
 const articleFunnelLabDraftStorageKey = "rgl-admin-article-funnel-lab-v2";
+const articleFunnelLabPendingOpenIdStorageKey =
+  "rutgonlink-lab-pending-open-id";
 const linksSubtabStorageKey = "rutgonlink-links-subtab";
 let createSubtab =
   localStorage.getItem(createSubtabStorageKey) === "lab" ? "lab" : "standard";
@@ -5468,6 +5470,7 @@ function refreshLabEmbed(frameId) {
 function resetCreateLabEmbed() {
   const frame = document.getElementById("createLabIframe");
   if (frame) frame.dataset.pendingLabId = "0";
+  localStorage.setItem(articleFunnelLabPendingOpenIdStorageKey, "0");
   localStorage.removeItem(articleFunnelLabDraftStorageKey);
   refreshLabEmbed("createLabIframe");
   postLabEditorMessage("createLabIframe", {
@@ -5505,6 +5508,10 @@ function openExistingLabInCreateEditor(labId) {
   }
   const normalizedId = Number(labId || 0);
   localStorage.removeItem(articleFunnelLabDraftStorageKey);
+  localStorage.setItem(
+    articleFunnelLabPendingOpenIdStorageKey,
+    String(Number.isInteger(normalizedId) && normalizedId > 0 ? normalizedId : 0),
+  );
   navigate("create");
   createSubtab = "lab";
   localStorage.setItem(createSubtabStorageKey, createSubtab);
