@@ -5488,6 +5488,7 @@ function openExistingLabInCreateEditor(labId) {
     return;
   }
   const normalizedId = Number(labId || 0);
+  localStorage.removeItem(articleFunnelLabDraftStorageKey);
   navigate("create");
   createSubtab = "lab";
   localStorage.setItem(createSubtabStorageKey, createSubtab);

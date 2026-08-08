@@ -5781,6 +5781,33 @@
           showToast("Đã mở lab mới");
         }
 
+        function resetLabEditorAfterCreate(options = {}) {
+          const successMessage = String(
+            options.successMessage || "Đã tạo lab thành công",
+          ).trim();
+          const preserveToast = Boolean(options.preserveToast);
+          localStorage.removeItem(STORAGE_KEY);
+          Object.keys(state).forEach((key) => delete state[key]);
+          Object.assign(state, clone(defaultState));
+          sourceManagedDeepMode = false;
+          selectedLabId = 0;
+          els.labNameInput.value = "";
+          resetTimers();
+          clearResolvedCache();
+          clearGeneratedPreviewLink();
+          clearGeneratedPublishedLink();
+          closeOverlay();
+          visibleBlockCount = state.blocks.length;
+          hydrateAffiliateDefaults();
+          renderLabOptions();
+          openLabEditor();
+          render();
+          saveState();
+          if (preserveToast && successMessage) {
+            showToast(successMessage);
+          }
+        }
+
         function setActionButtonBusy(button, busy, busyLabel = "Đang xử lý...") {
           if (!button) return;
           if (!button.dataset.idleLabel) {
@@ -5835,6 +5862,8 @@
           const suppressSuccessToast = Boolean(options?.suppressSuccessToast);
           const suppressErrorToast = Boolean(options?.suppressErrorToast);
           const manageBusyState = options?.manageBusyState !== false;
+          const resetAfterCreateSuccess =
+            options?.resetAfterCreateSuccess !== false;
           if (manageBusyState) {
             setPrimaryLabActionBusy(true, {
               createLabel: isCreating ? "Đang tạo lab..." : "Đang lưu lab...",
@@ -5873,6 +5902,9 @@
                   ? "Đã tạo lab thành công"
                   : "Đã lưu thay đổi của lab",
               );
+            }
+            if (isCreating && resetAfterCreateSuccess) {
+              resetLabEditorAfterCreate();
             }
             return { ok: true, isCreating };
           } catch {
@@ -8499,6 +8531,7 @@
                 const result = await saveDbLab({
                   suppressSuccessToast: true,
                   manageBusyState: false,
+                  resetAfterCreateSuccess: false,
                 });
                 if (result?.ok) {
                   const publishResult = await publishShortLinkSilently();
@@ -8528,6 +8561,9 @@
                             : `Đã lưu lab nhưng chưa publish được: ${publishErrorMessage}`
                           : "Đã lưu thay đổi của lab",
                   );
+                  if (result.isCreating) {
+                    resetLabEditorAfterCreate();
+                  }
                 }
               } finally {
                 setPrimaryLabActionBusy(false);
