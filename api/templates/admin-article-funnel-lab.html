@@ -3654,7 +3654,11 @@
         );
 
         const isEmbedListView = embedMode && embedView === "list";
-        const state = isEmbedListView ? clone(defaultState) : loadState();
+        const shouldUseEmbeddedDraftState = !embedMode;
+        const state =
+          isEmbedListView || !shouldUseEmbeddedDraftState
+            ? clone(defaultState)
+            : loadState();
         let activeStage = "";
         let timer3s = null;
         let timer20s = null;
@@ -5309,6 +5313,10 @@
         }
 
         function saveState(message) {
+          if (!shouldUseEmbeddedDraftState) {
+            if (message) showToast(message);
+            return;
+          }
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
           if (message) showToast(message);
         }
