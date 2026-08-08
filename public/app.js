@@ -5435,13 +5435,26 @@ function buildLabEmbedSrcdoc(frameId, forceRefresh = false) {
   return template.replace("<head>", `<head>${baseTag}${embedConfigScript}${bootstrapScript}`);
 }
 
+function mountLabEmbedSrcdoc(frame, nextSrcdoc) {
+  if (!frame || !nextSrcdoc) return;
+  frame.dataset.booting = "true";
+  frame.srcdoc = nextSrcdoc;
+  frame.dataset.loaded = "true";
+  frame.addEventListener(
+    "load",
+    () => {
+      frame.dataset.booting = "false";
+    },
+    { once: true },
+  );
+}
+
 function ensureLabEmbedLoaded(frameId) {
   const frame = document.getElementById(frameId);
   if (!frame || frame.dataset.loaded === "true") return;
   const nextSrcdoc = buildLabEmbedSrcdoc(frameId);
   if (!nextSrcdoc) return;
-  frame.srcdoc = nextSrcdoc;
-  frame.dataset.loaded = "true";
+  mountLabEmbedSrcdoc(frame, nextSrcdoc);
 }
 
 function refreshLabEmbed(frameId) {
@@ -5449,8 +5462,7 @@ function refreshLabEmbed(frameId) {
   if (!frame) return;
   const nextSrcdoc = buildLabEmbedSrcdoc(frameId, true);
   if (!nextSrcdoc) return;
-  frame.srcdoc = nextSrcdoc;
-  frame.dataset.loaded = "true";
+  mountLabEmbedSrcdoc(frame, nextSrcdoc);
 }
 
 function resetCreateLabEmbed() {
@@ -5480,7 +5492,7 @@ function postLabEditorMessage(frameId, payload) {
     });
   };
   frame.addEventListener("load", scheduleMessageBurst, { once: true });
-  if (frame.contentWindow) {
+  if (frame.contentWindow && frame.dataset.booting !== "true") {
     scheduleMessageBurst();
     return;
   }
