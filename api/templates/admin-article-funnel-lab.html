@@ -510,6 +510,10 @@
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
 
+      body.embed-mode .lab-debug-panel {
+        margin: 0 0 16px;
+      }
+
       a {
         color: inherit;
       }
@@ -2759,6 +2763,10 @@
                 </div>
               </div>
             </div>
+            <div class="lab-debug-panel" id="labDebugPanel">
+              <strong>Lab Debug</strong>
+              <div class="lab-debug-grid" id="labDebugGrid"></div>
+            </div>
 
             <div class="embed-editor-toolbar" id="embedEditorToolbar">
               <div class="embed-editor-toolbar-main">
@@ -2803,10 +2811,6 @@
                     <label for="labNameInput">Tên lab hiện tại</label>
                     <input id="labNameInput" type="text" />
                   </div>
-                </div>
-                <div class="lab-debug-panel" id="labDebugPanel">
-                  <strong>Lab Debug</strong>
-                  <div class="lab-debug-grid" id="labDebugGrid"></div>
                 </div>
                 <div class="action-bar compact" id="workspaceActionBar">
                   <div class="action-row primary-actions">
