@@ -3610,6 +3610,9 @@
           ) || 0,
           0,
         );
+        const isLabDebugVisible = embedConfig
+          ? !!embedConfig.debugVisible
+          : true;
         const clone = (value) => JSON.parse(JSON.stringify(value));
         const applyAppTheme = (themeValue) => {
           const nextTheme = themeValue === "light" ? "light" : "dark";
@@ -5278,7 +5281,12 @@
         }
 
         function renderLabDebugState() {
-          if (!els.labDebugGrid) return;
+          if (!els.labDebugPanel || !els.labDebugGrid) return;
+          els.labDebugPanel.hidden = !isLabDebugVisible;
+          if (!isLabDebugVisible) {
+            els.labDebugGrid.innerHTML = "";
+            return;
+          }
           const rows = [
             ["source", labDebugState.source || ""],
             ["clickedLabId", labDebugState.clickedLabId ?? ""],

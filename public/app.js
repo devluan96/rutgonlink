@@ -5424,6 +5424,7 @@ function buildLabEmbedSrcdoc(frameId, forceRefresh = false) {
     view,
     embedId,
     initialLabId,
+    debugVisible: isAdminUser(),
     refreshToken: forceRefresh ? Date.now().toString(36) : labEmbedCacheBust,
   })};<\/script>`;
   const bootstrapScript = `<script>window.__ARTICLE_FUNNEL_LAB_BOOTSTRAP__ = ${JSON.stringify({
