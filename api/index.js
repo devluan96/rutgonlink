@@ -10325,13 +10325,15 @@ app.post("/api/extract-thumb", requireAuth, async (req, res) => {
 app.get("/api/stats/summary", async (req, res) => {
   try {
     const database = await getDb();
+    const compactMode =
+      String(req.query.compact || "").trim() === "1";
     const [publicBaseUrl, user] = await Promise.all([
       getPublicBaseUrl(),
       resolveUser(req),
     ]);
     const userId = user?.id || null;
     const guestSessionId = user ? null : req.guestSessionId;
-    const cacheKey = `summary:${buildStatsCacheKey(userId, guestSessionId)}`;
+    const cacheKey = `summary:${buildStatsCacheKey(userId, guestSessionId)}:compact:${compactMode ? 1 : 0}`;
     const cachedEntry = statsSummaryResponseCache.get(cacheKey);
     if (
       cachedEntry &&
@@ -10432,15 +10434,17 @@ app.get("/api/stats/summary", async (req, res) => {
               timings,
             )
           : Promise.resolve(null),
-        measureAsyncTiming(
-          "recentLinks",
-          () =>
-            database.getRecentLinks(userId, guestSessionId, {
-              limit: Math.min(STATS_RECENT_LINK_LIMIT, 5),
-              select: "stats",
-            }),
-          timings,
-        ),
+        compactMode
+          ? Promise.resolve([])
+          : measureAsyncTiming(
+              "recentLinks",
+              () =>
+                database.getRecentLinks(userId, guestSessionId, {
+                  limit: Math.min(STATS_RECENT_LINK_LIMIT, 5),
+                  select: "stats",
+                }),
+              timings,
+            ),
       ]);
       const mappedLabAnalyticsRows =
         mapArticleFunnelClickRowsToAnalyticsRows(labAnalyticsRows);
@@ -10503,8 +10507,8 @@ app.get("/api/stats/summary", async (req, res) => {
         rawClicksToday: Number(today.clicksToday || 0),
         recentWindowDays: 1,
         selectedRangeDays: 1,
-        recent,
-        analytics,
+        recent: compactMode ? [] : recent,
+        analytics: compactMode ? null : analytics,
         alerts,
         plan: user?.plan || "guest",
         debug: {
@@ -10513,6 +10517,7 @@ app.get("/api/stats/summary", async (req, res) => {
           analyticsSource,
           route: "/api/stats/summary",
           labAnalyticsRows: mappedLabAnalyticsRows.length,
+          compactMode,
         },
       };
       timings.total = Date.now() - startedAt;

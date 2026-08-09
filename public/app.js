@@ -115,6 +115,8 @@ const articleFunnelLabDraftStorageKey = "rgl-admin-article-funnel-lab-v2";
 const articleFunnelLabPendingOpenIdStorageKey =
   "rutgonlink-lab-pending-open-id";
 const articleFunnelLabDebugStorageKey = "rutgonlink-lab-debug";
+const articleFunnelLabSrcdocAssetUrl =
+  "/article-funnel-lab-srcdoc.js?v=20260809b";
 const linksSubtabStorageKey = "rutgonlink-links-subtab";
 let createSubtab =
   localStorage.getItem(createSubtabStorageKey) === "lab" ? "lab" : "standard";
@@ -169,6 +171,9 @@ let statsSummaryPayloadPromise = null;
 let statsSummaryPayloadCache = null;
 let statsSummaryPayloadCacheAt = 0;
 let statsSummaryPayloadCacheDays = DEFAULT_STATS_RANGE_DAYS;
+let compactStatsSummaryPayloadPromise = null;
+let compactStatsSummaryPayloadCache = null;
+let compactStatsSummaryPayloadCacheAt = 0;
 let linksPayloadPromise = null;
 let linksPayloadCache = null;
 let linksPayloadCacheAt = 0;
@@ -192,6 +197,7 @@ let accountAffiliateHealth = {
 let activeAffiliatePresetTargetFieldId = "";
 const notificationSeenStorageKey = "rutgonlink-notification-seen";
 let seenNotificationKeys = {};
+let articleFunnelLabSrcdocPromise = null;
 const themeMeta = document.querySelector('meta[name="theme-color"]');
 const rootStyles = () => getComputedStyle(document.documentElement);
 const themeColor = (name, fallback) =>
@@ -2424,10 +2430,62 @@ function resetStatsDataCaches() {
   statsSummaryPayloadCache = null;
   statsSummaryPayloadCacheAt = 0;
   statsSummaryPayloadCacheDays = DEFAULT_STATS_RANGE_DAYS;
+  compactStatsSummaryPayloadPromise = null;
+  compactStatsSummaryPayloadCache = null;
+  compactStatsSummaryPayloadCacheAt = 0;
   linksPayloadPromise = null;
   linksPayloadCache = null;
   linksPayloadCacheAt = 0;
   notificationStatsSnapshot = null;
+}
+
+function ensureArticleFunnelLabSrcdocAsset() {
+  const hasTemplate =
+    typeof window.__ARTICLE_FUNNEL_LAB_TEMPLATE_HTML__ === "string" &&
+    window.__ARTICLE_FUNNEL_LAB_TEMPLATE_HTML__.trim();
+  if (hasTemplate) {
+    return Promise.resolve(window.__ARTICLE_FUNNEL_LAB_TEMPLATE_HTML__);
+  }
+  if (articleFunnelLabSrcdocPromise) {
+    return articleFunnelLabSrcdocPromise;
+  }
+  articleFunnelLabSrcdocPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector(
+      `script[data-lab-srcdoc-loader="true"]`,
+    );
+    const handleReady = () => {
+      const template = window.__ARTICLE_FUNNEL_LAB_TEMPLATE_HTML__;
+      if (typeof template === "string" && template.trim()) {
+        resolve(template);
+        return;
+      }
+      reject(new Error("Không thể tải lab editor"));
+    };
+    if (existingScript) {
+      existingScript.addEventListener("load", handleReady, { once: true });
+      existingScript.addEventListener(
+        "error",
+        () => reject(new Error("Không thể tải lab editor")),
+        { once: true },
+      );
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = articleFunnelLabSrcdocAssetUrl;
+    script.async = true;
+    script.dataset.labSrcdocLoader = "true";
+    script.addEventListener("load", handleReady, { once: true });
+    script.addEventListener(
+      "error",
+      () => reject(new Error("Không thể tải lab editor")),
+      { once: true },
+    );
+    document.body.appendChild(script);
+  }).catch((error) => {
+    articleFunnelLabSrcdocPromise = null;
+    throw error;
+  });
+  return articleFunnelLabSrcdocPromise;
 }
 
 function buildAdminNotificationSnapshot(
@@ -2458,7 +2516,14 @@ function rememberAdminNotificationSnapshot(
 async function pollRealtimeNotifications() {
   if (!shouldPollRealtimeNotifications()) return;
   try {
-    const statsPayload = await getStatsSummaryPayload({ preferCache: true });
+    const activePage = getActiveAppPage();
+    const notificationDropdownOpen = !!document
+      .getElementById("notificationDropdown")
+      ?.classList.contains("show");
+    const statsPayload = await getStatsSummaryPayload({
+      preferCache: true,
+      compact: activePage !== "dashboard",
+    });
     if (statsPayload) {
       enqueueStatsAlerts(statsPayload);
       const previous = notificationStatsSnapshot;
@@ -2487,7 +2552,6 @@ async function pollRealtimeNotifications() {
           });
         }
       }
-      const activePage = getActiveAppPage();
       if (activePage === "dashboard") {
         await loadDashboardData({ prefetched: statsPayload });
       } else if (pageNeedsRealtimeFullStatsPayload(activePage)) {
@@ -2501,7 +2565,7 @@ async function pollRealtimeNotifications() {
       notificationStatsSnapshot = next;
     }
 
-    if (isAdminUser()) {
+    if (isAdminUser() && (activePage === "admin" || notificationDropdownOpen)) {
       const shouldIncludeRedirects =
         adminSection === "logs" &&
         !!document.getElementById("page-admin")?.classList.contains("active");
@@ -2558,7 +2622,7 @@ async function pollRealtimeNotifications() {
         }
         adminNotificationSnapshot = nextAdmin;
       }
-    } else {
+    } else if (!isAdminUser()) {
       adminNotificationSnapshot = null;
     }
   } catch {}
@@ -5453,23 +5517,25 @@ function mountLabEmbedSrcdoc(frame, nextSrcdoc) {
   );
 }
 
-function ensureLabEmbedLoaded(frameId) {
+async function ensureLabEmbedLoaded(frameId) {
   const frame = document.getElementById(frameId);
   if (!frame || frame.dataset.loaded === "true") return;
+  await ensureArticleFunnelLabSrcdocAsset();
   const nextSrcdoc = buildLabEmbedSrcdoc(frameId);
   if (!nextSrcdoc) return;
   mountLabEmbedSrcdoc(frame, nextSrcdoc);
 }
 
-function refreshLabEmbed(frameId) {
+async function refreshLabEmbed(frameId) {
   const frame = document.getElementById(frameId);
   if (!frame) return;
+  await ensureArticleFunnelLabSrcdocAsset();
   const nextSrcdoc = buildLabEmbedSrcdoc(frameId, true);
   if (!nextSrcdoc) return;
   mountLabEmbedSrcdoc(frame, nextSrcdoc);
 }
 
-function resetCreateLabEmbed() {
+async function resetCreateLabEmbed() {
   const frame = document.getElementById("createLabIframe");
   if (frame) frame.dataset.pendingLabId = "0";
   localStorage.setItem(articleFunnelLabPendingOpenIdStorageKey, "0");
@@ -5483,7 +5549,13 @@ function resetCreateLabEmbed() {
     }),
   );
   localStorage.removeItem(articleFunnelLabDraftStorageKey);
-  refreshLabEmbed("createLabIframe");
+  try {
+    await refreshLabEmbed("createLabIframe");
+  } catch (error) {
+    console.error("resetCreateLabEmbed failed", error);
+    toast(error?.message || "Không thể tải lab editor", "err");
+    return;
+  }
   postLabEditorMessage("createLabIframe", {
     type: "article-funnel-lab:load-lab",
     labId: 0,
@@ -5491,25 +5563,30 @@ function resetCreateLabEmbed() {
 }
 
 function postLabEditorMessage(frameId, payload) {
-  const frame = document.getElementById(frameId);
-  if (!frame) return;
-  ensureLabEmbedLoaded(frameId);
-  const sendMessage = () => {
+  void (async () => {
     try {
-      frame.contentWindow?.postMessage(payload, window.location.origin);
-    } catch (_) {}
-  };
-  const scheduleMessageBurst = () => {
-    sendMessage();
-    [180, 420, 900].forEach((delay) => {
-      setTimeout(sendMessage, delay);
-    });
-  };
-  frame.addEventListener("load", scheduleMessageBurst, { once: true });
-  if (frame.contentWindow && frame.dataset.booting !== "true") {
-    scheduleMessageBurst();
-    return;
-  }
+      const frame = document.getElementById(frameId);
+      if (!frame) return;
+      await ensureLabEmbedLoaded(frameId);
+      const sendMessage = () => {
+        try {
+          frame.contentWindow?.postMessage(payload, window.location.origin);
+        } catch (_) {}
+      };
+      const scheduleMessageBurst = () => {
+        sendMessage();
+        [180, 420, 900].forEach((delay) => {
+          setTimeout(sendMessage, delay);
+        });
+      };
+      frame.addEventListener("load", scheduleMessageBurst, { once: true });
+      if (frame.contentWindow && frame.dataset.booting !== "true") {
+        scheduleMessageBurst();
+      }
+    } catch (error) {
+      console.error("postLabEditorMessage failed", error);
+    }
+  })();
 }
 
 function openExistingLabInCreateEditor(labId) {
@@ -5558,24 +5635,30 @@ function openExistingLabInCreateEditor(labId) {
 }
 
 function postLabSharedSettingsToFrame(frameId, settings) {
-  const frame = document.getElementById(frameId);
-  if (!frame) return;
-  ensureLabEmbedLoaded(frameId);
-  const payload = normalizeLabSharedSettings(settings);
-  const sendSettings = () => {
+  void (async () => {
     try {
-      frame.contentWindow?.postMessage(
-        { type: "article-funnel-lab:apply-shared-settings", settings: payload },
-        window.location.origin,
-      );
-    } catch (_) {}
-  };
-  if (frame.contentWindow) {
-    sendSettings();
-    setTimeout(sendSettings, 180);
-    return;
-  }
-  frame.addEventListener("load", sendSettings, { once: true });
+      const frame = document.getElementById(frameId);
+      if (!frame) return;
+      await ensureLabEmbedLoaded(frameId);
+      const payload = normalizeLabSharedSettings(settings);
+      const sendSettings = () => {
+        try {
+          frame.contentWindow?.postMessage(
+            { type: "article-funnel-lab:apply-shared-settings", settings: payload },
+            window.location.origin,
+          );
+        } catch (_) {}
+      };
+      if (frame.contentWindow) {
+        sendSettings();
+        setTimeout(sendSettings, 180);
+        return;
+      }
+      frame.addEventListener("load", sendSettings, { once: true });
+    } catch (error) {
+      console.error("postLabSharedSettingsToFrame failed", error);
+    }
+  })();
 }
 
 function openLabSharedSettingsModal(frameId = "createLabIframe") {
@@ -5697,7 +5780,9 @@ function syncCreateSubtabUI() {
     panel.hidden = panel.dataset.createPanel !== activeTab;
   });
   if (activeTab === "lab") {
-    ensureLabEmbedLoaded("createLabIframe");
+    void ensureLabEmbedLoaded("createLabIframe").catch((error) => {
+      console.error("ensure createLabIframe failed", error);
+    });
   }
 }
 
@@ -5717,7 +5802,9 @@ function syncLinksSubtabUI() {
     panel.hidden = panel.dataset.linksPanel !== activeTab;
   });
   if (activeTab === "lab") {
-    ensureLabEmbedLoaded("linksLabIframe");
+    void ensureLabEmbedLoaded("linksLabIframe").catch((error) => {
+      console.error("ensure linksLabIframe failed", error);
+    });
   }
 }
 
@@ -9116,8 +9203,35 @@ async function getStatsPayload({ preferCache = false, days = statsRangeDays } = 
   }
 }
 
-async function getStatsSummaryPayload({ preferCache = false } = {}) {
+async function getStatsSummaryPayload({ preferCache = false, compact = false } = {}) {
   const now = Date.now();
+  if (compact) {
+    if (
+      preferCache &&
+      compactStatsSummaryPayloadCache &&
+      now - compactStatsSummaryPayloadCacheAt <= STATS_PAYLOAD_CACHE_TTL_MS
+    ) {
+      return compactStatsSummaryPayloadCache;
+    }
+    if (compactStatsSummaryPayloadPromise) {
+      return compactStatsSummaryPayloadPromise;
+    }
+    compactStatsSummaryPayloadPromise = (async () => {
+      const response = await fetch("/api/stats/summary?compact=1");
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.error || "KhÃ´ng thá»ƒ táº£i thá»‘ng kÃª nhanh");
+      }
+      compactStatsSummaryPayloadCache = payload || {};
+      compactStatsSummaryPayloadCacheAt = Date.now();
+      return payload || {};
+    })();
+    try {
+      return await compactStatsSummaryPayloadPromise;
+    } finally {
+      compactStatsSummaryPayloadPromise = null;
+    }
+  }
   if (
     preferCache &&
     statsSummaryPayloadCache &&
