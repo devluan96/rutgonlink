@@ -10085,7 +10085,7 @@ async function deleteLabLink(id, label) {
   }
 }
 
-async function republishLabLink(id, triggerButton = null) {
+async function republishLabLinkLegacyMojibake(id, triggerButton = null) {
   const normalizedId = Number(id || 0);
   if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
     toast("KhÃ´ng xÃ¡c Ä‘á»‹nh Ä‘Æ°á»£c lab cáº§n publish", "warn");
@@ -10152,6 +10152,70 @@ async function republishLabLink(id, triggerButton = null) {
 function filterTable(q) {
   linkSearchQuery = (q || "").toLowerCase();
   applyLinkFilters();
+}
+
+async function republishLabLink(id, triggerButton = null) {
+  const normalizedId = Number(id || 0);
+  if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+    toast("Không xác định được lab cần publish", "warn");
+    return false;
+  }
+  const originalLabel = triggerButton?.textContent || "";
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.textContent = "…";
+  }
+  try {
+    const detailResponse = await fetch(
+      `/api/admin/article-funnel-labs/${normalizedId}`,
+      {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      },
+    );
+    const detailPayload = await detailResponse.json().catch(() => null);
+    if (!detailResponse.ok || !detailPayload?.item) {
+      throw new Error(
+        String(detailPayload?.error || "").trim() ||
+          "Không tải được dữ liệu lab để publish",
+      );
+    }
+    const item = detailPayload.item || {};
+    const publishResponse = await fetch("/api/admin/article-funnel-lab/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        config: item.config_json || {},
+        lab_id: normalizedId,
+        lab_name:
+          String(item.name || "").trim() ||
+          String(item.title || "").trim() ||
+          `Lab ${normalizedId}`,
+      }),
+    });
+    const publishPayload = await publishResponse.json().catch(() => null);
+    if (!publishResponse.ok) {
+      throw new Error(
+        String(publishPayload?.error || "").trim() ||
+          "Không publish được link ngắn",
+      );
+    }
+    await loadLinksData();
+    toast("Đã publish link lab", "ok");
+    return true;
+  } catch (error) {
+    toast(
+      String(error?.message || "").trim() ||
+        "Không publish lại được link ngắn",
+      "err",
+    );
+    return false;
+  } finally {
+    if (triggerButton?.isConnected) {
+      triggerButton.disabled = false;
+      triggerButton.textContent = originalLabel || "↻";
+    }
+  }
 }
 
 async function copyClip(url) {
