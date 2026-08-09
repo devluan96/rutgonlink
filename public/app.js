@@ -9946,6 +9946,42 @@ function renderTable(arr) {
     .join("");
   syncMobileCardTableLabels(tb);
   syncLinkBulkToolbar(currentFilteredLinks);
+  syncLabLinkPublishButtons(tb);
+}
+
+function syncLabLinkPublishButtons(tb) {
+  const tableBody = tb || document.getElementById("tblBody");
+  if (!tableBody || !Array.isArray(currentFilteredLinks)) return;
+  const rows = Array.from(tableBody.querySelectorAll("tr[data-row-key]"));
+  rows.forEach((row, index) => {
+    const link = currentFilteredLinks[index];
+    if ((link?._kind || "") !== "lab") return;
+    const actionsGrid = row.querySelector(".links-actions-grid");
+    if (!actionsGrid || actionsGrid.querySelector("[data-lab-publish-action]")) {
+      return;
+    }
+    const normalizedId = Number(link?.id || 0);
+    if (!Number.isFinite(normalizedId) || normalizedId <= 0) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn-cp";
+    button.dataset.labPublishAction = String(normalizedId);
+    const publishTitle = link?.published_route_slug
+      ? "Republish link ngắn"
+      : "Publish link ngắn";
+    button.textContent = "↻";
+    button.title = publishTitle;
+    button.setAttribute("aria-label", publishTitle);
+    button.addEventListener("click", () => {
+      republishLabLink(normalizedId, button);
+    });
+    const copyButton = actionsGrid.querySelector(".btn-cp");
+    if (copyButton?.nextSibling) {
+      actionsGrid.insertBefore(button, copyButton.nextSibling);
+    } else {
+      actionsGrid.appendChild(button);
+    }
+  });
 }
 
 function toggleOriginalLinkExpand(linkKey) {
@@ -10033,6 +10069,70 @@ async function deleteLabLink(id, label) {
     refreshActiveStatsData();
   } catch {
     toast("Lỗi kết nối", "err");
+  }
+}
+
+async function republishLabLink(id, triggerButton = null) {
+  const normalizedId = Number(id || 0);
+  if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+    toast("KhÃ´ng xÃ¡c Ä‘á»‹nh Ä‘Æ°á»£c lab cáº§n publish", "warn");
+    return false;
+  }
+  const originalLabel = triggerButton?.textContent || "";
+  if (triggerButton) {
+    triggerButton.disabled = true;
+    triggerButton.textContent = "…";
+  }
+  try {
+    const detailResponse = await fetch(
+      `/api/admin/article-funnel-labs/${normalizedId}`,
+      {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      },
+    );
+    const detailPayload = await detailResponse.json().catch(() => null);
+    if (!detailResponse.ok || !detailPayload?.item) {
+      throw new Error(
+        String(detailPayload?.error || "").trim() ||
+          "KhÃ´ng táº£i Ä‘Æ°á»£c dá»¯ liá»‡u lab Ä‘á»ƒ publish",
+      );
+    }
+    const item = detailPayload.item || {};
+    const publishResponse = await fetch("/api/admin/article-funnel-lab/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        config: item.config_json || {},
+        lab_id: normalizedId,
+        lab_name:
+          String(item.name || "").trim() ||
+          String(item.title || "").trim() ||
+          `Lab ${normalizedId}`,
+      }),
+    });
+    const publishPayload = await publishResponse.json().catch(() => null);
+    if (!publishResponse.ok) {
+      throw new Error(
+        String(publishPayload?.error || "").trim() ||
+          "KhÃ´ng publish Ä‘Æ°á»£c link ngáº¯n",
+      );
+    }
+    await loadLinksData();
+    toast("ÄÃ£ publish link lab", "ok");
+    return true;
+  } catch (error) {
+    toast(
+      String(error?.message || "").trim() ||
+        "KhÃ´ng publish láº¡i Ä‘Æ°á»£c link ngáº¯n",
+      "err",
+    );
+    return false;
+  } finally {
+    if (triggerButton?.isConnected) {
+      triggerButton.disabled = false;
+      triggerButton.textContent = originalLabel || "↻";
+    }
   }
 }
 
@@ -10231,6 +10331,7 @@ function buildUnifiedLinkRows(recentLinks = [], labs = []) {
     clicks: Math.max(Number(lab.affiliate_clicks) || 0, 0),
     created_at: lab.created_at || lab.updated_at || "",
     updated_at: lab.updated_at || lab.created_at || "",
+    published_route_slug: String(lab.published_route_slug || "").trim(),
     published_test_20s_url: String(lab.published_test_20s_url || "").trim(),
     platform_key: String(lab.platform_key || "generic").trim() || "generic",
     name: String(lab.name || "").trim(),
