@@ -228,7 +228,7 @@ test("buildArticleFunnelPreviewPage routes TikTok 20s through the launch helper 
   );
   assert.match(
     html,
-    /function getLaunchUrl\(stage\)\{\s+var stageKey = encodeURIComponent\(String\(stage && stage\.stage_key \|\| ''\)\);\s+var basePath =\s+stage && stage\.use_deeplink_route\s+\? \(deeplinkBasePath \|\| launchBasePath \|\| location\.pathname\)\s+:\s+\(launchBasePath \|\| location\.pathname\);\s+return appendPopupDebugQuery\(basePath \+ '\/' \+ stageKey\);\s+\}/s,
+    /function getLaunchUrl\(stage\)\{\s+var stageKey = encodeURIComponent\(String\(stage && stage\.stage_key \|\| ''\)\);\s+var basePath =\s+stage && stage\.use_deeplink_route\s+\? \(deeplinkBasePath \|\| launchBasePath \|\| location\.pathname\)\s+:\s+\(launchBasePath \|\| location\.pathname\);\s+return appendSnapshotQuery\(\s*appendPopupDebugQuery\(basePath \+ '\/' \+ stageKey\)\s*\);\s+\}/s,
   );
   assert.match(
     html,

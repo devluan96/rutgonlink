@@ -42,9 +42,21 @@ const BASE_URL =
   (process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
     : "http://localhost:3000");
-const LOCAL_CANONICAL_HOST = (
-  process.env.LOCAL_CANONICAL_HOST || "localhost"
-).trim().toLowerCase();
+function normalizeLocalCanonicalHost(rawHost = "localhost") {
+  const trimmed = String(rawHost || "").trim().toLowerCase();
+  if (!trimmed) return "localhost";
+  try {
+    return new URL(trimmed.includes("://") ? trimmed : `http://${trimmed}`).hostname || "localhost";
+  } catch (_) {
+    return trimmed
+      .replace(/^https?:\/\//, "")
+      .replace(/\/.*$/, "")
+      .replace(/:\d+$/, "") || "localhost";
+  }
+}
+const LOCAL_CANONICAL_HOST = normalizeLocalCanonicalHost(
+  process.env.LOCAL_CANONICAL_HOST || "localhost",
+);
 const JWT_SECRET =
   process.env.JWT_SECRET ||
   (process.env.NODE_ENV === "production"
@@ -341,6 +353,9 @@ function serveAppShell(_req, res) {
 
 function requireAppShellSession(req, res, next) {
   const token = parseToken(req);
+  if (req.guestSessionId) {
+    return next();
+  }
   if (!token) {
     return res.redirect(
       302,

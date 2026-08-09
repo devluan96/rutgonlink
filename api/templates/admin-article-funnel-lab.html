@@ -5739,6 +5739,9 @@
               `;
               const actionMarkup = `
                 <div class="lab-home-actions">
+                  <button class="ghost-btn" type="button" data-republish-lab="${item.id}">
+                    ${item.published_route_slug ? "Republish" : "Publish"}
+                  </button>
                   ${
                     publishedUrl
                       ? `<button class="ghost-btn" type="button" data-copy-lab-url="${escapeAttr(publishedUrl)}">Copy link</button>`
@@ -8408,6 +8411,84 @@
           }
         }
 
+        async function republishLabItem(labId, triggerButton) {
+          const normalizedId = Number(labId || 0);
+          if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+            showToast("Không tìm thấy lab để publish");
+            return false;
+          }
+          const originalLabel = triggerButton?.textContent || "";
+          if (triggerButton) {
+            triggerButton.disabled = true;
+            triggerButton.textContent = "Đang publish...";
+          }
+          try {
+            const detailResponse = await fetch(
+              `/api/admin/article-funnel-labs/${normalizedId}`,
+              {
+                headers: { Accept: "application/json" },
+                cache: "no-store",
+              },
+            );
+            const detailPayload = await detailResponse.json().catch(() => null);
+            if (!detailResponse.ok || !detailPayload?.item) {
+              throw new Error(
+                String(detailPayload?.error || "").trim() ||
+                  "Không tải được dữ liệu lab để publish",
+              );
+            }
+            const item = detailPayload.item || {};
+            const publishResponse = await fetch(
+              "/api/admin/article-funnel-lab/publish",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  config: item.config_json || {},
+                  lab_id: normalizedId,
+                  lab_name:
+                    String(item.name || "").trim() ||
+                    String(item.title || "").trim() ||
+                    `Lab ${normalizedId}`,
+                }),
+              },
+            );
+            const publishPayload = await publishResponse.json().catch(() => null);
+            if (!publishResponse.ok) {
+              throw new Error(
+                String(publishPayload?.error || "").trim() ||
+                  "Không xuất bản được link ngắn",
+              );
+            }
+            if (Number(selectedLabId || 0) === normalizedId) {
+              generatedPublishedUrl = String(
+                publishPayload?.published_url || "",
+              ).trim();
+              generatedPublishedUpdatedAt = String(
+                publishPayload?.updated_at || "",
+              ).trim();
+              generatedPublishedDomainNote = String(
+                publishPayload?.domain_note || "",
+              ).trim();
+              renderPreviewShell();
+            }
+            await refreshDbLabs({ preserveSelected: true });
+            showToast("Đã publish lại link ngắn");
+            return true;
+          } catch (error) {
+            const message =
+              String(error?.message || "").trim() ||
+              "Không publish lại được link ngắn";
+            showToast(message);
+            return false;
+          } finally {
+            if (triggerButton) {
+              triggerButton.disabled = false;
+              triggerButton.textContent = originalLabel || "Republish";
+            }
+          }
+        }
+
         document.querySelectorAll("[data-add-block]").forEach((button) => {
           button.addEventListener("click", () =>
             addBlock(button.dataset.addBlock),
@@ -8648,6 +8729,14 @@
           deleteLabIds(getSelectedLabIdList());
         });
         els.labHomeList.addEventListener("click", (event) => {
+          const republishButton = event.target.closest("[data-republish-lab]");
+          if (republishButton) {
+            republishLabItem(
+              republishButton.dataset.republishLab || "",
+              republishButton,
+            );
+            return;
+          }
           const copyButton = event.target.closest("[data-copy-lab-url]");
           if (copyButton) {
             const publishedUrl = String(
