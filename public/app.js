@@ -9901,7 +9901,20 @@ function renderTable(arr) {
       const isLab = (link?._kind || "") === "lab";
       const platformKey = getUnifiedLinkRowPlatform(link);
       const shortUrl = String(link?.short_url || link?.original_url || "").trim();
-      const shortLabel = shortUrl.replace(/^https?:\/\//, "");
+      let shortLabel = shortUrl.replace(/^https?:\/\//, "");
+      if (isLab) {
+        const publishedSlug = String(link?.published_route_slug || "").trim();
+        if (publishedSlug) {
+          try {
+            const parsedShortUrl = new URL(shortUrl);
+            shortLabel = `${parsedShortUrl.host}/${publishedSlug}`;
+          } catch (_) {
+            shortLabel = shortLabel.split("?")[0] || shortLabel;
+          }
+        } else {
+          shortLabel = shortLabel.split("?")[0] || shortLabel;
+        }
+      }
       const date = String(link?.created_at || "").substring(0, 10);
       const linkId = Number(link?.id || 0);
       const rowKey = String(link?._rowKey || `${isLab ? "lab" : "link"}-${linkId || shortLabel}`);
