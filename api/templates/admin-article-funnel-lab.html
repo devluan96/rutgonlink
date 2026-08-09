@@ -6722,6 +6722,8 @@
               const shouldForceShopeeWebFirst =
                 isInApp &&
                 String(launchConfig.stage_key || "").trim() === "3s";
+              const shouldSuppressShopeeInAppFallback =
+                shouldForceShopeeWebFirst && isInApp;
               const shopeeInAppWebTarget =
                 launchConfig.direct_ios_browser_url ||
                 launchConfig.direct_web_url ||
@@ -6770,11 +6772,13 @@
                   );
                 }
               }
-              scheduleLaunchFallback(
-                launchConfig.direct_web_url || targetUrl,
-                isInApp ? 1500 : 1600,
-                { preferTopLevel: isInApp },
-              );
+              if (!shouldSuppressShopeeInAppFallback) {
+                scheduleLaunchFallback(
+                  launchConfig.direct_web_url || targetUrl,
+                  isInApp ? 1500 : 1600,
+                  { preferTopLevel: isInApp },
+                );
+              }
               return true;
             }
 
@@ -8235,7 +8239,7 @@
           showToast("Đã bắt đầu mô phỏng timer 3s / 10s / 300s");
           timer3s = setTimeout(() => openOverlay("3s"), 3000);
           if (state.popup20sUrl.trim()) {
-            timer20s = setTimeout(() => openOverlay("20s"), 10000);
+            timer20s = setTimeout(() => openOverlay("20s"), 7000);
           }
           if (state.popup300sUrl.trim()) {
             timer300s = setTimeout(() => openOverlay("300s"), 300000);

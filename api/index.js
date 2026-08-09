@@ -5987,17 +5987,48 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
   const overlay = config.overlay && typeof config.overlay === "object"
     ? config.overlay
     : {};
+  const inputStages = Array.isArray(config.stages) ? config.stages : [];
+  const stage3Candidate =
+    inputStages.find((stage, index) => {
+      const rawStageKey = String(stage?.stage_key || "").trim();
+      return rawStageKey === "3s" || (!rawStageKey && index === 0);
+    }) || null;
+  const stage20Candidate =
+    inputStages.find((stage, index) => {
+      const rawStageKey = String(stage?.stage_key || "").trim();
+      return rawStageKey === "20s" || rawStageKey === "5s" || (!rawStageKey && index === 1);
+    }) || null;
+  const stage300Candidate =
+    inputStages.find((stage, index) => {
+      const rawStageKey = String(stage?.stage_key || "").trim();
+      return rawStageKey === "300s" || (!rawStageKey && index === 2);
+    }) || null;
   const shareImage = String(config.share_image || config.shareImage || "").trim();
   const overlayImage = String(
-    overlay.image || overlay.popup_3s_image || config.overlayImage || "",
+    overlay.image ||
+      overlay.popup_3s_image ||
+      stage3Candidate?.overlay_image ||
+      stage3Candidate?.image ||
+      config.overlay_image ||
+      config.overlayImage ||
+      "",
   ).trim();
   const overlay20sImage = String(
     overlay.popup_20s_image ||
       overlay.popup_5s_image ||
+      stage20Candidate?.overlay_image ||
+      stage20Candidate?.image ||
+      config.popup_20s_image ||
       config.overlay20sImage ||
       "",
   ).trim();
-  const overlay300sImage = String(overlay.popup_300s_image || "").trim();
+  const overlay300sImage = String(
+    overlay.popup_300s_image ||
+      stage300Candidate?.overlay_image ||
+      stage300Candidate?.image ||
+      config.popup_300s_image ||
+      "",
+  ).trim();
   const getOverlayImageForStage = (stageKey) => {
     if (stageKey === "20s") {
       return overlay20sImage || overlayImage || shareImage;
@@ -6007,7 +6038,6 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
     }
     return overlayImage || shareImage;
   };
-  const inputStages = Array.isArray(config.stages) ? config.stages : [];
   const normalizedStages =
     resolvedStages ||
     (inputStages.length
@@ -6018,11 +6048,12 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
           const stageKey =
             rawStageKey === "5s" ? "20s" : rawStageKey || fallbackStageKey;
           const fallbackDelayMs =
-            stageKey === "3s" ? 3000 : stageKey === "20s" ? 15000 : 300000;
+            stageKey === "3s" ? 3000 : stageKey === "20s" ? 7000 : 300000;
           const parsedDelayMs = Number(stage?.delay_ms || 0) || 0;
           const delayMs =
-            stageKey === "20s" && (rawStageKey === "5s" || parsedDelayMs === 5000)
-              ? 15000
+            stageKey === "20s" &&
+              (rawStageKey === "5s" || parsedDelayMs === 5000 || parsedDelayMs === 15000)
+              ? 7000
               : parsedDelayMs || fallbackDelayMs;
           return {
             ...stage,
@@ -6043,7 +6074,7 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
           ...((overlay.popup_20s_url || overlay.popup_5s_url)
             ? [{
                 stage_key: "20s",
-                delay_ms: 15000,
+                delay_ms: 7000,
                 overlay_image: getOverlayImageForStage("20s"),
                 ...buildOverlayLaunchConfig(
                   overlay.popup_20s_url || overlay.popup_5s_url || "",
@@ -6086,8 +6117,9 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
         stage_key: normalizedStageKey,
         delay_ms:
           String(stage.stage_key || "").trim() === "5s" &&
-          Number(stage.delay_ms || 0) === 5000
-            ? 15000
+          (Number(stage.delay_ms || 0) === 5000 ||
+            Number(stage.delay_ms || 0) === 15000)
+            ? 7000
             : Number(stage.delay_ms || 0) || 0,
         target_url: String(stage.target_url || "").trim(),
         overlay_image:
@@ -7264,6 +7296,30 @@ ${ogImageTag}
     return 'popup_closed_' + encodeURIComponent(String(stageKey || ''));
   }
 
+  function getPopupDismissStorageKey(stageKey) {
+    return 'popup_closed_until_' + encodeURIComponent(String(stageKey || ''));
+  }
+
+  function getPopupDismissUntil(stageKey) {
+    var cookieKey = getPopupDismissCookieName(stageKey) + '=';
+    var hasCookie = document.cookie
+      .split(';')
+      .map(function(part) { return part.trim(); })
+      .some(function(part) { return part.indexOf(cookieKey) === 0; });
+    if (hasCookie) {
+      return Date.now() + 60 * 1000;
+    }
+    try {
+      var storedValue = window.localStorage
+        ? window.localStorage.getItem(getPopupDismissStorageKey(stageKey))
+        : '';
+      var dismissUntil = Number(storedValue || 0);
+      return Number.isFinite(dismissUntil) ? dismissUntil : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   function setPopupDismissCookie(stageKey) {
     var minutes = 1440;
     var expiresAt = new Date();
@@ -7273,14 +7329,18 @@ ${ogImageTag}
       '=yes; expires=' +
       expiresAt.toUTCString() +
       '; path=/';
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(
+          getPopupDismissStorageKey(stageKey),
+          String(expiresAt.getTime()),
+        );
+      }
+    } catch (_) {}
   }
 
   function hasPopupDismissCookie(stageKey) {
-    var key = getPopupDismissCookieName(stageKey) + '=';
-    return document.cookie
-      .split(';')
-      .map(function(part) { return part.trim(); })
-      .some(function(part) { return part.indexOf(key) === 0; });
+    return getPopupDismissUntil(stageKey) > Date.now();
   }
 
   function escHtml(value){
@@ -7734,6 +7794,8 @@ ${ogImageTag}
       if (isIOS) {
         var shouldForceShopeeWebFirst =
           isInApp && String(stage.stage_key || '') === '3s';
+        var shouldSuppressShopeeInAppFallback =
+          shouldForceShopeeWebFirst && isInApp;
         var shopeeInAppWebTarget =
           stage.direct_ios_browser_url ||
           stage.direct_web_url ||
@@ -7760,15 +7822,17 @@ ${ogImageTag}
             navigateWindowLocation(iosTarget, {
               preferTopLevel: true,
             });
-          } else {
-            openViaAnchor(iosTarget, '_self', 'noopener');
+            } else {
+              openViaAnchor(iosTarget, '_self', 'noopener');
+            }
           }
+        if (!shouldSuppressShopeeInAppFallback) {
+          scheduleLaunchFallback(
+            stage.direct_web_url,
+            isInApp ? 1500 : 1600,
+            { preferTopLevel: isInApp },
+          );
         }
-        scheduleLaunchFallback(
-          stage.direct_web_url,
-          isInApp ? 1500 : 1600,
-          { preferTopLevel: isInApp },
-        );
         return true;
       }
       if (stage.direct_web_url) {

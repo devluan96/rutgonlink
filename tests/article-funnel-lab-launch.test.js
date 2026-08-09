@@ -96,7 +96,11 @@ test("admin article funnel lab keeps Shopee popup 3s web-first on iPhone in-app"
   );
   assert.match(
     templateHtml,
-    /scheduleLaunchFallback\(\s+launchConfig\.direct_web_url \|\| targetUrl,\s+isInApp \? 1500 : 1600,\s+\{ preferTopLevel: isInApp \},\s+\);/s,
+    /const shouldSuppressShopeeInAppFallback =\s+shouldForceShopeeWebFirst && isInApp;/s,
+  );
+  assert.match(
+    templateHtml,
+    /if \(!shouldSuppressShopeeInAppFallback\) \{\s+scheduleLaunchFallback\(\s+launchConfig\.direct_web_url \|\| targetUrl,\s+isInApp \? 1500 : 1600,\s+\{ preferTopLevel: isInApp \},\s+\);\s+\}/s,
   );
   assert.match(
     templateHtml,
@@ -200,7 +204,7 @@ test("admin article funnel lab keeps TikTok popup 20s on direct launch urls inst
   );
 });
 
-test("admin article funnel lab auto-wraps TikTok popup 20s links with BAuo and fires the timer at 10 seconds", () => {
+test("admin article funnel lab auto-wraps TikTok popup 20s links with BAuo and fires the timer at 7 seconds", () => {
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
     "utf8",
@@ -222,7 +226,7 @@ test("admin article funnel lab auto-wraps TikTok popup 20s links with BAuo and f
   );
   assert.match(
     templateHtml,
-    /timer20s = setTimeout\(\(\) => openOverlay\("20s"\), 10000\);/,
+    /timer20s = setTimeout\(\(\) => openOverlay\("20s"\), 7000\);/,
   );
 });
 

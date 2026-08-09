@@ -60,6 +60,52 @@ test("buildOverlayLaunchConfig keeps TikTok short links as browser fallback", ()
   assert.equal(config.direct_android_url, originalUrl);
 });
 
+test("normalizeArticleFunnelPreviewConfig prefers explicit popup 3s stage image over share preview image", () => {
+  const normalized = __testUtils.normalizeArticleFunnelPreviewConfig({
+    share_image: "https://cdn.example.com/share.jpg",
+    stages: [
+      {
+        stage_key: "3s",
+        delay_ms: 3000,
+        overlay_image: "https://cdn.example.com/popup-3s.jpg",
+        target_url: "https://shopee.vn/demo",
+      },
+    ],
+  });
+
+  assert.equal(normalized.overlay_image, "https://cdn.example.com/popup-3s.jpg");
+  assert.equal(
+    normalized.stages[0].overlay_image,
+    "https://cdn.example.com/popup-3s.jpg",
+  );
+});
+
+test("normalizeArticleFunnelPreviewConfig prefers explicit popup 20s stage image and normalizes legacy delay to 7 seconds", () => {
+  const normalized = __testUtils.normalizeArticleFunnelPreviewConfig({
+    share_image: "https://cdn.example.com/share.jpg",
+    stages: [
+      {
+        stage_key: "3s",
+        delay_ms: 3000,
+        overlay_image: "https://cdn.example.com/popup-3s.jpg",
+        target_url: "https://shopee.vn/demo-3s",
+      },
+      {
+        stage_key: "20s",
+        delay_ms: 15000,
+        overlay_image: "https://cdn.example.com/popup-20s.jpg",
+        target_url: "https://shopee.vn/demo-20s",
+      },
+    ],
+  });
+
+  assert.equal(
+    normalized.stages[1].overlay_image,
+    "https://cdn.example.com/popup-20s.jpg",
+  );
+  assert.equal(normalized.stages[1].delay_ms, 7000);
+});
+
 test("buildOverlayLaunchConfig keeps TikTok product links web-first for iOS in-app", () => {
   const originalUrl =
     "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180";

@@ -94,7 +94,11 @@ test("buildArticleFunnelPreviewPage keeps Shopee popup 3s web-first on iPhone in
   assert.match(html, /window\.addEventListener\('focus', onFocus, true\)/);
   assert.match(
     html,
-    /scheduleLaunchFallback\(\s+stage\.direct_web_url,\s+isInApp \? 1500 : 1600,\s+\{ preferTopLevel: isInApp \},\s+\);/s,
+    /var shouldSuppressShopeeInAppFallback =\s+shouldForceShopeeWebFirst && isInApp;/s,
+  );
+  assert.match(
+    html,
+    /if \(!shouldSuppressShopeeInAppFallback\) \{\s+scheduleLaunchFallback\(\s+stage\.direct_web_url,\s+isInApp \? 1500 : 1600,\s+\{ preferTopLevel: isInApp \},\s+\);\s+\}/s,
   );
 });
 
@@ -359,7 +363,14 @@ test("buildArticleFunnelPreviewPage uses domain-wide popup dismiss cookies with 
     html,
     /function setPopupDismissCookie\(stageKey\) \{\s+var minutes = 1440;/s,
   );
-  assert.doesNotMatch(html, /function getPopupDismissScopeKey\(/);
+  assert.match(
+    html,
+    /function getPopupDismissStorageKey\(stageKey\) \{\s+return 'popup_closed_until_' \+ encodeURIComponent\(String\(stageKey \|\| ''\)\);\s+\}/s,
+  );
+  assert.match(
+    html,
+    /window\.localStorage\.setItem\(\s*getPopupDismissStorageKey\(stageKey\),\s*String\(expiresAt\.getTime\(\)\),\s*\)/s,
+  );
 });
 
 test("buildArticleFunnelPopupTestUrl produces a usable signed test url", () => {
