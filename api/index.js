@@ -624,12 +624,16 @@ app.get("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, r
           item.config_json && typeof item.config_json === "object"
             ? item.config_json
             : {};
+        const snapshotToken = String(
+          configJson.published_snapshot_token || "",
+        ).trim();
         const publishedUrl =
           item.published_route_slug
-            ? buildArticleFunnelPublicUrl(
+            ? buildArticleFunnelPublishedUrlWithSnapshot(
                 item.published_route_slug,
                 normalizeDomainHost(configJson.source_domain),
                 publicBaseUrl,
+                snapshotToken,
               )
             : "";
         const publishedTest20sUrl =
@@ -639,6 +643,8 @@ app.get("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, r
                 normalizeDomainHost(configJson.source_domain),
                 publicBaseUrl,
                 "20s",
+                Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
+                snapshotToken,
               )
             : "";
         return {
@@ -673,12 +679,16 @@ app.get("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (re
       return res.status(403).json({ error: "Khong co quyen xem lab nay" });
     }
     const configJson = normalizeArticleFunnelLabConfigJson(row.config_json);
+    const snapshotToken = String(
+      configJson.published_snapshot_token || "",
+    ).trim();
     const publishedUrl =
       row.published_route_slug
-        ? buildArticleFunnelPublicUrl(
+        ? buildArticleFunnelPublishedUrlWithSnapshot(
             row.published_route_slug,
             normalizeDomainHost(configJson.source_domain),
             publicBaseUrl,
+            snapshotToken,
           )
         : "";
     const publishedTest20sUrl =
@@ -688,6 +698,8 @@ app.get("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (re
             normalizeDomainHost(configJson.source_domain),
             publicBaseUrl,
             "20s",
+            Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
+            snapshotToken,
           )
         : "";
     return res.json({
@@ -866,6 +878,23 @@ app.post("/api/admin/article-funnel-lab/publish", requireArticleFunnelLab, async
     const fallbackDomainHostname = normalizeDomainHost(publicBaseUrl);
     const selectedDomainHostname =
       activeRequestedDomain || fallbackDomainHostname || null;
+    const publishedSnapshotExpiresAt =
+      Date.now() + ARTICLE_FUNNEL_PUBLISHED_SNAPSHOT_TOKEN_TTL_MS;
+    const publishedSnapshotToken = encodeArticleFunnelPreviewToken(
+      buildArticleFunnelPublishedSnapshotPayload({
+        config: publishedConfig,
+        routeSlug,
+        domainHostname: selectedDomainHostname,
+        expiresAt: publishedSnapshotExpiresAt,
+      }),
+    );
+    const publishedConfigWithSnapshot = {
+      ...publishedConfig,
+      published_snapshot_token: publishedSnapshotToken,
+      published_snapshot_expires_at: new Date(
+        publishedSnapshotExpiresAt,
+      ).toISOString(),
+    };
     const draftLabId = Number(req.body?.lab_id || 0);
     if (Number.isInteger(draftLabId) && draftLabId > 0) {
       const draftLab = await database.getArticleFunnelLabById(draftLabId);
@@ -890,7 +919,7 @@ app.post("/api/admin/article-funnel-lab/publish", requireArticleFunnelLab, async
       route_slug: routeSlug,
       domain_hostname: selectedDomainHostname,
       title: publishedConfig.title || null,
-      config_json: publishedConfig,
+      config_json: publishedConfigWithSnapshot,
       created_by_user_id: req.currentUser?.id || null,
     });
     if (Number.isInteger(draftLabId) && draftLabId > 0) {
@@ -898,17 +927,18 @@ app.post("/api/admin/article-funnel-lab/publish", requireArticleFunnelLab, async
         await database.updateArticleFunnelLab(draftLabId, {
           name: String(req.body?.lab_name || "").trim() || publishedConfig.title || "Lab mới",
           title: publishedConfig.title || null,
-          config_json: publishedConfig,
+          config_json: publishedConfigWithSnapshot,
           published_route_slug: saved.route_slug,
         });
       } catch (labError) {
         console.error("[article-funnel-lab/publish-sync-draft]", labError);
       }
     }
-    const publishedUrl = buildArticleFunnelPublicUrl(
+    const publishedUrl = buildArticleFunnelPublishedUrlWithSnapshot(
       saved.route_slug,
       saved.domain_hostname,
       publicBaseUrl,
+      publishedSnapshotToken,
     );
     const publishedTest20sUrl = hasArticleFunnelStage(publishedConfig, "20s")
       ? buildArticleFunnelPopupTestUrl(
@@ -916,6 +946,8 @@ app.post("/api/admin/article-funnel-lab/publish", requireArticleFunnelLab, async
           saved.domain_hostname,
           publicBaseUrl,
           "20s",
+          Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
+          publishedSnapshotToken,
         )
       : "";
     const domainNote =
@@ -928,6 +960,8 @@ app.post("/api/admin/article-funnel-lab/publish", requireArticleFunnelLab, async
       published_test_20s_url: publishedTest20sUrl,
       route_slug: saved.route_slug,
       domain_hostname: saved.domain_hostname || "",
+      snapshot_token: publishedSnapshotToken,
+      snapshot_expires_at: new Date(publishedSnapshotExpiresAt).toISOString(),
       domain_note: domainNote,
       updated_at: saved.updated_at || saved.created_at || new Date().toISOString(),
     });
@@ -1187,7 +1221,11 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
   try {
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
-    const articleFunnel = await database.getArticleFunnelBySlug(req.params.slug);
+    const articleFunnel = await resolvePublishedArticleFunnelRequest(
+      database,
+      req,
+      req.params.slug,
+    );
     if (!articleFunnel) {
       return res
         .status(404)
@@ -1223,6 +1261,7 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
         },
         buildArticleFunnelBridgeBasePath(articleFunnel.route_slug),
         buildArticleFunnelGoBasePath(articleFunnel.route_slug),
+        String(articleFunnel.snapshot_token || "").trim(),
       ),
     );
   } catch (error) {
@@ -1234,7 +1273,11 @@ app.get(["/af-bridge/:slug/:stageKey", "/af-bridge/:slug/:stageKey/"], async (re
   try {
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
-    const articleFunnel = await database.getArticleFunnelBySlug(req.params.slug);
+    const articleFunnel = await resolvePublishedArticleFunnelRequest(
+      database,
+      req,
+      req.params.slug,
+    );
     if (!articleFunnel) {
       return res
         .status(404)
@@ -1271,7 +1314,11 @@ app.get(["/af-go/:slug/:stageKey", "/af-go/:slug/:stageKey/"], async (req, res) 
   try {
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
-    const articleFunnel = await database.getArticleFunnelBySlug(req.params.slug);
+    const articleFunnel = await resolvePublishedArticleFunnelRequest(
+      database,
+      req,
+      req.params.slug,
+    );
     if (!articleFunnel) {
       return res
         .status(404)
@@ -1305,7 +1352,11 @@ app.get(["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"], async (re
   try {
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
-    const articleFunnel = await database.getArticleFunnelBySlug(req.params.slug);
+    const articleFunnel = await resolvePublishedArticleFunnelRequest(
+      database,
+      req,
+      req.params.slug,
+    );
     if (!articleFunnel) {
       return res
         .status(404)
@@ -1347,7 +1398,11 @@ app.get(["/:slug/go/:stageKey", "/:slug/go/:stageKey/"], async (req, res, next) 
     if (conflictingLink) {
       return next();
     }
-    const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
+    const articleFunnel = await resolvePublishedArticleFunnelRequest(
+      database,
+      req,
+      routeSlug,
+    );
     if (
       !articleFunnel ||
       !canServePublishedArticleFunnelOnHost(
@@ -1394,7 +1449,11 @@ app.get(["/:slug/bridge/:stageKey", "/:slug/bridge/:stageKey/"], async (req, res
     if (conflictingLink) {
       return next();
     }
-    const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
+    const articleFunnel = await resolvePublishedArticleFunnelRequest(
+      database,
+      req,
+      routeSlug,
+    );
     if (
       !articleFunnel ||
       !canServePublishedArticleFunnelOnHost(
@@ -1444,7 +1503,11 @@ app.get(["/:slug/launch/:stageKey", "/:slug/launch/:stageKey/"], async (req, res
     if (conflictingLink) {
       return next();
     }
-    const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
+    const articleFunnel = await resolvePublishedArticleFunnelRequest(
+      database,
+      req,
+      routeSlug,
+    );
     if (
       !articleFunnel ||
       !canServePublishedArticleFunnelOnHost(
@@ -1487,7 +1550,11 @@ app.get("/:slug", async (req, res, next) => {
     }
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
-    const articleFunnel = await database.getArticleFunnelBySlug(routeSlug);
+    const articleFunnel = await resolvePublishedArticleFunnelRequest(
+      database,
+      req,
+      routeSlug,
+    );
     if (
       !articleFunnel ||
       !canServePublishedArticleFunnelOnHost(
@@ -1528,6 +1595,7 @@ app.get("/:slug", async (req, res, next) => {
         },
         buildArticleFunnelBridgeBasePath(articleFunnel.route_slug),
         buildArticleFunnelGoBasePath(articleFunnel.route_slug),
+        String(articleFunnel.snapshot_token || "").trim(),
       ),
     );
   } catch (error) {
@@ -5710,6 +5778,9 @@ function extractArticleFunnelImportPayload(html = "", baseUrl = "") {
 
 const ARTICLE_FUNNEL_PREVIEW_TOKEN_TTL_MS = 7 * 24 * 3600 * 1000;
 const ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS = 24 * 3600 * 1000;
+const ARTICLE_FUNNEL_PUBLISHED_SNAPSHOT_TOKEN_TTL_MS =
+  5 * 365 * 24 * 3600 * 1000;
+const ARTICLE_FUNNEL_SNAPSHOT_QUERY_KEY = "afs";
 
 function base64UrlEncode(input) {
   return Buffer.from(input)
@@ -5771,6 +5842,77 @@ function decodeArticleFunnelPreviewToken(token) {
     throw new Error("PREVIEW_TOKEN_EXPIRED");
   }
   return payload;
+}
+
+function buildArticleFunnelPublishedSnapshotPayload({
+  config,
+  routeSlug,
+  domainHostname,
+  expiresAt = Date.now() + ARTICLE_FUNNEL_PUBLISHED_SNAPSHOT_TOKEN_TTL_MS,
+} = {}) {
+  return {
+    v: 2,
+    exp: Number(expiresAt || 0),
+    route_slug: String(routeSlug || "").trim(),
+    domain_hostname: normalizeDomainHost(domainHostname),
+    config:
+      config && typeof config === "object" && !Array.isArray(config)
+        ? config
+        : {},
+  };
+}
+
+function appendArticleFunnelSnapshotToken(rawUrl = "", snapshotToken = "") {
+  const normalizedUrl = String(rawUrl || "").trim();
+  const normalizedToken = String(snapshotToken || "").trim();
+  if (!normalizedUrl || !normalizedToken) return normalizedUrl;
+  try {
+    const url = new URL(normalizedUrl, BASE_URL);
+    url.searchParams.set(ARTICLE_FUNNEL_SNAPSHOT_QUERY_KEY, normalizedToken);
+    if (
+      normalizedUrl.startsWith("/") &&
+      normalizeDomainHost(url.origin) === normalizeDomainHost(BASE_URL)
+    ) {
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+    return url.toString();
+  } catch {
+    const joiner = normalizedUrl.includes("?") ? "&" : "?";
+    return `${normalizedUrl}${joiner}${ARTICLE_FUNNEL_SNAPSHOT_QUERY_KEY}=${encodeURIComponent(normalizedToken)}`;
+  }
+}
+
+function getArticleFunnelSnapshotTokenFromRequest(req) {
+  return String(req?.query?.[ARTICLE_FUNNEL_SNAPSHOT_QUERY_KEY] || "").trim();
+}
+
+function decodeArticleFunnelPublishedSnapshotFromRequest(req, expectedRouteSlug = "") {
+  const token = getArticleFunnelSnapshotTokenFromRequest(req);
+  if (!token) return null;
+  try {
+    const payload = decodeArticleFunnelPreviewToken(token);
+    const payloadRouteSlug = String(payload?.route_slug || "").trim();
+    const normalizedExpectedSlug = String(expectedRouteSlug || "").trim();
+    if (
+      normalizedExpectedSlug &&
+      payloadRouteSlug &&
+      payloadRouteSlug !== normalizedExpectedSlug
+    ) {
+      return null;
+    }
+    return {
+      route_slug: payloadRouteSlug,
+      domain_hostname: normalizeDomainHost(payload?.domain_hostname),
+      config_json:
+        payload?.config && typeof payload.config === "object"
+          ? payload.config
+          : {},
+      snapshot_token: token,
+      snapshot_source: "query",
+    };
+  } catch {
+    return null;
+  }
 }
 
 function encodeArticleFunnelPopupTestToken(payload) {
@@ -6034,6 +6176,18 @@ function buildArticleFunnelPublicUrl(
   return buildShortUrl(baseUrl, encodeURIComponent(routeSlug || ""));
 }
 
+function buildArticleFunnelPublishedUrlWithSnapshot(
+  routeSlug,
+  domainHostname,
+  fallbackBaseUrl = BASE_URL,
+  snapshotToken = "",
+) {
+  return appendArticleFunnelSnapshotToken(
+    buildArticleFunnelPublicUrl(routeSlug, domainHostname, fallbackBaseUrl),
+    snapshotToken,
+  );
+}
+
 function buildArticleFunnelLaunchBasePath(routeSlug) {
   const normalizedSlug = encodeURIComponent(String(routeSlug || "").trim());
   return normalizedSlug ? `/${normalizedSlug}/launch` : "/launch";
@@ -6055,6 +6209,7 @@ function buildArticleFunnelPopupTestUrl(
   fallbackBaseUrl = BASE_URL,
   stageKey = "20s",
   expiresAt = Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
+  snapshotToken = "",
 ) {
   const normalizedRouteSlug = String(routeSlug || "").trim();
   const normalizedStageKey = normalizeArticleFunnelStageKey(stageKey);
@@ -6074,9 +6229,12 @@ function buildArticleFunnelPopupTestUrl(
     const url = new URL(publicUrl);
     url.searchParams.set("popup_test", normalizedStageKey);
     url.searchParams.set("popup_test_token", token);
+    if (snapshotToken) {
+      url.searchParams.set(ARTICLE_FUNNEL_SNAPSHOT_QUERY_KEY, snapshotToken);
+    }
     return url.toString();
   } catch {
-    return publicUrl;
+    return appendArticleFunnelSnapshotToken(publicUrl, snapshotToken);
   }
 }
 
@@ -6109,6 +6267,21 @@ function isArticleFunnelPopupTestRequestAllowed(
   } catch {
     return false;
   }
+}
+
+async function resolvePublishedArticleFunnelRequest(
+  database,
+  req,
+  routeSlug,
+) {
+  const snapshotArticleFunnel = decodeArticleFunnelPublishedSnapshotFromRequest(
+    req,
+    routeSlug,
+  );
+  if (snapshotArticleFunnel) {
+    return snapshotArticleFunnel;
+  }
+  return database.getArticleFunnelBySlug(routeSlug);
 }
 
 function normalizeArticleFunnelStageKey(stageKey = "") {
@@ -6902,6 +7075,7 @@ function buildArticleFunnelPreviewPage(
   trackingContext = null,
   bridgeBasePath = "",
   deeplinkBasePath = "",
+  snapshotToken = "",
 ) {
   const title = esc(config.title || "Article preview");
   const description = esc(String(config.description || "").trim());
@@ -6933,6 +7107,7 @@ function buildArticleFunnelPreviewPage(
       trackingContext?.routeSlug || trackingContext?.route_slug || "",
     ).trim() || null,
   );
+  const snapshotTokenJson = JSON.stringify(String(snapshotToken || "").trim());
   const showPopupTestButtonJson = JSON.stringify(
     Boolean(
       trackingContext?.showPopupTestButton ||
@@ -7036,6 +7211,7 @@ ${ogImageTag}
   var bridgeBasePath = ${bridgeBasePathJson};
   var deeplinkBasePath = ${deeplinkBasePathJson};
   var trackingRouteSlug = ${trackingRouteSlugJson};
+  var snapshotToken = ${snapshotTokenJson};
   var canShowPopupTestButton = ${showPopupTestButtonJson};
   var pendingStages = [];
   var overlayEl = document.getElementById('overlay');
@@ -7231,13 +7407,33 @@ ${ogImageTag}
     }
   }
 
+  function appendSnapshotQuery(rawUrl) {
+    if (!rawUrl || !snapshotToken) return rawUrl;
+    try {
+      var parsed = new URL(rawUrl, window.location.origin);
+      parsed.searchParams.set(${JSON.stringify(ARTICLE_FUNNEL_SNAPSHOT_QUERY_KEY)}, snapshotToken);
+      if (
+        rawUrl.charAt(0) === '/' &&
+        parsed.origin === window.location.origin
+      ) {
+        return parsed.pathname + parsed.search + parsed.hash;
+      }
+      return parsed.toString();
+    } catch (_) {
+      var joiner = rawUrl.indexOf('?') === -1 ? '?' : '&';
+      return rawUrl + joiner + ${JSON.stringify(ARTICLE_FUNNEL_SNAPSHOT_QUERY_KEY)} + '=' + encodeURIComponent(snapshotToken);
+    }
+  }
+
   function getLaunchUrl(stage){
     var stageKey = encodeURIComponent(String(stage && stage.stage_key || ''));
     var basePath =
       stage && stage.use_deeplink_route
         ? (deeplinkBasePath || launchBasePath || location.pathname)
         : (launchBasePath || location.pathname);
-    return appendPopupDebugQuery(basePath + '/' + stageKey);
+    return appendSnapshotQuery(
+      appendPopupDebugQuery(basePath + '/' + stageKey)
+    );
   }
 
   function shouldUseDedicatedBridgeRoute(stage) {
@@ -7247,7 +7443,9 @@ ${ogImageTag}
   function getBridgeUrl(stage){
     var stageKey = encodeURIComponent(String(stage && stage.stage_key || ''));
     return (bridgeBasePath || '')
-      ? appendPopupDebugQuery(bridgeBasePath + '/' + stageKey)
+      ? appendSnapshotQuery(
+          appendPopupDebugQuery(bridgeBasePath + '/' + stageKey)
+        )
       : '';
   }
 
@@ -10121,6 +10319,9 @@ app.get("/api/links", async (req, res) => {
       })),
       labs: recentLabs.slice(0, limit).map((item) => {
         const configJson = normalizeArticleFunnelLabConfigJson(item.config_json);
+        const snapshotToken = String(
+          configJson.published_snapshot_token || "",
+        ).trim();
         const referenceSourceUrl = String(
           configJson.reference_source_url ||
             configJson.referenceSourceUrl ||
@@ -10135,10 +10336,11 @@ app.get("/api/links", async (req, res) => {
           title: item.title || "",
           published_route_slug: item.published_route_slug || "",
           published_url: item.published_route_slug
-            ? buildArticleFunnelPublicUrl(
+            ? buildArticleFunnelPublishedUrlWithSnapshot(
                 item.published_route_slug,
                 normalizeDomainHost(configJson.source_domain),
                 publicBaseUrl,
+                snapshotToken,
               )
             : "",
           published_test_20s_url:
@@ -10148,6 +10350,8 @@ app.get("/api/links", async (req, res) => {
                   normalizeDomainHost(configJson.source_domain),
                   publicBaseUrl,
                   "20s",
+                  Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
+                  snapshotToken,
                 )
               : "",
           affiliate_clicks: Math.max(Number(item.affiliate_clicks) || 0, 0),
