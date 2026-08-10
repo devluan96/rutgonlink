@@ -7300,6 +7300,21 @@ ${ogImageTag}
     return 'popup_closed_until_' + encodeURIComponent(String(stageKey || ''));
   }
 
+  function getNextVietnamMidnightTimestamp(nowMs) {
+    var vnOffsetMs = 7 * 60 * 60 * 1000;
+    var referenceMs = Number(nowMs || Date.now());
+    var vnNow = new Date(referenceMs + vnOffsetMs);
+    return Date.UTC(
+      vnNow.getUTCFullYear(),
+      vnNow.getUTCMonth(),
+      vnNow.getUTCDate() + 1,
+      0,
+      0,
+      0,
+      0,
+    ) - vnOffsetMs;
+  }
+
   function getPopupDismissUntil(stageKey) {
     var cookieKey = getPopupDismissCookieName(stageKey) + '=';
     var hasCookie = document.cookie
@@ -7307,7 +7322,7 @@ ${ogImageTag}
       .map(function(part) { return part.trim(); })
       .some(function(part) { return part.indexOf(cookieKey) === 0; });
     if (hasCookie) {
-      return Date.now() + 60 * 1000;
+      return getNextVietnamMidnightTimestamp(Date.now());
     }
     try {
       var storedValue = window.localStorage
@@ -7321,9 +7336,7 @@ ${ogImageTag}
   }
 
   function setPopupDismissCookie(stageKey) {
-    var minutes = 1440;
-    var expiresAt = new Date();
-    expiresAt.setTime(expiresAt.getTime() + minutes * 60 * 1000);
+    var expiresAt = new Date(getNextVietnamMidnightTimestamp(Date.now()));
     document.cookie =
       getPopupDismissCookieName(stageKey) +
       '=yes; expires=' +

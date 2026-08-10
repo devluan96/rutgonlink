@@ -361,7 +361,15 @@ test("buildArticleFunnelPreviewPage uses domain-wide popup dismiss cookies with 
   );
   assert.match(
     html,
-    /function setPopupDismissCookie\(stageKey\) \{\s+var minutes = 1440;/s,
+    /function getNextVietnamMidnightTimestamp\(nowMs\) \{\s+var vnOffsetMs = 7 \* 60 \* 60 \* 1000;/s,
+  );
+  assert.match(
+    html,
+    /return Date\.UTC\(\s+vnNow\.getUTCFullYear\(\),\s+vnNow\.getUTCMonth\(\),\s+vnNow\.getUTCDate\(\) \+ 1,/s,
+  );
+  assert.match(
+    html,
+    /function setPopupDismissCookie\(stageKey\) \{\s+var expiresAt = new Date\(getNextVietnamMidnightTimestamp\(Date\.now\(\)\)\);/s,
   );
   assert.match(
     html,
