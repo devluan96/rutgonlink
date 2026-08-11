@@ -116,7 +116,7 @@ const articleFunnelLabPendingOpenIdStorageKey =
   "rutgonlink-lab-pending-open-id";
 const articleFunnelLabDebugStorageKey = "rutgonlink-lab-debug";
 const articleFunnelLabSrcdocAssetUrl =
-  "/article-funnel-lab-srcdoc.js?v=20260809d";
+  "/article-funnel-lab-srcdoc.js?v=20260811a";
 const linksSubtabStorageKey = "rutgonlink-links-subtab";
 let createSubtab =
   localStorage.getItem(createSubtabStorageKey) === "lab" ? "lab" : "standard";
