@@ -3790,11 +3790,14 @@
         );
 
         const isEmbedListView = embedMode && embedView === "list";
-        const shouldUseEmbeddedDraftState = !embedMode;
-        const state =
-          isEmbedListView || !shouldUseEmbeddedDraftState
-            ? clone(defaultState)
-            : loadState();
+        const shouldUseEmbeddedDraftState = !isEmbedListView;
+        const initialDraftSnapshot = shouldUseEmbeddedDraftState
+          ? loadDraftSnapshot()
+          : {
+              state: clone(defaultState),
+              meta: {},
+            };
+        const state = initialDraftSnapshot.state;
         let activeStage = "";
         let timer3s = null;
         let timer20s = null;
@@ -3806,7 +3809,7 @@
         let generatedPublishedUrl = "";
         let generatedPublishedUpdatedAt = "";
         let generatedPublishedDomainNote = "";
-        let selectedLabId = 0;
+        let selectedLabId = Number(initialDraftSnapshot.meta?.selectedLabId || 0);
         let latestLabLoadRequestId = 0;
         let labDebugState = {};
         let sourceManagedDeepMode = false;
@@ -3937,6 +3940,9 @@
           overlayStack: document.getElementById("overlayStack"),
           toast: document.getElementById("toast"),
         };
+        els.labNameInput.value = String(
+          initialDraftSnapshot.meta?.labName || "",
+        ).trim();
 
         let embedHeightTimer = null;
 
@@ -5136,15 +5142,61 @@
             });
         }
 
-        function loadState() {
+        function normalizeDraftMeta(input) {
+          const source =
+            input && typeof input === "object" && !Array.isArray(input)
+              ? input
+              : {};
+          const selectedLabId = Number(source.selectedLabId || 0);
+          return {
+            selectedLabId:
+              Number.isInteger(selectedLabId) && selectedLabId > 0
+                ? selectedLabId
+                : 0,
+            labName: String(source.labName || "").trim(),
+          };
+        }
+
+        function parseDraftSnapshot(input) {
+          const source =
+            input && typeof input === "object" && !Array.isArray(input)
+              ? input
+              : {};
+          const configSource =
+            source.config && typeof source.config === "object"
+              ? source.config
+              : source;
+          return {
+            state: normalizeImportedState(configSource),
+            meta: normalizeDraftMeta(
+              source.__draft_meta ||
+                source.draft_meta ||
+                source.meta ||
+                {},
+            ),
+          };
+        }
+
+        function loadDraftSnapshot() {
           try {
             const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return clone(defaultState);
-            const parsed = JSON.parse(raw);
-            return normalizeImportedState(parsed);
+            if (!raw) {
+              return {
+                state: clone(defaultState),
+                meta: {},
+              };
+            }
+            return parseDraftSnapshot(JSON.parse(raw));
           } catch {
-            return clone(defaultState);
+            return {
+              state: clone(defaultState),
+              meta: {},
+            };
           }
+        }
+
+        function loadState() {
+          return loadDraftSnapshot().state;
         }
 
         function normalizeImportedState(input) {
@@ -5552,12 +5604,28 @@
           };
         }
 
+        function buildDraftSnapshot() {
+          return {
+            config: getExportPayload(),
+            __draft_meta: {
+              selectedLabId:
+                Number.isInteger(Number(selectedLabId || 0)) &&
+                Number(selectedLabId || 0) > 0
+                  ? Number(selectedLabId || 0)
+                  : 0,
+              labName: String(
+                els.labNameInput?.value || state.title || "",
+              ).trim(),
+            },
+          };
+        }
+
         function saveState(message) {
           if (!shouldUseEmbeddedDraftState) {
             if (message) showToast(message);
             return;
           }
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(buildDraftSnapshot()));
           if (message) showToast(message);
         }
 
@@ -6028,10 +6096,12 @@
             clearResolvedCache();
             clearGeneratedPreviewLink();
             clearGeneratedPublishedLink();
-            if (item.published_route_slug) {
+            if (item.published_url) {
+              generatedPublishedUrl = String(item.published_url || "").trim();
+            } else if (item.published_route_slug) {
               generatedPublishedUrl = buildPublishedLabUrl(
                 item.published_route_slug,
-                nextState.sourceDomain,
+                item.domain_hostname || nextState.sourceDomain,
               );
             }
             closeOverlay();
@@ -9317,7 +9387,7 @@
         render();
         loadDomainOptions();
         loadAffiliatePresets();
-        refreshDbLabs({ preserveSelected: false });
+        refreshDbLabs({ preserveSelected: Number(selectedLabId || 0) > 0 });
       })();
     </script>
   </body>

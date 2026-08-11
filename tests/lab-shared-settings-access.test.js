@@ -88,6 +88,23 @@ test("article funnel lab APIs normalize legacy string config_json payloads", () 
   );
 });
 
+test("article funnel lab APIs reuse the published funnel domain for lab list and detail links", () => {
+  const indexJs = fs.readFileSync(
+    path.join(__dirname, "..", "api", "index.js"),
+    "utf8",
+  );
+
+  assert.match(
+    indexJs,
+    /const publishedArticleFunnel = item\.published_route_slug\s+\? await database\.getArticleFunnelBySlug\(item\.published_route_slug\)\s+:\s+null;/s,
+  );
+  assert.match(
+    indexJs,
+    /const publishedDomainHostname =\s+normalizeDomainHost\(publishedArticleFunnel\?\.domain_hostname\) \|\|\s+normalizeDomainHost\(configJson\.source_domain\);/s,
+  );
+  assert.match(indexJs, /domain_hostname:\s*publishedDomainHostname \|\| "",/);
+});
+
 test("lab shared settings persist on the user profile instead of local-only storage", () => {
   const schemaSql = fs.readFileSync(
     path.join(__dirname, "..", "supabase", "schema.sql"),
@@ -116,7 +133,7 @@ test("lab shared settings persist on the user profile instead of local-only stor
   );
   assert.match(
     indexJs,
-    /lab_shared_settings:\s*normalizeUserLabSharedSettings\(\s*user\.lab_shared_settings_json \|\| \{\},/s,
+    /const settingsBundle = normalizeUserSettingsBundle\(\s*user\.lab_shared_settings_json \|\| \{\},/s,
   );
   assert.match(appJs, /function syncLabSharedSettingsStorageFromUser\(\)/);
   assert.match(

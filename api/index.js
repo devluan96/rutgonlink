@@ -632,18 +632,23 @@ app.get("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, r
     const rows = await database.listArticleFunnelLabs({
       createdByUserId: req.currentUser?.id || 0,
     });
-    return res.json({
-      ok: true,
-      items: rows.map((item) => {
+    const items = await Promise.all(
+      rows.map(async (item) => {
         const configJson =
           item.config_json && typeof item.config_json === "object"
             ? item.config_json
             : {};
+        const publishedArticleFunnel = item.published_route_slug
+          ? await database.getArticleFunnelBySlug(item.published_route_slug)
+          : null;
+        const publishedDomainHostname =
+          normalizeDomainHost(publishedArticleFunnel?.domain_hostname) ||
+          normalizeDomainHost(configJson.source_domain);
         const publishedUrl =
           item.published_route_slug
             ? buildArticleFunnelPublicUrl(
                 item.published_route_slug,
-                normalizeDomainHost(configJson.source_domain),
+                publishedDomainHostname,
                 publicBaseUrl,
               )
             : "";
@@ -651,7 +656,7 @@ app.get("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, r
           item.published_route_slug && hasArticleFunnelStage(configJson, "20s")
             ? buildArticleFunnelPopupTestUrl(
                 item.published_route_slug,
-                normalizeDomainHost(configJson.source_domain),
+                publishedDomainHostname,
                 publicBaseUrl,
                 "20s",
                 Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
@@ -664,12 +669,17 @@ app.get("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, r
           published_route_slug: item.published_route_slug || "",
           published_url: publishedUrl,
           published_test_20s_url: publishedTest20sUrl,
+          domain_hostname: publishedDomainHostname || "",
           affiliate_clicks: Math.max(Number(item.affiliate_clicks) || 0, 0),
           created_by_user_id: item.created_by_user_id || null,
           created_at: item.created_at || null,
           updated_at: item.updated_at || item.created_at || null,
         };
       }),
+    );
+    return res.json({
+      ok: true,
+      items,
     });
   } catch (error) {
     console.error("[article-funnel-labs/list]", error);
@@ -689,11 +699,17 @@ app.get("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (re
       return res.status(403).json({ error: "Khong co quyen xem lab nay" });
     }
     const configJson = normalizeArticleFunnelLabConfigJson(row.config_json);
+    const publishedArticleFunnel = row.published_route_slug
+      ? await database.getArticleFunnelBySlug(row.published_route_slug)
+      : null;
+    const publishedDomainHostname =
+      normalizeDomainHost(publishedArticleFunnel?.domain_hostname) ||
+      normalizeDomainHost(configJson.source_domain);
     const publishedUrl =
       row.published_route_slug
         ? buildArticleFunnelPublicUrl(
             row.published_route_slug,
-            normalizeDomainHost(configJson.source_domain),
+            publishedDomainHostname,
             publicBaseUrl,
           )
         : "";
@@ -701,7 +717,7 @@ app.get("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (re
       row.published_route_slug && hasArticleFunnelStage(configJson, "20s")
         ? buildArticleFunnelPopupTestUrl(
             row.published_route_slug,
-            normalizeDomainHost(configJson.source_domain),
+            publishedDomainHostname,
             publicBaseUrl,
             "20s",
             Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
@@ -721,6 +737,7 @@ app.get("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (re
         published_route_slug: row.published_route_slug || "",
         published_url: publishedUrl,
         published_test_20s_url: publishedTest20sUrl,
+        domain_hostname: publishedDomainHostname || "",
         affiliate_clicks: Math.max(Number(row.affiliate_clicks) || 0, 0),
         created_by_user_id: row.created_by_user_id || null,
         created_at: row.created_at || null,

@@ -326,3 +326,27 @@ test("admin article funnel lab exposes a switch to disable popup 3s without dele
   assert.match(templateHtml, /enablePopup3s:\s*state\.enablePopup3s,/);
   assert.match(templateHtml, /popup_3s_enabled:\s*state\.enablePopup3s,/);
 });
+
+test("admin article funnel lab preserves the selected lab id in embedded draft snapshots", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(
+    templateHtml,
+    /const shouldUseEmbeddedDraftState = !isEmbedListView;/,
+  );
+  assert.match(
+    templateHtml,
+    /const initialDraftSnapshot = shouldUseEmbeddedDraftState\s+\? loadDraftSnapshot\(\)\s+:\s+\{\s+state:\s*clone\(defaultState\),\s+meta:\s*\{\},\s+\};/s,
+  );
+  assert.match(
+    templateHtml,
+    /let selectedLabId = Number\(initialDraftSnapshot\.meta\?\.selectedLabId \|\| 0\);/,
+  );
+  assert.match(
+    templateHtml,
+    /function buildDraftSnapshot\(\) \{\s+return \{\s+config:\s*getExportPayload\(\),\s+__draft_meta:/s,
+  );
+});
