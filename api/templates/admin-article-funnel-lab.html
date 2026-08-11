@@ -400,6 +400,84 @@
         color: var(--muted);
       }
 
+      .inline-switch-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-top: 12px;
+        padding: 12px 14px;
+        border: 1px solid rgba(96, 165, 250, 0.18);
+        border-radius: 16px;
+        background: rgba(9, 16, 29, 0.42);
+      }
+
+      .inline-switch-copy {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .inline-switch-copy strong {
+        font-size: 13px;
+        letter-spacing: -0.01em;
+      }
+
+      .inline-switch-copy span {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .inline-switch {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        width: 52px;
+        height: 30px;
+        flex: 0 0 auto;
+      }
+
+      .inline-switch input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        margin: 0;
+        cursor: pointer;
+      }
+
+      .inline-switch-track {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: 999px;
+        background: rgba(71, 85, 105, 0.8);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        transition: background 0.2s ease, border-color 0.2s ease;
+      }
+
+      .inline-switch-track::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        background: #f8fafc;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.28);
+        transition: transform 0.2s ease;
+      }
+
+      .inline-switch input:checked + .inline-switch-track {
+        background: rgba(59, 130, 246, 0.9);
+        border-color: rgba(96, 165, 250, 0.75);
+      }
+
+      .inline-switch input:checked + .inline-switch-track::after {
+        transform: translateX(22px);
+      }
+
       .lab-editor-modal {
         position: fixed;
         inset: 0;
@@ -3031,6 +3109,16 @@
                         class="field-status-note"
                         data-link-health-status="baseUrlInput"
                       ></div>
+                      <div class="inline-switch-row">
+                        <div class="inline-switch-copy">
+                          <strong id="popup3sToggleLabel">Bật popup 3 giây</strong>
+                          <span id="popup3sToggleHint">Tắt mục này để giữ link 3s nhưng không hiện popup 3 giây.</span>
+                        </div>
+                        <label class="inline-switch" for="enablePopup3sInput">
+                          <input id="enablePopup3sInput" type="checkbox" checked />
+                          <span class="inline-switch-track" aria-hidden="true"></span>
+                        </label>
+                      </div>
                     </div>
 
                     <div class="field">
@@ -3645,6 +3733,7 @@
             "Mô tả ngắn của bài viết sẽ hiện ngay dưới tiêu đề khi bạn cần thêm ngữ cảnh.",
           baseUrl:
             "https://shopee.vn/product/37251933/591989399?utm_source=admin-lab",
+          enablePopup3s: true,
           popup3sIosFbUrl: "",
           popup20sUrl: "",
           popup20sIosFbUrl: "",
@@ -3792,6 +3881,7 @@
           publishedUrlOutput: document.getElementById("publishedUrlOutput"),
           publishedUrlMeta: document.getElementById("publishedUrlMeta"),
           baseUrlInput: document.getElementById("baseUrlInput"),
+          enablePopup3sInput: document.getElementById("enablePopup3sInput"),
           popup3sIosFbInput: document.getElementById("popup3sIosFbInput"),
           popup20sInput: document.getElementById("popup20sInput"),
           popup20sIosFbInput: document.getElementById("popup20sIosFbInput"),
@@ -3855,6 +3945,9 @@
           return {
             popup3sUrl: String(source.popup3sUrl || "").trim(),
             popup3sIosFbUrl: String(source.popup3sIosFbUrl || "").trim(),
+            enablePopup3s:
+              source.enablePopup3s !== false &&
+              source.enablePopup3s !== "false",
             overlayImage: String(source.overlayImage || "").trim(),
             overlay20sImage: String(source.overlay20sImage || "").trim(),
             overlay300sImage: String(source.overlay300sImage || "").trim(),
@@ -4961,6 +5054,11 @@
           setLabel("titleInput", "Tiêu đề");
           setLabel("descriptionInput", "Mô tả");
           setLabel("baseUrlInput", "Link gốc / popup 3s mặc định");
+          setText("#popup3sToggleLabel", "Bật popup 3s");
+          setText(
+            "#popup3sToggleHint",
+            "Tắt mục này để giữ link 3s nhưng không hiện popup 3 giây.",
+          );
           setLabel("overlayImageInput", "Ảnh popup 3s");
           setLabel("overlay20sImageInput", "Ảnh popup 10s");
           setLabel("overlay300sImageInput", "Ảnh popup 300s");
@@ -5135,6 +5233,15 @@
                 stage3sTarget ||
                 base.baseUrl,
             ),
+            enablePopup3s:
+              source.enablePopup3s === false ||
+              source.enablePopup3s === "false" ||
+              source.popup_3s_enabled === false ||
+              source.popup_3s_enabled === "false" ||
+              overlay.popup_3s_enabled === false ||
+              overlay.popup_3s_enabled === "false"
+                ? false
+                : base.enablePopup3s,
             popup3sIosFbUrl: String(
               source.popup3sIosFbUrl ||
                 source.popup_3s_ios_fb_url ||
@@ -5358,6 +5465,9 @@
         }
 
         function getEffectiveTarget(stageKey) {
+          if (stageKey === "3s" && !state.enablePopup3s) {
+            return "";
+          }
           if (
             (stageKey === "20s" || stageKey === "5s") &&
             state.popup20sUrl.trim()
@@ -5388,6 +5498,15 @@
           return state.overlayImage.trim() || state.shareImage.trim();
         }
 
+        function shouldEnableStageOverlay(stageKey) {
+          const targetUrl = getEffectiveTarget(stageKey);
+          if (!targetUrl) return false;
+          if (stageKey === "3s") {
+            return detectTargetPlatform(targetUrl) === "shopee";
+          }
+          return true;
+        }
+
         function getCurrentDescriptionValue() {
           const liveValue =
             els.descriptionInput && typeof els.descriptionInput.value === "string"
@@ -5405,6 +5524,7 @@
             reference_source_url: String(state.referenceSourceUrl || "").trim(),
             title: state.title.trim(),
             description: getCurrentDescriptionValue(),
+            enablePopup3s: state.enablePopup3s,
             share_image: state.shareImage.trim(),
             group_label: state.groupLabel.trim(),
             group_url: state.groupUrl.trim(),
@@ -5416,6 +5536,7 @@
                 state.overlay20sImage.trim() || state.overlayImage.trim(),
               popup_300s_image:
                 state.overlay300sImage.trim() || state.overlayImage.trim(),
+              popup_3s_enabled: state.enablePopup3s,
               popup_3s_url: state.baseUrl.trim(),
               popup_3s_ios_fb_url: state.popup3sIosFbUrl.trim(),
               popup_20s_url: state.popup20sUrl.trim(),
@@ -7641,6 +7762,11 @@
           setLabel("titleInput", "Tiêu đề");
           setLabel("descriptionInput", "Mô tả");
           setLabel("baseUrlInput", "Link gốc / popup 3 giây mặc định");
+          setText("#popup3sToggleLabel", "Bật popup 3 giây");
+          setText(
+            "#popup3sToggleHint",
+            "Tắt mục này để giữ link 3s nhưng không hiện popup 3 giây.",
+          );
           setLabel("overlayImageInput", "Ảnh popup 3 giây");
           setLabel("overlay20sImageInput", "Ảnh popup 10 giây");
           setLabel("overlay300sImageInput", "Ảnh popup 300 giây");
@@ -7777,6 +7903,11 @@
           setLabel("titleInput", "Tiêu đề");
           setLabel("descriptionInput", "Mô tả");
           setLabel("baseUrlInput", "Link gốc / popup 3 giây mặc định");
+          setText("#popup3sToggleLabel", "Bật popup 3 giây");
+          setText(
+            "#popup3sToggleHint",
+            "Tắt mục này để giữ link 3s nhưng không hiện popup 3 giây.",
+          );
           setLabel("popup20sInput", "Popup 10 giây override");
           setLabel(
             "popup20sIosFbInput",
@@ -7978,10 +8109,15 @@
           els.titleInput.value = state.title;
           els.descriptionInput.value = state.description;
           els.baseUrlInput.value = state.baseUrl;
+          els.enablePopup3sInput.checked = !!state.enablePopup3s;
           els.popup3sIosFbInput.value = state.popup3sIosFbUrl;
           els.popup20sInput.value = state.popup20sUrl;
           els.popup20sIosFbInput.value = state.popup20sIosFbUrl;
           els.popup300sInput.value = state.popup300sUrl;
+          const show3sBtn = document.getElementById("show3sBtn");
+          if (show3sBtn) {
+            show3sBtn.disabled = !shouldEnableStageOverlay("3s");
+          }
           els.overlayImageInput.value = state.overlayImage;
           els.overlay20sImageInput.value = state.overlay20sImage;
           els.overlay300sImageInput.value = state.overlay300sImage;
@@ -8164,7 +8300,7 @@
         }
 
         function openOverlay(stageKey) {
-          if (!getEffectiveTarget(stageKey)) return;
+          if (!shouldEnableStageOverlay(stageKey)) return;
           activeStage = stageKey;
           primeResolvedTarget(getEffectiveTarget(stageKey));
           if (!pendingStages.includes(stageKey)) {
@@ -8237,11 +8373,13 @@
           closeOverlay();
           primeResolvedTargets();
           showToast("Đã bắt đầu mô phỏng timer 3s / 10s / 300s");
-          timer3s = setTimeout(() => openOverlay("3s"), 3000);
-          if (state.popup20sUrl.trim()) {
+          if (shouldEnableStageOverlay("3s")) {
+            timer3s = setTimeout(() => openOverlay("3s"), 3000);
+          }
+          if (shouldEnableStageOverlay("20s")) {
             timer20s = setTimeout(() => openOverlay("20s"), 7000);
           }
-          if (state.popup300sUrl.trim()) {
+          if (shouldEnableStageOverlay("300s")) {
             timer300s = setTimeout(() => openOverlay("300s"), 300000);
           }
         }
@@ -8649,6 +8787,7 @@
           ["titleInput", "title"],
           ["descriptionInput", "description"],
           ["baseUrlInput", "baseUrl"],
+          ["enablePopup3sInput", "enablePopup3s"],
           ["popup3sIosFbInput", "popup3sIosFbUrl"],
           ["popup20sInput", "popup20sUrl"],
           ["popup20sIosFbInput", "popup20sIosFbUrl"],
@@ -8663,12 +8802,19 @@
           ["backupUrlInput", "backupUrl"],
         ].forEach(([elementKey, stateKey]) => {
           const input = els[elementKey];
-          input.addEventListener("input", () => {
-            const rawValue = input.value;
+          input.addEventListener(
+            elementKey === "enablePopup3sInput" ? "change" : "input",
+            () => {
+            const rawValue =
+              elementKey === "enablePopup3sInput"
+                ? input.checked
+                : input.value;
             const previousTitle = state.title;
             state[stateKey] =
               stateKey === "sourceDomain"
                 ? normalizeDomainHost(rawValue)
+                : stateKey === "enablePopup3s"
+                  ? !!rawValue
                 : rawValue;
             if (stateKey === "title") {
               const currentLabName = String(
@@ -8689,6 +8835,7 @@
             clearGeneratedPublishedLink();
             if (
               stateKey === "baseUrl" ||
+              stateKey === "enablePopup3s" ||
               stateKey === "popup20sUrl" ||
               stateKey === "popup300sUrl"
             ) {
@@ -8709,7 +8856,8 @@
             renderPreviewShell();
             renderJsonOutput();
             saveState();
-          });
+            },
+          );
         });
 
         document

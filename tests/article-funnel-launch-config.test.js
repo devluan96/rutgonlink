@@ -554,3 +554,47 @@ test("normalizeArticleFunnelPreviewConfig omits 300s stage when popup 300s URL i
     true,
   );
 });
+
+test("normalizeArticleFunnelPreviewConfig omits 3s stage when the 3s link is missing or not Shopee", () => {
+  const empty3sConfig = __testUtils.normalizeArticleFunnelPreviewConfig({
+    baseUrl: "",
+    overlay: {
+      popup_3s_url: "",
+      popup_20s_url: "https://vt.tiktok.com/demo/",
+    },
+  });
+  assert.equal(
+    empty3sConfig.stages.some((stage) => String(stage.stage_key) === "3s"),
+    false,
+  );
+
+  const nonShopee3sConfig = __testUtils.normalizeArticleFunnelPreviewConfig({
+    baseUrl: "https://example.com/not-shopee",
+    overlay: {
+      popup_3s_url: "https://example.com/not-shopee",
+      popup_20s_url: "https://vt.tiktok.com/demo/",
+    },
+  });
+  assert.equal(
+    nonShopee3sConfig.stages.some((stage) => String(stage.stage_key) === "3s"),
+    false,
+  );
+});
+
+test("normalizeArticleFunnelPreviewConfig omits 3s stage when popup 3s is explicitly disabled", () => {
+  const config = __testUtils.normalizeArticleFunnelPreviewConfig({
+    enablePopup3s: false,
+    baseUrl: "https://shopee.vn/product/37251933/591989399",
+    overlay: {
+      popup_3s_enabled: false,
+      popup_3s_url: "https://shopee.vn/product/37251933/591989399",
+      popup_20s_url: "https://vt.tiktok.com/demo/",
+    },
+  });
+
+  assert.equal(config.enablePopup3s, false);
+  assert.equal(
+    config.stages.some((stage) => String(stage.stage_key) === "3s"),
+    false,
+  );
+});

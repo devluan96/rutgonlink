@@ -230,6 +230,26 @@ test("admin article funnel lab auto-wraps TikTok popup 20s links with BAuo and f
   );
 });
 
+test("admin article funnel lab only schedules popup 3s when the 3s link is a Shopee target", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(
+    templateHtml,
+    /function shouldEnableStageOverlay\(stageKey\) \{\s+const targetUrl = getEffectiveTarget\(stageKey\);\s+if \(!targetUrl\) return false;\s+if \(stageKey === "3s"\) \{\s+return detectTargetPlatform\(targetUrl\) === "shopee";\s+\}\s+return true;\s+\}/s,
+  );
+  assert.match(
+    templateHtml,
+    /if \(shouldEnableStageOverlay\("3s"\)\) \{\s+timer3s = setTimeout\(\(\) => openOverlay\("3s"\), 3000\);\s+\}/s,
+  );
+  assert.match(
+    templateHtml,
+    /function openOverlay\(stageKey\) \{\s+if \(!shouldEnableStageOverlay\(stageKey\)\) return;/s,
+  );
+});
+
 test("admin article funnel lab uploads sensitive video blocks through the video flow", () => {
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
@@ -289,4 +309,20 @@ test("admin article funnel lab preserves video-embed blocks when reopening saved
     templateHtml,
     /const allowedTypes = new Set\(\[\s*"paragraph",\s*"image",\s*"sensitive-image",\s*"video",\s*"video-embed",\s*"sensitive-video",\s*\]\);/s,
   );
+});
+
+test("admin article funnel lab exposes a switch to disable popup 3s without deleting the saved link", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(templateHtml, /id="enablePopup3sInput"/);
+  assert.match(templateHtml, /enablePopup3s:\s*true,/);
+  assert.match(
+    templateHtml,
+    /if \(stageKey === "3s" && !state\.enablePopup3s\) \{\s+return "";\s+\}/s,
+  );
+  assert.match(templateHtml, /enablePopup3s:\s*state\.enablePopup3s,/);
+  assert.match(templateHtml, /popup_3s_enabled:\s*state\.enablePopup3s,/);
 });

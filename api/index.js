@@ -5987,6 +5987,13 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
   const overlay = config.overlay && typeof config.overlay === "object"
     ? config.overlay
     : {};
+  const enablePopup3s =
+    config.enablePopup3s === false ||
+    config.enablePopup3s === "false" ||
+    overlay.popup_3s_enabled === false ||
+    overlay.popup_3s_enabled === "false"
+      ? false
+      : true;
   const inputStages = Array.isArray(config.stages) ? config.stages : [];
   const stage3Candidate =
     inputStages.find((stage, index) => {
@@ -6055,11 +6062,11 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
               (rawStageKey === "5s" || parsedDelayMs === 5000 || parsedDelayMs === 15000)
               ? 7000
               : parsedDelayMs || fallbackDelayMs;
-          return {
-            ...stage,
-            stage_key: stageKey,
-            delay_ms: delayMs,
-            overlay_image: String(stage?.overlay_image || "").trim() || getOverlayImageForStage(stageKey),
+            return {
+              ...stage,
+              stage_key: stageKey,
+              delay_ms: delayMs,
+              overlay_image: String(stage?.overlay_image || "").trim() || getOverlayImageForStage(stageKey),
           };
         })
       : [
@@ -6093,6 +6100,27 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
             : []),
         ]);
 
+  const shouldKeepArticleFunnelStage = (stage) => {
+    const stageKey = String(stage?.stage_key || "").trim();
+    const targetUrl = String(
+      stage?.target_url ||
+        stage?.direct_web_url ||
+        stage?.direct_app_url ||
+        stage?.direct_ios_url ||
+        stage?.direct_android_url ||
+        "",
+    ).trim();
+    if (!targetUrl) return false;
+    if (stageKey === "3s") {
+      if (!enablePopup3s) return false;
+      return (
+        String(stage?.direct_platform || "").trim().toLowerCase() === "shopee" ||
+        isShopeeUrl(targetUrl)
+      );
+    }
+    return true;
+  };
+
   return {
     source_domain: String(config.sourceDomain || config.source_domain || "").trim(),
     slug: String(config.slug || "").trim(),
@@ -6101,6 +6129,7 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
     ).trim(),
     title: String(config.title || "").trim() || "Article preview",
     description: String(config.description || config.desc || "").trim(),
+    enablePopup3s,
     share_image: shareImage,
     overlay_image: overlayImage,
     group_label: String(config.group_label || config.groupLabel || "Group facebook").trim(),
@@ -6108,45 +6137,47 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
     backup_label: String(config.backup_label || config.backupLabel || "Page phu").trim(),
     backup_url: String(config.backup_url || config.backupUrl || "").trim(),
     blocks: normalizeArticleFunnelBlocks(config.blocks),
-    stages: normalizedStages.map((stage) => {
-      const normalizedStageKey =
-        String(stage.stage_key || "").trim() === "5s"
-          ? "20s"
-          : String(stage.stage_key || "").trim();
-      const normalizedStage = {
-        stage_key: normalizedStageKey,
-        delay_ms:
-          String(stage.stage_key || "").trim() === "5s" &&
-          (Number(stage.delay_ms || 0) === 5000 ||
-            Number(stage.delay_ms || 0) === 15000)
-            ? 7000
-            : Number(stage.delay_ms || 0) || 0,
-        target_url: String(stage.target_url || "").trim(),
-        overlay_image:
-          String(stage.overlay_image || "").trim() ||
-          getOverlayImageForStage(normalizedStageKey),
-        direct_platform: String(stage.direct_platform || "generic").trim(),
-        direct_web_url: String(stage.direct_web_url || "").trim(),
-        direct_app_url: String(stage.direct_app_url || "").trim(),
-        direct_ios_url: String(stage.direct_ios_url || "").trim(),
-        direct_ios_fb_url: String(stage.direct_ios_fb_url || "").trim(),
-        direct_ios_browser_url: String(
-          stage.direct_ios_browser_url || "",
-        ).trim(),
-        direct_android_url: String(stage.direct_android_url || "").trim(),
-        direct_android_intent_url: String(
-          stage.direct_android_intent_url || "",
-        ).trim(),
-        direct_android_package: String(
-          stage.direct_android_package || "",
-        ).trim(),
-      };
-      return applyArticleFunnelStageDirectOverrides(
-        { stage_key: normalizedStageKey },
-        normalizedStage,
-        config,
-      );
-    }),
+    stages: normalizedStages
+      .map((stage) => {
+        const normalizedStageKey =
+          String(stage.stage_key || "").trim() === "5s"
+            ? "20s"
+            : String(stage.stage_key || "").trim();
+        const normalizedStage = {
+          stage_key: normalizedStageKey,
+          delay_ms:
+            String(stage.stage_key || "").trim() === "5s" &&
+            (Number(stage.delay_ms || 0) === 5000 ||
+              Number(stage.delay_ms || 0) === 15000)
+              ? 7000
+              : Number(stage.delay_ms || 0) || 0,
+          target_url: String(stage.target_url || "").trim(),
+          overlay_image:
+            String(stage.overlay_image || "").trim() ||
+            getOverlayImageForStage(normalizedStageKey),
+          direct_platform: String(stage.direct_platform || "generic").trim(),
+          direct_web_url: String(stage.direct_web_url || "").trim(),
+          direct_app_url: String(stage.direct_app_url || "").trim(),
+          direct_ios_url: String(stage.direct_ios_url || "").trim(),
+          direct_ios_fb_url: String(stage.direct_ios_fb_url || "").trim(),
+          direct_ios_browser_url: String(
+            stage.direct_ios_browser_url || "",
+          ).trim(),
+          direct_android_url: String(stage.direct_android_url || "").trim(),
+          direct_android_intent_url: String(
+            stage.direct_android_intent_url || "",
+          ).trim(),
+          direct_android_package: String(
+            stage.direct_android_package || "",
+          ).trim(),
+        };
+        return applyArticleFunnelStageDirectOverrides(
+          { stage_key: normalizedStageKey },
+          normalizedStage,
+          config,
+        );
+      })
+      .filter(shouldKeepArticleFunnelStage),
   };
 }
 
