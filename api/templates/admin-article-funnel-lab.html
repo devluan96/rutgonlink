@@ -5246,6 +5246,20 @@
               stage300s.direct_app_url ||
               "",
           ).trim();
+          const stage3sDirectPlatform = String(
+            stage3s.direct_platform || detectTargetPlatform(stage3sTarget),
+          )
+            .trim()
+            .toLowerCase();
+          const stage3sDirectIosFbUrl = String(
+            stage3s.direct_ios_fb_url || "",
+          ).trim();
+          const stage3sIosFbFallback =
+            stage3sDirectPlatform === "shopee" &&
+            stage3sDirectIosFbUrl &&
+            stage3sDirectIosFbUrl !== stage3sTarget
+              ? stage3sDirectIosFbUrl
+              : "";
           const blockSource = Array.isArray(source.blocks)
             ? source.blocks
             : source.blocks || [];
@@ -5298,11 +5312,7 @@
               source.popup3sIosFbUrl ||
                 source.popup_3s_ios_fb_url ||
                 overlay.popup_3s_ios_fb_url ||
-                (String(stage3s.direct_ios_fb_url || "").trim() &&
-                String(stage3s.direct_ios_fb_url || "").trim() !==
-                  stage3sTarget
-                  ? String(stage3s.direct_ios_fb_url || "").trim()
-                  : "") ||
+                stage3sIosFbFallback ||
                 base.popup3sIosFbUrl,
             ),
             popup20sUrl: String(

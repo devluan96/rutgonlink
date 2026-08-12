@@ -55,9 +55,29 @@ test("admin article funnel lab supports saved popup 3s opaanlp overrides and sha
   );
   assert.match(
     templateHtml,
+    /const stage3sIosFbFallback =\s+stage3sDirectPlatform === "shopee"\s+&&\s+stage3sDirectIosFbUrl\s+&&\s+stage3sDirectIosFbUrl !== stage3sTarget/s,
+  );
+  assert.match(
+    templateHtml,
     /normalizedStageKey === "3s"\s+&&\s+String\(launchConfig\.direct_platform \|\| ""\)\.trim\(\) === "shopee"/s,
   );
   assert.match(templateHtml, /direct_ios_fb_url:\s*iosInAppOverride/);
+});
+
+test("admin article funnel lab only restores popup 3s iOS FB override from Shopee stage data", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(
+    templateHtml,
+    /const stage3sDirectPlatform = String\(\s+stage3s\.direct_platform \|\| detectTargetPlatform\(stage3sTarget\),\s+\)\s+\.trim\(\)\s+\.toLowerCase\(\);/s,
+  );
+  assert.match(
+    templateHtml,
+    /popup3sIosFbUrl:\s*String\(\s*source\.popup3sIosFbUrl \|\|\s*source\.popup_3s_ios_fb_url \|\|\s*overlay\.popup_3s_ios_fb_url \|\|\s*stage3sIosFbFallback \|\|\s*base\.popup3sIosFbUrl,/s,
+  );
 });
 
 test("admin article funnel lab keeps Shopee popup 3s web-first on iPhone in-app", () => {
