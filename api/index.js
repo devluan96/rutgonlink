@@ -2772,18 +2772,43 @@ function buildTikTokPopup20sOneLink(destinationUrl) {
 
 function detectPlatformDeep(originalUrl, platform) {
   let hostname = "";
+  let pathname = "";
+  let search = "";
   try {
-    hostname = new URL(String(originalUrl || "").trim()).hostname.toLowerCase();
+    const parsedUrl = new URL(String(originalUrl || "").trim());
+    hostname = parsedUrl.hostname.toLowerCase();
+    pathname = parsedUrl.pathname || "";
+    search = parsedUrl.search || "";
   } catch {}
-  // ── Shopee product: -i.<shopId>.<itemId>
-  const sp = originalUrl.match(/shopee\.vn\/.*?-i\.(\d+)\.(\d+)/i);
-  if (sp) {
-    const [, shopId, itemId] = sp;
-    let hasTrackingQuery = false;
-    try {
-      hasTrackingQuery =
-        new URL(originalUrl).searchParams.toString().length > 0;
-    } catch {}
+  // ── Shopee product: -i.<shopId>.<itemId>, /product/<shopId>/<itemId>,
+  // /universal-link/product/<shopId>/<itemId>, /opaanlp/<shopId>/<itemId>
+  const shopeeProductPathMatch = pathname.match(
+    /^\/(?:universal-link\/)?product\/(\d+)\/(\d+)/i,
+  );
+  const shopeeLegacyProductMatch = pathname.match(/-i\.(\d+)\.(\d+)/i);
+  const shopeeOpaanlpMatch = pathname.match(/^\/opaanlp\/(\d+)\/(\d+)/i);
+  const shopeeShortHostMatch = String(originalUrl || "").match(
+    /shopee\.vn\/.*?-i\.(\d+)\.(\d+)/i,
+  );
+  const shopId =
+    shopeeProductPathMatch?.[1] ||
+    shopeeLegacyProductMatch?.[1] ||
+    shopeeOpaanlpMatch?.[1] ||
+    shopeeShortHostMatch?.[1] ||
+    "";
+  const itemId =
+    shopeeProductPathMatch?.[2] ||
+    shopeeLegacyProductMatch?.[2] ||
+    shopeeOpaanlpMatch?.[2] ||
+    shopeeShortHostMatch?.[2] ||
+    "";
+
+  if (
+    (hostname === "shopee.vn" || hostname.endsWith(".shopee.vn")) &&
+    shopId &&
+    itemId
+  ) {
+    const hasTrackingQuery = search.length > 1;
     // Universal Link – OS tự mở app, không cần JS trick
     const universalLink = `https://shopee.vn/universal-link/product/${shopId}/${itemId}`;
     const shopeeTarget = hasTrackingQuery ? originalUrl : universalLink;
@@ -11393,7 +11418,14 @@ app.get("/:code", async (req, res) => {
       return res.send(buildVideoPage(videoLink));
     }
 
-    const info = detectPlatformDeep(link.original_url, platform);
+    const resolvedShopeeOriginalUrl = await resolveShopeeShortUrl(
+      link.original_url,
+    );
+    const redirectLink =
+      resolvedShopeeOriginalUrl === link.original_url
+        ? link
+        : { ...link, original_url: resolvedShopeeOriginalUrl };
+    const info = detectPlatformDeep(redirectLink.original_url, platform);
     const isFacebookInApp = isFacebookInAppBrowser(ua);
 
     if (
@@ -11413,7 +11445,7 @@ app.get("/:code", async (req, res) => {
         platform: info.platform_name,
         uaKind,
         status: 200,
-        target: info.fallback || link.original_url,
+        target: info.fallback || redirectLink.original_url,
         referer,
       });
       res.set({
@@ -11422,7 +11454,9 @@ app.get("/:code", async (req, res) => {
         "Content-Type": "text/html;charset=utf-8",
         "X-Frame-Options": "SAMEORIGIN",
       });
-      return res.send(buildShopeeFacebookBridgePage(link, publicBaseUrl, info));
+      return res.send(
+        buildShopeeFacebookBridgePage(redirectLink, publicBaseUrl, info),
+      );
     }
 
     // ── Desktop → redirect thẳng ─────────────────────────────────────────
@@ -11439,15 +11473,15 @@ app.get("/:code", async (req, res) => {
         platform: info.platform_name,
         uaKind,
         status: 302,
-        target: link.original_url,
+        target: redirectLink.original_url,
         referer,
       });
-      return res.redirect(302, link.original_url);
+      return res.redirect(302, redirectLink.original_url);
     }
 
     // ── Shopee mobile → 301 thẳng tới Shopee/App Link ───────────────────
     if (info.platform_name === "shopee") {
-      const shopeeTarget = info.deeplink || link.original_url;
+      const shopeeTarget = info.deeplink || redirectLink.original_url;
       setRedirectDebugHeaders(res, {
         mode: "shopee-direct-redirect",
         platform: info.platform_name,
@@ -11468,7 +11502,7 @@ app.get("/:code", async (req, res) => {
 
     // ── Mobile có deeplink → DirectBridgePage ────────────────────────────
     if (info.deeplink || linkType === "deeplink") {
-      const shortUrl = buildLinkShortUrl(link, publicBaseUrl);
+      const shortUrl = buildLinkShortUrl(redirectLink, publicBaseUrl);
       setRedirectDebugHeaders(res, {
         mode: "deeplink-bridge",
         platform: info.platform_name,
@@ -11481,14 +11515,14 @@ app.get("/:code", async (req, res) => {
         platform: info.platform_name,
         uaKind,
         status: 200,
-        target: info.deeplink || link.original_url,
+        target: info.deeplink || redirectLink.original_url,
         referer,
       });
       res.set({
         "Cache-Control": "no-cache,no-store,must-revalidate",
         Pragma: "no-cache",
       });
-      return res.send(buildDirectBridgePage(link, shortUrl, info));
+      return res.send(buildDirectBridgePage(redirectLink, shortUrl, info));
     }
 
     // ── Mobile không có deeplink → redirect thẳng ────────────────────────
@@ -11504,10 +11538,10 @@ app.get("/:code", async (req, res) => {
       platform: info.platform_name,
       uaKind,
       status: 302,
-      target: link.original_url,
+      target: redirectLink.original_url,
       referer,
     });
-    return res.redirect(302, link.original_url);
+    return res.redirect(302, redirectLink.original_url);
   } catch (e) {
     console.error(e);
     res.status(500).send("Server error");

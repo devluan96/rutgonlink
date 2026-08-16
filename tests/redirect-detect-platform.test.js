@@ -32,3 +32,26 @@ test("detectPlatformDeep still builds TikTok app schemes for canonical video lin
   );
   assert.equal(detected.fallback, originalUrl);
 });
+
+test("detectPlatformDeep recognizes Shopee canonical product paths as product deeplinks", () => {
+  const originalUrl = "https://shopee.vn/product/131477471/22466400575";
+  const detected = __testUtils.detectPlatformDeep(originalUrl, "ios");
+
+  assert.equal(detected.platform_name, "shopee");
+  assert.equal(
+    detected.deeplink,
+    "https://shopee.vn/universal-link/product/131477471/22466400575",
+  );
+  assert.equal(detected.fallback, originalUrl);
+});
+
+test("detectPlatformDeep keeps Shopee affiliate tracking params on canonical product paths", () => {
+  const originalUrl =
+    "https://shopee.vn/product/131477471/22466400575?mmp_pid=an_17358580605&utm_source=an_17358580605";
+  const detected = __testUtils.detectPlatformDeep(originalUrl, "android");
+
+  assert.equal(detected.platform_name, "shopee");
+  assert.equal(detected.deeplink, originalUrl);
+  assert.equal(detected.deeplink_android, originalUrl);
+  assert.equal(detected.fallback, originalUrl);
+});
