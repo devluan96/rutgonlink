@@ -3148,6 +3148,10 @@ function buildAffiliateShopeeSourceId(index = 0) {
   return `shopee-src-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${index}`;
 }
 
+function getAffiliateShopeeSourceProductUrl(source = null) {
+  return String(source?.product_url || source?.productUrl || source?.url || "").trim();
+}
+
 function getUserAffiliateShopeeSources() {
   const sourceList = Array.isArray(user?.affiliate_shopee_sources)
     ? user.affiliate_shopee_sources
@@ -3163,6 +3167,9 @@ function getUserAffiliateShopeeSources() {
           buildAffiliateShopeeSourceId(index + 1),
         label: String(source.label || source.name || `Acc ${index + 1}`).trim(),
         url,
+        product_url: String(
+          source.product_url || source.productUrl || source.url || "",
+        ).trim(),
         opaanlp_url: String(
           source.opaanlp_url || source.opaanlpUrl || source.open_app_url || "",
         ).trim(),
@@ -3179,6 +3186,7 @@ function getUserAffiliateShopeeSources() {
             id: buildAffiliateShopeeSourceId(1),
             label: "Acc 1",
             url: fallbackUrl,
+            product_url: fallbackUrl,
             opaanlp_url: "",
             is_default: true,
           },
@@ -3208,6 +3216,9 @@ function getAffiliateShopeeDraftSources() {
       const url = String(
         row.querySelector("[data-affiliate-shopee-source-url]")?.value || "",
       ).trim();
+      const productUrl = String(
+        row.querySelector("[data-affiliate-shopee-source-product-url]")?.value || "",
+      ).trim();
       const opaanlpUrl = String(
         row.querySelector("[data-affiliate-shopee-source-opaanlp-url]")?.value ||
           "",
@@ -3215,12 +3226,13 @@ function getAffiliateShopeeDraftSources() {
       const isDefault = !!row.querySelector(
         "[data-affiliate-shopee-source-default]",
       )?.checked;
-      if (!label && !url) return null;
-      if (!url) return null;
+      if (!label && !url && !productUrl) return null;
+      if (!url && !productUrl) return null;
       return {
         id,
         label: label || `Acc ${index + 1}`,
         url,
+        product_url: productUrl,
         opaanlp_url: opaanlpUrl,
         is_default: isDefault,
       };
@@ -3243,7 +3255,7 @@ function syncAffiliateShopeeDefaultInputFromRows() {
   }
   const defaultSource =
     sources.find((item) => item.is_default) || sources[0] || null;
-  shopeeInput.value = String(defaultSource?.url || "").trim();
+  shopeeInput.value = getAffiliateShopeeSourceProductUrl(defaultSource);
 }
 
 function renderAffiliateShopeeSourcesManager(sourceList = null) {
@@ -3257,6 +3269,9 @@ function renderAffiliateShopeeSourcesManager(sourceList = null) {
           id: buildAffiliateShopeeSourceId(1),
           label: "Acc 1",
           url:
+            document.getElementById("accountAffiliateShopeeInput")?.value.trim() ||
+            "",
+          product_url:
             document.getElementById("accountAffiliateShopeeInput")?.value.trim() ||
             "",
           opaanlp_url: "",
@@ -3281,15 +3296,23 @@ function renderAffiliateShopeeSourcesManager(sourceList = null) {
                 type="url"
                 class="fi"
                 data-affiliate-shopee-source-url
-                placeholder="https://shopee.vn/product/... hoặc https://s.shopee.vn/..."
+                placeholder="Link aff/link gốc: https://s.shopee.vn/... hoặc https://shopee.vn/..."
                 value="${esc(source.url || "")}"
                 oninput="syncAffiliateShopeeDefaultInputFromRows()"
               />
               <input
                 type="url"
                 class="fi"
+                data-affiliate-shopee-source-product-url
+                placeholder="Link product cho deeplink thường: https://shopee.vn/product/..."
+                value="${esc(getAffiliateShopeeSourceProductUrl(source))}"
+                oninput="syncAffiliateShopeeDefaultInputFromRows()"
+              />
+              <input
+                type="url"
+                class="fi"
                 data-affiliate-shopee-source-opaanlp-url
-                placeholder="https://shopee.vn/opaanlp/... (tuỳ chọn)"
+                placeholder="Link opaanlp cho lab: https://shopee.vn/opaanlp/..."
                 value="${esc(source.opaanlp_url || "")}"
               />
               <label class="account-affiliate-source-default">
@@ -3331,6 +3354,7 @@ function addAffiliateShopeeSourceRow() {
     id: buildAffiliateShopeeSourceId(sources.length + 1),
     label: `Acc ${sources.length + 1}`,
     url: "",
+    product_url: "",
     opaanlp_url: "",
     is_default: !sources.length,
   });
@@ -3664,7 +3688,7 @@ async function saveAccountAffiliateSettings() {
       body: JSON.stringify({
         affiliate_shopee_url:
           String(
-            defaultShopeeSource?.url ||
+            getAffiliateShopeeSourceProductUrl(defaultShopeeSource) ||
               document.getElementById("accountAffiliateShopeeInput")?.value.trim() ||
               "",
           ).trim() ||
@@ -3819,7 +3843,9 @@ function getSelectedAffiliatePresetUrl(platform, containerId = "") {
   }
   const selectedSource = getSelectedAffiliateShopeeSource(containerId);
   return String(
-    selectedSource?.url || getUserAffiliatePresetUrl("shopee") || "",
+    getAffiliateShopeeSourceProductUrl(selectedSource) ||
+      getUserAffiliatePresetUrl("shopee") ||
+      "",
   ).trim();
 }
 
@@ -3842,7 +3868,7 @@ function refreshAffiliatePresetSelection(containerId = "", platform = "") {
   const preview = document.getElementById(`${containerId}_presetUrl_shopee`);
   if (!preview) return;
   const selectedSource = getSelectedAffiliateShopeeSource(containerId);
-  const url = String(selectedSource?.url || "").trim();
+  const url = getAffiliateShopeeSourceProductUrl(selectedSource);
   preview.textContent = url || "Chưa có URL";
   preview.title = url;
 }
@@ -5184,7 +5210,9 @@ function buildAffiliatePresetMarkup(containerId) {
       key: "shopee",
       label: "Shopee",
       url: String(
-        shopeeDefaultSource?.url || getUserAffiliatePresetUrl("shopee") || "",
+        getAffiliateShopeeSourceProductUrl(shopeeDefaultSource) ||
+          getUserAffiliatePresetUrl("shopee") ||
+          "",
       ).trim(),
     },
     {
@@ -5480,6 +5508,7 @@ function buildLabEmbedSrcdoc(frameId, forceRefresh = false) {
     id: String(item?.id || "").trim(),
     label: String(item?.label || "").trim(),
     url: String(item?.url || "").trim(),
+    product_url: String(item?.product_url || item?.productUrl || "").trim(),
     opaanlp_url: String(item?.opaanlp_url || "").trim(),
     is_default: !!item?.is_default,
   }));

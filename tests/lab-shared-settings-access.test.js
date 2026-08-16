@@ -30,6 +30,14 @@ test("app lab access logic allows explicitly granted users and stores popup 3s d
     appJs,
     /popup3sIosFbUrl:\s*String\(source\.popup3sIosFbUrl \|\| ""\)\.trim\(\)/,
   );
+  assert.match(
+    appJs,
+    /function getAffiliateShopeeSourceProductUrl\(source = null\) \{\s+return String\(source\?\.product_url \|\| source\?\.productUrl \|\| source\?\.url \|\| ""\)\.trim\(\);\s+\}/s,
+  );
+  assert.match(
+    appJs,
+    /data-affiliate-shopee-source-product-url/,
+  );
   assert.doesNotMatch(appJs, /labSharedShareImageInput/);
   assert.match(appJs, /async function adminSetLabAccess\(userId, checkboxEl\)/);
 });

@@ -4638,7 +4638,11 @@ function normalizeUserAffiliateShopeeSources(input = []) {
         String(source.url || "").trim(),
         "shopee",
       );
-      if (!normalizedUrl) return null;
+      const normalizedProductUrl = normalizeAffiliatePresetUrl(
+        String(source.product_url || source.productUrl || "").trim(),
+        "shopee",
+      );
+      if (!normalizedUrl && !normalizedProductUrl) return null;
       const label = String(
         source.label || source.name || `Acc ${index + 1}`,
       ).trim();
@@ -4653,7 +4657,8 @@ function normalizeUserAffiliateShopeeSources(input = []) {
           String(source.id || "").trim() ||
           `shopee-${Date.now()}-${index + 1}`,
         label: label || `Acc ${index + 1}`,
-        url: normalizedUrl,
+        url: normalizedUrl || normalizedProductUrl,
+        product_url: normalizedProductUrl || "",
         opaanlp_url: normalizedOpaanlpUrl || "",
         is_default: Boolean(source.is_default),
       };
@@ -4684,12 +4689,17 @@ async function normalizeUserAffiliateShopeeSourcesResolved(input = []) {
   for (const item of normalizedSources) {
     const resolvedUrl =
       (await normalizeSavedShopeeAffiliateUrl(item.url)) || item.url;
+    const resolvedProductUrl =
+      (await normalizeSavedShopeeAffiliateUrl(item.product_url || item.url)) ||
+      item.product_url ||
+      resolvedUrl;
     const resolvedOpaanlpUrl = item.opaanlp_url
       ? normalizeAffiliatePresetUrl(item.opaanlp_url, "shopee") || ""
-      : buildShopeeIosInAppWebUrl(resolvedUrl) || "";
+      : buildShopeeIosInAppWebUrl(resolvedProductUrl) || "";
     resolvedSources.push({
       ...item,
       url: resolvedUrl,
+      product_url: resolvedProductUrl,
       opaanlp_url: resolvedOpaanlpUrl,
     });
   }
@@ -8629,7 +8639,8 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
             nextSettings.affiliate_shopee_sources.find(
               (item) => item.is_default,
             ) || nextSettings.affiliate_shopee_sources[0];
-          updates.affiliate_shopee_url = defaultSource?.url || null;
+          updates.affiliate_shopee_url =
+            defaultSource?.product_url || defaultSource?.url || null;
         }
       }
       updates.lab_shared_settings_json = nextSettings;
