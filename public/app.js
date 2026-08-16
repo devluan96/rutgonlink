@@ -3281,7 +3281,7 @@ function renderAffiliateShopeeSourcesManager(sourceList = null) {
                 type="url"
                 class="fi"
                 data-affiliate-shopee-source-url
-                placeholder="https://shopee.vn/..."
+                placeholder="https://shopee.vn/product/... hoặc https://s.shopee.vn/..."
                 value="${esc(source.url || "")}"
                 oninput="syncAffiliateShopeeDefaultInputFromRows()"
               />

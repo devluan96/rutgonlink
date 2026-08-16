@@ -55,3 +55,25 @@ test("detectPlatformDeep keeps Shopee affiliate tracking params on canonical pro
   assert.equal(detected.deeplink_android, originalUrl);
   assert.equal(detected.fallback, originalUrl);
 });
+
+test("canonicalizeShopeeProductUrl rewrites opaanlp links into canonical product links", () => {
+  const normalized = __testUtils.canonicalizeShopeeProductUrl(
+    "https://shopee.vn/opaanlp/131477471/22466400575?__mobile__=1&mmp_pid=an_17358580605&utm_source=an_17358580605",
+  );
+
+  assert.equal(
+    normalized,
+    "https://shopee.vn/product/131477471/22466400575?mmp_pid=an_17358580605&utm_source=an_17358580605",
+  );
+});
+
+test("canonicalizeShopeeProductUrl rewrites universal-link product urls into canonical product links", () => {
+  const normalized = __testUtils.canonicalizeShopeeProductUrl(
+    "https://shopee.vn/universal-link/product/131477471/22466400575?utm_medium=affiliates",
+  );
+
+  assert.equal(
+    normalized,
+    "https://shopee.vn/product/131477471/22466400575?utm_medium=affiliates",
+  );
+});

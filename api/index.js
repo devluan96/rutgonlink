@@ -3111,7 +3111,7 @@ async function resolveShopeeShortUrl(input) {
   try {
     const url = new URL(String(input || "").trim());
     const hostname = url.hostname.toLowerCase();
-    if (hostname !== "s.shopee.vn") return input;
+    if (hostname !== "s.shopee.vn" && hostname !== "shp.ee") return input;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3500);
@@ -3132,6 +3132,56 @@ async function resolveShopeeShortUrl(input) {
   } catch {
     return input;
   }
+}
+
+function canonicalizeShopeeProductUrl(input) {
+  try {
+    const normalized = normalizeAffiliatePresetUrl(input, "shopee");
+    if (!normalized) return "";
+    const url = new URL(normalized);
+    const hostname = url.hostname.toLowerCase();
+    if (
+      hostname !== "shopee.vn" &&
+      !hostname.endsWith(".shopee.vn") &&
+      hostname !== "s.shopee.vn" &&
+      hostname !== "shp.ee"
+    ) {
+      return normalized;
+    }
+
+    const pathname = url.pathname || "";
+    const productPathMatch = pathname.match(
+      /^\/(?:universal-link\/)?product\/(\d+)\/(\d+)/i,
+    );
+    const legacyProductMatch = pathname.match(/-i\.(\d+)\.(\d+)/i);
+    const opaanlpMatch = pathname.match(/^\/opaanlp\/(\d+)\/(\d+)/i);
+    const shopId =
+      productPathMatch?.[1] || legacyProductMatch?.[1] || opaanlpMatch?.[1] || "";
+    const itemId =
+      productPathMatch?.[2] || legacyProductMatch?.[2] || opaanlpMatch?.[2] || "";
+
+    if (!shopId || !itemId) {
+      return normalized;
+    }
+
+    const query = new URLSearchParams(url.searchParams);
+    query.delete("__mobile__");
+    const queryString = query.toString();
+    return `https://shopee.vn/product/${shopId}/${itemId}${queryString ? `?${queryString}` : ""}`;
+  } catch {
+    return "";
+  }
+}
+
+async function normalizeSavedShopeeAffiliateUrl(input) {
+  const normalizedInput = normalizeAffiliatePresetUrl(input, "shopee");
+  if (!normalizedInput) return null;
+  const resolvedUrl = await resolveShopeeShortUrl(normalizedInput);
+  return (
+    canonicalizeShopeeProductUrl(resolvedUrl) ||
+    canonicalizeShopeeProductUrl(normalizedInput) ||
+    normalizedInput
+  );
 }
 
 function getLinkAnalyticsPlatform(link) {
@@ -4624,6 +4674,30 @@ function normalizeUserAffiliateShopeeSources(input = []) {
     normalized[0].is_default = true;
   }
   return normalized;
+}
+
+async function normalizeUserAffiliateShopeeSourcesResolved(input = []) {
+  const normalizedSources = normalizeUserAffiliateShopeeSources(input);
+  if (!normalizedSources.length) return [];
+
+  const resolvedSources = [];
+  for (const item of normalizedSources) {
+    const resolvedUrl =
+      (await normalizeSavedShopeeAffiliateUrl(item.url)) || item.url;
+    const resolvedOpaanlpUrl = item.opaanlp_url
+      ? normalizeAffiliatePresetUrl(item.opaanlp_url, "shopee") || ""
+      : buildShopeeIosInAppWebUrl(resolvedUrl) || "";
+    resolvedSources.push({
+      ...item,
+      url: resolvedUrl,
+      opaanlp_url: resolvedOpaanlpUrl,
+    });
+  }
+
+  if (!resolvedSources.some((item) => item.is_default) && resolvedSources.length) {
+    resolvedSources[0].is_default = true;
+  }
+  return resolvedSources;
 }
 
 function normalizeUserSettingsBundle(input = {}) {
@@ -8497,7 +8571,7 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
         body.affiliate_shopee_url || "",
       ).trim();
       const shopeeAffiliateUrl = shopeeAffiliateInput
-        ? normalizeAffiliatePresetUrl(shopeeAffiliateInput, "shopee")
+        ? await normalizeSavedShopeeAffiliateUrl(shopeeAffiliateInput)
         : null;
       if (shopeeAffiliateInput && !shopeeAffiliateUrl) {
         return res
@@ -8543,9 +8617,10 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
         );
       }
       if (Object.prototype.hasOwnProperty.call(body, "affiliate_shopee_sources")) {
-        nextSettings.affiliate_shopee_sources = normalizeUserAffiliateShopeeSources(
-          body.affiliate_shopee_sources || [],
-        );
+        nextSettings.affiliate_shopee_sources =
+          await normalizeUserAffiliateShopeeSourcesResolved(
+            body.affiliate_shopee_sources || [],
+          );
         if (
           !Object.prototype.hasOwnProperty.call(body, "affiliate_shopee_url") &&
           nextSettings.affiliate_shopee_sources.length
@@ -13425,6 +13500,7 @@ module.exports = app;
 module.exports.__testUtils = {
   buildTikTokAppScheme,
   detectPlatformDeep,
+  canonicalizeShopeeProductUrl,
   buildDirectLaunchConfig,
   buildDirectBridgePage,
   buildOverlayLaunchConfig,
