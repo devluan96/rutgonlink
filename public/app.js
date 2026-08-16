@@ -3684,7 +3684,7 @@ async function saveAccountAffiliateSettings() {
     accountAffiliateHealth.tiktok = null;
     updateTopbar();
     renderForms();
-    renderAccountAffiliateSettings({ preserveInputValues: true });
+    renderAccountAffiliateSettings();
     toast("✅ Đã lưu preset affiliate", "ok");
     if (hint) {
       hint.className = "account-note ok";
