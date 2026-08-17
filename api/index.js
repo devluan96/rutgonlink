@@ -142,8 +142,18 @@ const R2_VIDEO_PUBLIC_BASE_URL = (
 )
   .trim()
   .replace(/\/+$/, "");
+const R2_IMAGE_PUBLIC_BASE_URL = (
+  process.env.R2_IMAGE_PUBLIC_BASE_URL || R2_VIDEO_PUBLIC_BASE_URL
+)
+  .trim()
+  .replace(/\/+$/, "");
 const R2_VIDEO_PREFIX = String(
   process.env.R2_VIDEO_PREFIX || "rutgonlink/videos",
+)
+  .trim()
+  .replace(/^\/+|\/+$/g, "");
+const R2_IMAGE_PREFIX = String(
+  process.env.R2_IMAGE_PREFIX || "rutgonlink/images",
 )
   .trim()
   .replace(/^\/+|\/+$/g, "");
@@ -153,6 +163,13 @@ const R2_VIDEO_OK = !!(
   R2_VIDEO_SECRET_ACCESS_KEY &&
   R2_VIDEO_BUCKET &&
   R2_VIDEO_PUBLIC_BASE_URL
+);
+const R2_IMAGE_OK = !!(
+  R2_VIDEO_ACCOUNT_ID &&
+  R2_VIDEO_ACCESS_KEY_ID &&
+  R2_VIDEO_SECRET_ACCESS_KEY &&
+  R2_VIDEO_BUCKET &&
+  R2_IMAGE_PUBLIC_BASE_URL
 );
 let r2VideoClient = null;
 if (R2_VIDEO_OK) {
@@ -1725,9 +1742,10 @@ const memStorage = multer.memoryStorage();
 const CLOUDINARY_VIDEO_MAX_BYTES = 200 * 1024 * 1024;
 const CLOUDINARY_VIDEO_FOLDER = "rutgonlink/videos";
 const VIDEO_REMOTE_UPLOAD_OK = R2_VIDEO_OK || CLOUDINARY_OK;
+const IMAGE_REMOTE_UPLOAD_OK = R2_IMAGE_OK || CLOUDINARY_OK;
 
 const upload = multer({
-  storage: CLOUDINARY_OK
+  storage: IMAGE_REMOTE_UPLOAD_OK
     ? memStorage
     : multer.diskStorage({
         destination: (_, __, cb) => cb(null, uploadsDir),
@@ -1833,6 +1851,80 @@ function buildR2VideoObjectKey(originalName = "", contentType = "") {
 
 function buildR2VideoPublicUrl(key = "") {
   return `${R2_VIDEO_PUBLIC_BASE_URL}/${String(key || "").replace(/^\/+/, "")}`;
+}
+
+const IMAGE_EXT_TO_CONTENT_TYPE = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+};
+
+const IMAGE_CONTENT_TYPE_TO_EXT = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+};
+
+function normalizeImageUploadExt(originalName = "", contentType = "") {
+  const inputExt = path.extname(String(originalName || "")).toLowerCase();
+  if (IMAGE_EXT_TO_CONTENT_TYPE[inputExt]) return inputExt;
+  const normalizedType = String(contentType || "")
+    .trim()
+    .toLowerCase()
+    .split(";")[0];
+  return IMAGE_CONTENT_TYPE_TO_EXT[normalizedType] || null;
+}
+
+function normalizeImageUploadContentType(originalName = "", contentType = "") {
+  const normalizedType = String(contentType || "")
+    .trim()
+    .toLowerCase()
+    .split(";")[0];
+  if (IMAGE_CONTENT_TYPE_TO_EXT[normalizedType]) return normalizedType;
+  const ext = normalizeImageUploadExt(originalName, contentType);
+  return IMAGE_EXT_TO_CONTENT_TYPE[ext] || "application/octet-stream";
+}
+
+function buildR2ImageObjectKey(originalName = "", contentType = "") {
+  const ext = normalizeImageUploadExt(originalName, contentType);
+  if (!ext) {
+    throw new Error("IMAGE_TYPE_NOT_SUPPORTED");
+  }
+  return `${R2_IMAGE_PREFIX}/${nanoid(16)}${ext}`;
+}
+
+function buildR2ImagePublicUrl(key = "") {
+  return `${R2_IMAGE_PUBLIC_BASE_URL}/${String(key || "").replace(/^\/+/, "")}`;
+}
+
+async function uploadImageBufferToR2(
+  fileBuffer,
+  { originalName = "", contentType = "" } = {},
+) {
+  if (!R2_IMAGE_OK || !r2VideoClient) {
+    throw new Error("R2_IMAGE_NOT_CONFIGURED");
+  }
+  const key = buildR2ImageObjectKey(originalName, contentType);
+  const normalizedContentType = normalizeImageUploadContentType(
+    originalName,
+    contentType,
+  );
+  await r2VideoClient.send(
+    new PutObjectCommand({
+      Bucket: R2_VIDEO_BUCKET,
+      Key: key,
+      Body: fileBuffer,
+      ContentType: normalizedContentType,
+    }),
+  );
+  return {
+    key,
+    url: buildR2ImagePublicUrl(key),
+    source: "r2",
+  };
 }
 
 async function createR2VideoUploadSignature({
@@ -9589,6 +9681,13 @@ app.post(
         .status(400)
         .json({ error: "Không có file hoặc định dạng không hợp lệ" });
     try {
+      if (R2_IMAGE_OK && req.file.buffer) {
+        const result = await uploadImageBufferToR2(req.file.buffer, {
+          originalName: req.file.originalname,
+          contentType: req.file.mimetype,
+        });
+        return res.json(result);
+      }
       if (CLOUDINARY_OK && req.file.buffer) {
         const result = await uploadToCloudinary(
           req.file.buffer,
