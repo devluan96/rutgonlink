@@ -771,31 +771,6 @@
           <span class="kbd2">Ctrl K</span>
         </div>
         <div class="tb-right">
-          <button
-            class="tb-bell"
-            type="button"
-            id="notificationBellBtn"
-            onclick="toggleNotificationDropdown()"
-            aria-label="Mở thông báo"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.9"
-            >
-              <path
-                d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7 2.5 7h-17S6 15 6 9Z"
-                stroke-linejoin="round"
-              />
-              <path
-                d="M10 19a2 2 0 0 0 4 0"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            <span id="notificationBadge" hidden>0</span>
-          </button>
           <div class="tb-user" id="tbUser" onclick="toggleDropdown()">
             <div class="tb-avatar" id="tbAvatar">?</div>
             <span class="tb-uname" id="tbUname">Khách</span>
@@ -803,32 +778,6 @@
           </div>
         </div>
       </header>
-      <div
-        class="notification-popup"
-        id="notificationDropdown"
-        aria-hidden="true"
-      >
-        <div class="notification-head">
-          <div>
-            <div class="notification-title">Thông báo realtime</div>
-            <div class="notification-sub" id="notificationStatus">
-              Chưa có thông báo mới
-            </div>
-          </div>
-          <button
-            class="notification-clear"
-            type="button"
-            onclick="markAllNotificationsRead()"
-          >
-            Đã xem hết
-          </button>
-        </div>
-        <div class="notification-list" id="notificationList">
-          <div class="notification-empty">
-            Chuông sẽ hiện các thay đổi mới về click, link, domain và quản trị.
-          </div>
-        </div>
-      </div>
       <div class="user-popup" id="userDropdown" aria-hidden="true">
         <div class="user-menu-head">
           <div class="tb-avatar" id="popupAvatar">?</div>
@@ -3679,7 +3628,7 @@
     <div class="toast" id="toast"></div>
 
     <script src="/shared-client.js"></script>
-    <script src="/app.js?v=20260820a"></script>
+    <script src="/app.js?v=20260820c"></script>
   </body>
 </html>
 

@@ -35,19 +35,11 @@ test("article funnel click row query no longer duplicates config_json on every r
   );
 });
 
-test("admin notification summary route exists for lightweight polling", () => {
-  assert.match(
-    apiSource,
-    /app\.get\("\/api\/admin\/notification-summary", requireAdmin, async \(req, res\) => \{/,
-  );
-  assert.match(
-    apiSource,
-    /readRecentRedirectLogEntries\(1\)/,
-  );
-  assert.match(
-    apiSource,
-    /database\.countUsers\(\)/,
-  );
+test("notification bell UI and active polling are removed", () => {
+  assert.doesNotMatch(indexSource, /id="notificationBellBtn"/);
+  assert.doesNotMatch(indexSource, /id="notificationDropdown"/);
+  assert.doesNotMatch(appSource, /startRealtimeNotificationLoop\(/);
+  assert.doesNotMatch(appSource, /stopRealtimeNotificationLoop\(/);
 });
 
 test("admin overview avoids unbounded click and link reads", () => {
@@ -102,21 +94,6 @@ test("user stats summary route exists for lightweight notification polling", () 
   assert.doesNotMatch(
     apiSource,
     /app\.get\("\/api\/stats\/summary"[\s\S]{0,2200}?database\.getTotals\(userId, guestSessionId\)/s,
-  );
-});
-
-test("frontend notification polling uses lightweight admin summary endpoint", () => {
-  assert.match(
-    appSource,
-    /fetch\(\s*"\/api\/admin\/notification-summary"/,
-  );
-  assert.doesNotMatch(
-    appSource,
-    /const \[adminStatsResponse, redirectResponse\] = await Promise\.all\(\[\s*fetch\("\/api\/admin\/stats"\),\s*fetch\("\/api\/admin\/redirects\?limit=3"\),/s,
-  );
-  assert.match(
-    appSource,
-    /const SUPPORT_POLL_INTERVAL_MS = 20000;/,
   );
 });
 
@@ -282,6 +259,10 @@ test("dashboard, stats, and links pages reuse browser cache until a manual reloa
   assert.match(
     appSource,
     /function reloadLinksPageData\(\) \{/,
+  );
+  assert.match(
+    appSource,
+    /const d =\s+prefetched\s+\|\|\s+\(await getStatsPayload\(\{\s*preferCache: options\.preferCache !== false,\s*forceNetwork: !!options\.forceNetwork,/s,
   );
 });
 

@@ -114,8 +114,6 @@ const ADMIN_STATS_RESPONSE_CACHE_TTL_MS = Math.max(
 );
 const adminStatsResponseCache = new Map();
 const adminStatsResponseInFlight = new Map();
-const adminNotificationResponseCache = new Map();
-const adminNotificationResponseInFlight = new Map();
 const USER_STATS_RECENT_DAYS = 7;
 const DEFAULT_STATS_RANGE_DAYS = 1;
 const ALLOWED_STATS_RANGE_DAYS = new Set([1, 7, 14]);
@@ -9829,58 +9827,6 @@ app.get("/api/admin/users/location-analytics", requireAdmin, async (req, res) =>
         top_countries: countries.slice(0, 8),
       },
     });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get("/api/admin/notification-summary", requireAdmin, async (req, res) => {
-  if (!(await checkAdmin(req, res))) return;
-  try {
-    const includeRedirects = req.query.include_redirects === "1";
-    const cacheKey = includeRedirects
-      ? "admin-notifications:redirects"
-      : "admin-notifications:base";
-    const cachedEntry = adminNotificationResponseCache.get(cacheKey);
-    if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
-      return res.json(cachedEntry.payload);
-    }
-    if (adminNotificationResponseInFlight.has(cacheKey)) {
-      const payload = await adminNotificationResponseInFlight.get(cacheKey);
-      return res.json(payload);
-    }
-
-    const requestPromise = (async () => {
-      const database = await getDb();
-      const [totalUsers, domains, redirectEvents] = await Promise.all([
-        database.countUsers(),
-        database.getDomains(),
-        includeRedirects
-          ? readRecentRedirectLogEntries(1)
-          : Promise.resolve([]),
-      ]);
-      return {
-        totalUsers: Number(totalUsers || 0),
-        alerts: buildAdminAlertPayload(domains),
-        redirects: {
-          events: redirectEvents,
-        },
-      };
-    })();
-
-    adminNotificationResponseInFlight.set(cacheKey, requestPromise);
-    try {
-      const payload = await requestPromise;
-      if (ADMIN_STATS_RESPONSE_CACHE_TTL_MS > 0) {
-        adminNotificationResponseCache.set(cacheKey, {
-          payload,
-          expiresAt: Date.now() + ADMIN_STATS_RESPONSE_CACHE_TTL_MS,
-        });
-      }
-      return res.json(payload);
-    } finally {
-      adminNotificationResponseInFlight.delete(cacheKey);
-    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

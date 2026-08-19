@@ -241,7 +241,6 @@ let notificationItems = [];
 let unreadNotificationCount = 0;
 let notificationStatsSnapshot = null;
 let adminNotificationSnapshot = null;
-let notificationPollTimer = null;
 const STATS_PAYLOAD_CACHE_TTL_MS = 15000;
 let statsPayloadPromise = null;
 let statsPayloadPromiseDays = DEFAULT_STATS_RANGE_DAYS;
@@ -2235,8 +2234,6 @@ function showAuthScreen(mode = "landing") {
   setAuthRouteMode(mode);
   document.getElementById("authScreen").style.display = "flex";
   document.getElementById("appScreen").classList.remove("show");
-  stopRealtimeNotificationLoop();
-  closeNotificationDropdown();
   finishShellBoot();
   applyAppLanguage(appLanguage);
   if (mode === "landing") {
@@ -2265,7 +2262,6 @@ function showApp() {
   syncLabTabAvailability();
   updateIntegrationUI();
   syncRouteFromLocation();
-  startRealtimeNotificationLoop({ immediate: false });
 }
 function showAuth(mode = "landing") {
   if (mode === "landing") {
@@ -2277,8 +2273,6 @@ function showAuth(mode = "landing") {
   setAuthRouteMode(mode);
   document.getElementById("appScreen").classList.remove("show");
   document.getElementById("authScreen").style.display = "flex";
-  stopRealtimeNotificationLoop();
-  closeNotificationDropdown();
   finishShellBoot();
   applyAppLanguage(appLanguage);
   if (mode === "landing") {
@@ -2314,7 +2308,6 @@ function continueAsGuest() {
   syncLabTabAvailability();
   updateIntegrationUI();
   syncRouteFromLocation();
-  startRealtimeNotificationLoop({ immediate: false });
   if (landingQuickUrl) {
     prefillCreateUrl(landingQuickUrl);
     landingQuickUrl = "";
@@ -2420,7 +2413,6 @@ async function doLogout() {
   accountTwoFactorMode = "";
   document.getElementById("userDropdown").classList.remove("show");
   document.getElementById("userDropdown").setAttribute("aria-hidden", "true");
-  stopRealtimeNotificationLoop();
   stopSupportSyncLoops();
   window.location.replace("/");
 }
@@ -2495,7 +2487,9 @@ function renderNotificationCenter() {
     .join("");
 }
 
-function addNotification(entry = {}) {
+function addNotification() {}
+
+function legacyAddNotification(entry = {}) {
   const key = String(entry.key || `${Date.now()}-${Math.random()}`);
   if (notificationItems.some((item) => item.key === key)) return;
   const item = {
@@ -2514,7 +2508,6 @@ function addNotification(entry = {}) {
   ) {
     unreadNotificationCount += 1;
   }
-  renderNotificationCenter();
 }
 
 function closeNotificationDropdown() {
@@ -2768,7 +2761,7 @@ function rememberAdminNotificationSnapshot(
   );
 }
 
-async function pollRealtimeNotifications() {
+async function legacyPollRealtimeNotifications() {
   if (!shouldPollRealtimeNotifications()) return;
   try {
     const activePage = getActiveAppPage();
@@ -2891,23 +2884,6 @@ function shouldPollRealtimeNotifications() {
     dropdownOpen ||
     ["dashboard", "stats", "links", "account", "admin"].includes(activePage)
   );
-}
-
-function stopRealtimeNotificationLoop() {
-  if (notificationPollTimer) {
-    clearInterval(notificationPollTimer);
-    notificationPollTimer = null;
-  }
-}
-
-function startRealtimeNotificationLoop({ immediate = true } = {}) {
-  stopRealtimeNotificationLoop();
-  unreadNotificationCount = 0;
-  renderNotificationCenter();
-  const bell = document.getElementById("notificationBellBtn");
-  const dropdown = document.getElementById("notificationDropdown");
-  if (bell) bell.hidden = true;
-  if (dropdown) dropdown.classList.remove("show");
 }
 
 function setAvatarNode(target, currentUser, fallbackText) {
@@ -5083,7 +5059,6 @@ async function showApp() {
   syncLabTabAvailability();
   updateIntegrationUI();
   syncRouteFromLocation();
-  startRealtimeNotificationLoop({ immediate: false });
   startSupportSyncLoops();
 }
 
@@ -5187,7 +5162,6 @@ function updateTopbar() {
       plan === "pro" || plan === "business" || isAdmin ? "none" : "";
   }
   renderSupportConversation();
-  renderNotificationCenter();
   updatePricingUI();
   if (document.getElementById("page-account")?.classList.contains("active")) {
     renderAccountPage();
@@ -5197,8 +5171,6 @@ function updateTopbar() {
 document.addEventListener("click", (e) => {
   const userToggle = document.getElementById("tbUser");
   const userDropdown = document.getElementById("userDropdown");
-  const notificationToggle = document.getElementById("notificationBellBtn");
-  const notificationDropdown = document.getElementById("notificationDropdown");
   if (
     userToggle &&
     userDropdown &&
@@ -5206,14 +5178,6 @@ document.addEventListener("click", (e) => {
     !userDropdown.contains(e.target)
   ) {
     closeUserPopup();
-  }
-  if (
-    notificationToggle &&
-    notificationDropdown &&
-    !notificationToggle.contains(e.target) &&
-    !notificationDropdown.contains(e.target)
-  ) {
-    closeNotificationDropdown();
   }
 });
 
@@ -5325,7 +5289,6 @@ function navigate(page, el) {
     el = getSidebarNavItem(page);
   }
   closeUserPopup();
-  closeNotificationDropdown();
   document
     .querySelectorAll(".page")
     .forEach((p) => p.classList.remove("active"));
@@ -10041,7 +10004,13 @@ loadData = async function loadDataWithRange(prefetched = null, options = {}) {
     const requestedDays = normalizeStatsRangeDays(
       options.days ?? prefetched?.selectedRangeDays ?? statsRangeDays,
     );
-    const d = prefetched || (await getStatsPayload({ days: requestedDays }));
+    const d =
+      prefetched ||
+      (await getStatsPayload({
+        preferCache: options.preferCache !== false,
+        forceNetwork: !!options.forceNetwork,
+        days: requestedDays,
+      }));
     if (loadSequence !== statsLoadSequence) {
       logStatsRender("ignored-stale-response", d, {
         sequence: loadSequence,
