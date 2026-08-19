@@ -1944,6 +1944,18 @@ async function init() {
       }));
     },
 
+    async getAdminTopLinks(limit = 5) {
+      const safeLimit = Math.min(Math.max(Number(limit) || 5, 1), 20);
+      const { data, error } = await sb
+        .from('links')
+        .select('short_code,alias,original_url,clicks,link_type')
+        .order('clicks', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(safeLimit);
+      check(error, 'admin_top_links');
+      return data || [];
+    },
+
     async deleteLink(linkId) {
       const { error } = await sb.from('links').delete().eq('id', linkId);
       check(error);
@@ -1994,20 +2006,25 @@ async function init() {
       return { totalLinks: count || 0, totalClicks };
     },
 
-    async getAdminTotals() {
+    async getAdminTotals(options = {}) {
+      const includeClickTotal = options?.includeClickTotal !== false;
       const [
         { count: totalLinks },
-        { data: clickData },
+        clickResult,
         { count: totalUsers },
         articleFunnelClicks,
       ] = await Promise.all([
         sb.from('links').select('*', { count: 'exact', head: true }),
-        sb.from('links').select('clicks'),
+        includeClickTotal
+          ? sb.from('links').select('clicks')
+          : Promise.resolve({ data: [] }),
         sb.from('users').select('*', { count: 'exact', head: true }),
-        countArticleFunnelClicks({ includeAll: true }),
+        includeClickTotal
+          ? countArticleFunnelClicks({ includeAll: true })
+          : Promise.resolve(0),
       ]);
       const totalClicks =
-        (clickData || []).reduce((s, l) => s + (l.clicks || 0), 0) +
+        (clickResult.data || []).reduce((s, l) => s + (l.clicks || 0), 0) +
         articleFunnelClicks;
       return { totalLinks: totalLinks || 0, totalClicks, totalUsers: totalUsers || 0 };
     },

@@ -15,6 +15,10 @@ const appSource = fs.readFileSync(
   path.join(__dirname, "..", "public", "app.js"),
   "utf8",
 );
+const indexSource = fs.readFileSync(
+  path.join(__dirname, "..", "public", "index.html"),
+  "utf8",
+);
 
 test("article funnel click row query no longer duplicates config_json on every row", () => {
   assert.match(
@@ -38,11 +42,35 @@ test("admin notification summary route exists for lightweight polling", () => {
   );
   assert.match(
     apiSource,
-    /readRecentRedirectLogEntries\(3\)/,
+    /readRecentRedirectLogEntries\(1\)/,
   );
   assert.match(
     apiSource,
     /database\.countUsers\(\)/,
+  );
+});
+
+test("admin overview avoids unbounded click and link reads", () => {
+  assert.match(
+    apiSource,
+    /ADMIN_STATS_RESPONSE_CACHE_TTL_MS = Math\.max\([\s\S]{0,120}?\|\| 120000,/s,
+  );
+  assert.match(
+    dbSource,
+    /async getAdminTotals\(options = \{\}[\s\S]{0,900}?includeClickTotal = options\?\.includeClickTotal !== false/s,
+  );
+  assert.match(
+    dbSource,
+    /async getAdminTopLinks\(limit = 5\)[\s\S]{0,500}?\.limit\(safeLimit\)/s,
+  );
+  assert.match(
+    apiSource,
+    /database\.getAdminTotals\(\{ includeClickTotal: false \}\)/,
+  );
+  assert.match(apiSource, /database\.getAdminTopLinks\(5\)/);
+  assert.match(
+    apiSource,
+    /getAdminArticleFunnelClickAnalyticsRows\(\{[\s\S]{0,120}?limit: 1000,[\s\S]{0,80}?days: 30,/s,
   );
 });
 
@@ -108,6 +136,14 @@ test("frontend notification polling uses lightweight user stats summary endpoint
   assert.doesNotMatch(
     appSource,
     /async function pollRealtimeNotifications\(\) \{[\s\S]{0,1200}?getStatsPayload\(\{ preferCache: true \}\)/s,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /async function pollRealtimeNotifications\(\) \{[\s\S]{0,2200}?await loadDashboardData\(/s,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /async function pollRealtimeNotifications\(\) \{[\s\S]{0,2200}?await loadData\(/s,
   );
 });
 
@@ -187,11 +223,11 @@ test("bio profile sync is lazy-loaded instead of preloading on app boot", () => 
 test("billing config is lazy-loaded instead of preloading on app boot", () => {
   assert.match(
     appSource,
-    /async function loadBillingData\(\) \{/,
+    /async function loadBillingData\(force = false\) \{/,
   );
   assert.match(
     appSource,
-    /if \(billingDataLoadedUserId === activeUserId && !billingDataPromise\) \{/,
+    /!force &&[\s\S]{0,240}?BILLING_DATA_CACHE_TTL_MS/s,
   );
   assert.match(
     appSource,
@@ -218,6 +254,86 @@ test("full stats payload is no longer preloaded for every app page on boot", () 
   );
   assert.match(
     appSource,
-    /if \(pageNeedsFullStatsPayload\(page\)\) \{\s*void loadData\(\);\s*\}/,
+    /if \(pageNeedsFullStatsPayload\(page\)\) \{\s*void loadData\(null,\s*\{\s*preferCache:\s*true\s*\}\);\s*\}/,
+  );
+});
+
+test("dashboard, stats, and links pages reuse browser cache until a manual reload", () => {
+  assert.match(
+    appSource,
+    /void loadDashboardData\(\{\s*preferCache:\s*true\s*\}\);/,
+  );
+  assert.match(
+    appSource,
+    /void loadLinksData\(\{\s*preferCache:\s*true\s*\}\);/,
+  );
+  assert.match(
+    appSource,
+    /void loadData\(null,\s*\{\s*preferCache:\s*true\s*\}\);/,
+  );
+  assert.match(
+    appSource,
+    /function reloadDashboardPageData\(\) \{/,
+  );
+  assert.match(
+    appSource,
+    /function reloadStatsPageData\(\) \{/,
+  );
+  assert.match(
+    appSource,
+    /function reloadLinksPageData\(\) \{/,
+  );
+});
+
+test("manual reload bypasses both memory and persistent browser caches", () => {
+  assert.match(
+    appSource,
+    /if \(\s*preferCache &&\s*!forceNetwork &&\s*statsPayloadCache &&/s,
+  );
+  assert.match(
+    appSource,
+    /if \(options\.preferCache !== false && !options\.forceNetwork\) \{/,
+  );
+  assert.match(
+    appSource,
+    /function loadAvailableDomains\(\{ force = false \} = \{\}\)/,
+  );
+  assert.match(appSource, /DOMAINS_CACHE_TTL_MS = 5 \* 60 \* 1000/);
+});
+
+test("remaining data tabs use bounded session caches and real force reloads", () => {
+  assert.match(appSource, /PERSISTED_STATS_CACHE_TTL_MS = 5 \* 60 \* 1000/);
+  assert.match(
+    appSource,
+    /Date\.now\(\) - Number\(parsed\.cachedAt\) > maxAgeMs/,
+  );
+  assert.match(
+    appSource,
+    /async function loadTeamWorkspace\(\{ silent = false, force = false \}/,
+  );
+  assert.match(
+    appSource,
+    /async function loadBillingData\(force = false\)/,
+  );
+  assert.match(indexSource, /onclick="loadAdminData\(true\)"/);
+  assert.match(
+    appSource,
+    /readPersistentStatsCache\("team-workspace"\)/,
+  );
+  assert.match(
+    appSource,
+    /writePersistentStatsCache\("team-workspace", teamWorkspaceData\)/,
+  );
+  assert.match(
+    appSource,
+    /function hydrateAdminSectionFromPersistentCache\(section\)/,
+  );
+  assert.match(
+    appSource,
+    /readPersistentStatsCache\(`admin-\$\{section\}`,\s*\{\s*ttlMs: ADMIN_SECTION_CACHE_TTL_MS,?\s*\}\)/,
+  );
+  assert.match(
+    appSource,
+    /writePersistentStatsCache\(`admin-(overview|system|users|logs|payments)`/,
   );
 });

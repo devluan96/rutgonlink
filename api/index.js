@@ -109,8 +109,7 @@ const statsResponseInFlight = new Map();
 const statsSummaryResponseCache = new Map();
 const statsSummaryResponseInFlight = new Map();
 const ADMIN_STATS_RESPONSE_CACHE_TTL_MS = Math.max(
-  Number(process.env.ADMIN_STATS_RESPONSE_CACHE_TTL_MS) ||
-    STATS_RESPONSE_CACHE_TTL_MS,
+  Number(process.env.ADMIN_STATS_RESPONSE_CACHE_TTL_MS) || 120000,
   0,
 );
 const adminStatsResponseCache = new Map();
@@ -10112,7 +10111,7 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
       ] = await Promise.all([
         measureAsyncTiming(
           "adminTotals",
-          () => database.getAdminTotals(),
+          () => database.getAdminTotals({ includeClickTotal: false }),
           timings,
         ),
         measureAsyncTiming(
@@ -10122,7 +10121,11 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
         ),
         measureAsyncTiming("domains", () => database.getDomains(), timings),
         measureAsyncTiming("users", () => database.getAllUsers(), timings),
-        measureAsyncTiming("links", () => database.getAllLinks(), timings),
+        measureAsyncTiming(
+          "topLinks",
+          () => database.getAdminTopLinks(5),
+          timings,
+        ),
         measureAsyncTiming(
           "payments",
           () => database.listPaymentRequests(300),
@@ -10135,7 +10138,11 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
         ),
         measureAsyncTiming(
           "adminLabAnalyticsRows",
-          () => database.getAdminArticleFunnelClickAnalyticsRows(5000),
+          () =>
+            database.getAdminArticleFunnelClickAnalyticsRows({
+              limit: 1000,
+              days: 30,
+            }),
           timings,
         ),
       ]);
@@ -10168,6 +10175,10 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
           buildStatsAnalyticsWithRecentBuckets(mappedLabAnalyticsRows),
         );
       }
+      const totalsForPayload = {
+        ...totals,
+        totalClicks: Number(analytics?.total_clicks ?? totals.totalClicks ?? 0),
+      };
       const combinedToday = {
         ...today,
         uniqueClicksToday: Number(
@@ -10177,11 +10188,11 @@ app.get("/api/admin/stats", requireAdmin, async (req, res) => {
         ),
       };
       const payload = {
-        ...totals,
+        ...totalsForPayload,
         ...combinedToday,
         analytics,
         overview: buildAdminOverviewPayload({
-          totals,
+          totals: totalsForPayload,
           today: combinedToday,
           analytics,
           users,

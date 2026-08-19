@@ -27,6 +27,14 @@ const ALLOWED_STATS_RANGE_DAYS = new Set([1, 7, 14]);
 const LINKS_PAGE_FETCH_LIMIT = 10;
 const BILLING_DATA_CACHE_TTL_MS = 60000;
 const ACCOUNT_LOGIN_EVENTS_CACHE_TTL_MS = 60000;
+const PERSISTED_STATS_CACHE_VERSION = "v1";
+const PERSISTED_STATS_CACHE_PREFIX = `rutgonlink-page-cache-${PERSISTED_STATS_CACHE_VERSION}`;
+const PERSISTED_STATS_CACHE_TTL_MS = 5 * 60 * 1000;
+const DOMAINS_CACHE_STORAGE_KEY = "rutgonlink-domains-cache-v1";
+const DOMAINS_CACHE_TTL_MS = 5 * 60 * 1000;
+const CHART_JS_ASSET_URL =
+  "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js";
+const PLOTLY_ASSET_URL = "https://cdn.plot.ly/plotly-2.35.2.min.js";
 
 function stripVietnameseMarks(value) {
   return String(value || "")
@@ -65,7 +73,9 @@ function appendAliasSuffixPreview(alias, suffix, maxLength = 40) {
   const trimmedBase = baseAlias
     .slice(0, Math.max(1, maxLength - suffixAlias.length - 1))
     .replace(/-+$/g, "");
-  return `${trimmedBase}-${suffixAlias}`.slice(0, maxLength).replace(/-+$/g, "");
+  return `${trimmedBase}-${suffixAlias}`
+    .slice(0, maxLength)
+    .replace(/-+$/g, "");
 }
 
 function buildTeamTemplateAlias(template, sourceLink) {
@@ -91,6 +101,75 @@ function humanizeSlugTitle(value) {
     .replace(/\s+/g, " ");
   if (!normalized) return "";
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+let chartJsAssetPromise = null;
+let plotlyAssetPromise = null;
+
+function loadExternalScriptOnce(url, marker) {
+  const existingTag = document.querySelector(
+    `script[data-rgl-external-script="${marker}"]`,
+  );
+  if (existingTag) {
+    return new Promise((resolve, reject) => {
+      if (existingTag.dataset.loaded === "true") {
+        resolve();
+        return;
+      }
+      existingTag.addEventListener("load", () => resolve(), { once: true });
+      existingTag.addEventListener(
+        "error",
+        () => reject(new Error(`Khong the tai ${marker}`)),
+        { once: true },
+      );
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = url;
+    script.async = true;
+    script.dataset.rglExternalScript = marker;
+    script.addEventListener(
+      "load",
+      () => {
+        script.dataset.loaded = "true";
+        resolve();
+      },
+      { once: true },
+    );
+    script.addEventListener(
+      "error",
+      () => reject(new Error(`Khong the tai ${marker}`)),
+      { once: true },
+    );
+    document.head.appendChild(script);
+  });
+}
+
+function ensureChartJs() {
+  if (window.Chart) return Promise.resolve(window.Chart);
+  if (!chartJsAssetPromise) {
+    chartJsAssetPromise = loadExternalScriptOnce(CHART_JS_ASSET_URL, "chartjs")
+      .then(() => window.Chart)
+      .catch((error) => {
+        chartJsAssetPromise = null;
+        throw error;
+      });
+  }
+  return chartJsAssetPromise;
+}
+
+function ensurePlotly() {
+  if (window.Plotly) return Promise.resolve(window.Plotly);
+  if (!plotlyAssetPromise) {
+    plotlyAssetPromise = loadExternalScriptOnce(PLOTLY_ASSET_URL, "plotly")
+      .then(() => window.Plotly)
+      .catch((error) => {
+        plotlyAssetPromise = null;
+        throw error;
+      });
+  }
+  return plotlyAssetPromise;
 }
 
 function looksLikeSlugTitle(value) {
@@ -144,6 +223,8 @@ const integrationStorageKey = "rutgonlink-integrations";
 const teamStorageKey = "rutgonlink-teamspace";
 let teamState = null;
 let teamWorkspaceData = null;
+let teamWorkspaceLoadedUserId = 0;
+let teamWorkspaceLoadedAt = 0;
 let pendingTeamTemplateDraft = null;
 let editingTeamTemplateId = null;
 let teamTemplateModalState = null;
@@ -204,62 +285,181 @@ const themeColor = (name, fallback) =>
   rootStyles().getPropertyValue(name).trim() || fallback;
 const landingIntroCopy = {
   vi: {
-    "brandSubline": "Rút gọn link, QR, bio public và analytics",
-    "heroKicker": "Bước tiếp theo",
-    "heroTitle": "Tạo link ở một chỗ, xem dữ liệu ở một chỗ",
+    brandSubline: "Rút gọn link, QR, bio public và analytics",
+    heroKicker: "Bước tiếp theo",
+    heroTitle: "Tạo link ở một chỗ, xem dữ liệu ở một chỗ",
     heroDesc:
       "Dùng cùng một luồng như trong app: tạo link, tinh chỉnh preview và theo dõi hiệu quả mà không phải đổi giữa quá nhiều màn hình khác nhau.",
-    "heroPrimary": "Bắt đầu miễn phí",
-    "heroSecondary": "Đăng nhập",
-    "heroQuick": "Thử rút gọn nhanh",
-    "stepsTitle": "Lộ trình ngắn",
-    "stepsBadge": "3 bước",
-    "step1Title": "Tạo link",
-    "step1Desc": "Dán URL và chọn kiểu link phù hợp.",
-    "step2Title": "Tối ưu preview",
-    "step2Desc": "Chỉnh OG, alias hoặc video overlay nếu cần.",
-    "step3Title": "Theo dõi hiệu quả",
-    "step3Desc": "Kiểm tra click và hiệu suất ngay trong dashboard.",
-    "quickPlaceholder": "Dán URL dài",
-    "quickSubmit": "Rút gọn",
+    heroPrimary: "Bắt đầu miễn phí",
+    heroSecondary: "Đăng nhập",
+    heroQuick: "Thử rút gọn nhanh",
+    stepsTitle: "Lộ trình ngắn",
+    stepsBadge: "3 bước",
+    step1Title: "Tạo link",
+    step1Desc: "Dán URL và chọn kiểu link phù hợp.",
+    step2Title: "Tối ưu preview",
+    step2Desc: "Chỉnh OG, alias hoặc video overlay nếu cần.",
+    step3Title: "Theo dõi hiệu quả",
+    step3Desc: "Kiểm tra click và hiệu suất ngay trong dashboard.",
+    quickPlaceholder: "Dán URL dài",
+    quickSubmit: "Rút gọn",
     resultMessage:
       "Liên kết đã được rút gọn thành công. Muốn thêm tùy chọn tùy chỉnh?",
-    "resultCta": "Bắt đầu",
-    "searchPlaceholder": "Tìm link... (Ctrl+K)",
+    resultCta: "Bắt đầu",
+    searchPlaceholder: "Tìm link... (Ctrl+K)",
   },
-  "en": {
-    "brandSubline": "Short links, QR, public bio and analytics",
-    "heroKicker": "Next step",
-    "heroTitle": "Create links in one place, track results in one place",
+  en: {
+    brandSubline: "Short links, QR, public bio and analytics",
+    heroKicker: "Next step",
+    heroTitle: "Create links in one place, track results in one place",
     heroDesc:
       "Use the same flow as the app: create links, tune previews, and review performance without jumping across too many separate screens.",
-    "heroPrimary": "Start free",
-    "heroSecondary": "Log in",
-    "heroQuick": "Try quick shorten",
-    "stepsTitle": "Quick path",
-    "stepsBadge": "3 steps",
-    "step1Title": "Create a link",
-    "step1Desc": "Paste a URL and choose the right link type.",
-    "step2Title": "Optimize preview",
-    "step2Desc": "Adjust OG, alias, or video overlay when needed.",
-    "step3Title": "Track performance",
-    "step3Desc": "Review clicks and performance right in the dashboard.",
-    "quickPlaceholder": "Paste a long URL",
-    "quickSubmit": "Shorten",
+    heroPrimary: "Start free",
+    heroSecondary: "Log in",
+    heroQuick: "Try quick shorten",
+    stepsTitle: "Quick path",
+    stepsBadge: "3 steps",
+    step1Title: "Create a link",
+    step1Desc: "Paste a URL and choose the right link type.",
+    step2Title: "Optimize preview",
+    step2Desc: "Adjust OG, alias, or video overlay when needed.",
+    step3Title: "Track performance",
+    step3Desc: "Review clicks and performance right in the dashboard.",
+    quickPlaceholder: "Paste a long URL",
+    quickSubmit: "Shorten",
     resultMessage:
       "Your link has been shortened. Want more control and customization?",
-    "resultCta": "Get started",
-    "searchPlaceholder": "Search links... (Ctrl+K)",
+    resultCta: "Get started",
+    searchPlaceholder: "Search links... (Ctrl+K)",
   },
 };
+
+function getPersistentStatsCacheOwnerKey() {
+  return user?.id ? `user-${Number(user.id)}` : "guest";
+}
+
+function buildPersistentStatsCacheKey(kind = "", suffix = "") {
+  const normalizedKind = String(kind || "").trim() || "generic";
+  const normalizedSuffix = String(suffix || "").trim();
+  return normalizedSuffix
+    ? `${PERSISTED_STATS_CACHE_PREFIX}:${getPersistentStatsCacheOwnerKey()}:${normalizedKind}:${normalizedSuffix}`
+    : `${PERSISTED_STATS_CACHE_PREFIX}:${getPersistentStatsCacheOwnerKey()}:${normalizedKind}`;
+}
+
+function writePersistentStatsCache(kind, payload, options = {}) {
+  if (!payload || typeof payload !== "object") return;
+  const suffix = String(options?.suffix || "").trim();
+  try {
+    localStorage.setItem(
+      buildPersistentStatsCacheKey(kind, suffix),
+      JSON.stringify({
+        cachedAt: Date.now(),
+        selectedRangeDays: Number(options?.selectedRangeDays || 0) || null,
+        payload,
+      }),
+    );
+  } catch (_) {}
+}
+
+function readPersistentStatsCache(kind, options = {}) {
+  const suffix = String(options?.suffix || "").trim();
+  try {
+    const raw = localStorage.getItem(
+      buildPersistentStatsCacheKey(kind, suffix),
+    );
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const maxAgeMs =
+      Number(options?.ttlMs) > 0
+        ? Number(options.ttlMs)
+        : PERSISTED_STATS_CACHE_TTL_MS;
+    if (
+      !Number(parsed.cachedAt) ||
+      Date.now() - Number(parsed.cachedAt) > maxAgeMs
+    ) {
+      return null;
+    }
+    if (!parsed.payload || typeof parsed.payload !== "object") return null;
+    const expectedDays = Number(options?.selectedRangeDays || 0) || 0;
+    if (expectedDays > 0) {
+      const cachedDays = normalizeStatsRangeDays(
+        parsed.selectedRangeDays ?? parsed.payload?.selectedRangeDays,
+        expectedDays,
+      );
+      if (cachedDays !== expectedDays) return null;
+    }
+    return parsed.payload;
+  } catch (_) {
+    return null;
+  }
+}
+
+function clearPersistentStatsDataCaches() {
+  try {
+    for (const days of ALLOWED_STATS_RANGE_DAYS) {
+      localStorage.removeItem(
+        buildPersistentStatsCacheKey("stats-payload", String(days)),
+      );
+    }
+    localStorage.removeItem(buildPersistentStatsCacheKey("stats-summary"));
+    localStorage.removeItem(
+      buildPersistentStatsCacheKey("stats-summary-compact"),
+    );
+    localStorage.removeItem(buildPersistentStatsCacheKey("links-payload"));
+  } catch (_) {}
+}
+
+function hydrateStatsCachesFromPersistentStorage() {
+  try {
+    const defaultStatsPayload = readPersistentStatsCache("stats-payload", {
+      suffix: String(DEFAULT_STATS_RANGE_DAYS),
+      selectedRangeDays: DEFAULT_STATS_RANGE_DAYS,
+    });
+    if (defaultStatsPayload) {
+      statsPayloadCache = defaultStatsPayload;
+      statsPayloadCacheAt = Date.now();
+      statsPayloadCacheDays = normalizeStatsRangeDays(
+        defaultStatsPayload.selectedRangeDays,
+        DEFAULT_STATS_RANGE_DAYS,
+      );
+    }
+
+    const summaryPayload = readPersistentStatsCache("stats-summary", {
+      selectedRangeDays: DEFAULT_STATS_RANGE_DAYS,
+    });
+    if (summaryPayload) {
+      statsSummaryPayloadCache = summaryPayload;
+      statsSummaryPayloadCacheAt = Date.now();
+      statsSummaryPayloadCacheDays = normalizeStatsRangeDays(
+        summaryPayload.selectedRangeDays,
+        DEFAULT_STATS_RANGE_DAYS,
+      );
+    }
+
+    const compactSummaryPayload = readPersistentStatsCache(
+      "stats-summary-compact",
+    );
+    if (compactSummaryPayload) {
+      compactStatsSummaryPayloadCache = compactSummaryPayload;
+      compactStatsSummaryPayloadCacheAt = Date.now();
+    }
+
+    const persistedLinksPayload = readPersistentStatsCache("links-payload");
+    if (persistedLinksPayload) {
+      linksPayloadCache = persistedLinksPayload;
+      linksPayloadCacheAt = Date.now();
+    }
+  } catch (_) {}
+}
 const appUiTextTranslations = {
-  "en": {
+  en: {
     "Thông báo realtime": "Realtime notifications",
     "Chưa có thông báo mới": "No new notifications",
     "Đã xem hết": "Mark all read",
     "Chuông sẽ hiện các thay đổi mới về click, link, domain và quản trị.":
       "The bell shows new changes for clicks, links, domains, and admin activity.",
-    "Khách": "Guest",
+    Khách: "Guest",
     "Chưa đăng nhập": "Not signed in",
     "Hồ sơ công khai": "Public profile",
     "Thanh toán": "Billing",
@@ -369,8 +569,8 @@ const appUiTextTranslations = {
     "Kích thước": "Size",
     "Màu QR": "QR color",
     "Màu brand": "Brand color",
-    "Đen": "Black",
-    "Tím": "Purple",
+    Đen: "Black",
+    Tím: "Purple",
     "Xanh lá": "Green",
     "Tạo / cập nhật": "Create / update",
     "Sao chép URL": "Copy URL",
@@ -429,7 +629,7 @@ const appUiTextTranslations = {
     "Những người có thể thao tác ngay": "People who can act right away",
     "Lời mời": "Invitations",
     "Đang chờ xác nhận": "Awaiting confirmation",
-    "Workspace": "Workspace",
+    Workspace: "Workspace",
     "Owner + editor + analyst trong một luồng.":
       "Owner + editor + analyst in one shared flow.",
     "Thành viên workspace": "Workspace members",
@@ -452,12 +652,14 @@ const appUiTextTranslations = {
     "Mẫu chung chỉ khóa nội dung share, kiểu link, video overlay và domain. Editor lấy theo từng link để sửa URL gốc của riêng mình, không ảnh hưởng tới mẫu chung.":
       "Shared templates only lock shared copy, link type, video overlay, and domain. Editors use each link separately to edit their own original URL without affecting the shared template.",
     "Đăng nhập để mời cộng tác viên.": "Log in to invite collaborators.",
-    "Đăng nhập để dùng mẫu liên kết chung.": "Log in to use shared link templates.",
+    "Đăng nhập để dùng mẫu liên kết chung.":
+      "Log in to use shared link templates.",
     "Chỉ owner quản lý": "Owner only",
     "Chỉ editor được lấy": "Editors only",
     "Lời mời workspace": "Workspace invitation",
     "Chọn tối đa 5 link nguồn": "Select up to 5 source links",
-    "Chọn tối đa 5 link để gom vào cùng 1 mẫu chia sẻ.": "Select up to 5 links to bundle into one shared template.",
+    "Chọn tối đa 5 link để gom vào cùng 1 mẫu chia sẻ.":
+      "Select up to 5 links to bundle into one shared template.",
     "Media sẽ tự lấy từ link đã tick nếu có preview, hoặc bạn có thể tải file riêng từ máy.":
       "Media will be taken automatically from selected links if a preview exists, or you can upload a separate file from your device.",
     "Sửa mẫu chung": "Edit shared template",
@@ -477,9 +679,9 @@ const appUiTextTranslations = {
     "Tất cả link đã tạo": "All created links",
     "Danh sách liên kết": "Link list",
     "Tất cả": "All",
-    "Khác": "Other",
+    Khác: "Other",
     "OG Meta": "OG meta",
-    "Clicks": "Clicks",
+    Clicks: "Clicks",
     "Bỏ chọn": "Clear selection",
     "Xóa đã chọn": "Delete selected",
     "Link rút gọn": "Short link",
@@ -540,19 +742,19 @@ const appUiTextTranslations = {
     "Chưa chọn người dùng nào.": "No users selected.",
     "Chọn trang này": "Select this page",
     "Chọn theo bộ lọc": "Select by filter",
-    "Tên": "Name",
+    Tên: "Name",
     "Gói hiện tại": "Current plan",
     "Yêu cầu thanh toán": "Payment requests",
     "Điều hướng quản trị": "Admin navigation",
     "Tìm theo mã thanh toán...": "Search by payment code...",
     "Tải lại": "Reload",
-    "Mã": "Code",
-    "Gói": "Plan",
+    Mã: "Code",
+    Gói: "Plan",
     "Số tiền": "Amount",
     "Chuyển lúc": "Paid at",
     "Ghi chú": "Note",
     "Thao tác": "Actions",
-    "Duyệt": "Approve",
+    Duyệt: "Approve",
     "Từ chối": "Reject",
     "Đang tải...": "Loading...",
     "Đang tải yêu cầu thanh toán...": "Loading payment requests...",
@@ -564,8 +766,8 @@ const appUiTextTranslations = {
     "Hết hạn": "Expires",
     "Đặt làm domain chính": "Set as primary domain",
     "Thêm domain": "Add domain",
-    "Nhãn": "Label",
-    "Chính": "Primary",
+    Nhãn: "Label",
+    Chính: "Primary",
     "Nguồn log:": "Log source:",
     "Thời gian": "Time",
     "Tạo QR cho link ngắn, chiến dịch hoặc trang tiểu sử":
@@ -631,12 +833,12 @@ const appUiTextTranslations = {
       'After the transfer, click "Paid" to send the request to Admin > Payments.',
     "Có thể quét QR hoặc nhập tay thông tin chuyển khoản nếu QR chưa được cấu hình.":
       "You can scan the QR or manually enter the transfer details if the QR is not configured.",
-    "Đóng": "Close",
+    Đóng: "Close",
     "Đã thanh toán": "Paid",
     "Xác nhận hành động": "Confirm action",
     "Bạn có chắc muốn tiếp tục thao tác này không?":
       "Are you sure you want to continue?",
-    "Hủy": "Cancel",
+    Hủy: "Cancel",
     "Mở menu": "Open menu",
     "Đổi giao diện": "Toggle theme",
     "Mở thông báo": "Open notifications",
@@ -650,81 +852,83 @@ const appUiTextTranslations = {
   },
 };
 const appUiTextPatterns = {
-  "en": [
+  en: [
     {
-      "regex": /^Danh sách liên kết \((\d+)\)$/,
-      "replace": (_match, count) => `Link list (${count})`,
+      regex: /^Danh sách liên kết \((\d+)\)$/,
+      replace: (_match, count) => `Link list (${count})`,
     },
     {
-      "regex": /^Mẫu link chung \((\d+)\)$/,
-      "replace": (_match, count) => `Shared templates (${count})`,
+      regex: /^Mẫu link chung \((\d+)\)$/,
+      replace: (_match, count) => `Shared templates (${count})`,
     },
     {
-      "regex": /^👥 Người dùng \((\d+)\)$/,
-      "replace": (_match, count) => `👥 Users (${count})`,
+      regex: /^👥 Người dùng \((\d+)\)$/,
+      replace: (_match, count) => `👥 Users (${count})`,
     },
     {
-      "regex": /^💳 Yêu cầu thanh toán \((\d+)\)$/,
-      "replace": (_match, count) => `💳 Payment requests (${count})`,
+      regex: /^💳 Yêu cầu thanh toán \((\d+)\)$/,
+      replace: (_match, count) => `💳 Payment requests (${count})`,
     },
     {
-      "regex": /^Đang hiển thị (\d+) link$/,
-      "replace": (_match, count) => `Showing ${count} links`,
+      regex: /^Đang hiển thị (\d+) link$/,
+      replace: (_match, count) => `Showing ${count} links`,
     },
     {
-      "regex": /^Bộ lọc hiện có (\d+) người dùng$/,
-      "replace": (_match, count) => `The current filter contains ${count} users`,
+      regex: /^Bộ lọc hiện có (\d+) người dùng$/,
+      replace: (_match, count) => `The current filter contains ${count} users`,
     },
     {
-      "regex": /^Hiển thị (\d+)-(\d+) \/ (\d+)$/,
-      "replace": (_match, from, to, total) => `Showing ${from}-${to} / ${total}`,
+      regex: /^Hiển thị (\d+)-(\d+) \/ (\d+)$/,
+      replace: (_match, from, to, total) => `Showing ${from}-${to} / ${total}`,
     },
     {
-      "regex": /^Tổng raw click: (.+)$/,
-      "replace": (_match, value) => `Total raw clicks: ${value}`,
+      regex: /^Tổng raw click: (.+)$/,
+      replace: (_match, value) => `Total raw clicks: ${value}`,
     },
     {
-      "regex": /^Đang chờ chuyển khoản: (.+)$/,
-      "replace": (_match, value) => `Awaiting transfer: ${value}`,
+      regex: /^Đang chờ chuyển khoản: (.+)$/,
+      replace: (_match, value) => `Awaiting transfer: ${value}`,
     },
     {
-      "regex": /^User mới: (.+)$/,
-      "replace": (_match, value) => `New users: ${value}`,
+      regex: /^User mới: (.+)$/,
+      replace: (_match, value) => `New users: ${value}`,
     },
     {
-      "regex": /^Click unique: (.+)$/,
-      "replace": (_match, value) => `Unique clicks: ${value}`,
+      regex: /^Click unique: (.+)$/,
+      replace: (_match, value) => `Unique clicks: ${value}`,
     },
     {
-      "regex": /^Thanh toán: (.+)$/,
-      "replace": (_match, value) => `Payments: ${value}`,
+      regex: /^Thanh toán: (.+)$/,
+      replace: (_match, value) => `Payments: ${value}`,
     },
     {
-      "regex": /^Đang tạo cho (.+)$/,
-      "replace": (_match, value) => `Generating for ${value}`,
+      regex: /^Đang tạo cho (.+)$/,
+      replace: (_match, value) => `Generating for ${value}`,
     },
     {
-      "regex": /^(\d+) thiết bị đã được ghi nhận trên tài khoản này\.$/,
-      "replace": (_match, count) =>
+      regex: /^(\d+) thiết bị đã được ghi nhận trên tài khoản này\.$/,
+      replace: (_match, count) =>
         `${count} devices have been recorded for this account.`,
     },
     {
-      "regex": /^Seat đang dùng (\d+)\/(\d+) · Quyền của bạn (.+)$/,
-      "replace": (_match, used, total, role) =>
+      regex: /^Seat đang dùng (\d+)\/(\d+) · Quyền của bạn (.+)$/,
+      replace: (_match, used, total, role) =>
         `Seats in use ${used}/${total} · Your role ${role}`,
     },
     {
-      "regex": /^Đã chọn (\d+)\/5 link\. Media sẽ tự lấy từ link đầu tiên có preview, hoặc file upload\.$/,
-      "replace": (_match, count) =>
+      regex:
+        /^Đã chọn (\d+)\/5 link\. Media sẽ tự lấy từ link đầu tiên có preview, hoặc file upload\.$/,
+      replace: (_match, count) =>
         `Selected ${count}/5 links. Media will be taken from the first link with a preview, or from an uploaded file.`,
     },
     {
-      "regex": /^Đang dùng media tải từ máy: (.+)$/,
-      "replace": (_match, label) => `Using uploaded media from device: ${label}`,
+      regex: /^Đang dùng media tải từ máy: (.+)$/,
+      replace: (_match, label) => `Using uploaded media from device: ${label}`,
     },
     {
-      "regex": /^Media sẽ lấy từ link đã chọn: (.+)$/,
-      "replace": (_match, label) => `Media will be taken from the selected link: ${label}`,
+      regex: /^Media sẽ lấy từ link đã chọn: (.+)$/,
+      replace: (_match, label) =>
+        `Media will be taken from the selected link: ${label}`,
     },
   ],
 };
@@ -883,8 +1087,47 @@ function syncAvailableDomains(domains = []) {
   return availableDomains;
 }
 
+function persistAvailableDomainsCache(domains = []) {
+  try {
+    localStorage.setItem(
+      DOMAINS_CACHE_STORAGE_KEY,
+      JSON.stringify({
+        cachedAt: Date.now(),
+        domains: Array.isArray(domains) ? domains : [],
+      }),
+    );
+  } catch (_) {}
+}
+
+function readAvailableDomainsCache() {
+  try {
+    const raw = localStorage.getItem(DOMAINS_CACHE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!Array.isArray(parsed.domains)) return null;
+    return {
+      cachedAt: Number(parsed.cachedAt) || 0,
+      domains: parsed.domains,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 async function loadAvailableDomains({ force = false } = {}) {
   if (availableDomainsPromise && !force) return availableDomainsPromise;
+  if (!force) {
+    const cachedDomains = readAvailableDomainsCache();
+    if (
+      cachedDomains?.domains?.length &&
+      Date.now() - cachedDomains.cachedAt <= DOMAINS_CACHE_TTL_MS
+    ) {
+      const syncedDomains = syncAvailableDomains(cachedDomains.domains);
+      availableDomainsPromise = Promise.resolve(syncedDomains);
+      return availableDomainsPromise;
+    }
+  }
   availableDomainsPromise = (async () => {
     try {
       const response = await fetch("/api/domains");
@@ -892,11 +1135,13 @@ async function loadAvailableDomains({ force = false } = {}) {
       if (!response.ok) {
         throw new Error(data.error || "Không thể tải domain");
       }
-      return syncAvailableDomains(data.domains || []);
+      const syncedDomains = syncAvailableDomains(data.domains || []);
+      persistAvailableDomainsCache(syncedDomains);
+      return syncedDomains;
     } catch (error) {
       console.error("loadAvailableDomains", error);
       if (!availableDomains.length) {
-        syncAvailableDomains([]);
+        syncAvailableDomains(readAvailableDomainsCache()?.domains || []);
       }
       return availableDomains;
     }
@@ -1001,11 +1246,12 @@ function onCreateDomainChange(cid, value) {
 }
 
 function syncAvailableDomainsFromAdmin(domains = []) {
-  syncAvailableDomains(
+  const syncedDomains = syncAvailableDomains(
     (Array.isArray(domains) ? domains : []).filter(
       (domain) => domain?.is_active !== false,
     ),
   );
+  persistAvailableDomainsCache(syncedDomains);
   availableDomainsPromise = Promise.resolve(availableDomains);
 }
 
@@ -1027,7 +1273,12 @@ function isAdminUser() {
 }
 
 function isSupportAgentUser() {
-  return isAdminUser() || String(user?.role || "").trim().toLowerCase() === "support";
+  return (
+    isAdminUser() ||
+    String(user?.role || "")
+      .trim()
+      .toLowerCase() === "support"
+  );
 }
 
 function guardAdminRoute() {
@@ -2048,6 +2299,9 @@ function continueAsGuest() {
   user = null;
   syncLabSharedSettingsStorageFromUser();
   resetStatsDataCaches();
+  teamWorkspaceData = null;
+  teamWorkspaceLoadedUserId = 0;
+  teamWorkspaceLoadedAt = 0;
   closeLandingNav();
   document.getElementById("authScreen").style.display = "none";
   document.getElementById("appScreen").classList.add("show");
@@ -2437,6 +2691,7 @@ function resetStatsDataCaches() {
   linksPayloadCache = null;
   linksPayloadCacheAt = 0;
   notificationStatsSnapshot = null;
+  clearPersistentStatsDataCaches();
 }
 
 function ensureArticleFunnelLabSrcdocAsset() {
@@ -2552,11 +2807,6 @@ async function pollRealtimeNotifications() {
           });
         }
       }
-      if (activePage === "dashboard") {
-        await loadDashboardData({ prefetched: statsPayload });
-      } else if (pageNeedsRealtimeFullStatsPayload(activePage)) {
-        await loadData();
-      }
       if (
         document.getElementById("page-account")?.classList.contains("active")
       ) {
@@ -2652,14 +2902,12 @@ function stopRealtimeNotificationLoop() {
 
 function startRealtimeNotificationLoop({ immediate = true } = {}) {
   stopRealtimeNotificationLoop();
-  loadSeenNotificationKeys();
+  unreadNotificationCount = 0;
   renderNotificationCenter();
-  if (immediate) {
-    void pollRealtimeNotifications();
-  }
-  notificationPollTimer = setInterval(() => {
-    void pollRealtimeNotifications();
-  }, NOTIFICATION_POLL_INTERVAL_MS);
+  const bell = document.getElementById("notificationBellBtn");
+  const dropdown = document.getElementById("notificationDropdown");
+  if (bell) bell.hidden = true;
+  if (dropdown) dropdown.classList.remove("show");
 }
 
 function setAvatarNode(target, currentUser, fallbackText) {
@@ -2747,8 +2995,9 @@ function updateTopbar() {
       : "Đăng nhập để quản lý";
   }
   const canOpenSupportInbox = plan === "admin" || role === "admin";
-  document.getElementById("popupAdminBtn").style.display =
-    canOpenSupportInbox ? "" : "none";
+  document.getElementById("popupAdminBtn").style.display = canOpenSupportInbox
+    ? ""
+    : "none";
   document.getElementById("popupAdminBtn").textContent =
     role === "support" ? "Hộp thư hỗ trợ" : "Quản trị";
 
@@ -3105,7 +3354,10 @@ function syncMobileCardTableLabels(target) {
   Array.from(table.tBodies || []).forEach((tbody) => {
     Array.from(tbody.rows || []).forEach((row) => {
       Array.from(row.cells || []).forEach((cell, index) => {
-        if (cell.classList.contains("tbl-empty") || Number(cell.colSpan || 1) > 1) {
+        if (
+          cell.classList.contains("tbl-empty") ||
+          Number(cell.colSpan || 1) > 1
+        ) {
           cell.removeAttribute("data-label");
           return;
         }
@@ -3149,7 +3401,9 @@ function buildAffiliateShopeeSourceId(index = 0) {
 }
 
 function getAffiliateShopeeSourceProductUrl(source = null) {
-  return String(source?.product_url || source?.productUrl || source?.url || "").trim();
+  return String(
+    source?.product_url || source?.productUrl || source?.url || "",
+  ).trim();
 }
 
 function getUserAffiliateShopeeSources() {
@@ -3217,11 +3471,12 @@ function getAffiliateShopeeDraftSources() {
         row.querySelector("[data-affiliate-shopee-source-url]")?.value || "",
       ).trim();
       const productUrl = String(
-        row.querySelector("[data-affiliate-shopee-source-product-url]")?.value || "",
+        row.querySelector("[data-affiliate-shopee-source-product-url]")
+          ?.value || "",
       ).trim();
       const opaanlpUrl = String(
-        row.querySelector("[data-affiliate-shopee-source-opaanlp-url]")?.value ||
-          "",
+        row.querySelector("[data-affiliate-shopee-source-opaanlp-url]")
+          ?.value || "",
       ).trim();
       const isDefault = !!row.querySelector(
         "[data-affiliate-shopee-source-default]",
@@ -3269,11 +3524,13 @@ function renderAffiliateShopeeSourcesManager(sourceList = null) {
           id: buildAffiliateShopeeSourceId(1),
           label: "Acc 1",
           url:
-            document.getElementById("accountAffiliateShopeeInput")?.value.trim() ||
-            "",
+            document
+              .getElementById("accountAffiliateShopeeInput")
+              ?.value.trim() || "",
           product_url:
-            document.getElementById("accountAffiliateShopeeInput")?.value.trim() ||
-            "",
+            document
+              .getElementById("accountAffiliateShopeeInput")
+              ?.value.trim() || "",
           opaanlp_url: "",
           is_default: true,
         },
@@ -3689,14 +3946,16 @@ async function saveAccountAffiliateSettings() {
         affiliate_shopee_url:
           String(
             getAffiliateShopeeSourceProductUrl(defaultShopeeSource) ||
-              document.getElementById("accountAffiliateShopeeInput")?.value.trim() ||
+              document
+                .getElementById("accountAffiliateShopeeInput")
+                ?.value.trim() ||
               "",
-          ).trim() ||
-          "",
+          ).trim() || "",
         affiliate_shopee_sources: affiliateShopeeSources,
         affiliate_tiktok_url:
-          document.getElementById("accountAffiliateTikTokInput")?.value.trim() ||
-          "",
+          document
+            .getElementById("accountAffiliateTikTokInput")
+            ?.value.trim() || "",
       }),
     });
     const data = await response.json().catch(() => ({}));
@@ -3735,7 +3994,9 @@ async function checkAffiliatePreset(platform, containerId = "") {
     redirectToAuth("login", "Cần đăng nhập để kiểm tra link affiliate.");
     return;
   }
-  const normalized = String(platform || "").trim().toLowerCase();
+  const normalized = String(platform || "")
+    .trim()
+    .toLowerCase();
   const inputId =
     normalized === "shopee"
       ? "accountAffiliateShopeeInput"
@@ -3837,7 +4098,9 @@ function resolveAffiliatePresetTargetField(cid) {
 }
 
 function getSelectedAffiliatePresetUrl(platform, containerId = "") {
-  const normalized = String(platform || "").trim().toLowerCase();
+  const normalized = String(platform || "")
+    .trim()
+    .toLowerCase();
   if (normalized !== "shopee") {
     return getUserAffiliatePresetUrl(normalized);
   }
@@ -3863,7 +4126,9 @@ function getSelectedAffiliateShopeeSource(containerId = "") {
 }
 
 function refreshAffiliatePresetSelection(containerId = "", platform = "") {
-  const normalized = String(platform || "").trim().toLowerCase();
+  const normalized = String(platform || "")
+    .trim()
+    .toLowerCase();
   if (!containerId || normalized !== "shopee") return;
   const preview = document.getElementById(`${containerId}_presetUrl_shopee`);
   if (!preview) return;
@@ -4174,7 +4439,7 @@ async function saveProfile() {
   }
 }
 
-async function loadBillingData() {
+async function loadBillingData(force = false) {
   const activeUserId = Number(user?.id || 0);
   if (!activeUserId) {
     billingConfig = null;
@@ -4185,6 +4450,7 @@ async function loadBillingData() {
     return;
   }
   if (
+    !force &&
     billingDataLoadedUserId === activeUserId &&
     !billingDataPromise &&
     Date.now() - billingDataLoadedAt <= BILLING_DATA_CACHE_TTL_MS
@@ -4208,8 +4474,8 @@ async function loadBillingData() {
       updateTopbar();
     })();
     return await billingDataPromise;
-  } catch {}
-  finally {
+  } catch {
+  } finally {
     billingDataPromise = null;
   }
 }
@@ -4389,7 +4655,7 @@ async function submitPaymentRequest() {
       throw new Error(data.error || "Không thể gửi xác nhận thanh toán");
     }
     paymentRequestDraft = data.request;
-    await loadBillingData();
+    await loadBillingData(true);
     closePaymentModal();
     updateTopbar();
     addNotification({
@@ -4553,7 +4819,9 @@ function shouldFetchAdminSection(section, force = false) {
 }
 
 function getAdminSectionsForLoad(section = adminSection) {
-  const normalizedSection = String(section || "overview").trim().toLowerCase();
+  const normalizedSection = String(section || "overview")
+    .trim()
+    .toLowerCase();
   return [normalizedSection];
 }
 
@@ -4673,6 +4941,10 @@ function setAdminOverviewRange(days) {
 function renderAdminOverviewTrend() {
   const canvas = document.getElementById("adminOverviewChart");
   if (!canvas) return;
+  if (!window.Chart) {
+    void ensureChartJs().then(() => renderAdminOverviewTrend());
+    return;
+  }
 
   const trend = adminOverviewTrendPayload || {};
   const labels = Array.isArray(trend.labels) ? trend.labels : [];
@@ -4803,6 +5075,7 @@ async function showApp() {
   loadThemePreference();
   applyAppLanguage(appLanguage);
   syncLabSharedSettingsStorageFromUser();
+  hydrateStatsCachesFromPersistentStorage();
   updateTopbar();
   renderSupportConversation();
   loadBioConfig();
@@ -4896,8 +5169,9 @@ function updateTopbar() {
       : "Đăng nhập để quản lý";
   }
   const canOpenSupportInbox = plan === "admin" || role === "admin";
-  document.getElementById("popupAdminBtn").style.display =
-    canOpenSupportInbox ? "" : "none";
+  document.getElementById("popupAdminBtn").style.display = canOpenSupportInbox
+    ? ""
+    : "none";
   document.getElementById("popupAdminBtn").textContent =
     role === "support" ? "Hộp thư hỗ trợ" : "Quản trị";
   const isAdmin = plan === "admin" || role === "admin";
@@ -4972,7 +5246,10 @@ window.addEventListener("message", (event) => {
   if (!frameId) return;
   const frame = document.getElementById(frameId);
   if (!frame) return;
-  const nextHeight = Math.max(Number(data.height || 0), frameId === "createLabIframe" ? 980 : 760);
+  const nextHeight = Math.max(
+    Number(data.height || 0),
+    frameId === "createLabIframe" ? 980 : 760,
+  );
   frame.style.height = `${nextHeight}px`;
 });
 
@@ -5071,11 +5348,11 @@ function navigate(page, el) {
   }
   if (page === "stats") renderStatsPage();
   if (page === "dashboard") {
-    void loadDashboardData();
+    void loadDashboardData({ preferCache: true });
   } else if (page === "links") {
-    void loadLinksData();
+    void loadLinksData({ preferCache: true });
   } else if (pageNeedsFullStatsPayload(page)) {
-    void loadData();
+    void loadData(null, { preferCache: true });
   }
   const sidebar = document.getElementById("sidebar");
   sidebar?.classList.remove("mob-open");
@@ -5105,7 +5382,9 @@ function toggleSidebar() {
 //  SHORTEN FORM
 // ══════════════════════════════════════════════════
 function resolveAccountSectionId(section = "profile") {
-  const normalized = String(section || "profile").trim().toLowerCase();
+  const normalized = String(section || "profile")
+    .trim()
+    .toLowerCase();
   if (normalized === "billing") return "accountBillingSection";
   if (normalized === "security") return "accountSecuritySection";
   if (normalized === "settings") return "accountSettingsSection";
@@ -5115,7 +5394,9 @@ function resolveAccountSectionId(section = "profile") {
 }
 
 function scrollToAccountSection(section = "profile") {
-  activeAccountSection = String(section || "profile").trim().toLowerCase();
+  activeAccountSection = String(section || "profile")
+    .trim()
+    .toLowerCase();
   const target = document.getElementById(
     resolveAccountSectionId(activeAccountSection),
   );
@@ -5129,7 +5410,9 @@ function openPaymentPage() {
 }
 
 function openAccountSection(section = "profile") {
-  activeAccountSection = String(section || "profile").trim().toLowerCase();
+  activeAccountSection = String(section || "profile")
+    .trim()
+    .toLowerCase();
   if (activeAccountSection === "billing") {
     openPaymentPage();
     return;
@@ -5140,7 +5423,9 @@ function openAccountSection(section = "profile") {
 }
 
 function getUserAffiliatePresetUrl(platform = "") {
-  const normalized = String(platform || "").trim().toLowerCase();
+  const normalized = String(platform || "")
+    .trim()
+    .toLowerCase();
   if (normalized === "shopee") {
     return String(user?.affiliate_shopee_url || "").trim();
   }
@@ -5151,22 +5436,29 @@ function getUserAffiliatePresetUrl(platform = "") {
 }
 
 function getAffiliatePresetHealthLabel(platform = "") {
-  const key = String(platform || "").trim().toLowerCase();
+  const key = String(platform || "")
+    .trim()
+    .toLowerCase();
   const health = accountAffiliateHealth[key];
-  if (health?.pending) return { label: "\u0110ang ki\u1ec3m tra", tone: "warn" };
+  if (health?.pending)
+    return { label: "\u0110ang ki\u1ec3m tra", tone: "warn" };
   if (!health) return { label: "Chưa kiểm tra", tone: "" };
   if (health.alive) return { label: "Đang hoạt động", tone: "ok" };
   return { label: health.note || "Có lỗi", tone: "err" };
 }
 
 function canUseAffiliatePreset(platform = "") {
-  const key = String(platform || "").trim().toLowerCase();
+  const key = String(platform || "")
+    .trim()
+    .toLowerCase();
   const health = accountAffiliateHealth[key];
   return !!(health && !health.pending && health.alive);
 }
 
 function syncAffiliatePresetActionState(containerId = "", platform = "") {
-  const normalized = String(platform || "").trim().toLowerCase();
+  const normalized = String(platform || "")
+    .trim()
+    .toLowerCase();
   if (!containerId || !normalized) return;
   const health = getAffiliatePresetHealthLabel(normalized);
   const statusEl = document.getElementById(
@@ -5194,7 +5486,8 @@ function syncAffiliatePresetActionState(containerId = "", platform = "") {
 
 function normalizeAffiliateHealthErrorMessage(error) {
   const rawMessage = String(error?.message || "").trim();
-  if (!rawMessage) return "Kh\u00f4ng th\u1ec3 ki\u1ec3m tra link affiliate l\u00fac n\u00e0y.";
+  if (!rawMessage)
+    return "Kh\u00f4ng th\u1ec3 ki\u1ec3m tra link affiliate l\u00fac n\u00e0y.";
   if (/failed to fetch/i.test(rawMessage)) {
     return "Kh\u00f4ng k\u1ebft n\u1ed1i \u0111\u01b0\u1ee3c t\u1edbi API ki\u1ec3m tra affiliate.";
   }
@@ -5256,7 +5549,8 @@ function buildAffiliatePresetMarkup(containerId) {
                          <select class="fi affiliate-preset-select" id="${containerId}_presetSelect_shopee" onchange="refreshAffiliatePresetSelection('${containerId}','shopee')">
                            ${shopeeSources
                              .map(
-                               (source) => `<option value="${esc(source.id)}" ${source.is_default ? "selected" : ""}>${esc(source.label || "Nguồn Shopee")} ${source.is_default ? "(mặc định)" : ""}</option>`,
+                               (source) =>
+                                 `<option value="${esc(source.id)}" ${source.is_default ? "selected" : ""}>${esc(source.label || "Nguồn Shopee")} ${source.is_default ? "(mặc định)" : ""}</option>`,
                              )
                              .join("")}
                          </select>`
@@ -5356,7 +5650,9 @@ function syncLabSharedSettingsStorageFromUser() {
 
 function getLabSharedSettings() {
   if (user?.id) {
-    const normalized = normalizeLabSharedSettings(user.lab_shared_settings || {});
+    const normalized = normalizeLabSharedSettings(
+      user.lab_shared_settings || {},
+    );
     user.lab_shared_settings = normalized;
     return normalized;
   }
@@ -5457,7 +5753,6 @@ function triggerLabSharedImagePicker(assetKey) {
   }
 }
 
-
 async function handleLabSharedImagePicked(assetKey, input) {
   const config = labSharedImageFieldConfig[assetKey];
   const file = input?.files?.[0];
@@ -5497,39 +5792,61 @@ async function handleLabSharedImagePicked(assetKey, input) {
 function buildLabEmbedSrcdoc(frameId, forceRefresh = false) {
   const frame = document.getElementById(frameId);
   const rawTemplate = window.__ARTICLE_FUNNEL_LAB_TEMPLATE_HTML__;
-  const template = typeof rawTemplate === "string"
-    ? rawTemplate.trim()
-    : String(rawTemplate?.value || "").trim();
+  const template =
+    typeof rawTemplate === "string"
+      ? rawTemplate.trim()
+      : String(rawTemplate?.value || "").trim();
   if (!frame || !template) return "";
-  const view = String(frame.dataset.labView || "").trim().toLowerCase() || "editor";
+  const view =
+    String(frame.dataset.labView || "")
+      .trim()
+      .toLowerCase() || "editor";
   const embedId = String(frame.dataset.labEmbedId || "").trim() || frameId;
-  const initialLabId = Math.max(Number(frame.dataset.pendingLabId || 0) || 0, 0);
-  const affiliateShopeeSources = getUserAffiliateShopeeSources().map((item) => ({
-    id: String(item?.id || "").trim(),
-    label: String(item?.label || "").trim(),
-    url: String(item?.url || "").trim(),
-    product_url: String(item?.product_url || item?.productUrl || "").trim(),
-    opaanlp_url: String(item?.opaanlp_url || "").trim(),
-    is_default: !!item?.is_default,
-  }));
-  const embedConfigScript = `<script>window.__ARTICLE_FUNNEL_LAB_EMBED__ = ${JSON.stringify({
-    embed: true,
-    view,
-    embedId,
-    initialLabId,
-    debugVisible: isAdminUser(),
-    refreshToken: forceRefresh ? Date.now().toString(36) : labEmbedCacheBust,
-  })};<\/script>`;
-  const bootstrapScript = `<script>window.__ARTICLE_FUNNEL_LAB_BOOTSTRAP__ = ${JSON.stringify({
-    user: {
-      affiliate_shopee_url: String(getUserAffiliatePresetUrl("shopee") || "").trim(),
-      affiliate_tiktok_url: String(getUserAffiliatePresetUrl("tiktok") || "").trim(),
-      affiliate_shopee_sources: affiliateShopeeSources,
-      lab_shared_settings: normalizeLabSharedSettings(user?.lab_shared_settings || {}),
+  const initialLabId = Math.max(
+    Number(frame.dataset.pendingLabId || 0) || 0,
+    0,
+  );
+  const affiliateShopeeSources = getUserAffiliateShopeeSources().map(
+    (item) => ({
+      id: String(item?.id || "").trim(),
+      label: String(item?.label || "").trim(),
+      url: String(item?.url || "").trim(),
+      product_url: String(item?.product_url || item?.productUrl || "").trim(),
+      opaanlp_url: String(item?.opaanlp_url || "").trim(),
+      is_default: !!item?.is_default,
+    }),
+  );
+  const embedConfigScript = `<script>window.__ARTICLE_FUNNEL_LAB_EMBED__ = ${JSON.stringify(
+    {
+      embed: true,
+      view,
+      embedId,
+      initialLabId,
+      debugVisible: isAdminUser(),
+      refreshToken: forceRefresh ? Date.now().toString(36) : labEmbedCacheBust,
     },
-  })};<\/script>`;
+  )};<\/script>`;
+  const bootstrapScript = `<script>window.__ARTICLE_FUNNEL_LAB_BOOTSTRAP__ = ${JSON.stringify(
+    {
+      user: {
+        affiliate_shopee_url: String(
+          getUserAffiliatePresetUrl("shopee") || "",
+        ).trim(),
+        affiliate_tiktok_url: String(
+          getUserAffiliatePresetUrl("tiktok") || "",
+        ).trim(),
+        affiliate_shopee_sources: affiliateShopeeSources,
+        lab_shared_settings: normalizeLabSharedSettings(
+          user?.lab_shared_settings || {},
+        ),
+      },
+    },
+  )};<\/script>`;
   const baseTag = `<base href="${window.location.origin}/">`;
-  return template.replace("<head>", `<head>${baseTag}${embedConfigScript}${bootstrapScript}`);
+  return template.replace(
+    "<head>",
+    `<head>${baseTag}${embedConfigScript}${bootstrapScript}`,
+  );
 }
 
 function mountLabEmbedSrcdoc(frame, nextSrcdoc) {
@@ -5627,7 +5944,9 @@ function openExistingLabInCreateEditor(labId) {
   localStorage.removeItem(articleFunnelLabDraftStorageKey);
   localStorage.setItem(
     articleFunnelLabPendingOpenIdStorageKey,
-    String(Number.isInteger(normalizedId) && normalizedId > 0 ? normalizedId : 0),
+    String(
+      Number.isInteger(normalizedId) && normalizedId > 0 ? normalizedId : 0,
+    ),
   );
   localStorage.setItem(
     articleFunnelLabDebugStorageKey,
@@ -5673,7 +5992,10 @@ function postLabSharedSettingsToFrame(frameId, settings) {
       const sendSettings = () => {
         try {
           frame.contentWindow?.postMessage(
-            { type: "article-funnel-lab:apply-shared-settings", settings: payload },
+            {
+              type: "article-funnel-lab:apply-shared-settings",
+              settings: payload,
+            },
             window.location.origin,
           );
         } catch (_) {}
@@ -6166,7 +6488,9 @@ function renderForm(containerId) {
   ].forEach((fieldId) => {
     const input = document.getElementById(fieldId);
     if (!input) return;
-    input.addEventListener("input", () => syncVideoOverlayRoleHint(containerId));
+    input.addEventListener("input", () =>
+      syncVideoOverlayRoleHint(containerId),
+    );
   });
   syncVideoOverlayRoleHint(containerId);
 
@@ -6205,24 +6529,32 @@ function syncVideoOverlayRoleHint(cid) {
       key: "5s",
       label: "5s",
       value:
-        document.getElementById(`${cid}_video_popup_url_5s`)?.value.trim() || "",
+        document.getElementById(`${cid}_video_popup_url_5s`)?.value.trim() ||
+        "",
     },
     {
       key: "300s",
       label: "300s",
       value:
-        document.getElementById(`${cid}_video_popup_url_300s`)?.value.trim() || "",
+        document.getElementById(`${cid}_video_popup_url_300s`)?.value.trim() ||
+        "",
     },
   ];
-  const overrideStages = stages.filter((stage) => !!stage.value).map((stage) => stage.label);
-  const fallbackStages = stages.filter((stage) => !stage.value).map((stage) => stage.label);
+  const overrideStages = stages
+    .filter((stage) => !!stage.value)
+    .map((stage) => stage.label);
+  const fallbackStages = stages
+    .filter((stage) => !stage.value)
+    .map((stage) => stage.label);
 
   let message =
     "Link ở ô trên là link gốc của short link video và cũng là link popup 3s mặc định.";
   if (!baseUrl) {
-    message += " Các ô dưới chỉ là link popup riêng cho mốc 5s và 300s khi bạn cần override.";
+    message +=
+      " Các ô dưới chỉ là link popup riêng cho mốc 5s và 300s khi bạn cần override.";
   } else if (!overrideStages.length) {
-    message += " Hiện tại popup 3s / 5s / 300s đều đang dùng chính link gốc này.";
+    message +=
+      " Hiện tại popup 3s / 5s / 300s đều đang dùng chính link gốc này.";
   } else if (overrideStages.length === stages.length) {
     message +=
       " Popup 5s và 300s đang dùng link riêng bên dưới; popup 3s vẫn dùng link gốc ở trên.";
@@ -6266,7 +6598,9 @@ function enhanceCreateFormLayout(containerId) {
   const urlBar = card.querySelector(".url-bar");
   const urlHint = card.querySelector(`#${containerId}_urlhint`);
   const detectBadge = card.querySelector(`#${containerId}_det`);
-  const aliasDomainBlock = card.querySelector(".create-form-grid--alias-domain");
+  const aliasDomainBlock = card.querySelector(
+    ".create-form-grid--alias-domain",
+  );
   const linkTypeSelect = card.querySelector(`#${containerId}_ltype`);
   const linkTypeBlock = linkTypeSelect?.closest("div") || null;
   const anchor = templateNotice || affiliatePreset || urlBar;
@@ -6701,6 +7035,9 @@ function setTeamWorkspaceData(payload) {
       : [],
     invitation_pending: payload.invitation_pending === true,
   };
+  teamWorkspaceLoadedUserId = Number(user?.id || 0);
+  teamWorkspaceLoadedAt = Date.now();
+  writePersistentStatsCache("team-workspace", teamWorkspaceData);
   return teamWorkspaceData;
 }
 
@@ -6779,7 +7116,9 @@ function toggleTeamTemplateSourceDropdown(forceOpen = null) {
   const dropdown = document.getElementById("teamTemplateSourceDropdown");
   if (!trigger || !dropdown || trigger.disabled) return;
   const nextOpen =
-    typeof forceOpen === "boolean" ? forceOpen : !isTeamTemplateSourceDropdownOpen;
+    typeof forceOpen === "boolean"
+      ? forceOpen
+      : !isTeamTemplateSourceDropdownOpen;
   isTeamTemplateSourceDropdownOpen = nextOpen;
   trigger.classList.toggle("open", nextOpen);
   dropdown.classList.toggle("hidden", !nextOpen);
@@ -6867,10 +7206,27 @@ function findTeamTemplateById(templateId) {
   );
 }
 
-async function loadTeamWorkspace({ silent = false } = {}) {
+async function loadTeamWorkspace({ silent = false, force = false } = {}) {
   if (!user) {
     teamWorkspaceData = null;
+    teamWorkspaceLoadedUserId = 0;
+    teamWorkspaceLoadedAt = 0;
     return null;
+  }
+  const activeUserId = Number(user.id || 0);
+  if (
+    !force &&
+    teamWorkspaceData &&
+    teamWorkspaceLoadedUserId === activeUserId &&
+    Date.now() - teamWorkspaceLoadedAt <= 120000
+  ) {
+    return teamWorkspaceData;
+  }
+  if (!force) {
+    const persistedWorkspace = readPersistentStatsCache("team-workspace");
+    if (persistedWorkspace) {
+      return setTeamWorkspaceData(persistedWorkspace);
+    }
   }
   try {
     const response = await fetch("/api/team/workspace");
@@ -6966,7 +7322,9 @@ function renderTeamTemplates(templates) {
   body.innerHTML = templates
     .map((template) => {
       const title = template.name || template.og_title || "Template";
-      const playableVideoUrl = buildCloudinaryPlayableVideoUrl(template.video_url || "");
+      const playableVideoUrl = buildCloudinaryPlayableVideoUrl(
+        template.video_url || "",
+      );
       const mediaMarkup = playableVideoUrl
         ? `<div class="team-template-media"><video src="${esc(playableVideoUrl)}" controls preload="metadata" playsinline muted></video></div>`
         : template.og_image
@@ -6978,18 +7336,27 @@ function renderTeamTemplates(templates) {
       const hasVideoBadge = playableVideoUrl
         ? `<span class="team-template-flag">Video</span>`
         : "";
-      const groupedLinks = Array.isArray(template.source_links) && template.source_links.length
-        ? template.source_links
-        : [
-            {
-              title: template.og_title || template.name || "Link",
-              short_url: template.source_link_short_url || "",
-              original_url: template.source_link_original_url || "",
-            },
-          ];
-      const sourcePlatform = groupedLinks[0]?.original_url ? pt(groupedLinks[0].original_url) : "generic";
-      const platformLabel = sourcePlatform === "shopee" ? "Shopee" : sourcePlatform === "tiktok" ? "TikTok" : "Generic";
-      const canEditTemplate = Number(template.created_by_user_id || 0) === Number(user?.id || 0);
+      const groupedLinks =
+        Array.isArray(template.source_links) && template.source_links.length
+          ? template.source_links
+          : [
+              {
+                title: template.og_title || template.name || "Link",
+                short_url: template.source_link_short_url || "",
+                original_url: template.source_link_original_url || "",
+              },
+            ];
+      const sourcePlatform = groupedLinks[0]?.original_url
+        ? pt(groupedLinks[0].original_url)
+        : "generic";
+      const platformLabel =
+        sourcePlatform === "shopee"
+          ? "Shopee"
+          : sourcePlatform === "tiktok"
+            ? "TikTok"
+            : "Generic";
+      const canEditTemplate =
+        Number(template.created_by_user_id || 0) === Number(user?.id || 0);
       const templateActionButtons = canEditTemplate
         ? `<button class="btn-cp" onclick="openTeamTemplateModal('edit', ${Number(template.id)})" title="Sua mau">Sua</button>
            <button class="btn-cp" onclick="deleteTeamTemplate(${Number(template.id)})" title="Xoa mau" style="color:var(--red);border-color:rgba(239,68,68,.2)">Xoa</button>`
@@ -7087,12 +7454,18 @@ function renderTeamWorkspaceSummary() {
   const domainLabel = document.getElementById("teamDomainLabel");
   const templateCount = document.getElementById("teamTemplateCount");
   const templateHint = document.getElementById("teamTemplateHint");
-  const templateSourcePicker = document.getElementById("teamTemplateSourcePicker");
-  const templateSourceStatus = document.getElementById("teamTemplateSourceStatus");
+  const templateSourcePicker = document.getElementById(
+    "teamTemplateSourcePicker",
+  );
+  const templateSourceStatus = document.getElementById(
+    "teamTemplateSourceStatus",
+  );
   const templateSource = null;
   const templateMediaLink = document.getElementById("teamTemplateMediaLink");
   const templateMediaHint = document.getElementById("teamTemplateMediaHint");
-  const templateUploadStatus = document.getElementById("teamTemplateUploadStatus");
+  const templateUploadStatus = document.getElementById(
+    "teamTemplateUploadStatus",
+  );
   const templateName = document.getElementById("teamTemplateName");
   const templateCreateBtn = document.getElementById("teamTemplateCreateBtn");
   const invitationBanner = document.getElementById("teamInvitationBanner");
@@ -7224,10 +7597,16 @@ function renderTeamWorkspaceSummary() {
       templateSourcePicker.innerHTML = sourceLinks
         .map((link) => {
           const primary =
-            link.og_title || link.alias || link.short_code || `Link #${link.id}`;
+            link.og_title ||
+            link.alias ||
+            link.short_code ||
+            `Link #${link.id}`;
           const secondary = link.original_url || "";
-          const selected = selectedTeamTemplateSourceIds.includes(Number(link.id));
-          const disabled = !selected && selectedTeamTemplateSourceIds.length >= 5;
+          const selected = selectedTeamTemplateSourceIds.includes(
+            Number(link.id),
+          );
+          const disabled =
+            !selected && selectedTeamTemplateSourceIds.length >= 5;
           return `<label class="team-template-source-item ${selected ? "active" : ""} ${disabled || !canCreateTemplates ? "disabled" : ""}">
             <input type="checkbox" ${selected ? "checked" : ""} ${disabled || !canCreateTemplates ? "disabled" : ""} onchange="toggleTeamTemplateSourceSelection(${Number(link.id)})" />
             <span class="team-template-source-copy">
@@ -7258,7 +7637,8 @@ function renderTeamWorkspaceSummary() {
       })
       .join("");
     templateMediaLink.innerHTML = `<option value="">Chon media bat buoc cho mau nay</option>${mediaOptions}`;
-    templateMediaLink.disabled = !canCreateTemplates || !mediaEligibleLinks.length;
+    templateMediaLink.disabled =
+      !canCreateTemplates || !mediaEligibleLinks.length;
   }
   if (templateMediaHint) {
     templateMediaHint.textContent = mediaEligibleLinks.length
@@ -7474,7 +7854,9 @@ function removeTeamMember(memberId) {
 function toggleTeamTemplateSourceSelection(linkId) {
   const normalizedId = Number(linkId);
   if (!Number.isInteger(normalizedId) || normalizedId < 1) return;
-  const selected = new Set(selectedTeamTemplateSourceIds.map((id) => Number(id)));
+  const selected = new Set(
+    selectedTeamTemplateSourceIds.map((id) => Number(id)),
+  );
   if (selected.has(normalizedId)) {
     selected.delete(normalizedId);
   } else {
@@ -7572,7 +7954,9 @@ async function createTeamTemplate() {
   const nameInput = document.getElementById("teamTemplateName");
   const mediaInput = document.getElementById("teamTemplateMediaLink");
   const selectedSourceLinkIds = [...selectedTeamTemplateSourceIds];
-  const mediaLinkId = Number(selectedTeamTemplateMediaLinkId || mediaInput?.value || 0);
+  const mediaLinkId = Number(
+    selectedTeamTemplateMediaLinkId || mediaInput?.value || 0,
+  );
   const name = String(nameInput?.value || "").trim();
   if (!selectedSourceLinkIds.length) {
     toast("Chọn một link nguồn của bạn trước khi tạo mẫu.", "warn");
@@ -7584,7 +7968,10 @@ async function createTeamTemplate() {
     sourceInput?.focus();
     return;
   }
-  if ((!Number.isInteger(mediaLinkId) || mediaLinkId < 1) && !uploadedTeamTemplateMedia?.url) {
+  if (
+    (!Number.isInteger(mediaLinkId) || mediaLinkId < 1) &&
+    !uploadedTeamTemplateMedia?.url
+  ) {
     toast("Ban phai chon video hoac anh dai dien cho mau chung.", "warn");
     mediaInput?.focus();
     return;
@@ -7595,7 +7982,8 @@ async function createTeamTemplate() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         source_link_ids: selectedSourceLinkIds,
-        media_link_id: Number.isInteger(mediaLinkId) && mediaLinkId > 0 ? mediaLinkId : null,
+        media_link_id:
+          Number.isInteger(mediaLinkId) && mediaLinkId > 0 ? mediaLinkId : null,
         uploaded_media_kind: uploadedTeamTemplateMedia?.kind || null,
         uploaded_media_url: uploadedTeamTemplateMedia?.url || null,
         uploaded_media_thumb: uploadedTeamTemplateMedia?.image || null,
@@ -7696,9 +8084,12 @@ function editTeamTemplate(templateId) {
       ? [Number(template.source_link_id)]
       : [];
   selectedTeamTemplateMediaLinkId =
-    Number(template.media_link_id || 0) > 0 ? Number(template.media_link_id) : null;
+    Number(template.media_link_id || 0) > 0
+      ? Number(template.media_link_id)
+      : null;
   uploadedTeamTemplateMedia =
-    !selectedTeamTemplateMediaLinkId && (template.video_url || template.og_image)
+    !selectedTeamTemplateMediaLinkId &&
+    (template.video_url || template.og_image)
       ? {
           kind: template.video_url ? "video" : "image",
           url: String(template.video_url || template.og_image || ""),
@@ -7753,7 +8144,10 @@ function openTeamTemplateModal(mode, templateId, sourceLinkId = null) {
     toast("Không tìm thấy mẫu chung.", "warn");
     return;
   }
-  if (mode === "edit" && Number(template.created_by_user_id || 0) !== Number(user?.id || 0)) {
+  if (
+    mode === "edit" &&
+    Number(template.created_by_user_id || 0) !== Number(user?.id || 0)
+  ) {
     toast("Chi nguoi tao mau moi duoc sua mau chung nay.", "warn");
     return;
   }
@@ -7763,14 +8157,21 @@ function openTeamTemplateModal(mode, templateId, sourceLinkId = null) {
   const noteEl = document.getElementById("teamTemplateModalNote");
   const editFields = document.getElementById("teamTemplateEditFields");
   const useFields = document.getElementById("teamTemplateUseFields");
-  const sourceSummaryEl = document.getElementById("teamTemplateModalSourceSummary");
+  const sourceSummaryEl = document.getElementById(
+    "teamTemplateModalSourceSummary",
+  );
   const sourceSelect = document.getElementById("teamTemplateModalSourceLink");
   const nameInput = document.getElementById("teamTemplateModalName");
-  const originalUrlInput = document.getElementById("teamTemplateModalOriginalUrl");
+  const originalUrlInput = document.getElementById(
+    "teamTemplateModalOriginalUrl",
+  );
   if (!modal || !titleEl || !actionBtn) return;
-  const groupedLinks = Array.isArray(template.source_links) ? template.source_links : [];
-  const selectedSource =
-    groupedLinks.find((link) => Number(link.id) === Number(sourceLinkId)) ||
+  const groupedLinks = Array.isArray(template.source_links)
+    ? template.source_links
+    : [];
+  const selectedSource = groupedLinks.find(
+    (link) => Number(link.id) === Number(sourceLinkId),
+  ) ||
     groupedLinks[0] || {
       id: template.source_link_id,
       title: template.og_title || template.name || "Link",
@@ -7915,7 +8316,7 @@ async function closeTeamTemplateModal(confirmed) {
     } catch {}
     await refreshActiveStatsData();
     if (document.getElementById("page-team")?.classList.contains("active")) {
-      await loadTeamWorkspace({ silent: true });
+      await loadTeamWorkspace({ silent: true, force: true });
       renderTeamWorkspaceSummary();
       renderTeamMembers(teamWorkspaceData?.members || []);
       renderTeamTemplates(teamWorkspaceData?.templates || []);
@@ -8177,7 +8578,12 @@ function isShopeeUrlCandidate(value) {
   }
 }
 
-function setInlineUploadStatus(targetId, message = "", tone = "", progress = null) {
+function setInlineUploadStatus(
+  targetId,
+  message = "",
+  tone = "",
+  progress = null,
+) {
   const el = document.getElementById(targetId);
   if (!el) return;
   if (!message) {
@@ -8308,7 +8714,12 @@ async function handleVideoUploadLegacy(event, cid) {
   }
   const area = document.getElementById(cid + "_vuploadarea");
   if (area) area.style.borderColor = "var(--brand)";
-  setInlineUploadStatus(`${cid}_videoUploadStatus`, "Đang upload video...", "warn", 0);
+  setInlineUploadStatus(
+    `${cid}_videoUploadStatus`,
+    "Đang upload video...",
+    "warn",
+    0,
+  );
   const fd = new FormData();
   fd.append("video", file);
   try {
@@ -8340,7 +8751,12 @@ async function handleVideoUploadLegacy(event, cid) {
       toast("✅ Upload video thành công!", "ok");
     }
     if (area) area.style.borderColor = "var(--green)";
-    setInlineUploadStatus(`${cid}_videoUploadStatus`, "Upload video xong", "ok", 100);
+    setInlineUploadStatus(
+      `${cid}_videoUploadStatus`,
+      "Upload video xong",
+      "ok",
+      100,
+    );
     void triggerVideoMetadataAi(cid, true);
   } catch (error) {
     if (error?.status === 401) {
@@ -8521,7 +8937,12 @@ async function handleVideoUpload(event, cid) {
 
   const area = document.getElementById(cid + "_vuploadarea");
   if (area) area.style.borderColor = "var(--brand)";
-  setInlineUploadStatus(`${cid}_videoUploadStatus`, "Đang upload video...", "warn", 0);
+  setInlineUploadStatus(
+    `${cid}_videoUploadStatus`,
+    "Đang upload video...",
+    "warn",
+    0,
+  );
 
   try {
     let uploadData;
@@ -8568,7 +8989,12 @@ async function handleVideoUpload(event, cid) {
     }
 
     if (area) area.style.borderColor = "var(--green)";
-    setInlineUploadStatus(`${cid}_videoUploadStatus`, "Upload video xong", "ok", 100);
+    setInlineUploadStatus(
+      `${cid}_videoUploadStatus`,
+      "Upload video xong",
+      "ok",
+      100,
+    );
     void triggerVideoMetadataAi(cid, true);
   } catch (error) {
     if (error?.status === 401) {
@@ -8617,8 +9043,7 @@ function extractThumbFromVideoElement(videoEl, cid) {
 
 async function triggerVideoMetadataAi(cid, force = false) {
   if (!user?.id) return;
-  const originalUrl =
-    document.getElementById(`${cid}_url`)?.value.trim() || "";
+  const originalUrl = document.getElementById(`${cid}_url`)?.value.trim() || "";
   const videoUrl =
     document.getElementById(`${cid}_videourl`)?.value.trim() || "";
   const imageUrl = document.getElementById(`${cid}_ogimg`)?.value.trim() || "";
@@ -8780,7 +9205,10 @@ async function handleFileUpload(event, cid) {
       areaId: `${cid}_uarea`,
       onAfterSet: () => updateOgPreview(cid),
     });
-    toast(data?.url ? "✅ Upload ảnh thành công!" : "✅ Upload ảnh xong!", "ok");
+    toast(
+      data?.url ? "✅ Upload ảnh thành công!" : "✅ Upload ảnh xong!",
+      "ok",
+    );
   } catch (error) {
     if (error?.status === 401) {
       redirectToAuth("login", "Cần đăng nhập để upload ảnh.");
@@ -8984,15 +9412,15 @@ async function doShorten(cid, confirmAffiliate = false) {
         og_desc,
         og_image,
         domain_hostname,
-          link_type,
-          video_url,
-          video_overlay_text,
-          video_popup_url_3s,
-          video_popup_url_5s,
-          video_popup_url_300s,
-          team_template_id: teamTemplateId,
-          confirm_affiliate: confirmAffiliate && affiliateUrl,
-        }),
+        link_type,
+        video_url,
+        video_overlay_text,
+        video_popup_url_3s,
+        video_popup_url_5s,
+        video_popup_url_300s,
+        team_template_id: teamTemplateId,
+        confirm_affiliate: confirmAffiliate && affiliateUrl,
+      }),
     });
     const data = await r.json();
     if (!r.ok) {
@@ -9102,7 +9530,9 @@ function getDashboardPlatformMetrics() {
   const rawRows = Array.isArray(statsAnalytics?.platforms?.distribution)
     ? statsAnalytics.platforms.distribution
     : [];
-  const rawTodayRows = Array.isArray(statsAnalytics?.platforms?.today_distribution)
+  const rawTodayRows = Array.isArray(
+    statsAnalytics?.platforms?.today_distribution,
+  )
     ? statsAnalytics.platforms.today_distribution
     : [];
   const readMetric = (key) => ({
@@ -9117,8 +9547,8 @@ function getDashboardPlatformMetrics() {
       rawRows.find((item) => String(item?.key || "") === key)?.clicks || 0,
     ),
     rawToday: Number(
-      rawTodayRows.find((item) => String(item?.key || "") === key)?.clicks_today ||
-        0,
+      rawTodayRows.find((item) => String(item?.key || "") === key)
+        ?.clicks_today || 0,
     ),
   });
   return {
@@ -9158,6 +9588,10 @@ function rememberStatsPayloadCache(payload) {
     payload.selectedRangeDays,
     statsRangeDays,
   );
+  writePersistentStatsCache("stats-payload", payload, {
+    suffix: String(statsPayloadCacheDays),
+    selectedRangeDays: statsPayloadCacheDays,
+  });
   rememberStatsSummaryPayloadCache(payload);
 }
 
@@ -9169,6 +9603,9 @@ function rememberStatsSummaryPayloadCache(payload) {
     payload.selectedRangeDays,
     DEFAULT_STATS_RANGE_DAYS,
   );
+  writePersistentStatsCache("stats-summary", payload, {
+    selectedRangeDays: statsSummaryPayloadCacheDays,
+  });
 }
 
 function getStatsDebugMeta(payload = {}) {
@@ -9200,16 +9637,31 @@ function logStatsRender(stage, payload = {}, extra = {}) {
   } catch (_) {}
 }
 
-async function getStatsPayload({ preferCache = false, days = statsRangeDays } = {}) {
+async function getStatsPayload({
+  preferCache = false,
+  forceNetwork = false,
+  days = statsRangeDays,
+} = {}) {
   const requestedDays = normalizeStatsRangeDays(days);
   const now = Date.now();
   if (
     preferCache &&
+    !forceNetwork &&
     statsPayloadCache &&
     statsPayloadCacheDays === requestedDays &&
     now - statsPayloadCacheAt <= STATS_PAYLOAD_CACHE_TTL_MS
   ) {
     return statsPayloadCache;
+  }
+  if (!forceNetwork && preferCache !== false) {
+    const persistedPayload = readPersistentStatsCache("stats-payload", {
+      suffix: String(requestedDays),
+      selectedRangeDays: requestedDays,
+    });
+    if (persistedPayload) {
+      rememberStatsPayloadCache(persistedPayload);
+      return persistedPayload;
+    }
   }
   if (statsPayloadPromise && statsPayloadPromiseDays === requestedDays) {
     return statsPayloadPromise;
@@ -9232,15 +9684,30 @@ async function getStatsPayload({ preferCache = false, days = statsRangeDays } = 
   }
 }
 
-async function getStatsSummaryPayload({ preferCache = false, compact = false } = {}) {
+async function getStatsSummaryPayload({
+  preferCache = false,
+  forceNetwork = false,
+  compact = false,
+} = {}) {
   const now = Date.now();
   if (compact) {
     if (
       preferCache &&
+      !forceNetwork &&
       compactStatsSummaryPayloadCache &&
       now - compactStatsSummaryPayloadCacheAt <= STATS_PAYLOAD_CACHE_TTL_MS
     ) {
       return compactStatsSummaryPayloadCache;
+    }
+    if (!forceNetwork && preferCache !== false) {
+      const persistedCompactPayload = readPersistentStatsCache(
+        "stats-summary-compact",
+      );
+      if (persistedCompactPayload) {
+        compactStatsSummaryPayloadCache = persistedCompactPayload;
+        compactStatsSummaryPayloadCacheAt = Date.now();
+        return persistedCompactPayload;
+      }
     }
     if (compactStatsSummaryPayloadPromise) {
       return compactStatsSummaryPayloadPromise;
@@ -9249,10 +9716,16 @@ async function getStatsSummaryPayload({ preferCache = false, compact = false } =
       const response = await fetch("/api/stats/summary?compact=1");
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.error || "KhÃ´ng thá»ƒ táº£i thá»‘ng kÃª nhanh");
+        throw new Error(
+          payload?.error || "KhÃ´ng thá»ƒ táº£i thá»‘ng kÃª nhanh",
+        );
       }
       compactStatsSummaryPayloadCache = payload || {};
       compactStatsSummaryPayloadCacheAt = Date.now();
+      writePersistentStatsCache(
+        "stats-summary-compact",
+        compactStatsSummaryPayloadCache,
+      );
       return payload || {};
     })();
     try {
@@ -9263,11 +9736,21 @@ async function getStatsSummaryPayload({ preferCache = false, compact = false } =
   }
   if (
     preferCache &&
+    !forceNetwork &&
     statsSummaryPayloadCache &&
     statsSummaryPayloadCacheDays === DEFAULT_STATS_RANGE_DAYS &&
     now - statsSummaryPayloadCacheAt <= STATS_PAYLOAD_CACHE_TTL_MS
   ) {
     return statsSummaryPayloadCache;
+  }
+  if (!forceNetwork && preferCache !== false) {
+    const persistedSummaryPayload = readPersistentStatsCache("stats-summary", {
+      selectedRangeDays: DEFAULT_STATS_RANGE_DAYS,
+    });
+    if (persistedSummaryPayload) {
+      rememberStatsSummaryPayloadCache(persistedSummaryPayload);
+      return persistedSummaryPayload;
+    }
   }
   if (statsSummaryPayloadPromise) {
     return statsSummaryPayloadPromise;
@@ -9288,14 +9771,26 @@ async function getStatsSummaryPayload({ preferCache = false, compact = false } =
   }
 }
 
-async function getLinksPayload({ preferCache = false } = {}) {
+async function getLinksPayload({
+  preferCache = false,
+  forceNetwork = false,
+} = {}) {
   const now = Date.now();
   if (
     preferCache &&
+    !forceNetwork &&
     linksPayloadCache &&
     now - linksPayloadCacheAt <= STATS_PAYLOAD_CACHE_TTL_MS
   ) {
     return linksPayloadCache;
+  }
+  if (!forceNetwork && preferCache !== false) {
+    const persistedLinksPayload = readPersistentStatsCache("links-payload");
+    if (persistedLinksPayload) {
+      linksPayloadCache = persistedLinksPayload;
+      linksPayloadCacheAt = Date.now();
+      return persistedLinksPayload;
+    }
   }
   if (linksPayloadPromise) {
     return linksPayloadPromise;
@@ -9308,6 +9803,7 @@ async function getLinksPayload({ preferCache = false } = {}) {
     }
     linksPayloadCache = payload || {};
     linksPayloadCacheAt = Date.now();
+    writePersistentStatsCache("links-payload", linksPayloadCache);
     return payload || {};
   })();
   try {
@@ -9317,14 +9813,27 @@ async function getLinksPayload({ preferCache = false } = {}) {
   }
 }
 
-async function loadDashboardData({ preferCache = false, prefetched = null } = {}) {
+async function loadDashboardData({
+  preferCache = false,
+  forceNetwork = false,
+  prefetched = null,
+} = {}) {
   const summaryPayload =
-    prefetched || (await getStatsSummaryPayload({ preferCache }));
-  return loadData(summaryPayload, { days: DEFAULT_STATS_RANGE_DAYS });
+    prefetched || (await getStatsSummaryPayload({ preferCache, forceNetwork }));
+  return loadData(summaryPayload, {
+    preferCache,
+    forceNetwork,
+    days: DEFAULT_STATS_RANGE_DAYS,
+  });
 }
 
-async function loadLinksData({ preferCache = false, prefetched = null } = {}) {
-  const payload = prefetched || (await getLinksPayload({ preferCache }));
+async function loadLinksData({
+  preferCache = false,
+  forceNetwork = false,
+  prefetched = null,
+} = {}) {
+  const payload =
+    prefetched || (await getLinksPayload({ preferCache, forceNetwork }));
   standardLinks = Array.isArray(payload?.recent) ? payload.recent : [];
   linkLabs = Array.isArray(payload?.labs) ? payload.labs : [];
   links = standardLinks.slice();
@@ -9343,6 +9852,58 @@ async function loadLinksData({ preferCache = false, prefetched = null } = {}) {
   renderLinksOverview();
   applyLinkFilters();
   return payload;
+}
+
+async function runManualStatsReload(buttonId, loader, successMessage) {
+  const button = buttonId ? document.getElementById(buttonId) : null;
+  const originalLabel = button?.textContent || "";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Dang tai...";
+  }
+  try {
+    resetStatsDataCaches();
+    await loader();
+    if (successMessage) {
+      toast(successMessage, "ok");
+    }
+  } catch (error) {
+    toast(error?.message || "Khong the tai lai du lieu", "warn");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalLabel || "Tai lai";
+    }
+  }
+}
+
+function reloadDashboardPageData() {
+  return runManualStatsReload(
+    "dashboardReloadBtn",
+    () => loadDashboardData({ preferCache: false, forceNetwork: true }),
+    "Đã tải lại dashboard mới nhất.",
+  );
+}
+
+function reloadStatsPageData() {
+  return runManualStatsReload(
+    "statsReloadBtn",
+    () =>
+      loadData(null, {
+        preferCache: false,
+        forceNetwork: true,
+        days: statsRangeDays,
+      }),
+    "Đã tải lại thống kê mới nhất.",
+  );
+}
+
+function reloadLinksPageData() {
+  return runManualStatsReload(
+    "linksReloadBtn",
+    () => loadLinksData({ preferCache: false, forceNetwork: true }),
+    "Đã tải lại danh sách liên kết mới nhất.",
+  );
 }
 
 async function refreshActiveStatsData(options = {}) {
@@ -9364,8 +9925,22 @@ async function loadData(prefetched = null, options = {}) {
     const requestedDays = normalizeStatsRangeDays(
       options.days ?? prefetched?.selectedRangeDays ?? statsRangeDays,
     );
+    if (options.preferCache !== false && !options.forceNetwork) {
+      const persistedPayload = readPersistentStatsCache("stats-payload", {
+        suffix: String(requestedDays),
+        selectedRangeDays: requestedDays,
+      });
+      if (persistedPayload) {
+        prefetched = persistedPayload;
+      }
+    }
     const d =
-      prefetched || (await getStatsPayload({ days: requestedDays }));
+      prefetched ||
+      (await getStatsPayload({
+        preferCache: options.preferCache !== false,
+        forceNetwork: !!options.forceNetwork,
+        days: requestedDays,
+      }));
     rememberStatsPayloadCache(d);
     statsRangeDays = normalizeStatsRangeDays(
       d.selectedRangeDays,
@@ -9425,9 +10000,10 @@ async function loadData(prefetched = null, options = {}) {
     document.getElementById("navCount").textContent = d.totalLinks || 0;
     document.getElementById("linkCountLabel").textContent = d.totalLinks || 0;
     const dashboardPlatformMetrics = getDashboardPlatformMetrics();
-    document.getElementById("dClicksSub").textContent = `Raw clicks ${recentWindowLabel}: ${Number(
-      d.rawTotalClicks ?? statsAnalytics?.total_clicks ?? 0,
-    ).toLocaleString()}`;
+    document.getElementById("dClicksSub").textContent =
+      `Raw clicks ${recentWindowLabel}: ${Number(
+        d.rawTotalClicks ?? statsAnalytics?.total_clicks ?? 0,
+      ).toLocaleString()}`;
     document.getElementById("dShopee").textContent = Number(
       dashboardPlatformMetrics.shopee.unique,
     ).toLocaleString();
@@ -9465,8 +10041,7 @@ loadData = async function loadDataWithRange(prefetched = null, options = {}) {
     const requestedDays = normalizeStatsRangeDays(
       options.days ?? prefetched?.selectedRangeDays ?? statsRangeDays,
     );
-    const d =
-      prefetched || (await getStatsPayload({ days: requestedDays }));
+    const d = prefetched || (await getStatsPayload({ days: requestedDays }));
     if (loadSequence !== statsLoadSequence) {
       logStatsRender("ignored-stale-response", d, {
         sequence: loadSequence,
@@ -9619,7 +10194,11 @@ loadData = async function loadDataWithRange(prefetched = null, options = {}) {
             dashboardPlatformMetrics.tiktok.raw,
           ).toLocaleString()}`;
 
-    if (recentWindowDays === 1 && d?.yesterday && typeof d.yesterday === "object") {
+    if (
+      recentWindowDays === 1 &&
+      d?.yesterday &&
+      typeof d.yesterday === "object"
+    ) {
       document.getElementById("dClicksSub").textContent = `Hôm qua: ${Number(
         d?.yesterday?.unique_clicks || 0,
       ).toLocaleString()} click`;
@@ -9631,11 +10210,17 @@ loadData = async function loadDataWithRange(prefetched = null, options = {}) {
       ).toLocaleString()} click`;
     } else {
       document.getElementById("dClicksSub").textContent =
-        recentWindowDays === 7 ? "7 ngày gần nhất" : `${recentWindowLabel} gần nhất`;
+        recentWindowDays === 7
+          ? "7 ngày gần nhất"
+          : `${recentWindowLabel} gần nhất`;
       document.getElementById("dShopeeSub").textContent =
-        recentWindowDays === 7 ? "7 ngày gần nhất" : `${recentWindowLabel} gần nhất`;
+        recentWindowDays === 7
+          ? "7 ngày gần nhất"
+          : `${recentWindowLabel} gần nhất`;
       document.getElementById("dTiktokSub").textContent =
-        recentWindowDays === 7 ? "7 ngày gần nhất" : `${recentWindowLabel} gần nhất`;
+        recentWindowDays === 7
+          ? "7 ngày gần nhất"
+          : `${recentWindowLabel} gần nhất`;
     }
 
     const dashboardChartTitle = document.getElementById("dashboardChartTitle");
@@ -9704,7 +10289,9 @@ function renderActivity(arr, id) {
 }
 
 function shouldUseOriginalLinkClamp(link = null, platform = "") {
-  const normalizedPlatform = String(platform || "").trim().toLowerCase();
+  const normalizedPlatform = String(platform || "")
+    .trim()
+    .toLowerCase();
   const originalUrl = String(link?.original_url || "").trim();
   return normalizedPlatform === "tiktok" && originalUrl.length > 120;
 }
@@ -9929,7 +10516,9 @@ function renderTable(arr) {
     .map((link) => {
       const isLab = (link?._kind || "") === "lab";
       const platformKey = getUnifiedLinkRowPlatform(link);
-      const shortUrl = String(link?.short_url || link?.original_url || "").trim();
+      const shortUrl = String(
+        link?.short_url || link?.original_url || "",
+      ).trim();
       let shortLabel = shortUrl.replace(/^https?:\/\//, "");
       if (isLab) {
         const publishedSlug = String(link?.published_route_slug || "").trim();
@@ -9946,10 +10535,16 @@ function renderTable(arr) {
       }
       const date = String(link?.created_at || "").substring(0, 10);
       const linkId = Number(link?.id || 0);
-      const rowKey = String(link?._rowKey || `${isLab ? "lab" : "link"}-${linkId || shortLabel}`);
+      const rowKey = String(
+        link?._rowKey || `${isLab ? "lab" : "link"}-${linkId || shortLabel}`,
+      );
       const isSelected = !isLab && selectedLinkIds.has(linkId);
-      const displayTitle =
-        String(link?.og_title || link?.name || shortLabel || (isLab ? `Lab ${linkId}` : `Link ${linkId}`)).trim();
+      const displayTitle = String(
+        link?.og_title ||
+          link?.name ||
+          shortLabel ||
+          (isLab ? `Lab ${linkId}` : `Link ${linkId}`),
+      ).trim();
       return `<tr data-row-key="${rowKey}" data-link-id="${isLab ? "" : linkId}" class="${isSelected ? "is-selected" : ""}${isLab ? " is-lab-row" : ""}">
         <td class="td-check">
           <label class="tbl-check">
@@ -9999,7 +10594,10 @@ function syncLabLinkPublishButtons(tb) {
     const link = currentFilteredLinks[index];
     if ((link?._kind || "") !== "lab") return;
     const actionsGrid = row.querySelector(".links-actions-grid");
-    if (!actionsGrid || actionsGrid.querySelector("[data-lab-publish-action]")) {
+    if (
+      !actionsGrid ||
+      actionsGrid.querySelector("[data-lab-publish-action]")
+    ) {
       return;
     }
     const normalizedId = Number(link?.id || 0);
@@ -10099,9 +10697,12 @@ async function deleteLabLink(id, label) {
   });
   if (!confirmed) return;
   try {
-    const response = await fetch(`/api/admin/article-funnel-labs/${Number(id)}`, {
-      method: "DELETE",
-    });
+    const response = await fetch(
+      `/api/admin/article-funnel-labs/${Number(id)}`,
+      {
+        method: "DELETE",
+      },
+    );
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       toast(data.error || "Xóa lab thất bại", "err");
@@ -10141,18 +10742,21 @@ async function republishLabLinkLegacyMojibake(id, triggerButton = null) {
       );
     }
     const item = detailPayload.item || {};
-    const publishResponse = await fetch("/api/admin/article-funnel-lab/publish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        config: item.config_json || {},
-        lab_id: normalizedId,
-        lab_name:
-          String(item.name || "").trim() ||
-          String(item.title || "").trim() ||
-          `Lab ${normalizedId}`,
-      }),
-    });
+    const publishResponse = await fetch(
+      "/api/admin/article-funnel-lab/publish",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          config: item.config_json || {},
+          lab_id: normalizedId,
+          lab_name:
+            String(item.name || "").trim() ||
+            String(item.title || "").trim() ||
+            `Lab ${normalizedId}`,
+        }),
+      },
+    );
     const publishPayload = await publishResponse.json().catch(() => null);
     if (!publishResponse.ok) {
       throw new Error(
@@ -10210,18 +10814,21 @@ async function republishLabLink(id, triggerButton = null) {
       );
     }
     const item = detailPayload.item || {};
-    const publishResponse = await fetch("/api/admin/article-funnel-lab/publish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        config: item.config_json || {},
-        lab_id: normalizedId,
-        lab_name:
-          String(item.name || "").trim() ||
-          String(item.title || "").trim() ||
-          `Lab ${normalizedId}`,
-      }),
-    });
+    const publishResponse = await fetch(
+      "/api/admin/article-funnel-lab/publish",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          config: item.config_json || {},
+          lab_id: normalizedId,
+          lab_name:
+            String(item.name || "").trim() ||
+            String(item.title || "").trim() ||
+            `Lab ${normalizedId}`,
+        }),
+      },
+    );
     const publishPayload = await publishResponse.json().catch(() => null);
     if (!publishResponse.ok) {
       throw new Error(
@@ -10234,8 +10841,7 @@ async function republishLabLink(id, triggerButton = null) {
     return true;
   } catch (error) {
     toast(
-      String(error?.message || "").trim() ||
-        "Không publish lại được link ngắn",
+      String(error?.message || "").trim() || "Không publish lại được link ngắn",
       "err",
     );
     return false;
@@ -10423,16 +11029,20 @@ function sortUnifiedLinkRows(rows = []) {
 }
 
 function buildUnifiedLinkRows(recentLinks = [], labs = []) {
-  const standardRows = (Array.isArray(recentLinks) ? recentLinks : []).map((link) => ({
-    ...link,
-    _kind: "standard",
-    _rowKey: `link-${Number(link.id)}`,
-    platform_key: pt(link.original_url),
-  }));
+  const standardRows = (Array.isArray(recentLinks) ? recentLinks : []).map(
+    (link) => ({
+      ...link,
+      _kind: "standard",
+      _rowKey: `link-${Number(link.id)}`,
+      platform_key: pt(link.original_url),
+    }),
+  );
   const labRows = (Array.isArray(labs) ? labs : []).map((lab) => ({
     id: Number(lab.id || 0),
     short_url: String(lab.published_url || "").trim(),
-    original_url: String(lab.reference_source_url || lab.title || lab.name || "").trim(),
+    original_url: String(
+      lab.reference_source_url || lab.title || lab.name || "",
+    ).trim(),
     og_title: String(lab.title || lab.name || "").trim(),
     clicks: Math.max(Number(lab.affiliate_clicks) || 0, 0),
     created_at: lab.created_at || lab.updated_at || "",
@@ -10452,7 +11062,9 @@ function renderLinksOverview() {
   const summaryMetaEl = document.getElementById("linksSummaryMeta");
   const filterStateEl = document.getElementById("linksFilterState");
   if (visibleCountEl) {
-    visibleCountEl.textContent = Number(unifiedLinkRows.length || 0).toLocaleString();
+    visibleCountEl.textContent = Number(
+      unifiedLinkRows.length || 0,
+    ).toLocaleString();
   }
   if (summaryMetaEl) {
     summaryMetaEl.textContent = `${standardLinks.length.toLocaleString()} link thường • ${linkLabs.length.toLocaleString()} link lab`;
@@ -10472,7 +11084,9 @@ function matchesLinkFilter(link, filter) {
   const p = getUnifiedLinkRowPlatform(link);
   if (filter === "all") return true;
   if (filter === "video") {
-    return (link._kind || "") === "standard" && (link.link_type || "") === "video";
+    return (
+      (link._kind || "") === "standard" && (link.link_type || "") === "video"
+    );
   }
   return p === filter;
 }
@@ -10483,7 +11097,8 @@ function matchesLinkViewFilter(link) {
 }
 
 function setLinkViewFilter(filter, el) {
-  linkViewFilter = filter === "lab" ? "lab" : filter === "standard" ? "standard" : "all";
+  linkViewFilter =
+    filter === "lab" ? "lab" : filter === "standard" ? "standard" : "all";
   document
     .querySelectorAll(".chip[data-kind-filter]")
     .forEach((chip) => chip.classList.remove("active"));
@@ -10554,7 +11169,7 @@ function setStatsRangeDays(value) {
   statsRangeDays = requestedDays;
   chartDays = requestedDays;
   syncStatsRangeControls();
-  void loadData(null, { days: requestedDays });
+  void loadData(null, { preferCache: true, days: requestedDays });
 }
 
 function setChartDays(n, btn) {
@@ -10569,6 +11184,10 @@ function setChartDays(n, btn) {
 function renderChart() {
   const ctx = document.getElementById("clickChart");
   if (!ctx) return;
+  if (!window.Chart) {
+    void ensureChartJs().then(() => renderChart());
+    return;
+  }
   const { labels, vals } = getStatsTimelineSeries();
   if (chart) chart.destroy();
   chart = new Chart(ctx, {
@@ -11149,9 +11768,8 @@ const adminSectionLoadedAt = {
 function shouldUseSidebarDrawerViewport() {
   if (typeof window === "undefined") return false;
   if (typeof window.matchMedia === "function") {
-    return window.matchMedia(
-      `(max-width: ${SIDEBAR_DRAWER_BREAKPOINT_PX}px)`,
-    ).matches;
+    return window.matchMedia(`(max-width: ${SIDEBAR_DRAWER_BREAKPOINT_PX}px)`)
+      .matches;
   }
   return window.innerWidth <= SIDEBAR_DRAWER_BREAKPOINT_PX;
 }
@@ -11209,7 +11827,9 @@ function shouldFetchAdminUserLocation(force = false) {
 }
 
 function getAdminSectionsForLoad(section = adminSection) {
-  const normalizedSection = String(section || "overview").trim().toLowerCase();
+  const normalizedSection = String(section || "overview")
+    .trim()
+    .toLowerCase();
   return normalizedSection === "overview" ? ["overview"] : [normalizedSection];
 }
 
@@ -11355,13 +11975,55 @@ function syncAdminUserSelectionUI(filteredUsers, pageRows) {
   }
 }
 
+function hydrateAdminSectionFromPersistentCache(section) {
+  const payload = readPersistentStatsCache(`admin-${section}`, {
+    ttlMs: ADMIN_SECTION_CACHE_TTL_MS,
+  });
+  if (!payload) return false;
+
+  if (section === "overview") {
+    renderAdminOverview(payload);
+    enqueueAdminAlerts(payload);
+  } else if (section === "system") {
+    adminDomains = Array.isArray(payload.domains) ? payload.domains : [];
+    renderAdminDomains(adminDomains);
+    syncAvailableDomainsFromAdmin(adminDomains);
+  } else if (section === "users") {
+    adminUsers = Array.isArray(payload.users) ? payload.users : [];
+    const locationPayload = readPersistentStatsCache("admin-users-location", {
+      ttlMs: ADMIN_SECTION_CACHE_TTL_MS,
+    });
+    if (!locationPayload && !payload.locationAnalytics) return false;
+    adminUserLocationAnalytics =
+      locationPayload?.locationAnalytics || payload.locationAnalytics || null;
+    renderAdminUsers();
+    renderAdminUserLocationAnalytics();
+    if (locationPayload || payload.locationAnalytics) {
+      markAdminUserLocationLoaded();
+    }
+  } else if (section === "logs") {
+    adminRedirects = Array.isArray(payload.events) ? payload.events : [];
+    renderAdminRedirects(adminRedirects, payload.file || "logs/redirect.log");
+  } else if (section === "payments") {
+    adminPayments = Array.isArray(payload.requests) ? payload.requests : [];
+    renderAdminPayments();
+  } else {
+    return false;
+  }
+
+  markAdminSectionLoaded(section);
+  return true;
+}
+
 async function loadAdminData(force = false) {
   if (!isAdminUser()) return;
   try {
     let statsPayload = null;
     let redirectPayload = null;
-    const sectionsToFetch = getAdminSectionsForLoad().filter((section) =>
-      shouldFetchAdminSection(section, force),
+    const sectionsToFetch = getAdminSectionsForLoad().filter(
+      (section) =>
+        shouldFetchAdminSection(section, force) &&
+        (force || !hydrateAdminSectionFromPersistentCache(section)),
     );
     const tasks = [];
     if (sectionsToFetch.includes("overview")) {
@@ -11369,6 +12031,7 @@ async function loadAdminData(force = false) {
         fetch("/api/admin/stats").then(async (response) => {
           if (!response.ok) return;
           statsPayload = await response.json();
+          writePersistentStatsCache(`admin-overview`, statsPayload);
           renderAdminOverview(statsPayload);
           enqueueAdminAlerts(statsPayload);
           markAdminSectionLoaded("overview");
@@ -11380,6 +12043,7 @@ async function loadAdminData(force = false) {
         fetch("/api/admin/domains").then(async (response) => {
           if (!response.ok) return;
           const payload = await response.json();
+          writePersistentStatsCache(`admin-system`, payload);
           adminDomains = payload.domains || [];
           renderAdminDomains(adminDomains);
           syncAvailableDomainsFromAdmin(adminDomains);
@@ -11392,6 +12056,7 @@ async function loadAdminData(force = false) {
         fetch("/api/admin/users").then(async (response) => {
           if (!response.ok) return;
           const payload = await response.json();
+          writePersistentStatsCache(`admin-users`, payload);
           adminUsers = payload.users || [];
           adminSelectedUserIds = new Set(
             [...adminSelectedUserIds].filter((id) =>
@@ -11404,13 +12069,16 @@ async function loadAdminData(force = false) {
       );
       if (shouldFetchAdminUserLocation(force)) {
         tasks.push(
-          fetch("/api/admin/users/location-analytics").then(async (response) => {
-            if (!response.ok) return;
-            const payload = await response.json();
-            adminUserLocationAnalytics = payload.locationAnalytics || null;
-            renderAdminUserLocationAnalytics();
-            markAdminUserLocationLoaded();
-          }),
+          fetch("/api/admin/users/location-analytics").then(
+            async (response) => {
+              if (!response.ok) return;
+              const payload = await response.json();
+              writePersistentStatsCache(`admin-users-location`, payload);
+              adminUserLocationAnalytics = payload.locationAnalytics || null;
+              renderAdminUserLocationAnalytics();
+              markAdminUserLocationLoaded();
+            },
+          ),
         );
       } else {
         renderAdminUserLocationAnalytics();
@@ -11422,6 +12090,7 @@ async function loadAdminData(force = false) {
           async (response) => {
             if (!response.ok) return;
             redirectPayload = await response.json();
+            writePersistentStatsCache(`admin-logs`, redirectPayload);
             adminRedirects = redirectPayload.events || [];
             renderAdminRedirects(
               adminRedirects,
@@ -11437,6 +12106,7 @@ async function loadAdminData(force = false) {
         fetch("/api/admin/payments").then(async (response) => {
           if (!response.ok) return;
           const payload = await response.json();
+          writePersistentStatsCache(`admin-payments`, payload);
           adminPayments = payload.requests || [];
           renderAdminPayments();
           markAdminSectionLoaded("payments");
@@ -11625,7 +12295,9 @@ function renderAdminUsers() {
       const userId = Number(u.id);
       const isSelected = adminSelectedUserIds.has(userId);
       const isAdminRole =
-        String(u.role || "user").trim().toLowerCase() === "admin";
+        String(u.role || "user")
+          .trim()
+          .toLowerCase() === "admin";
       const canUseLab = isAdminRole || !!u.can_use_lab;
       return `<tr class="admin-user-row ${isSelected ? "admin-row-selected" : ""}" onclick="openAdminUserDetailModal(${userId})">
     <td class="td-check" onclick="event.stopPropagation()">
@@ -12196,7 +12868,9 @@ async function adminSetPlan(userId, selectEl) {
 }
 
 function getManagedUserRoleLabel(role) {
-  const normalizedRole = String(role || "user").trim().toLowerCase();
+  const normalizedRole = String(role || "user")
+    .trim()
+    .toLowerCase();
   if (normalizedRole === "admin") return "Admin";
   if (normalizedRole === "support") return "Hỗ trợ";
   return "User";
@@ -12205,7 +12879,9 @@ function getManagedUserRoleLabel(role) {
 async function adminSetLabAccess(userId, checkboxEl) {
   const targetUser = adminUsers.find((u) => Number(u.id) === Number(userId));
   const isAdminRole =
-    String(targetUser?.role || "").trim().toLowerCase() === "admin";
+    String(targetUser?.role || "")
+      .trim()
+      .toLowerCase() === "admin";
   if (isAdminRole) {
     if (checkboxEl) checkboxEl.checked = true;
     return;
@@ -12312,7 +12988,10 @@ async function adminSetRole(userId, selectEl) {
         : userItem,
     );
     renderAdminUsers();
-    toast(`✅ Đã cập nhật role → ${getManagedUserRoleLabel(updatedUser.role || nextRole)}`, "ok");
+    toast(
+      `✅ Đã cập nhật role → ${getManagedUserRoleLabel(updatedUser.role || nextRole)}`,
+      "ok",
+    );
   } catch (error) {
     if (selectEl) selectEl.value = currentRole;
     toast(error.message || "Không thể cập nhật vai trò", "err");
@@ -12707,7 +13386,9 @@ function renderTeamTemplates(templates) {
   body.innerHTML = templates
     .map((template) => {
       const title = template.name || template.og_title || "Template";
-      const playableVideoUrl = buildCloudinaryPlayableVideoUrl(template.video_url || "");
+      const playableVideoUrl = buildCloudinaryPlayableVideoUrl(
+        template.video_url || "",
+      );
       const mediaMarkup = playableVideoUrl
         ? `<div class="team-template-media"><video src="${esc(playableVideoUrl)}" controls preload="metadata" playsinline muted></video></div>`
         : template.og_image
@@ -12716,29 +13397,40 @@ function renderTeamTemplates(templates) {
       const downloadVideoButton = playableVideoUrl
         ? `<a class="btn-cp" href="${esc(playableVideoUrl)}" target="_blank" rel="noopener noreferrer" download>Tải video</a>`
         : "";
-      const groupedLinks = Array.isArray(template.source_links) && template.source_links.length
-        ? template.source_links
-        : [
-            {
-              id: Number(template.source_link_id || 0) || null,
-              title: template.og_title || template.name || "Link",
-              short_url: template.source_link_short_url || "",
-              original_url: template.source_link_original_url || "",
-            },
-          ];
-      const sourcePlatform = groupedLinks[0]?.original_url ? pt(groupedLinks[0].original_url) : "generic";
-      const platformLabel = sourcePlatform === "shopee" ? "Shopee" : sourcePlatform === "tiktok" ? "TikTok" : "Generic";
-      const canEditTemplate = Number(template.created_by_user_id || 0) === Number(user?.id || 0);
+      const groupedLinks =
+        Array.isArray(template.source_links) && template.source_links.length
+          ? template.source_links
+          : [
+              {
+                id: Number(template.source_link_id || 0) || null,
+                title: template.og_title || template.name || "Link",
+                short_url: template.source_link_short_url || "",
+                original_url: template.source_link_original_url || "",
+              },
+            ];
+      const sourcePlatform = groupedLinks[0]?.original_url
+        ? pt(groupedLinks[0].original_url)
+        : "generic";
+      const platformLabel =
+        sourcePlatform === "shopee"
+          ? "Shopee"
+          : sourcePlatform === "tiktok"
+            ? "TikTok"
+            : "Generic";
+      const canEditTemplate =
+        Number(template.created_by_user_id || 0) === Number(user?.id || 0);
       const templateActionButtons = canEditTemplate
         ? `<button class="btn-cp" onclick="openTeamTemplateModal('edit', ${Number(template.id)})" title="Sửa mẫu">Sửa</button>
            <button class="btn-cp" onclick="deleteTeamTemplate(${Number(template.id)})" title="Xóa mẫu" style="color:var(--red);border-color:rgba(239,68,68,.2)">Xóa</button>`
         : "";
       const groupedLinkMarkup = groupedLinks
         .map((link, index) => {
-          const linkId = Number(link.id || 0) || Number(template.source_link_id || 0);
-          const useButton = canUseTemplates && linkId > 0
-            ? `<button class="btn-cp" onclick="useTeamTemplateSource(${Number(template.id)}, ${linkId})">Lấy link cho tôi</button>`
-            : '<span style="color:var(--text3);font-size:12px">Chỉ editor được lấy</span>';
+          const linkId =
+            Number(link.id || 0) || Number(template.source_link_id || 0);
+          const useButton =
+            canUseTemplates && linkId > 0
+              ? `<button class="btn-cp" onclick="useTeamTemplateSource(${Number(template.id)}, ${linkId})">Lấy link cho tôi</button>`
+              : '<span style="color:var(--text3);font-size:12px">Chỉ editor được lấy</span>';
           return `<div class="team-template-link-row">
                 <div class="team-template-link-main">
                   <span class="team-template-link-label">Link ${index + 1}</span>
@@ -12797,12 +13489,22 @@ function renderTeamTemplates(templates) {
 function renderTeamWorkspaceSummary() {
   const workspace = teamWorkspaceData?.workspace || null;
   const membership = teamWorkspaceData?.membership || null;
-  const members = Array.isArray(teamWorkspaceData?.members) ? teamWorkspaceData.members : [];
-  const sourceLinks = Array.isArray(teamWorkspaceData?.source_links) ? teamWorkspaceData.source_links : [];
-  const templates = Array.isArray(teamWorkspaceData?.templates) ? teamWorkspaceData.templates : [];
+  const members = Array.isArray(teamWorkspaceData?.members)
+    ? teamWorkspaceData.members
+    : [];
+  const sourceLinks = Array.isArray(teamWorkspaceData?.source_links)
+    ? teamWorkspaceData.source_links
+    : [];
+  const templates = Array.isArray(teamWorkspaceData?.templates)
+    ? teamWorkspaceData.templates
+    : [];
   const seatLimit = getTeamSeatLimit();
-  const activeCount = members.filter((member) => member.status === "active").length;
-  const pendingCount = members.filter((member) => member.status === "pending").length;
+  const activeCount = members.filter(
+    (member) => member.status === "active",
+  ).length;
+  const pendingCount = members.filter(
+    (member) => member.status === "pending",
+  ).length;
   const ownerMember = members.find((member) => member.role === "owner");
   const canManageMembers = canInviteTeamMembers();
   const canCreateTemplates = canCreateSharedTemplates();
@@ -12824,11 +13526,21 @@ function renderTeamWorkspaceSummary() {
   const domainLabel = document.getElementById("teamDomainLabel");
   const templateCount = document.getElementById("teamTemplateCount");
   const templateHint = document.getElementById("teamTemplateHint");
-  const templateSourceTrigger = document.getElementById("teamTemplateSourceTrigger");
-  const templateSourceDropdown = document.getElementById("teamTemplateSourceDropdown");
-  const templateSourcePicker = document.getElementById("teamTemplateSourcePicker");
-  const templateSourceStatus = document.getElementById("teamTemplateSourceStatus");
-  const templateUploadStatus = document.getElementById("teamTemplateUploadStatus");
+  const templateSourceTrigger = document.getElementById(
+    "teamTemplateSourceTrigger",
+  );
+  const templateSourceDropdown = document.getElementById(
+    "teamTemplateSourceDropdown",
+  );
+  const templateSourcePicker = document.getElementById(
+    "teamTemplateSourcePicker",
+  );
+  const templateSourceStatus = document.getElementById(
+    "teamTemplateSourceStatus",
+  );
+  const templateUploadStatus = document.getElementById(
+    "teamTemplateUploadStatus",
+  );
   const templateName = document.getElementById("teamTemplateName");
   const templateCreateBtn = document.getElementById("teamTemplateCreateBtn");
   const invitationBanner = document.getElementById("teamInvitationBanner");
@@ -12836,7 +13548,9 @@ function renderTeamWorkspaceSummary() {
   const templatesCard = document.getElementById("teamTemplatesCard");
 
   if (seatCount) {
-    seatCount.textContent = pendingInvitation ? "Chờ" : `${members.length}/${seatLimit}`;
+    seatCount.textContent = pendingInvitation
+      ? "Chờ"
+      : `${members.length}/${seatLimit}`;
   }
   if (seatHint) {
     seatHint.textContent = pendingInvitation
@@ -12848,7 +13562,9 @@ function renderTeamWorkspaceSummary() {
   if (activeEl) activeEl.textContent = pendingInvitation ? 0 : activeCount;
   if (pendingEl) pendingEl.textContent = pendingInvitation ? 1 : pendingCount;
   if (workspaceName) {
-    workspaceName.textContent = workspace?.name || (user ? `${getUserDisplayName(user)} Workspace` : "Workspace");
+    workspaceName.textContent =
+      workspace?.name ||
+      (user ? `${getUserDisplayName(user)} Workspace` : "Workspace");
   }
   if (workspaceStatus) {
     workspaceStatus.textContent = pendingInvitation
@@ -12863,7 +13579,8 @@ function renderTeamWorkspaceSummary() {
       : "Owner: chưa xác định";
   }
   if (inviteControls) {
-    inviteControls.style.display = !pendingInvitation && canManageMembers ? "" : "none";
+    inviteControls.style.display =
+      !pendingInvitation && canManageMembers ? "" : "none";
   }
   if (inviteHint) {
     inviteHint.textContent = !user
@@ -12877,7 +13594,10 @@ function renderTeamWorkspaceSummary() {
   if (inviteRole) inviteRole.disabled = !canManageMembers;
   if (domainLabel) {
     domainLabel.textContent =
-      templates[0]?.domain_hostname || sourceLinks[0]?.domain_hostname || location.host || "boclink.click";
+      templates[0]?.domain_hostname ||
+      sourceLinks[0]?.domain_hostname ||
+      location.host ||
+      "boclink.click";
   }
   if (templateCount) templateCount.textContent = String(templates.length);
   if (templateHint) {
@@ -12892,8 +13612,15 @@ function renderTeamWorkspaceSummary() {
     sourceLinks.some((link) => Number(link.id) === Number(id)),
   );
   const selectedSourceLinks = getSelectedTeamTemplateSourceLinks(sourceLinks);
-  const mediaEligibleLinks = selectedSourceLinks.filter((link) => !!(link.video_url || link.og_image));
-  if (selectedTeamTemplateMediaLinkId && !mediaEligibleLinks.some((link) => Number(link.id) === Number(selectedTeamTemplateMediaLinkId))) {
+  const mediaEligibleLinks = selectedSourceLinks.filter(
+    (link) => !!(link.video_url || link.og_image),
+  );
+  if (
+    selectedTeamTemplateMediaLinkId &&
+    !mediaEligibleLinks.some(
+      (link) => Number(link.id) === Number(selectedTeamTemplateMediaLinkId),
+    )
+  ) {
     selectedTeamTemplateMediaLinkId = null;
   }
   if (!selectedTeamTemplateMediaLinkId && mediaEligibleLinks.length) {
@@ -12904,16 +13631,31 @@ function renderTeamWorkspaceSummary() {
     const triggerLabel = selectedSourceLinks.length
       ? selectedSourceLinks
           .slice(0, 2)
-          .map((link) => link.og_title || link.alias || link.short_code || `Link #${link.id}`)
+          .map(
+            (link) =>
+              link.og_title ||
+              link.alias ||
+              link.short_code ||
+              `Link #${link.id}`,
+          )
           .join(" · ")
       : "Chọn tối đa 5 link nguồn";
-    const suffix = selectedSourceLinks.length > 2 ? ` +${selectedSourceLinks.length - 2}` : "";
+    const suffix =
+      selectedSourceLinks.length > 2
+        ? ` +${selectedSourceLinks.length - 2}`
+        : "";
     templateSourceTrigger.textContent = `${triggerLabel}${suffix}`;
     templateSourceTrigger.disabled = !canCreateTemplates || !sourceLinks.length;
-    templateSourceTrigger.classList.toggle("open", isTeamTemplateSourceDropdownOpen);
+    templateSourceTrigger.classList.toggle(
+      "open",
+      isTeamTemplateSourceDropdownOpen,
+    );
   }
   if (templateSourceDropdown) {
-    templateSourceDropdown.classList.toggle("hidden", !isTeamTemplateSourceDropdownOpen);
+    templateSourceDropdown.classList.toggle(
+      "hidden",
+      !isTeamTemplateSourceDropdownOpen,
+    );
   }
   if (templateSourcePicker) {
     if (!sourceLinks.length) {
@@ -12923,10 +13665,17 @@ function renderTeamWorkspaceSummary() {
     } else {
       templateSourcePicker.innerHTML = sourceLinks
         .map((link) => {
-          const primary = link.og_title || link.alias || link.short_code || `Link #${link.id}`;
+          const primary =
+            link.og_title ||
+            link.alias ||
+            link.short_code ||
+            `Link #${link.id}`;
           const secondary = link.original_url || "";
-          const selected = selectedTeamTemplateSourceIds.includes(Number(link.id));
-          const disabled = !selected && selectedTeamTemplateSourceIds.length >= 5;
+          const selected = selectedTeamTemplateSourceIds.includes(
+            Number(link.id),
+          );
+          const disabled =
+            !selected && selectedTeamTemplateSourceIds.length >= 5;
           return `<label class="team-template-source-item ${selected ? "active" : ""} ${disabled || !canCreateTemplates ? "disabled" : ""}">
             <input type="checkbox" ${selected ? "checked" : ""} ${disabled || !canCreateTemplates ? "disabled" : ""} onchange="toggleTeamTemplateSourceSelection(${Number(link.id)})" />
             <span class="team-template-source-copy">
@@ -12947,15 +13696,23 @@ function renderTeamWorkspaceSummary() {
     if (uploadedTeamTemplateMedia?.url) {
       templateUploadStatus.textContent = `Đang dùng media tải từ máy: ${uploadedTeamTemplateMedia.name || "media mới"}`;
     } else if (selectedTeamTemplateMediaLinkId) {
-      const mediaSource = mediaEligibleLinks.find((link) => Number(link.id) === Number(selectedTeamTemplateMediaLinkId));
-      const mediaName = mediaSource?.og_title || mediaSource?.alias || mediaSource?.short_code || `Link #${selectedTeamTemplateMediaLinkId}`;
+      const mediaSource = mediaEligibleLinks.find(
+        (link) => Number(link.id) === Number(selectedTeamTemplateMediaLinkId),
+      );
+      const mediaName =
+        mediaSource?.og_title ||
+        mediaSource?.alias ||
+        mediaSource?.short_code ||
+        `Link #${selectedTeamTemplateMediaLinkId}`;
       templateUploadStatus.textContent = `Media sẽ lấy từ link đã chọn: ${mediaName}`;
     } else {
-      templateUploadStatus.textContent = "Media sẽ tự lấy từ link đã tick nếu có preview, hoặc bạn có thể tải file riêng từ máy.";
+      templateUploadStatus.textContent =
+        "Media sẽ tự lấy từ link đã tick nếu có preview, hoặc bạn có thể tải file riêng từ máy.";
     }
   }
   if (templateName) templateName.disabled = !canCreateTemplates;
-  if (templateCreateBtn) templateCreateBtn.disabled = !canCreateTemplates || !sourceLinks.length;
+  if (templateCreateBtn)
+    templateCreateBtn.disabled = !canCreateTemplates || !sourceLinks.length;
 
   syncTeamTemplateComposer();
   if (membersCard) {
@@ -12998,10 +13755,12 @@ async function renderTeamPage() {
   const body = document.getElementById("teamMemberBody");
   const templateBody = document.getElementById("teamTemplateBody");
   if (user && body) {
-    body.innerHTML = '<tr><td colspan="6" class="tbl-empty">Đang tải team workspace...</td></tr>';
+    body.innerHTML =
+      '<tr><td colspan="6" class="tbl-empty">Đang tải team workspace...</td></tr>';
   }
   if (user && templateBody) {
-    templateBody.innerHTML = '<tr><td colspan="1" class="tbl-empty">Đang tải mẫu link chung...</td></tr>';
+    templateBody.innerHTML =
+      '<tr><td colspan="1" class="tbl-empty">Đang tải mẫu link chung...</td></tr>';
   }
   await loadTeamWorkspace({ silent: true });
   renderTeamWorkspaceViews();
@@ -13010,7 +13769,9 @@ async function renderTeamPage() {
 function toggleTeamTemplateSourceSelection(linkId) {
   const normalizedId = Number(linkId);
   if (!Number.isInteger(normalizedId) || normalizedId < 1) return;
-  const selected = new Set(selectedTeamTemplateSourceIds.map((id) => Number(id)));
+  const selected = new Set(
+    selectedTeamTemplateSourceIds.map((id) => Number(id)),
+  );
   if (selected.has(normalizedId)) {
     selected.delete(normalizedId);
   } else {
@@ -13108,7 +13869,8 @@ function buildPersonalTeamTemplateDraft(template, sourceLink) {
     id: template.id,
     name: template.name,
     creator_name: template.creator_name,
-    source_link_id: Number(sourceLink?.id || template.source_link_id || 0) || null,
+    source_link_id:
+      Number(sourceLink?.id || template.source_link_id || 0) || null,
     source_link_label: sourceLink?.title || template.name || "Link",
     original_url: sourceLink?.original_url || "",
     og_title: template.og_title || "",
@@ -13135,18 +13897,25 @@ function useTeamTemplateSource(templateId, sourceLinkId) {
     toast("Không tìm thấy mẫu link chung.", "warn");
     return;
   }
-  const groupedLinks = Array.isArray(template.source_links) ? template.source_links : [];
-  const selectedSource = groupedLinks.find((link) => Number(link.id) === Number(sourceLinkId)) || groupedLinks[0] || {
-    id: template.source_link_id,
-    title: template.og_title || template.name || "Link",
-    original_url: template.source_link_original_url || "",
-  };
+  const groupedLinks = Array.isArray(template.source_links)
+    ? template.source_links
+    : [];
+  const selectedSource = groupedLinks.find(
+    (link) => Number(link.id) === Number(sourceLinkId),
+  ) ||
+    groupedLinks[0] || {
+      id: template.source_link_id,
+      title: template.og_title || template.name || "Link",
+      original_url: template.source_link_original_url || "",
+    };
   openTeamTemplateModal("use", template.id, selectedSource.id);
 }
 
 function useTeamTemplate(templateId) {
   const template = findTeamTemplateById(templateId);
-  const firstSourceId = Number(template?.source_links?.[0]?.id || template?.source_link_id || 0);
+  const firstSourceId = Number(
+    template?.source_links?.[0]?.id || template?.source_link_id || 0,
+  );
   if (!template || !firstSourceId) {
     toast("Không tìm thấy link nguồn trong mẫu chung.", "warn");
     return;
@@ -13168,10 +13937,12 @@ function disableRemovedAdminSupportSurfaces() {
   if (!LEGACY_ADMIN_SUPPORT_SURFACES_REMOVED) return;
   const compatRoot = document.getElementById("removedAdminCompat");
   if (compatRoot) compatRoot.hidden = true;
-  document.querySelectorAll("#supportWidgetLauncher, .support-fab").forEach((node) => {
-    node.hidden = true;
-    node.remove();
-  });
+  document
+    .querySelectorAll("#supportWidgetLauncher, .support-fab")
+    .forEach((node) => {
+      node.hidden = true;
+      node.remove();
+    });
   supportWidgetOpen = false;
 }
 
@@ -13227,6 +13998,3 @@ window.addEventListener("hashchange", () => {
     showAuthScreen(getAuthRouteMode());
   }
 })();
-
-
-

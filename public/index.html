@@ -1227,6 +1227,14 @@
                   <p>Tổng quan nhanh, hành động tiếp theo và tín hiệu chính</p>
                 </div>
                 <div class="chart-filters">
+                  <button
+                    class="cf"
+                    type="button"
+                    id="dashboardReloadBtn"
+                    onclick="reloadDashboardPageData()"
+                  >
+                    Tải lại
+                  </button>
                   <button class="cf active" data-days="1" data-stats-range="1" onclick="setChartDays(1, this)">
                     HN
                   </button>
@@ -2079,7 +2087,7 @@
                     <button
                       class="user-btn secondary"
                       type="button"
-                      onclick="loadAdminData()"
+                      onclick="loadAdminData(true)"
                     >
                       Tải lại
                     </button>
@@ -2277,8 +2285,20 @@
           <!-- LINKS -->
           <div class="page" id="page-links">
             <div class="ph">
-              <h1>Quản lý liên kết</h1>
-              <p>Tất cả link đã tạo</p>
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+                <div>
+                  <h1>Quản lý liên kết</h1>
+                  <p>Tất cả link đã tạo</p>
+                </div>
+                <button
+                  class="user-btn secondary"
+                  type="button"
+                  id="linksReloadBtn"
+                  onclick="reloadLinksPageData()"
+                >
+                  Tải lại
+                </button>
+              </div>
             </div>
             <div class="links-overview-strip">
               <div class="links-overview-card">
@@ -2510,6 +2530,14 @@
                   <p>Phân tích lưu lượng chi tiết</p>
                 </div>
                 <div class="chart-filters">
+                  <button
+                    class="cf"
+                    type="button"
+                    id="statsReloadBtn"
+                    onclick="reloadStatsPageData()"
+                  >
+                    Tải lại
+                  </button>
                   <button class="cf active" data-days="1" data-stats-range="1" onclick="setChartDays(1, this)">
                     HN
                   </button>
@@ -3651,7 +3679,7 @@
     <div class="toast" id="toast"></div>
 
     <script src="/shared-client.js"></script>
-    <script src="/app.js?v=20260816a"></script>
+    <script src="/app.js?v=20260820a"></script>
   </body>
 </html>
 
