@@ -123,6 +123,10 @@ const DEFAULT_STATS_RANGE_DAYS = 1;
 const ALLOWED_STATS_RANGE_DAYS = new Set([1, 7, 14]);
 const STATS_RECENT_LINK_LIMIT = 12;
 const STATS_FALLBACK_CLICK_LIMIT = 2500;
+const SHOPEE_SHORT_URL_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const SHOPEE_SHORT_URL_CACHE_MAX_ENTRIES = 500;
+const shopeeShortUrlCache = new Map();
+const shopeeShortUrlInFlight = new Map();
 
 // ── Cloudinary config ────────────────────────────────────────────────────────
 const CLOUDINARY_OK = !!(
@@ -3211,27 +3215,65 @@ function attachVideoOverlayPublicFields(entity) {
   };
 }
 
-async function resolveShopeeShortUrl(input) {
+function clearShopeeShortUrlCache() {
+  shopeeShortUrlCache.clear();
+  shopeeShortUrlInFlight.clear();
+}
+
+function cacheShopeeShortUrl(cacheKey, value) {
+  if (shopeeShortUrlCache.size >= SHOPEE_SHORT_URL_CACHE_MAX_ENTRIES) {
+    const oldestKey = shopeeShortUrlCache.keys().next().value;
+    if (oldestKey) shopeeShortUrlCache.delete(oldestKey);
+  }
+  shopeeShortUrlCache.set(cacheKey, {
+    value,
+    expiresAt: Date.now() + SHOPEE_SHORT_URL_CACHE_TTL_MS,
+  });
+}
+
+async function resolveShopeeShortUrl(input, options = {}) {
   try {
     const url = new URL(String(input || "").trim());
     const hostname = url.hostname.toLowerCase();
     if (hostname !== "s.shopee.vn" && hostname !== "shp.ee") return input;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const cacheKey = url.toString();
+    const cached = shopeeShortUrlCache.get(cacheKey);
+    if (cached?.expiresAt > Date.now()) return cached.value;
+    if (cached) shopeeShortUrlCache.delete(cacheKey);
+
+    const pending = shopeeShortUrlInFlight.get(cacheKey);
+    if (pending) return pending;
+
+    const fetchImpl = options.fetchImpl || fetch;
+    const resolution = (async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      try {
+        const response = await fetchImpl(url.toString(), {
+          method: "GET",
+          redirect: "follow",
+          signal: controller.signal,
+          headers: {
+            "user-agent":
+              "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+          },
+        });
+        const resolvedUrl = response.url || input;
+        cacheShopeeShortUrl(cacheKey, resolvedUrl);
+        return resolvedUrl;
+      } catch {
+        return input;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    })();
+    shopeeShortUrlInFlight.set(cacheKey, resolution);
+
     try {
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        redirect: "follow",
-        signal: controller.signal,
-        headers: {
-          "user-agent":
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
-        },
-      });
-      return response.url || input;
+      return await resolution;
     } finally {
-      clearTimeout(timeoutId);
+      shopeeShortUrlInFlight.delete(cacheKey);
     }
   } catch {
     return input;
@@ -13602,6 +13644,8 @@ module.exports.__testUtils = {
   findArticleFunnelPublishConflict,
   recordArticleFunnelStageClick,
   shouldAssignGuestSession,
+  clearShopeeShortUrlCache,
+  resolveShopeeShortUrl,
 };
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;

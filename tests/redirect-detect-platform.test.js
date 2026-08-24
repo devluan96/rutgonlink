@@ -77,3 +77,29 @@ test("canonicalizeShopeeProductUrl rewrites universal-link product urls into can
     "https://shopee.vn/product/131477471/22466400575?utm_medium=affiliates",
   );
 });
+
+test("resolveShopeeShortUrl coalesces concurrent requests and reuses the resolved URL", async () => {
+  const {
+    clearShopeeShortUrlCache,
+    resolveShopeeShortUrl,
+  } = __testUtils;
+  clearShopeeShortUrlCache();
+
+  let requestCount = 0;
+  const fetchImpl = async () => {
+    requestCount += 1;
+    return { url: "https://shopee.vn/product/1/2" };
+  };
+  const shortUrl = "https://s.shopee.vn/abc123";
+
+  const [first, second] = await Promise.all([
+    resolveShopeeShortUrl(shortUrl, { fetchImpl }),
+    resolveShopeeShortUrl(shortUrl, { fetchImpl }),
+  ]);
+  const cached = await resolveShopeeShortUrl(shortUrl, { fetchImpl });
+
+  assert.equal(first, "https://shopee.vn/product/1/2");
+  assert.equal(second, first);
+  assert.equal(cached, first);
+  assert.equal(requestCount, 1);
+});

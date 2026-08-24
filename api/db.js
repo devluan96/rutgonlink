@@ -198,6 +198,16 @@ function isMissingAnyColumnError(error, columnNames = []) {
     : false;
 }
 
+function isMissingRecordLinkClickRpc(error) {
+  return Boolean(
+    error &&
+      (error.code === 'PGRST202' ||
+        /record_link_click.*(?:does not exist|could not find)|function.*record_link_click/i.test(
+          error.message || '',
+        )),
+  );
+}
+
 function normalizeLegacyAdminUserRow(row = {}) {
   return {
     ...row,
@@ -1826,6 +1836,31 @@ async function init() {
     async recordClick(linkId, ip, ua, ref, meta = {}) {
       const normalizedIp = String(ip || '').trim();
       const normalizedUa = String(ua || '').trim();
+      const { data: rpcResult, error: rpcError } = await sb.rpc(
+        'record_link_click',
+        {
+          p_link_id: linkId,
+          p_ip: normalizedIp,
+          p_user_agent: normalizedUa,
+          p_referrer: ref || '',
+          p_country_code: meta.country_code || null,
+          p_country_name: meta.country_name || null,
+          p_city: meta.city || null,
+        },
+      );
+      if (!rpcError) {
+        const result = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
+        return {
+          counted: Boolean(result?.counted),
+          deduped: Boolean(result?.deduped),
+        };
+      }
+      if (!isMissingRecordLinkClickRpc(rpcError)) {
+        check(rpcError, 'click_rpc');
+      }
+
+      // Deploying the application before the Supabase migration remains safe:
+      // fall back only while the RPC has not reached the database yet.
       if (linkId && normalizedIp && normalizedUa) {
         const duplicateSince = new Date(Date.now() - CLICK_DEDUP_WINDOW_MS).toISOString();
         const { count, error: duplicateError } = await sb
