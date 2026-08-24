@@ -36,7 +36,11 @@ function syncArticleFunnelLabSrcdocAsset() {
     console.error("[article-funnel-lab/srcdoc-sync] Failed to sync lab template asset", error);
   }
 }
-syncArticleFunnelLabSrcdocAsset();
+// This generated browser asset is committed to public/. Rebuilding it while a
+// production Function cold-starts wastes CPU and does not affect its response.
+if (process.env.NODE_ENV !== "production") {
+  syncArticleFunnelLabSrcdocAsset();
+}
 const BASE_URL =
   (process.env.BASE_URL || "").replace(/\/$/, "") ||
   (process.env.VERCEL_URL
@@ -300,7 +304,18 @@ app.use((req, res, next) => {
   res.setHeader("X-Request-Id", req.requestId);
   next();
 });
+function shouldAssignGuestSession(requestPath = "") {
+  const normalizedPath = String(requestPath || "");
+  return (
+    normalizedPath.startsWith("/api/") ||
+    /^\/(?:dashboard|links|create|qr|bio|integrations|team|pricing|stats|account|admin|app)(?:\/|$)/.test(
+      normalizedPath,
+    )
+  );
+}
+
 app.use((req, res, next) => {
+  if (!shouldAssignGuestSession(req.path)) return next();
   if (req.cookies?.token) return next();
 
   const guestSessionId = req.cookies?.[GUEST_SESSION_COOKIE];
@@ -13586,6 +13601,7 @@ module.exports.__testUtils = {
   extractArticleFunnelImportPayload,
   findArticleFunnelPublishConflict,
   recordArticleFunnelStageClick,
+  shouldAssignGuestSession,
 };
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
