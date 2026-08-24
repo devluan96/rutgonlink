@@ -9,6 +9,9 @@ test("Vercel serves files from public before falling back to the Express functio
   );
 
   assert.equal("routes" in config, false);
+  assert.deepEqual(config.builds, [
+    { src: "api/index.js", use: "@vercel/node" },
+  ]);
   assert.deepEqual(config.rewrites, [
     { source: "/(.*)", destination: "/api/index.js" },
   ]);
