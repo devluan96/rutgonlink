@@ -3,6 +3,32 @@ const assert = require("node:assert/strict");
 
 const { __testUtils } = require("../api/index");
 
+test("fetchArticleFunnelImportPayload retries with desktop headers when mobile has no importable content", async () => {
+  const requests = [];
+  const fetchMock = async (_url, options) => {
+    requests.push(options.headers["user-agent"]);
+    return {
+      ok: true,
+      status: 200,
+      url: "https://example.com/article",
+      text: async () =>
+        requests.length === 1
+          ? "<html><head></head><body></body></html>"
+          : "<html><head><title>Desktop fallback</title></head><body></body></html>",
+    };
+  };
+
+  const result = await __testUtils.fetchArticleFunnelImportPayload(
+    "https://example.com/article",
+    fetchMock,
+  );
+
+  assert.equal(requests.length, 2);
+  assert.match(requests[0], /iPhone/);
+  assert.match(requests[1], /Windows NT/);
+  assert.equal(result.item.title, "Desktop fallback");
+});
+
 test("extractArticleFunnelImportPayload preserves sensitive wrappers from source HTML", () => {
   const html = `
     <html>

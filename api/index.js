@@ -614,43 +614,16 @@ app.post("/api/admin/article-funnel-lab/import-url", requireArticleFunnelLab, as
       return res.status(400).json({ error: "URL nguon khong hop le" });
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    let response;
-    try {
-      response = await fetch(sourceUrl, {
-        method: "GET",
-        redirect: "follow",
-        signal: controller.signal,
-        headers: {
-          "user-agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0 Safari/537.36",
-          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "accept-language": "vi,en-US;q=0.9,en;q=0.8",
-        },
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    if (!response || !response.ok) {
+    const imported = await fetchArticleFunnelImportPayload(sourceUrl);
+    if (!imported.item) {
       return res.status(400).json({
-        error: `Khong tai duoc URL nguon (${Number(response?.status || 0) || "no-response"})`,
-      });
-    }
-
-    const finalUrl = normalizeImportSourceUrl(response.url || sourceUrl) || sourceUrl;
-    const html = await response.text();
-    const item = extractArticleFunnelImportPayload(html, finalUrl);
-    if (!item.title && !item.description && !item.blocks.length) {
-      return res.status(400).json({
-        error: "Khong tim thay title, mo ta hoac media hop le tren URL nguon",
+        error: `Khong tai duoc URL nguon (${Number(imported.status || 0) || "no-response"})`,
       });
     }
 
     return res.json({
       ok: true,
-      item,
+      item: imported.item,
     });
   } catch (error) {
     console.error("[article-funnel-lab/import-url]", error);
@@ -5716,6 +5689,53 @@ function normalizeImportSourceUrl(input = "") {
   } catch {
     return "";
   }
+}
+
+const ARTICLE_FUNNEL_IMPORT_USER_AGENTS = {
+  mobile:
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+  desktop:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0 Safari/537.36",
+};
+
+async function fetchArticleFunnelImportPayload(sourceUrl, fetchImpl = fetch) {
+  let lastStatus = 0;
+  for (const userAgent of [
+    ARTICLE_FUNNEL_IMPORT_USER_AGENTS.mobile,
+    ARTICLE_FUNNEL_IMPORT_USER_AGENTS.desktop,
+  ]) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetchImpl(sourceUrl, {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          "user-agent": userAgent,
+          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "accept-language": "vi,en-US;q=0.9,en;q=0.8",
+        },
+      });
+      lastStatus = Number(response?.status || 0) || lastStatus;
+      if (!response?.ok) continue;
+
+      const finalUrl = normalizeImportSourceUrl(response.url || sourceUrl) || sourceUrl;
+      const item = extractArticleFunnelImportPayload(await response.text(), finalUrl);
+      if (
+        item.title !== "Article preview" ||
+        item.description ||
+        item.blocks.length
+      ) {
+        return { item, status: lastStatus };
+      }
+    } catch (_) {
+      // Try the desktop representation when the mobile request cannot be read.
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  return { item: null, status: lastStatus };
 }
 
 function absolutizeImportedUrl(candidate = "", baseUrl = "") {
@@ -13641,6 +13661,7 @@ module.exports.__testUtils = {
   resolveArticleFunnelConfig,
   shouldUseArticleFunnelInlineLaunch,
   extractArticleFunnelImportPayload,
+  fetchArticleFunnelImportPayload,
   findArticleFunnelPublishConflict,
   recordArticleFunnelStageClick,
   shouldAssignGuestSession,
