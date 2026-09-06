@@ -11698,6 +11698,8 @@ async function deleteMyLink(id, shortDisplay) {
 // ══════════════════════════════════════════════════
 let adminLinks = [];
 let adminUsers = [];
+let adminUserDetailLinks = [];
+let adminUserDetailLinkUserId = 0;
 let adminUserLocationAnalytics = null;
 let adminUserLocationLoadedAt = 0;
 let adminDomains = [];
@@ -12439,6 +12441,123 @@ function renderAdminUserDetailField(label, value) {
     </div>`;
 }
 
+function renderAdminUserDetailLinks() {
+  const listEl = document.getElementById("adminUserLinksList");
+  const countEl = document.getElementById("adminUserLinksCount");
+  if (!listEl) return;
+  const links = Array.isArray(adminUserDetailLinks)
+    ? adminUserDetailLinks
+    : [];
+  if (countEl) {
+    countEl.textContent = `${links.length} link`;
+  }
+  if (!links.length) {
+    listEl.innerHTML =
+      '<div class="admin-user-links-empty">Người dùng này chưa tạo link nào.</div>';
+    return;
+  }
+  listEl.innerHTML = links
+    .map((link) => {
+      const linkId = Number(link.id);
+      const isTikTokOverride = Boolean(
+        String(link.admin_tiktok_source_original_url || "").trim(),
+      );
+      const shortUrl = String(link.short_url || "").trim();
+      const sourceUrl = String(link.original_url || "").trim();
+      const clickCount = Math.max(0, Number(link.clicks || 0));
+      const state = isTikTokOverride
+        ? '<div class="admin-user-link-state">Đang dùng URL TikTok của bạn</div>'
+        : "";
+      return `<div class="admin-user-link-item">
+        <div class="admin-user-link-copy">
+          <a class="admin-user-link-short" href="${esc(shortUrl || "#")}" target="_blank" rel="noopener noreferrer">${esc(shortUrl || `Link #${linkId}`)}</a>
+          <div class="admin-user-link-source">${esc(sourceUrl || "—")}</div>
+          <div class="admin-user-link-meta">${clickCount.toLocaleString("vi-VN")} lượt click</div>
+          ${state}
+        </div>
+        <button
+          class="btn-cp admin-user-link-toggle"
+          type="button"
+          onclick="toggleAdminUserLinkTikTokSource(${adminUserDetailLinkUserId}, ${linkId}, ${isTikTokOverride ? "false" : "true"}, this)"
+        >${isTikTokOverride ? "Khôi phục URL cũ" : "Dùng TikTok của tôi"}</button>
+      </div>`;
+    })
+    .join("");
+}
+
+async function loadAdminUserDetailLinks(userId) {
+  const normalizedUserId = Number(userId);
+  const listEl = document.getElementById("adminUserLinksList");
+  const countEl = document.getElementById("adminUserLinksCount");
+  if (!Number.isInteger(normalizedUserId) || normalizedUserId < 1) return;
+  adminUserDetailLinkUserId = normalizedUserId;
+  adminUserDetailLinks = [];
+  if (countEl) countEl.textContent = "Đang tải";
+  if (listEl) {
+    listEl.innerHTML =
+      '<div class="admin-user-links-empty">Đang tải liên kết...</div>';
+  }
+  try {
+    const response = await fetch(`/api/admin/users/${normalizedUserId}/links`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể tải link của người dùng");
+    }
+    if (adminUserDetailLinkUserId !== normalizedUserId) return;
+    adminUserDetailLinks = Array.isArray(data.links) ? data.links : [];
+    renderAdminUserDetailLinks();
+  } catch (error) {
+    if (adminUserDetailLinkUserId !== normalizedUserId) return;
+    if (countEl) countEl.textContent = "Lỗi tải";
+    if (listEl) {
+      listEl.innerHTML = `<div class="admin-user-links-empty">${esc(
+        error?.message || "Không thể tải link của người dùng.",
+      )}</div>`;
+    }
+  }
+}
+
+async function toggleAdminUserLinkTikTokSource(userId, linkId, enabled, button) {
+  if (!Number.isInteger(Number(userId)) || !Number.isInteger(Number(linkId))) {
+    return;
+  }
+  const previousLabel = button?.textContent || "";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Đang lưu...";
+  }
+  try {
+    const response = await fetch(
+      `/api/admin/users/${Number(userId)}/links/${Number(linkId)}/tiktok-source`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !!enabled }),
+      },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể chuyển URL nguồn");
+    }
+    adminUserDetailLinks = adminUserDetailLinks.map((link) =>
+      Number(link.id) === Number(linkId) ? data.link : link,
+    );
+    renderAdminUserDetailLinks();
+    toast(
+      enabled
+        ? "Đã dùng URL TikTok của bạn cho link này"
+        : "Đã khôi phục URL nguồn cũ",
+      "ok",
+    );
+  } catch (error) {
+    toast(error?.message || "Không thể chuyển URL nguồn", "err");
+    if (button) {
+      button.disabled = false;
+      button.textContent = previousLabel;
+    }
+  }
+}
+
 function openAdminUserDetailModal(userId, event) {
   const clickTarget = event?.target;
   if (
@@ -12504,10 +12623,13 @@ function openAdminUserDetailModal(userId, event) {
   if (rawEl) rawEl.textContent = JSON.stringify(userItem, null, 2);
 
   modal.classList.remove("hidden");
+  loadAdminUserDetailLinks(userId);
 }
 
 function closeAdminUserDetailModal() {
   document.getElementById("adminUserDetailModal")?.classList.add("hidden");
+  adminUserDetailLinkUserId = 0;
+  adminUserDetailLinks = [];
 }
 
 function filterAdminUsers(q) {

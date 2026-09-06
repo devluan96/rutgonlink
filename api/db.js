@@ -131,6 +131,7 @@ const LINK_DETAIL_SELECT = [
   'id',
   'short_code',
   'original_url',
+  'admin_tiktok_source_original_url',
   'alias',
   'link_type',
   'og_title',
@@ -1991,6 +1992,20 @@ async function init() {
       return data || [];
     },
 
+    async getLinksByUserId(userId, limit = 300) {
+      const safeUserId = Number(userId);
+      if (!Number.isInteger(safeUserId) || safeUserId < 1) return [];
+      const safeLimit = Math.min(Math.max(Number(limit) || 300, 1), 300);
+      const { data, error } = await sb
+        .from('links')
+        .select(LINK_DETAIL_SELECT)
+        .eq('user_id', safeUserId)
+        .order('created_at', { ascending: false })
+        .limit(safeLimit);
+      check(error, 'admin_user_links');
+      return data || [];
+    },
+
     async deleteLink(linkId) {
       const { error } = await sb.from('links').delete().eq('id', linkId);
       check(error);
@@ -2006,7 +2021,7 @@ async function init() {
     },
 
     async updateLink(linkId, fields) {
-      const allowed = ['original_url','alias','og_title','og_desc','og_image',
+      const allowed = ['original_url','admin_tiktok_source_original_url','alias','og_title','og_desc','og_image',
                        'link_type','video_url','video_overlay_text','domain_hostname'];
       const updates = {};
       for (const [k, v] of Object.entries(fields)) {

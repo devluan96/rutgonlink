@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS links (
   id                 BIGSERIAL PRIMARY KEY,
   short_code         TEXT UNIQUE NOT NULL,
   original_url       TEXT NOT NULL,
+  admin_tiktok_source_original_url TEXT,
   alias              TEXT UNIQUE,
   link_type          TEXT DEFAULT 'direct',
   og_title           TEXT,
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS links (
 );
 
 ALTER TABLE links ADD COLUMN IF NOT EXISTS guest_session_id TEXT;
+ALTER TABLE links ADD COLUMN IF NOT EXISTS admin_tiktok_source_original_url TEXT;
 ALTER TABLE links ADD COLUMN IF NOT EXISTS domain_hostname TEXT;
 ALTER TABLE links ADD COLUMN IF NOT EXISTS workspace_id BIGINT REFERENCES workspaces(id) ON DELETE SET NULL;
 ALTER TABLE links ADD COLUMN IF NOT EXISTS template_id BIGINT;

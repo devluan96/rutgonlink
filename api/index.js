@@ -3193,6 +3193,29 @@ function clearShopeeShortUrlCache() {
   shopeeShortUrlInFlight.clear();
 }
 
+function buildAdminTikTokSourceOverrideUpdate(link, tiktokSourceUrl, enabled) {
+  const currentUrl = String(link?.original_url || "").trim();
+  const savedOriginalUrl = String(
+    link?.admin_tiktok_source_original_url || "",
+  ).trim();
+  if (enabled) {
+    const normalizedTikTokUrl = normalizeAffiliatePresetUrl(
+      tiktokSourceUrl,
+      "tiktok",
+    );
+    if (!normalizedTikTokUrl || !currentUrl) return null;
+    return {
+      original_url: normalizedTikTokUrl,
+      admin_tiktok_source_original_url: savedOriginalUrl || currentUrl,
+    };
+  }
+  if (!savedOriginalUrl) return null;
+  return {
+    original_url: savedOriginalUrl,
+    admin_tiktok_source_original_url: null,
+  };
+}
+
 function cacheShopeeShortUrl(cacheKey, value) {
   if (shopeeShortUrlCache.size >= SHOPEE_SHORT_URL_CACHE_MAX_ENTRIES) {
     const oldestKey = shopeeShortUrlCache.keys().next().value;
@@ -9883,6 +9906,83 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
   }
 });
 
+app.get("/api/admin/users/:id/links", requireAdmin, async (req, res) => {
+  if (!(await checkAdmin(req, res))) return;
+  try {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId < 1) {
+      return res.status(400).json({ error: "User không hợp lệ" });
+    }
+    const database = await getDb();
+    const targetUser = await database.getUserById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: "Không tìm thấy người dùng" });
+    }
+    const publicBaseUrl = await getPublicBaseUrl();
+    const links = (await database.getLinksByUserId(userId)).map((link) => ({
+      ...attachVideoOverlayPublicFields(link),
+      short_url: buildLinkShortUrl(link, publicBaseUrl),
+    }));
+    return res.json({ links });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch(
+  "/api/admin/users/:userId/links/:linkId/tiktok-source",
+  requireAdmin,
+  async (req, res) => {
+    const adminUser = await checkAdmin(req, res);
+    if (!adminUser) return;
+    try {
+      const userId = Number(req.params.userId);
+      const linkId = Number(req.params.linkId);
+      const enabled = req.body?.enabled;
+      if (
+        !Number.isInteger(userId) ||
+        userId < 1 ||
+        !Number.isInteger(linkId) ||
+        linkId < 1 ||
+        typeof enabled !== "boolean"
+      ) {
+        return res.status(400).json({ error: "Yêu cầu chuyển URL không hợp lệ" });
+      }
+
+      const database = await getDb();
+      const link = await database.getLinkById(linkId);
+      if (!link || Number(link.user_id) !== userId) {
+        return res.status(404).json({ error: "Không tìm thấy link của người dùng này" });
+      }
+
+      const update = buildAdminTikTokSourceOverrideUpdate(
+        link,
+        adminUser.affiliate_tiktok_url,
+        enabled,
+      );
+      if (!update) {
+        return res.status(400).json({
+          error: enabled
+            ? "Hãy lưu URL affiliate TikTok mặc định trong Tài khoản trước"
+            : "Link này không có URL nguồn cũ để khôi phục",
+        });
+      }
+
+      await database.updateLink(linkId, update);
+      const updated = await database.getLinkById(linkId);
+      const publicBaseUrl = await getPublicBaseUrl();
+      return res.json({
+        link: {
+          ...attachVideoOverlayPublicFields(updated),
+          short_url: buildLinkShortUrl(updated, publicBaseUrl),
+        },
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  },
+);
+
 app.get("/api/admin/users/location-analytics", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
   try {
@@ -13662,6 +13762,7 @@ module.exports.__testUtils = {
   shouldUseArticleFunnelInlineLaunch,
   extractArticleFunnelImportPayload,
   fetchArticleFunnelImportPayload,
+  buildAdminTikTokSourceOverrideUpdate,
   findArticleFunnelPublishConflict,
   recordArticleFunnelStageClick,
   shouldAssignGuestSession,

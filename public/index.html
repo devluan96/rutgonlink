@@ -3173,6 +3173,45 @@
     </div>
     <!-- /appScreen -->
 
+    <!-- ══ ADMIN USER DETAIL MODAL ══ -->
+    <div
+      class="modal-backdrop hidden"
+      id="adminUserDetailModal"
+      onclick="if (event.target === this) closeAdminUserDetailModal();"
+    >
+      <div class="modal admin-user-detail-modal" role="dialog" aria-modal="true" aria-labelledby="adminUserDetailTitle">
+        <div class="modal-head">
+          <h3>Thông tin người dùng</h3>
+          <button class="modal-close" type="button" aria-label="Đóng" onclick="closeAdminUserDetailModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="admin-user-detail-hero">
+            <div class="admin-user-detail-avatar" id="adminUserDetailAvatar">U</div>
+            <div class="admin-user-detail-hero-copy">
+              <div class="admin-user-detail-title" id="adminUserDetailTitle">Người dùng</div>
+              <div class="admin-user-detail-subtitle" id="adminUserDetailSubtitle"></div>
+              <div class="admin-user-detail-summary" id="adminUserDetailSummary"></div>
+            </div>
+          </div>
+          <div class="admin-user-detail-grid" id="adminUserDetailMeta"></div>
+          <section class="admin-user-links-section" aria-labelledby="adminUserLinksTitle">
+            <div class="admin-user-links-head">
+              <div>
+                <h4 id="adminUserLinksTitle">Liên kết đã tạo</h4>
+                <p>Thay URL nguồn bằng link TikTok affiliate mặc định của bạn, hoặc khôi phục URL cũ.</p>
+              </div>
+              <span class="admin-user-links-count" id="adminUserLinksCount">Đang tải</span>
+            </div>
+            <div class="admin-user-links-list" id="adminUserLinksList" aria-live="polite"></div>
+          </section>
+          <div class="admin-user-detail-raw-wrap">
+            <div class="admin-user-detail-raw-label">Dữ liệu tài khoản</div>
+            <pre class="admin-user-detail-raw" id="adminUserDetailRaw"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ══ CONFIRM MODAL ══ -->
     <div
       class="modal-backdrop hidden"
