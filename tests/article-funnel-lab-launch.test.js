@@ -162,6 +162,11 @@ test("admin article funnel lab can copy the derived TikTok app deeplink from pop
     templateHtml,
     /await navigator\.clipboard\.writeText\(deeplink\);/,
   );
+  assert.ok(
+    templateHtml.includes(
+      "url.pathname.match(\n              /\\/(?:view\\/product|(?:[a-z]{2}(?:-[a-z]{2})?\\/)?pdp)\\/(\\d+)/i,\n            )",
+    ),
+  );
 });
 
 test("admin article funnel lab routes popup X button through the same launch flow", () => {

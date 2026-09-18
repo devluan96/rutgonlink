@@ -6497,7 +6497,9 @@
         function extractTikTokProductId(targetUrl) {
           try {
             const url = new URL(String(targetUrl || "").trim());
-            const productMatch = url.pathname.match(/\/view\/product\/(\d+)/i);
+            const productMatch = url.pathname.match(
+              /\/(?:view\/product|(?:[a-z]{2}(?:-[a-z]{2})?\/)?pdp)\/(\d+)/i,
+            );
             const queryProductId =
               url.searchParams.get("product_id") ||
               url.searchParams.get("productId") ||

@@ -29,6 +29,29 @@ test("buildTikTokAppScheme converts TikTok product links into snssdk1180 app dee
   );
 });
 
+test("TikTok Shop PDP affiliate links build app and Lab OneLink targets without dropping tracking", () => {
+  const originalUrl =
+    "https://shop.tiktok.com/vn/pdp/1732408517180359766?chain_key=%7B%22t%22%3A1%7D&encode_params=affiliate-token";
+  const launch = __testUtils.buildOverlayLaunchConfig(originalUrl);
+  const popup = __testUtils.applyArticleFunnelStageDirectOverrides(
+    { stage_key: "20s" },
+    launch,
+    {},
+  );
+
+  assert.equal(launch.direct_platform, "tiktok");
+  assert.equal(launch.direct_web_url, originalUrl);
+  assert.equal(launch.direct_ios_fb_url, originalUrl);
+  assert.match(launch.direct_app_url, /^snssdk1180:\/\/ec\/pdp\?/);
+  assert.match(
+    launch.direct_app_url,
+    /product_id%22%3A%5B%221732408517180359766%22%5D/,
+  );
+  assert.match(popup.direct_android_url, /^https:\/\/snssdk1180\.onelink\.me\/BAuo\?/);
+  assert.match(popup.direct_android_url, /1732408517180359766/);
+  assert.match(popup.direct_android_url, /shop.tiktok.com/);
+});
+
 test("buildOverlayLaunchConfig keeps TikTok iOS in-app target app-first", () => {
   const originalUrl = "https://www.tiktok.com/@demo/video/1234567890123456789";
   const config = __testUtils.buildOverlayLaunchConfig(originalUrl);

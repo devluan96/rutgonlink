@@ -2703,6 +2703,8 @@ const TIKTOK_APP_STORE_ID = "1235601864";
 const SHOPEE_ANDROID_PACKAGE = "com.shopee.vn";
 const SHOPEE_APP_STORE_ID = "959841449";
 const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID || "1609970790226254";
+const TIKTOK_PRODUCT_PATH_PATTERN =
+  /\/(?:view\/product|(?:[a-z]{2}(?:-[a-z]{2})?\/)?pdp)\/(\d+)/i;
 
 function isTikTokOneLinkHostname(hostname = "") {
   const normalizedHostname = String(hostname || "").trim().toLowerCase();
@@ -2743,7 +2745,7 @@ function isTikTokProductUrl(input = "") {
     ) {
       return false;
     }
-    return /\/view\/product\/\d+/i.test(url.pathname);
+    return TIKTOK_PRODUCT_PATH_PATTERN.test(url.pathname);
   } catch {
     return false;
   }
@@ -2759,7 +2761,7 @@ function buildTikTokAppScheme(destinationUrl) {
     const profileMatch = path.match(/\/@([\w.]+)/);
     if (profileMatch)
       return `snssdk1233://user/profile/?uniqueId=${profileMatch[1]}`;
-    const productMatch = path.match(/\/view\/product\/(\d+)/);
+    const productMatch = path.match(TIKTOK_PRODUCT_PATH_PATTERN);
     const queryProductId =
       url.searchParams.get("product_id") ||
       url.searchParams.get("productId") ||
@@ -2795,7 +2797,7 @@ function buildTikTokAppScheme(destinationUrl) {
 function extractTikTokProductId(destinationUrl) {
   try {
     const url = new URL(String(destinationUrl || "").trim());
-    const productMatch = url.pathname.match(/\/view\/product\/(\d+)/i);
+    const productMatch = url.pathname.match(TIKTOK_PRODUCT_PATH_PATTERN);
     const queryProductId =
       url.searchParams.get("product_id") ||
       url.searchParams.get("productId") ||
