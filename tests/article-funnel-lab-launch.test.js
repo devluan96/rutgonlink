@@ -31,6 +31,22 @@ test("admin article funnel lab keeps TikTok popup 20s on direct launch instead o
   );
 });
 
+test("embedded article funnel lab exposes a copyable public preview link without publishing", () => {
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.doesNotMatch(
+    templateHtml,
+    /body\.embed-mode #generatePreviewLinkBtn,\s*\r?\n\s*body\.embed-mode #publishShortLinkBtn/,
+  );
+  assert.match(
+    templateHtml,
+    /document\s*\.getElementById\("generatePreviewLinkBtn"\)\s*\.addEventListener\("click", async \(\) => \{[\s\S]*?createPublicPreviewLink\(\)[\s\S]*?navigator\.clipboard\.writeText\(generatedPreviewUrl\)/,
+  );
+});
+
 test("admin article funnel lab supports saved popup 3s opaanlp overrides and share preview uploads", () => {
   const templateHtml = fs.readFileSync(
     path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
@@ -163,7 +179,7 @@ test("admin article funnel lab can copy the derived TikTok app deeplink from pop
     /await navigator\.clipboard\.writeText\(deeplink\);/,
   );
   assert.ok(
-    templateHtml.includes(
+    templateHtml.replace(/\r\n/g, "\n").includes(
       "url.pathname.match(\n              /\\/(?:view\\/product|(?:[a-z]{2}(?:-[a-z]{2})?\\/)?pdp)\\/(\\d+)/i,\n            )",
     ),
   );

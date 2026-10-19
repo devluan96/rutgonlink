@@ -855,7 +855,7 @@ app.post("/api/admin/article-funnel-lab/preview-link", requireArticleFunnelLab, 
         : req.body;
     const previewConfig = await resolveArticleFunnelConfig(rawConfig);
     const expiresAt = Date.now() + ARTICLE_FUNNEL_PREVIEW_TOKEN_TTL_MS;
-    const token = encodeArticleFunnelPreviewToken({
+    const token = createArticleFunnelPreviewLinkToken({
       v: 1,
       exp: expiresAt,
       config: previewConfig,
@@ -1133,7 +1133,7 @@ app.get(
   async (req, res) => {
   try {
     const showPopupTestButton = await isAdminRequest(req);
-    const payload = decodeArticleFunnelPreviewToken(req.params.token);
+    const payload = resolveArticleFunnelPreviewToken(req.params.token);
     const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
     const canonicalUrl = `${BASE_URL}/_lab/article-funnel/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`;
     res.set({
@@ -1166,7 +1166,7 @@ app.get(
   ],
   async (req, res) => {
     try {
-      const payload = decodeArticleFunnelPreviewToken(req.params.token);
+      const payload = resolveArticleFunnelPreviewToken(req.params.token);
       const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
       const canonicalUrl = `${BASE_URL}/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}/${encodeURIComponent(req.params.stageKey || "")}`;
       return await handleArticleFunnelStageLaunch({
@@ -1193,7 +1193,7 @@ app.get(
   ],
   async (req, res) => {
     try {
-      const payload = decodeArticleFunnelPreviewToken(req.params.token);
+      const payload = resolveArticleFunnelPreviewToken(req.params.token);
       const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
       const canonicalUrl = `${BASE_URL}/_lab/article-funnel-go/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}/${encodeURIComponent(req.params.stageKey || "")}`;
       return await handleArticleFunnelStageDeeplinkRoute({
@@ -1220,7 +1220,7 @@ app.get(
   ],
   async (req, res) => {
     try {
-      const payload = decodeArticleFunnelPreviewToken(req.params.token);
+      const payload = resolveArticleFunnelPreviewToken(req.params.token);
       const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
       const canonicalUrl = `${BASE_URL}/_lab/article-funnel-bridge/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}/${encodeURIComponent(req.params.stageKey || "")}`;
       return await handleArticleFunnelStageLaunch({
@@ -6101,6 +6101,34 @@ const ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS = 24 * 3600 * 1000;
 const ARTICLE_FUNNEL_PUBLISHED_SNAPSHOT_TOKEN_TTL_MS =
   5 * 365 * 24 * 3600 * 1000;
 const ARTICLE_FUNNEL_SNAPSHOT_QUERY_KEY = "afs";
+const localArticleFunnelPreviewTokens = new Map();
+
+function createArticleFunnelPreviewLinkToken(payload) {
+  if (process.env.NODE_ENV === "production") {
+    return encodeArticleFunnelPreviewToken(payload);
+  }
+  const token = `p_${nanoid(14)}`;
+  localArticleFunnelPreviewTokens.set(token, payload);
+  const now = Date.now();
+  for (const [candidate, cachedPayload] of localArticleFunnelPreviewTokens) {
+    if (Number(cachedPayload?.exp || 0) < now) {
+      localArticleFunnelPreviewTokens.delete(candidate);
+    }
+  }
+  return token;
+}
+
+function resolveArticleFunnelPreviewToken(token) {
+  const cachedPayload = localArticleFunnelPreviewTokens.get(String(token || ""));
+  if (cachedPayload) {
+    if (Number(cachedPayload.exp || 0) < Date.now()) {
+      localArticleFunnelPreviewTokens.delete(String(token || ""));
+      throw new Error("PREVIEW_TOKEN_EXPIRED");
+    }
+    return cachedPayload;
+  }
+  return decodeArticleFunnelPreviewToken(token);
+}
 
 function base64UrlEncode(input) {
   return Buffer.from(input)
@@ -7571,6 +7599,17 @@ ${ogImageTag}
   .popup-test-fab{position:fixed;right:18px;bottom:18px;z-index:20;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:12px 16px;border:0;border-radius:999px;background:rgba(15,23,42,.92);box-shadow:0 18px 42px rgba(15,23,42,.28);color:#fff;font:600 14px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;cursor:pointer}
   .popup-test-fab[hidden]{display:none}
   .popup-test-fab:hover{background:#0f172a}
+  .facebook-inapp-gate{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px 18px;background:linear-gradient(180deg,#07111f 0%,#0b1727 100%);color:#f8fafc}
+  .facebook-inapp-gate[hidden]{display:none}
+  .facebook-inapp-gate-card{width:min(100%,430px);padding:28px 22px;border:1px solid rgba(148,163,184,.28);border-radius:24px;background:rgba(15,23,42,.82);box-shadow:0 24px 64px rgba(0,0,0,.42);text-align:center}
+  .facebook-inapp-gate-kicker{margin:0 0 12px;color:#93c5fd;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+  .facebook-inapp-gate h2{margin:0;color:#fff;font-size:clamp(28px,8vw,38px);line-height:1.08;letter-spacing:-.045em}
+  .facebook-inapp-gate-lead{margin:16px 0 0;color:#cbd5e1;font-size:16px;line-height:1.6}
+  .facebook-inapp-steps{display:grid;gap:12px;margin:24px 0 0;text-align:left}
+  .facebook-inapp-step{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;align-items:start;padding:14px;border:1px solid rgba(96,165,250,.24);border-radius:16px;background:rgba(30,41,59,.7);color:#e2e8f0;font-size:15px;font-weight:700;line-height:1.5}
+  .facebook-inapp-step-number{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;font-size:14px}
+  .facebook-inapp-gate-open{width:100%;min-height:48px;margin:20px 0 0;border:0;border-radius:14px;background:linear-gradient(135deg,#2563eb,#7c3aed);box-shadow:0 12px 24px rgba(37,99,235,.26);color:#fff;font:800 16px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;cursor:pointer}
+  .facebook-inapp-gate-note{margin:20px 0 0;color:#94a3b8;font-size:13px;line-height:1.55}
   @media (max-width: 900px){
     .article{padding-top:28px}
     .article-description{margin-top:26px}
@@ -7599,6 +7638,19 @@ ${ogImageTag}
   </div>
   <div class="overlay" id="overlay"><div class="overlay-stack" id="overlayStack"></div></div>
   <button type="button" class="popup-test-fab" id="popupTest20sBtn" hidden>Mở popup 20s</button>
+  <section class="facebook-inapp-gate" id="facebookInAppGate" hidden aria-live="polite">
+    <div class="facebook-inapp-gate-card">
+      <p class="facebook-inapp-gate-kicker">Xem trải nghiệm đầy đủ</p>
+      <h2>Mở bằng trình duyệt bên ngoài</h2>
+      <p class="facebook-inapp-gate-lead">Facebook đang dùng trình duyệt tích hợp. Hãy mở Safari hoặc Chrome để xem video và nhận popup đúng lúc.</p>
+      <div class="facebook-inapp-steps">
+        <div class="facebook-inapp-step"><span class="facebook-inapp-step-number">1</span><span>Nhấn dấu ba chấm (...) ở góc trên bên phải.</span></div>
+        <div class="facebook-inapp-step"><span class="facebook-inapp-step-number">2</span><span>Chọn “Mở bằng trình duyệt bên ngoài” hoặc “Open in Safari”.</span></div>
+      </div>
+      <button type="button" class="facebook-inapp-gate-open" id="facebookInAppGateOpenBtn">Mở Safari</button>
+      <p class="facebook-inapp-gate-note">Video và popup sẽ tự chạy sau khi bạn mở lại link bằng trình duyệt ngoài.</p>
+    </div>
+  </section>
 <script>
 (function(){
   var blocks = ${blocks};
@@ -7615,6 +7667,8 @@ ${ogImageTag}
   var overlayStackEl = document.getElementById('overlayStack');
   var previewBlocksEl = document.getElementById('previewBlocks');
   var popupTest20sBtn = document.getElementById('popupTest20sBtn');
+  var facebookInAppGate = document.getElementById('facebookInAppGate');
+  var facebookInAppGateOpenBtn = document.getElementById('facebookInAppGateOpenBtn');
 
   function getUserAgent() {
     return navigator.userAgent || '';
@@ -7639,6 +7693,23 @@ ${ogImageTag}
   function isInAppBrowser() {
     return isFacebookInAppBrowser() || /ZaloApp/i.test(getUserAgent());
   }
+
+  function shouldGateFacebookInAppVisit() {
+    return isFacebookInAppBrowser() && isSupportedMobileDevice();
+  }
+
+  function tryOpenSafariFromFacebook() {
+    if (!isIOSDevice() || !isFacebookInAppBrowser() || location.protocol !== 'https:') return false;
+    var safariUrl = 'x-safari-https://' + location.host + location.pathname + location.search + location.hash;
+    setTimeout(function(){
+      try { window.location.href = safariUrl; } catch (_) {}
+    }, 250);
+    return true;
+  }
+
+  facebookInAppGateOpenBtn.addEventListener('click', function() {
+    tryOpenSafariFromFacebook();
+  });
 
   function getPopupDismissCookieName(stageKey) {
     return 'popup_closed_' + encodeURIComponent(String(stageKey || ''));
@@ -8365,16 +8436,6 @@ ${ogImageTag}
     handleStageLaunch(stageKey, fallbackUrl);
   }
 
-  stages.forEach(queueStageOverlay);
-  if (popupTest20sBtn) {
-    popupTest20sBtn.hidden = !canShowPopupTestButton || !getStageByKey('20s');
-    if (canShowPopupTestButton) {
-      popupTest20sBtn.addEventListener('click', function(){
-        openStageForTesting('20s');
-      });
-    }
-  }
-
   overlayEl.addEventListener('click', function(event){
     if(event.target === overlayEl){
       pendingStages = [];
@@ -8425,6 +8486,20 @@ ${ogImageTag}
 
   renderBlocks();
   syncSensitiveWraps();
+  if (shouldGateFacebookInAppVisit()) {
+    facebookInAppGate.hidden = false;
+    tryOpenSafariFromFacebook();
+    return;
+  }
+  stages.forEach(queueStageOverlay);
+  if (popupTest20sBtn) {
+    popupTest20sBtn.hidden = !canShowPopupTestButton || !getStageByKey('20s');
+    if (canShowPopupTestButton) {
+      popupTest20sBtn.addEventListener('click', function(){
+        openStageForTesting('20s');
+      });
+    }
+  }
 })();
 </script>
 </body>
@@ -13756,6 +13831,8 @@ module.exports.__testUtils = {
   buildArticleFunnelPopup20sTikTokBridgePage,
   decorateArticleFunnelStagesForClient,
   buildArticleFunnelPreviewPage,
+  createArticleFunnelPreviewLinkToken,
+  resolveArticleFunnelPreviewToken,
   buildArticleFunnelPopupTestUrl,
   isArticleFunnelPopupTestRequestAllowed,
   normalizeArticleFunnelPreviewConfig,

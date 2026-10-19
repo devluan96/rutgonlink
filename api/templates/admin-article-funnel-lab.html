@@ -754,7 +754,6 @@
       }
 
       body.embed-mode #saveDbLabBtn,
-      body.embed-mode #generatePreviewLinkBtn,
       body.embed-mode #publishShortLinkBtn,
       body.embed-mode #workspaceStatusStrip,
       body.embed-mode .preview-topbar,
@@ -9166,7 +9165,16 @@
 
         document
           .getElementById("generatePreviewLinkBtn")
-          .addEventListener("click", createPublicPreviewLink);
+          .addEventListener("click", async () => {
+            const created = await createPublicPreviewLink();
+            if (!created || !generatedPreviewUrl) return;
+            try {
+              await navigator.clipboard.writeText(generatedPreviewUrl);
+              showToast("Đã tạo và copy link xem trước");
+            } catch (_) {
+              showToast("Đã tạo link xem trước, hãy copy từ ô đường dẫn");
+            }
+          });
         document
           .getElementById("publishShortLinkBtn")
           .addEventListener("click", publishShortLink);

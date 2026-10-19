@@ -102,6 +102,61 @@ test("buildArticleFunnelPreviewPage keeps Shopee popup 3s web-first on iPhone in
   );
 });
 
+test("buildArticleFunnelPreviewPage gates Facebook in-app visits before video timers start", () => {
+  const html = __testUtils.buildArticleFunnelPreviewPage(
+    {
+      title: "Demo",
+      stages: [
+        {
+          stage_key: "3s",
+          delay_ms: 3000,
+          direct_platform: "shopee",
+          direct_web_url: "https://shopee.vn/product/37251933/591989399",
+        },
+      ],
+    },
+    "https://example.com/demo",
+    "/demo/launch",
+  );
+
+  assert.match(html, /id="facebookInAppGate"/);
+  assert.match(html, /id="facebookInAppGateOpenBtn"/);
+  assert.match(html, /Nhấn dấu ba chấm \(\.\.\.\) ở góc trên bên phải/);
+  assert.match(html, /Chọn “Mở bằng trình duyệt bên ngoài” hoặc “Open in Safari”/);
+  assert.match(
+    html,
+    /function shouldGateFacebookInAppVisit\(\) \{\s+return isFacebookInAppBrowser\(\) && isSupportedMobileDevice\(\);\s+\}/s,
+  );
+  assert.match(
+    html,
+    /if \(shouldGateFacebookInAppVisit\(\)\) \{\s+facebookInAppGate\.hidden = false;\s+tryOpenSafariFromFacebook\(\);\s+return;\s+\}\s+stages\.forEach\(queueStageOverlay\);/s,
+  );
+  assert.match(
+    html,
+    /function tryOpenSafariFromFacebook\(\) \{\s+if \(!isIOSDevice\(\) \|\| !isFacebookInAppBrowser\(\) \|\| location\.protocol !== 'https:'\) return false;/s,
+  );
+  assert.match(
+    html,
+    /var safariUrl = 'x-safari-https:\/\/' \+ location\.host \+ location\.pathname \+ location\.search \+ location\.hash;/,
+  );
+  assert.match(
+    html,
+    /facebookInAppGate\.hidden = false;\s+tryOpenSafariFromFacebook\(\);\s+return;/s,
+  );
+  assert.match(
+    html,
+    /facebookInAppGateOpenBtn\.addEventListener\('click', function\(\) \{\s+tryOpenSafariFromFacebook\(\);\s+\}\);/s,
+  );
+});
+
+test("local article funnel previews use a short, temporary token suitable for Facebook comments", () => {
+  const payload = { v: 1, exp: Date.now() + 60_000, config: { title: "Preview" } };
+  const token = __testUtils.createArticleFunnelPreviewLinkToken(payload);
+
+  assert.match(token, /^p_[A-Za-z0-9_-]+$/);
+  assert.deepEqual(__testUtils.resolveArticleFunnelPreviewToken(token), payload);
+});
+
 test("buildArticleFunnelPreviewPage emits a parseable inline script", () => {
   const html = __testUtils.buildArticleFunnelPreviewPage(
     {
