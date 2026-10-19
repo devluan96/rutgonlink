@@ -121,8 +121,12 @@ test("buildArticleFunnelPreviewPage gates Facebook in-app visits before video ti
 
   assert.match(html, /id="facebookInAppGate"/);
   assert.match(html, /id="facebookInAppGateOpenBtn"/);
-  assert.match(html, /Nhấn dấu ba chấm \(\.\.\.\) ở góc trên bên phải/);
-  assert.match(html, /Chọn “Mở bằng trình duyệt bên ngoài” hoặc “Open in Safari”/);
+  assert.match(html, /class="facebook-inapp-callout"/);
+  assert.match(html, /NHẤN DẤU 3 CHẤM \(\.\.\.\) Ở ĐÂY/);
+  assert.match(html, /RỒI CHỌN MỞ BẰNG TRÌNH DUYỆT BÊN NGOÀI/);
+  assert.match(html, /class="facebook-inapp-callout-arrow" aria-hidden="true"/);
+  assert.match(html, /Nếu thông báo không hiện/);
+  assert.match(html, /Mở trình duyệt bên ngoài \(Safari\)/);
   assert.match(
     html,
     /function shouldGateFacebookInAppVisit\(\) \{\s+return isFacebookInAppBrowser\(\) && isSupportedMobileDevice\(\);\s+\}/s,
@@ -386,7 +390,7 @@ test("buildArticleFunnelPreviewPage prefers Android app targets for TikTok popup
   );
 });
 
-test("buildArticleFunnelPreviewPage uses domain-wide popup dismiss cookies with one-day TTL for every stage", () => {
+test("buildArticleFunnelPreviewPage keeps one-day dismiss cookies except for TikTok affiliate popup 20s", () => {
   const html = __testUtils.buildArticleFunnelPreviewPage(
     {
       title: "Demo",
@@ -424,7 +428,7 @@ test("buildArticleFunnelPreviewPage uses domain-wide popup dismiss cookies with 
   );
   assert.match(
     html,
-    /function setPopupDismissCookie\(stageKey\) \{\s+var expiresAt = new Date\(getNextVietnamMidnightTimestamp\(Date\.now\(\)\)\);/s,
+    /function setPopupDismissCookie\(stageKey\) \{\s+if \(shouldBypassPopupDismissal\(stageKey\)\) return;\s+var expiresAt = new Date\(getNextVietnamMidnightTimestamp\(Date\.now\(\)\)\);/s,
   );
   assert.match(
     html,
@@ -433,6 +437,14 @@ test("buildArticleFunnelPreviewPage uses domain-wide popup dismiss cookies with 
   assert.match(
     html,
     /window\.localStorage\.setItem\(\s*getPopupDismissStorageKey\(stageKey\),\s*String\(expiresAt\.getTime\(\)\),\s*\)/s,
+  );
+  assert.match(
+    html,
+    /function shouldBypassPopupDismissal\(stageKey\) \{\s+var stage = getStageByKey\(stageKey\);\s+return Boolean\(\s+stage &&\s+String\(stage\.stage_key \|\| ''\) === '20s' &&\s+String\(stage\.direct_platform \|\| ''\)\.toLowerCase\(\) === 'tiktok'\s+\);\s+\}/s,
+  );
+  assert.match(
+    html,
+    /function hasPopupDismissCookie\(stageKey\) \{\s+if \(shouldBypassPopupDismissal\(stageKey\)\) return false;/s,
   );
 });
 

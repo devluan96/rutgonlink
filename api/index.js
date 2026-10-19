@@ -9,10 +9,7 @@ const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 const zlib = require("zlib");
-const {
-  S3Client,
-  PutObjectCommand,
-} = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { nanoid } = require("nanoid");
 const bcrypt = require("bcryptjs");
@@ -25,15 +22,26 @@ const { isAffiliateShortenUrl } = require("../affiliate");
 
 const app = express();
 function syncArticleFunnelLabSrcdocAsset() {
-  const templatePath = path.join(__dirname, "templates", "admin-article-funnel-lab.html");
-  const assetPath = path.join(__dirname, "..", "public", "article-funnel-lab-srcdoc.js");
+  const templatePath = path.join(
+    __dirname,
+    "templates",
+    "admin-article-funnel-lab.html",
+  );
+  const assetPath = path.join(
+    __dirname,
+    "..",
+    "public",
+    "article-funnel-lab-srcdoc.js",
+  );
   try {
     const templateHtml = fs.readFileSync(templatePath, "utf8");
-    const assetContent =
-      `window.__ARTICLE_FUNNEL_LAB_TEMPLATE_HTML__ = ${JSON.stringify(templateHtml)};\n`;
+    const assetContent = `window.__ARTICLE_FUNNEL_LAB_TEMPLATE_HTML__ = ${JSON.stringify(templateHtml)};\n`;
     fs.writeFileSync(assetPath, assetContent, "utf8");
   } catch (error) {
-    console.error("[article-funnel-lab/srcdoc-sync] Failed to sync lab template asset", error);
+    console.error(
+      "[article-funnel-lab/srcdoc-sync] Failed to sync lab template asset",
+      error,
+    );
   }
 }
 // This generated browser asset is committed to public/. Rebuilding it while a
@@ -47,15 +55,22 @@ const BASE_URL =
     ? `https://${process.env.VERCEL_URL}`
     : "http://localhost:3000");
 function normalizeLocalCanonicalHost(rawHost = "localhost") {
-  const trimmed = String(rawHost || "").trim().toLowerCase();
+  const trimmed = String(rawHost || "")
+    .trim()
+    .toLowerCase();
   if (!trimmed) return "localhost";
   try {
-    return new URL(trimmed.includes("://") ? trimmed : `http://${trimmed}`).hostname || "localhost";
+    return (
+      new URL(trimmed.includes("://") ? trimmed : `http://${trimmed}`)
+        .hostname || "localhost"
+    );
   } catch (_) {
-    return trimmed
-      .replace(/^https?:\/\//, "")
-      .replace(/\/.*$/, "")
-      .replace(/:\d+$/, "") || "localhost";
+    return (
+      trimmed
+        .replace(/^https?:\/\//, "")
+        .replace(/\/.*$/, "")
+        .replace(/:\d+$/, "") || "localhost"
+    );
   }
 }
 const LOCAL_CANONICAL_HOST = normalizeLocalCanonicalHost(
@@ -142,9 +157,7 @@ const R2_VIDEO_SECRET_ACCESS_KEY = (
   process.env.R2_VIDEO_SECRET_ACCESS_KEY || ""
 ).trim();
 const R2_VIDEO_BUCKET = (process.env.R2_VIDEO_BUCKET || "").trim();
-const R2_VIDEO_PUBLIC_BASE_URL = (
-  process.env.R2_VIDEO_PUBLIC_BASE_URL || ""
-)
+const R2_VIDEO_PUBLIC_BASE_URL = (process.env.R2_VIDEO_PUBLIC_BASE_URL || "")
   .trim()
   .replace(/\/+$/, "");
 const R2_IMAGE_PUBLIC_BASE_URL = (
@@ -288,9 +301,7 @@ app.use((req, res, next) => {
     .trim()
     .toLowerCase();
   const isLocalAliasRequest =
-    hostname === "127.0.0.1" ||
-    hostname === "[::1]" ||
-    hostname === "::1";
+    hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
 
   if (isLocalAliasRequest) {
     const portMatch = hostHeader.match(/:(\d+)$/);
@@ -360,8 +371,8 @@ function serveLanding(_req, res) {
   const html = renderHtmlTemplate(
     path.join(__dirname, "..", "public", "landing.html"),
     {
-      "__BASE_URL__": BASE_URL,
-      "__OG_IMAGE_URL__": DEFAULT_OG_IMAGE_URL,
+      __BASE_URL__: BASE_URL,
+      __OG_IMAGE_URL__: DEFAULT_OG_IMAGE_URL,
     },
   );
   res.type("html").send(html);
@@ -446,12 +457,7 @@ const appShellRoutes = [
 const publicResourcePages = [
   {
     pathname: "/resources",
-    templatePath: path.join(
-      __dirname,
-      "..",
-      "public",
-      "resources-index.html",
-    ),
+    templatePath: path.join(__dirname, "..", "public", "resources-index.html"),
     title:
       "Tài nguyên BocLink cho short link, bio link và QR code | BocLink.click",
     description:
@@ -514,11 +520,11 @@ for (const page of publicResourcePages) {
     servePublicTemplate(
       page.templatePath,
       {
-        "__BASE_URL__": BASE_URL,
-        "__PAGE_URL__": `${BASE_URL}${page.pathname}`,
-        "__PAGE_TITLE__": page.title,
-        "__PAGE_DESCRIPTION__": page.description,
-        "__OG_IMAGE_URL__": DEFAULT_OG_IMAGE_URL,
+        __BASE_URL__: BASE_URL,
+        __PAGE_URL__: `${BASE_URL}${page.pathname}`,
+        __PAGE_TITLE__: page.title,
+        __PAGE_DESCRIPTION__: page.description,
+        __OG_IMAGE_URL__: DEFAULT_OG_IMAGE_URL,
       },
       { cacheControl: "public, max-age=300" },
     ),
@@ -529,10 +535,10 @@ const serveAuthHtml = (templatePath) => (_req, res) => {
   res.set("Cache-Control", "private, max-age=60, must-revalidate");
   res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   const html = renderHtmlTemplate(templatePath, {
-    "__GOOGLE_CLIENT_ID__": GOOGLE_CLIENT_ID,
-    "__SUPABASE_URL__": SUPABASE_URL,
-    "__SUPABASE_ANON_KEY__": SUPABASE_ANON_KEY,
-    "__BASE_URL__": BASE_URL,
+    __GOOGLE_CLIENT_ID__: GOOGLE_CLIENT_ID,
+    __SUPABASE_URL__: SUPABASE_URL,
+    __SUPABASE_ANON_KEY__: SUPABASE_ANON_KEY,
+    __BASE_URL__: BASE_URL,
   });
   res.type("html").send(html);
 };
@@ -555,447 +561,506 @@ app.get(
   redirectToCanonical("/register"),
 );
 app.get("/user/register/index.html", redirectToCanonical("/register"));
-app.post("/api/admin/article-funnel-lab/resolve-target", requireArticleFunnelLab, async (req, res) => {
-  try {
-    const inputUrl = String(req.body?.url || "").trim();
-    const iosInAppOverride = String(
-      req.body?.popup20sIosFbUrl ||
-        req.body?.popup_20s_ios_fb_url ||
-        req.body?.ios_fb_url ||
-        "",
-    ).trim();
-    if (!inputUrl) {
-      return res.status(400).json({ error: "Thiếu URL cần resolve" });
-    }
+app.post(
+  "/api/admin/article-funnel-lab/resolve-target",
+  requireArticleFunnelLab,
+  async (req, res) => {
+    try {
+      const inputUrl = String(req.body?.url || "").trim();
+      const iosInAppOverride = String(
+        req.body?.popup20sIosFbUrl ||
+          req.body?.popup_20s_ios_fb_url ||
+          req.body?.ios_fb_url ||
+          "",
+      ).trim();
+      if (!inputUrl) {
+        return res.status(400).json({ error: "Thiếu URL cần resolve" });
+      }
 
-    const inferredPlatform = inferAffiliatePlatformFromUrl(inputUrl);
-    const normalizedUrl =
-      normalizeAffiliatePresetUrl(
-        inputUrl,
-        inferredPlatform === "generic" ? "" : inferredPlatform,
-      ) ||
-      normalizeAffiliatePresetUrl(inputUrl) ||
-      inputUrl;
-    const health = await fetchAffiliateHealth(normalizedUrl);
-    const finalUrl = String(health?.final_url || normalizedUrl || "").trim();
-    const launchConfig = applyArticleFunnelStageDirectOverrides(
-      {
-        stage_key: "20s",
-      },
-      buildOverlayLaunchConfig(finalUrl),
-      {
-        overlay: {
-          popup_20s_ios_fb_url: iosInAppOverride,
+      const inferredPlatform = inferAffiliatePlatformFromUrl(inputUrl);
+      const normalizedUrl =
+        normalizeAffiliatePresetUrl(
+          inputUrl,
+          inferredPlatform === "generic" ? "" : inferredPlatform,
+        ) ||
+        normalizeAffiliatePresetUrl(inputUrl) ||
+        inputUrl;
+      const health = await fetchAffiliateHealth(normalizedUrl);
+      const finalUrl = String(health?.final_url || normalizedUrl || "").trim();
+      const launchConfig = applyArticleFunnelStageDirectOverrides(
+        {
+          stage_key: "20s",
         },
-      },
-    );
+        buildOverlayLaunchConfig(finalUrl),
+        {
+          overlay: {
+            popup_20s_ios_fb_url: iosInAppOverride,
+          },
+        },
+      );
 
-    return res.json({
-      ok: true,
-      input_url: inputUrl,
-      normalized_url: normalizedUrl,
-      final_url: finalUrl,
-      checked_at: health?.checked_at || new Date().toISOString(),
-      platform: launchConfig.direct_platform || inferredPlatform || "generic",
-      alive: Boolean(health?.alive),
-      note: health?.note || "",
-      status: Number(health?.status || 0),
-      ...launchConfig,
-    });
-  } catch (error) {
-    console.error("[article-funnel-lab/resolve-target]", error);
-    return res.status(500).json({ error: "Resolve target thất bại" });
-  }
-});
-app.post("/api/admin/article-funnel-lab/import-url", requireArticleFunnelLab, async (req, res) => {
-  try {
-    const sourceUrl = normalizeImportSourceUrl(req.body?.url || "");
-    if (!sourceUrl) {
-      return res.status(400).json({ error: "URL nguon khong hop le" });
-    }
-
-    const imported = await fetchArticleFunnelImportPayload(sourceUrl);
-    if (!imported.item) {
-      return res.status(400).json({
-        error: `Khong tai duoc URL nguon (${Number(imported.status || 0) || "no-response"})`,
+      return res.json({
+        ok: true,
+        input_url: inputUrl,
+        normalized_url: normalizedUrl,
+        final_url: finalUrl,
+        checked_at: health?.checked_at || new Date().toISOString(),
+        platform: launchConfig.direct_platform || inferredPlatform || "generic",
+        alive: Boolean(health?.alive),
+        note: health?.note || "",
+        status: Number(health?.status || 0),
+        ...launchConfig,
       });
+    } catch (error) {
+      console.error("[article-funnel-lab/resolve-target]", error);
+      return res.status(500).json({ error: "Resolve target thất bại" });
     }
+  },
+);
+app.post(
+  "/api/admin/article-funnel-lab/import-url",
+  requireArticleFunnelLab,
+  async (req, res) => {
+    try {
+      const sourceUrl = normalizeImportSourceUrl(req.body?.url || "");
+      if (!sourceUrl) {
+        return res.status(400).json({ error: "URL nguon khong hop le" });
+      }
 
-    return res.json({
-      ok: true,
-      item: imported.item,
-    });
-  } catch (error) {
-    console.error("[article-funnel-lab/import-url]", error);
-    return res.status(500).json({ error: "Khong the lay nhanh du lieu tu URL nguon" });
-  }
-});
-app.get("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, res) => {
-  try {
-    res.set("Cache-Control", "private, no-store");
-    const database = await getDb();
-    const publicBaseUrl = await getPublicBaseUrl();
-    const rows = await database.listArticleFunnelLabs({
-      createdByUserId: req.currentUser?.id || 0,
-    });
-    const items = await Promise.all(
-      rows.map(async (item) => {
-        const configJson =
-          item.config_json && typeof item.config_json === "object"
-            ? item.config_json
-            : {};
-        const publishedArticleFunnel = item.published_route_slug
-          ? await database.getArticleFunnelBySlug(item.published_route_slug)
-          : null;
-        const publishedDomainHostname =
-          normalizeDomainHost(publishedArticleFunnel?.domain_hostname) ||
-          normalizeDomainHost(configJson.source_domain);
-        const publishedUrl =
-          item.published_route_slug
+      const imported = await fetchArticleFunnelImportPayload(sourceUrl);
+      if (!imported.item) {
+        return res.status(400).json({
+          error: `Khong tai duoc URL nguon (${Number(imported.status || 0) || "no-response"})`,
+        });
+      }
+
+      return res.json({
+        ok: true,
+        item: imported.item,
+      });
+    } catch (error) {
+      console.error("[article-funnel-lab/import-url]", error);
+      return res
+        .status(500)
+        .json({ error: "Khong the lay nhanh du lieu tu URL nguon" });
+    }
+  },
+);
+app.get(
+  "/api/admin/article-funnel-labs",
+  requireArticleFunnelLab,
+  async (req, res) => {
+    try {
+      res.set("Cache-Control", "private, no-store");
+      const database = await getDb();
+      const publicBaseUrl = await getPublicBaseUrl();
+      const rows = await database.listArticleFunnelLabs({
+        createdByUserId: req.currentUser?.id || 0,
+      });
+      const items = await Promise.all(
+        rows.map(async (item) => {
+          const configJson =
+            item.config_json && typeof item.config_json === "object"
+              ? item.config_json
+              : {};
+          const publishedArticleFunnel = item.published_route_slug
+            ? await database.getArticleFunnelBySlug(item.published_route_slug)
+            : null;
+          const publishedDomainHostname =
+            normalizeDomainHost(publishedArticleFunnel?.domain_hostname) ||
+            normalizeDomainHost(configJson.source_domain);
+          const publishedUrl = item.published_route_slug
             ? buildArticleFunnelPublicUrl(
                 item.published_route_slug,
                 publishedDomainHostname,
                 publicBaseUrl,
               )
             : "";
-        const publishedTest20sUrl =
-          item.published_route_slug && hasArticleFunnelStage(configJson, "20s")
-            ? buildArticleFunnelPopupTestUrl(
-                item.published_route_slug,
-                publishedDomainHostname,
-                publicBaseUrl,
-                "20s",
-                Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
-              )
-            : "";
-        return {
-          id: item.id,
-          name: item.name || `Lab ${item.id}`,
-          title: item.title || "",
-          published_route_slug: item.published_route_slug || "",
-          published_url: publishedUrl,
-          published_test_20s_url: publishedTest20sUrl,
-          domain_hostname: publishedDomainHostname || "",
-          affiliate_clicks: Math.max(Number(item.affiliate_clicks) || 0, 0),
-          created_by_user_id: item.created_by_user_id || null,
-          created_at: item.created_at || null,
-          updated_at: item.updated_at || item.created_at || null,
-        };
-      }),
-    );
-    return res.json({
-      ok: true,
-      items,
-    });
-  } catch (error) {
-    console.error("[article-funnel-labs/list]", error);
-    return res.status(500).json({ error: "Khong the tai danh sach lab" });
-  }
-});
-app.get("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (req, res) => {
-  try {
-    res.set("Cache-Control", "private, no-store");
-    const database = await getDb();
-    const publicBaseUrl = await getPublicBaseUrl();
-    const row = await database.getArticleFunnelLabById(req.params.id);
-    if (!row) {
-      return res.status(404).json({ error: "Khong tim thay lab" });
+          const publishedTest20sUrl =
+            item.published_route_slug &&
+            hasArticleFunnelStage(configJson, "20s")
+              ? buildArticleFunnelPopupTestUrl(
+                  item.published_route_slug,
+                  publishedDomainHostname,
+                  publicBaseUrl,
+                  "20s",
+                  Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
+                )
+              : "";
+          return {
+            id: item.id,
+            name: item.name || `Lab ${item.id}`,
+            title: item.title || "",
+            published_route_slug: item.published_route_slug || "",
+            published_url: publishedUrl,
+            published_test_20s_url: publishedTest20sUrl,
+            domain_hostname: publishedDomainHostname || "",
+            affiliate_clicks: Math.max(Number(item.affiliate_clicks) || 0, 0),
+            created_by_user_id: item.created_by_user_id || null,
+            created_at: item.created_at || null,
+            updated_at: item.updated_at || item.created_at || null,
+          };
+        }),
+      );
+      return res.json({
+        ok: true,
+        items,
+      });
+    } catch (error) {
+      console.error("[article-funnel-labs/list]", error);
+      return res.status(500).json({ error: "Khong the tai danh sach lab" });
     }
-    if (!canManageArticleFunnelLab(req.currentUser, row)) {
-      return res.status(403).json({ error: "Khong co quyen xem lab nay" });
-    }
-    const configJson = normalizeArticleFunnelLabConfigJson(row.config_json);
-    const publishedArticleFunnel = row.published_route_slug
-      ? await database.getArticleFunnelBySlug(row.published_route_slug)
-      : null;
-    const publishedDomainHostname =
-      normalizeDomainHost(publishedArticleFunnel?.domain_hostname) ||
-      normalizeDomainHost(configJson.source_domain);
-    const publishedUrl =
-      row.published_route_slug
+  },
+);
+app.get(
+  "/api/admin/article-funnel-labs/:id",
+  requireArticleFunnelLab,
+  async (req, res) => {
+    try {
+      res.set("Cache-Control", "private, no-store");
+      const database = await getDb();
+      const publicBaseUrl = await getPublicBaseUrl();
+      const row = await database.getArticleFunnelLabById(req.params.id);
+      if (!row) {
+        return res.status(404).json({ error: "Khong tim thay lab" });
+      }
+      if (!canManageArticleFunnelLab(req.currentUser, row)) {
+        return res.status(403).json({ error: "Khong co quyen xem lab nay" });
+      }
+      const configJson = normalizeArticleFunnelLabConfigJson(row.config_json);
+      const publishedArticleFunnel = row.published_route_slug
+        ? await database.getArticleFunnelBySlug(row.published_route_slug)
+        : null;
+      const publishedDomainHostname =
+        normalizeDomainHost(publishedArticleFunnel?.domain_hostname) ||
+        normalizeDomainHost(configJson.source_domain);
+      const publishedUrl = row.published_route_slug
         ? buildArticleFunnelPublicUrl(
             row.published_route_slug,
             publishedDomainHostname,
             publicBaseUrl,
           )
         : "";
-    const publishedTest20sUrl =
-      row.published_route_slug && hasArticleFunnelStage(configJson, "20s")
+      const publishedTest20sUrl =
+        row.published_route_slug && hasArticleFunnelStage(configJson, "20s")
+          ? buildArticleFunnelPopupTestUrl(
+              row.published_route_slug,
+              publishedDomainHostname,
+              publicBaseUrl,
+              "20s",
+              Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
+            )
+          : "";
+      return res.json({
+        ok: true,
+        debug: {
+          requestId: req.requestId || null,
+          requestedLabId: Number(req.params.id) || 0,
+          responseLabId: row.id || null,
+        },
+        item: {
+          id: row.id,
+          name: row.name || `Lab ${row.id}`,
+          title: row.title || "",
+          published_route_slug: row.published_route_slug || "",
+          published_url: publishedUrl,
+          published_test_20s_url: publishedTest20sUrl,
+          domain_hostname: publishedDomainHostname || "",
+          affiliate_clicks: Math.max(Number(row.affiliate_clicks) || 0, 0),
+          created_by_user_id: row.created_by_user_id || null,
+          created_at: row.created_at || null,
+          updated_at: row.updated_at || row.created_at || null,
+          config_json: configJson,
+        },
+      });
+    } catch (error) {
+      console.error("[article-funnel-labs/get]", error);
+      return res.status(500).json({ error: "Khong the tai lab" });
+    }
+  },
+);
+app.post(
+  "/api/admin/article-funnel-labs",
+  requireArticleFunnelLab,
+  async (req, res) => {
+    try {
+      const database = await getDb();
+      const rawConfig =
+        req.body?.config && typeof req.body.config === "object"
+          ? req.body.config
+          : req.body?.config_json && typeof req.body.config_json === "object"
+            ? req.body.config_json
+            : req.body?.sourceDomain || req.body?.source_domain
+              ? req.body
+              : {};
+      const normalizedConfig = normalizeArticleFunnelPreviewConfig(rawConfig);
+      const row = await database.createArticleFunnelLab({
+        name:
+          String(req.body?.name || "").trim() ||
+          normalizedConfig.title ||
+          "Lab mới",
+        title: normalizedConfig.title || null,
+        config_json: normalizedConfig,
+        created_by_user_id: req.currentUser?.id || null,
+      });
+      return res.json({
+        ok: true,
+        item: row,
+      });
+    } catch (error) {
+      console.error("[article-funnel-labs/create]", error);
+      return res.status(500).json({ error: "Khong the tao lab" });
+    }
+  },
+);
+app.put(
+  "/api/admin/article-funnel-labs/:id",
+  requireArticleFunnelLab,
+  async (req, res) => {
+    try {
+      const database = await getDb();
+      const existingLab = await database.getArticleFunnelLabById(req.params.id);
+      if (!existingLab) {
+        return res.status(404).json({ error: "Khong tim thay lab" });
+      }
+      if (!canManageArticleFunnelLab(req.currentUser, existingLab)) {
+        return res.status(403).json({ error: "Khong co quyen sua lab nay" });
+      }
+      const rawConfig =
+        req.body?.config && typeof req.body.config === "object"
+          ? req.body.config
+          : req.body?.config_json && typeof req.body.config_json === "object"
+            ? req.body.config_json
+            : req.body?.sourceDomain || req.body?.source_domain
+              ? req.body
+              : {};
+      const updatePayload = {};
+      if (Object.keys(rawConfig).length) {
+        const normalizedConfig = normalizeArticleFunnelPreviewConfig(rawConfig);
+        updatePayload.config_json = normalizedConfig;
+        updatePayload.title = normalizedConfig.title || null;
+        if (!req.body?.name) {
+          updatePayload.name = normalizedConfig.title || "Lab mới";
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "name")) {
+        updatePayload.name = String(req.body?.name || "").trim() || "Lab mới";
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(
+          req.body || {},
+          "published_route_slug",
+        )
+      ) {
+        updatePayload.published_route_slug =
+          String(req.body?.published_route_slug || "").trim() || null;
+      }
+      const row = await database.updateArticleFunnelLab(
+        req.params.id,
+        updatePayload,
+      );
+      return res.json({
+        ok: true,
+        item: row,
+      });
+    } catch (error) {
+      console.error("[article-funnel-labs/update]", error);
+      return res.status(500).json({ error: "Khong the luu lab" });
+    }
+  },
+);
+app.delete(
+  "/api/admin/article-funnel-labs/:id",
+  requireArticleFunnelLab,
+  async (req, res) => {
+    try {
+      const database = await getDb();
+      const existingLab = await database.getArticleFunnelLabById(req.params.id);
+      if (!existingLab) {
+        return res.status(404).json({ error: "Khong tim thay lab" });
+      }
+      if (!canManageArticleFunnelLab(req.currentUser, existingLab)) {
+        return res.status(403).json({ error: "Khong co quyen xoa lab nay" });
+      }
+      await database.deleteArticleFunnelLab(req.params.id);
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error("[article-funnel-labs/delete]", error);
+      return res.status(500).json({ error: "Khong the xoa lab" });
+    }
+  },
+);
+app.post(
+  "/api/admin/article-funnel-lab/preview-link",
+  requireArticleFunnelLab,
+  async (req, res) => {
+    try {
+      const rawConfig =
+        req.body?.config && typeof req.body.config === "object"
+          ? req.body.config
+          : req.body;
+      const previewConfig = await resolveArticleFunnelConfig(rawConfig);
+      const expiresAt = Date.now() + ARTICLE_FUNNEL_PREVIEW_TOKEN_TTL_MS;
+      const token = createArticleFunnelPreviewLinkToken({
+        v: 1,
+        exp: expiresAt,
+        config: previewConfig,
+      });
+      const previewSlug = normalizeArticleFunnelPreviewSlug(
+        previewConfig.slug || previewConfig.title,
+      );
+      const previewUrl = `${BASE_URL}/_lab/article-funnel/${previewSlug}/${token}`;
+      return res.json({
+        ok: true,
+        preview_url: previewUrl,
+        expires_at: new Date(expiresAt).toISOString(),
+      });
+    } catch (error) {
+      console.error("[article-funnel-lab/preview-link]", error);
+      return res.status(500).json({ error: "Không thể tạo preview link" });
+    }
+  },
+);
+app.post(
+  "/api/admin/article-funnel-lab/publish",
+  requireArticleFunnelLab,
+  async (req, res) => {
+    try {
+      const database = await getDb();
+      const publicBaseUrl = await getPublicBaseUrl();
+      const rawConfig =
+        req.body?.config && typeof req.body.config === "object"
+          ? req.body.config
+          : req.body;
+      const publishedConfig = await resolveArticleFunnelConfig(rawConfig);
+      const routeSlug = normalizeArticleFunnelPreviewSlug(
+        publishedConfig.slug || publishedConfig.title,
+      );
+      if (isReservedPublishedArticleSlug(routeSlug)) {
+        return res.status(400).json({
+          error: "Slug này đang thuộc nhóm route hệ thống, hãy đổi slug khác.",
+        });
+      }
+      const conflictingLink = await findShortLinkSlugConflict(
+        database,
+        routeSlug,
+      );
+      if (conflictingLink) {
+        return res.status(409).json({
+          error: `Slug /${routeSlug} đang được dùng bởi link rút gọn thường. Hãy đổi slug khác để tránh đè deeplink thường.`,
+        });
+      }
+      const requestedDomainHostname = normalizeDomainHost(
+        publishedConfig.source_domain,
+      );
+      const activeRequestedDomain = requestedDomainHostname
+        ? await resolveActiveDomainHostname(database, requestedDomainHostname)
+        : null;
+      const fallbackDomainHostname = normalizeDomainHost(publicBaseUrl);
+      const selectedDomainHostname =
+        activeRequestedDomain || fallbackDomainHostname || null;
+      const publishedSnapshotExpiresAt =
+        Date.now() + ARTICLE_FUNNEL_PUBLISHED_SNAPSHOT_TOKEN_TTL_MS;
+      const publishedSnapshotToken = encodeArticleFunnelPreviewToken(
+        buildArticleFunnelPublishedSnapshotPayload({
+          config: publishedConfig,
+          routeSlug,
+          domainHostname: selectedDomainHostname,
+          expiresAt: publishedSnapshotExpiresAt,
+        }),
+      );
+      const publishedConfigWithSnapshot = {
+        ...publishedConfig,
+        published_snapshot_token: publishedSnapshotToken,
+        published_snapshot_expires_at: new Date(
+          publishedSnapshotExpiresAt,
+        ).toISOString(),
+      };
+      const draftLabId = Number(req.body?.lab_id || 0);
+      if (Number.isInteger(draftLabId) && draftLabId > 0) {
+        const draftLab = await database.getArticleFunnelLabById(draftLabId);
+        if (!draftLab) {
+          return res
+            .status(404)
+            .json({ error: "Khong tim thay lab de publish" });
+        }
+        if (!canManageArticleFunnelLab(req.currentUser, draftLab)) {
+          return res
+            .status(403)
+            .json({ error: "Khong co quyen publish lab nay" });
+        }
+      }
+      const conflictingPublishedLab = await findArticleFunnelPublishConflict(
+        database,
+        routeSlug,
+        { draftLabId },
+      );
+      if (conflictingPublishedLab) {
+        return res.status(409).json({
+          error: `Slug /${routeSlug} da duoc dung boi mot lab khac. Hay doi slug khac de tranh de bai published va gom nham click.`,
+        });
+      }
+      const saved = await database.upsertArticleFunnel({
+        route_slug: routeSlug,
+        domain_hostname: selectedDomainHostname,
+        title: publishedConfig.title || null,
+        config_json: publishedConfigWithSnapshot,
+        created_by_user_id: req.currentUser?.id || null,
+      });
+      if (Number.isInteger(draftLabId) && draftLabId > 0) {
+        try {
+          await database.updateArticleFunnelLab(draftLabId, {
+            name:
+              String(req.body?.lab_name || "").trim() ||
+              publishedConfig.title ||
+              "Lab mới",
+            title: publishedConfig.title || null,
+            config_json: publishedConfigWithSnapshot,
+            published_route_slug: saved.route_slug,
+          });
+        } catch (labError) {
+          console.error("[article-funnel-lab/publish-sync-draft]", labError);
+        }
+      }
+      const publishedUrl = buildArticleFunnelPublicUrl(
+        saved.route_slug,
+        saved.domain_hostname,
+        publicBaseUrl,
+      );
+      const publishedTest20sUrl = hasArticleFunnelStage(publishedConfig, "20s")
         ? buildArticleFunnelPopupTestUrl(
-            row.published_route_slug,
-            publishedDomainHostname,
+            saved.route_slug,
+            saved.domain_hostname,
             publicBaseUrl,
             "20s",
             Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
           )
         : "";
-    return res.json({
-      ok: true,
-      debug: {
-        requestId: req.requestId || null,
-        requestedLabId: Number(req.params.id) || 0,
-        responseLabId: row.id || null,
-      },
-      item: {
-        id: row.id,
-        name: row.name || `Lab ${row.id}`,
-        title: row.title || "",
-        published_route_slug: row.published_route_slug || "",
+      const domainNote =
+        requestedDomainHostname &&
+        requestedDomainHostname !== selectedDomainHostname
+          ? `Domain ${requestedDomainHostname} chua nam trong danh sach domain dang hoat dong, da fallback sang ${selectedDomainHostname || normalizeDomainHost(BASE_URL) || "domain mac dinh"}.`
+          : "";
+      return res.json({
+        ok: true,
         published_url: publishedUrl,
         published_test_20s_url: publishedTest20sUrl,
-        domain_hostname: publishedDomainHostname || "",
-        affiliate_clicks: Math.max(Number(row.affiliate_clicks) || 0, 0),
-        created_by_user_id: row.created_by_user_id || null,
-        created_at: row.created_at || null,
-        updated_at: row.updated_at || row.created_at || null,
-        config_json: configJson,
-      },
-    });
-  } catch (error) {
-    console.error("[article-funnel-labs/get]", error);
-    return res.status(500).json({ error: "Khong the tai lab" });
-  }
-});
-app.post("/api/admin/article-funnel-labs", requireArticleFunnelLab, async (req, res) => {
-  try {
-    const database = await getDb();
-    const rawConfig =
-      req.body?.config && typeof req.body.config === "object"
-        ? req.body.config
-        : req.body?.config_json && typeof req.body.config_json === "object"
-          ? req.body.config_json
-          : req.body?.sourceDomain || req.body?.source_domain
-            ? req.body
-            : {};
-    const normalizedConfig = normalizeArticleFunnelPreviewConfig(rawConfig);
-    const row = await database.createArticleFunnelLab({
-      name:
-        String(req.body?.name || "").trim() ||
-        normalizedConfig.title ||
-        "Lab mới",
-      title: normalizedConfig.title || null,
-      config_json: normalizedConfig,
-      created_by_user_id: req.currentUser?.id || null,
-    });
-    return res.json({
-      ok: true,
-      item: row,
-    });
-  } catch (error) {
-    console.error("[article-funnel-labs/create]", error);
-    return res.status(500).json({ error: "Khong the tao lab" });
-  }
-});
-app.put("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (req, res) => {
-  try {
-    const database = await getDb();
-    const existingLab = await database.getArticleFunnelLabById(req.params.id);
-    if (!existingLab) {
-      return res.status(404).json({ error: "Khong tim thay lab" });
-    }
-    if (!canManageArticleFunnelLab(req.currentUser, existingLab)) {
-      return res.status(403).json({ error: "Khong co quyen sua lab nay" });
-    }
-    const rawConfig =
-      req.body?.config && typeof req.body.config === "object"
-        ? req.body.config
-        : req.body?.config_json && typeof req.body.config_json === "object"
-          ? req.body.config_json
-          : req.body?.sourceDomain || req.body?.source_domain
-            ? req.body
-            : {};
-    const updatePayload = {};
-    if (Object.keys(rawConfig).length) {
-      const normalizedConfig = normalizeArticleFunnelPreviewConfig(rawConfig);
-      updatePayload.config_json = normalizedConfig;
-      updatePayload.title = normalizedConfig.title || null;
-      if (!req.body?.name) {
-        updatePayload.name = normalizedConfig.title || "Lab mới";
-      }
-    }
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "name")) {
-      updatePayload.name = String(req.body?.name || "").trim() || "Lab mới";
-    }
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "published_route_slug")) {
-      updatePayload.published_route_slug =
-        String(req.body?.published_route_slug || "").trim() || null;
-    }
-    const row = await database.updateArticleFunnelLab(req.params.id, updatePayload);
-    return res.json({
-      ok: true,
-      item: row,
-    });
-  } catch (error) {
-    console.error("[article-funnel-labs/update]", error);
-    return res.status(500).json({ error: "Khong the luu lab" });
-  }
-});
-app.delete("/api/admin/article-funnel-labs/:id", requireArticleFunnelLab, async (req, res) => {
-  try {
-    const database = await getDb();
-    const existingLab = await database.getArticleFunnelLabById(req.params.id);
-    if (!existingLab) {
-      return res.status(404).json({ error: "Khong tim thay lab" });
-    }
-    if (!canManageArticleFunnelLab(req.currentUser, existingLab)) {
-      return res.status(403).json({ error: "Khong co quyen xoa lab nay" });
-    }
-    await database.deleteArticleFunnelLab(req.params.id);
-    return res.json({ ok: true });
-  } catch (error) {
-    console.error("[article-funnel-labs/delete]", error);
-    return res.status(500).json({ error: "Khong the xoa lab" });
-  }
-});
-app.post("/api/admin/article-funnel-lab/preview-link", requireArticleFunnelLab, async (req, res) => {
-  try {
-    const rawConfig =
-      req.body?.config && typeof req.body.config === "object"
-        ? req.body.config
-        : req.body;
-    const previewConfig = await resolveArticleFunnelConfig(rawConfig);
-    const expiresAt = Date.now() + ARTICLE_FUNNEL_PREVIEW_TOKEN_TTL_MS;
-    const token = createArticleFunnelPreviewLinkToken({
-      v: 1,
-      exp: expiresAt,
-      config: previewConfig,
-    });
-    const previewSlug = normalizeArticleFunnelPreviewSlug(
-      previewConfig.slug || previewConfig.title,
-    );
-    const previewUrl = `${BASE_URL}/_lab/article-funnel/${previewSlug}/${token}`;
-    return res.json({
-      ok: true,
-      preview_url: previewUrl,
-      expires_at: new Date(expiresAt).toISOString(),
-    });
-  } catch (error) {
-    console.error("[article-funnel-lab/preview-link]", error);
-    return res.status(500).json({ error: "Không thể tạo preview link" });
-  }
-});
-app.post("/api/admin/article-funnel-lab/publish", requireArticleFunnelLab, async (req, res) => {
-  try {
-    const database = await getDb();
-    const publicBaseUrl = await getPublicBaseUrl();
-    const rawConfig =
-      req.body?.config && typeof req.body.config === "object"
-        ? req.body.config
-        : req.body;
-    const publishedConfig = await resolveArticleFunnelConfig(rawConfig);
-    const routeSlug = normalizeArticleFunnelPreviewSlug(
-      publishedConfig.slug || publishedConfig.title,
-    );
-    if (isReservedPublishedArticleSlug(routeSlug)) {
-      return res.status(400).json({
-        error: "Slug này đang thuộc nhóm route hệ thống, hãy đổi slug khác.",
+        route_slug: saved.route_slug,
+        domain_hostname: saved.domain_hostname || "",
+        snapshot_token: publishedSnapshotToken,
+        snapshot_expires_at: new Date(publishedSnapshotExpiresAt).toISOString(),
+        domain_note: domainNote,
+        updated_at:
+          saved.updated_at || saved.created_at || new Date().toISOString(),
       });
+    } catch (error) {
+      console.error("[article-funnel-lab/publish]", error);
+      return res
+        .status(500)
+        .json({ error: "Khong the publish article funnel" });
     }
-    const conflictingLink = await findShortLinkSlugConflict(database, routeSlug);
-    if (conflictingLink) {
-      return res.status(409).json({
-        error: `Slug /${routeSlug} đang được dùng bởi link rút gọn thường. Hãy đổi slug khác để tránh đè deeplink thường.`,
-      });
-    }
-    const requestedDomainHostname = normalizeDomainHost(
-      publishedConfig.source_domain,
-    );
-    const activeRequestedDomain = requestedDomainHostname
-      ? await resolveActiveDomainHostname(database, requestedDomainHostname)
-      : null;
-    const fallbackDomainHostname = normalizeDomainHost(publicBaseUrl);
-    const selectedDomainHostname =
-      activeRequestedDomain || fallbackDomainHostname || null;
-    const publishedSnapshotExpiresAt =
-      Date.now() + ARTICLE_FUNNEL_PUBLISHED_SNAPSHOT_TOKEN_TTL_MS;
-    const publishedSnapshotToken = encodeArticleFunnelPreviewToken(
-      buildArticleFunnelPublishedSnapshotPayload({
-        config: publishedConfig,
-        routeSlug,
-        domainHostname: selectedDomainHostname,
-        expiresAt: publishedSnapshotExpiresAt,
-      }),
-    );
-    const publishedConfigWithSnapshot = {
-      ...publishedConfig,
-      published_snapshot_token: publishedSnapshotToken,
-      published_snapshot_expires_at: new Date(
-        publishedSnapshotExpiresAt,
-      ).toISOString(),
-    };
-    const draftLabId = Number(req.body?.lab_id || 0);
-    if (Number.isInteger(draftLabId) && draftLabId > 0) {
-      const draftLab = await database.getArticleFunnelLabById(draftLabId);
-      if (!draftLab) {
-        return res.status(404).json({ error: "Khong tim thay lab de publish" });
-      }
-      if (!canManageArticleFunnelLab(req.currentUser, draftLab)) {
-        return res.status(403).json({ error: "Khong co quyen publish lab nay" });
-      }
-    }
-    const conflictingPublishedLab = await findArticleFunnelPublishConflict(
-      database,
-      routeSlug,
-      { draftLabId },
-    );
-    if (conflictingPublishedLab) {
-      return res.status(409).json({
-        error: `Slug /${routeSlug} da duoc dung boi mot lab khac. Hay doi slug khac de tranh de bai published va gom nham click.`,
-      });
-    }
-    const saved = await database.upsertArticleFunnel({
-      route_slug: routeSlug,
-      domain_hostname: selectedDomainHostname,
-      title: publishedConfig.title || null,
-      config_json: publishedConfigWithSnapshot,
-      created_by_user_id: req.currentUser?.id || null,
-    });
-    if (Number.isInteger(draftLabId) && draftLabId > 0) {
-      try {
-        await database.updateArticleFunnelLab(draftLabId, {
-          name: String(req.body?.lab_name || "").trim() || publishedConfig.title || "Lab mới",
-          title: publishedConfig.title || null,
-          config_json: publishedConfigWithSnapshot,
-          published_route_slug: saved.route_slug,
-        });
-      } catch (labError) {
-        console.error("[article-funnel-lab/publish-sync-draft]", labError);
-      }
-    }
-    const publishedUrl = buildArticleFunnelPublicUrl(
-      saved.route_slug,
-      saved.domain_hostname,
-      publicBaseUrl,
-    );
-    const publishedTest20sUrl = hasArticleFunnelStage(publishedConfig, "20s")
-      ? buildArticleFunnelPopupTestUrl(
-          saved.route_slug,
-          saved.domain_hostname,
-          publicBaseUrl,
-          "20s",
-          Date.now() + ARTICLE_FUNNEL_POPUP_TEST_TOKEN_TTL_MS,
-        )
-      : "";
-    const domainNote =
-      requestedDomainHostname && requestedDomainHostname !== selectedDomainHostname
-        ? `Domain ${requestedDomainHostname} chua nam trong danh sach domain dang hoat dong, da fallback sang ${selectedDomainHostname || normalizeDomainHost(BASE_URL) || "domain mac dinh"}.`
-        : "";
-    return res.json({
-      ok: true,
-      published_url: publishedUrl,
-      published_test_20s_url: publishedTest20sUrl,
-      route_slug: saved.route_slug,
-      domain_hostname: saved.domain_hostname || "",
-      snapshot_token: publishedSnapshotToken,
-      snapshot_expires_at: new Date(publishedSnapshotExpiresAt).toISOString(),
-      domain_note: domainNote,
-      updated_at: saved.updated_at || saved.created_at || new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error("[article-funnel-lab/publish]", error);
-    return res.status(500).json({ error: "Khong the publish article funnel" });
-  }
-});
+  },
+);
 app.post("/api/article-funnel/track-click", async (req, res) => {
   try {
     const routeSlug = String(
@@ -1056,7 +1121,9 @@ app.post("/api/article-funnel/track-click", async (req, res) => {
 });
 app.post("/api/article-funnel/bridge-debug", async (req, res) => {
   try {
-    const step = String(req.body?.step || "").trim().slice(0, 80);
+    const step = String(req.body?.step || "")
+      .trim()
+      .slice(0, 80);
     if (!step) {
       return res.status(400).json({ error: "step la bat buoc" });
     }
@@ -1065,23 +1132,19 @@ app.post("/api/article-funnel/bridge-debug", async (req, res) => {
     )
       .trim()
       .slice(0, 80);
-    const mode = String(req.body?.mode || "").trim().slice(0, 120);
+    const mode = String(req.body?.mode || "")
+      .trim()
+      .slice(0, 120);
     const stageKey = normalizeArticleFunnelStageKey(
       req.body?.stage_key || req.body?.stageKey || "",
     );
-    const routeSlug = String(
-      req.body?.route_slug || req.body?.routeSlug || "",
-    )
+    const routeSlug = String(req.body?.route_slug || req.body?.routeSlug || "")
       .trim()
       .slice(0, 180);
-    const pageUrl = String(
-      req.body?.page_url || req.body?.pageUrl || "",
-    )
+    const pageUrl = String(req.body?.page_url || req.body?.pageUrl || "")
       .trim()
       .slice(0, 600);
-    const targetUrl = String(
-      req.body?.target_url || req.body?.targetUrl || "",
-    )
+    const targetUrl = String(req.body?.target_url || req.body?.targetUrl || "")
       .trim()
       .slice(0, 600);
     const fallbackUrl = String(
@@ -1106,7 +1169,10 @@ app.post("/api/article-funnel/bridge-debug", async (req, res) => {
       refererHost: getRefererHost(req.headers["referer"] || "") || null,
       details,
     });
-    return res.json({ ok: true, request_id: requestId || req.requestId || null });
+    return res.json({
+      ok: true,
+      request_id: requestId || req.requestId || null,
+    });
   } catch (error) {
     console.error("[article-funnel/bridge-debug]", error);
     return res.status(500).json({ error: "Khong the ghi nhan bridge debug" });
@@ -1131,34 +1197,37 @@ app.get("/api/article-funnel/bridge-debug", async (req, res) => {
 app.get(
   ["/_lab/article-funnel/:slug/:token", "/_lab/article-funnel/:slug/:token/"],
   async (req, res) => {
-  try {
-    const showPopupTestButton = await isAdminRequest(req);
-    const payload = resolveArticleFunnelPreviewToken(req.params.token);
-    const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
-    const canonicalUrl = `${BASE_URL}/_lab/article-funnel/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`;
-    res.set({
-      "Cache-Control": "no-store",
-      "Content-Type": "text/html;charset=utf-8",
-    });
-    return res.send(
-      buildArticleFunnelPreviewPage(
-        config,
-        canonicalUrl,
-        `/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
-        { showPopupTestButton },
-        `/_lab/article-funnel-bridge/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
-        `/_lab/article-funnel-go/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
-      ),
-    );
-  } catch (error) {
-    const code = String(error?.message || "");
-    const status =
-      code === "PREVIEW_TOKEN_EXPIRED" || code.startsWith("INVALID_PREVIEW_")
-        ? 400
-        : 500;
-    return res.status(status).send("Preview link không hợp lệ hoặc đã hết hạn");
-  }
-});
+    try {
+      const showPopupTestButton = await isAdminRequest(req);
+      const payload = resolveArticleFunnelPreviewToken(req.params.token);
+      const config = normalizeArticleFunnelPreviewConfig(payload?.config || {});
+      const canonicalUrl = `${BASE_URL}/_lab/article-funnel/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`;
+      res.set({
+        "Cache-Control": "no-store",
+        "Content-Type": "text/html;charset=utf-8",
+      });
+      return res.send(
+        buildArticleFunnelPreviewPage(
+          config,
+          canonicalUrl,
+          `/_lab/article-funnel-launch/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
+          { showPopupTestButton },
+          `/_lab/article-funnel-bridge/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
+          `/_lab/article-funnel-go/${encodeURIComponent(req.params.slug || "article-preview")}/${req.params.token}`,
+        ),
+      );
+    } catch (error) {
+      const code = String(error?.message || "");
+      const status =
+        code === "PREVIEW_TOKEN_EXPIRED" || code.startsWith("INVALID_PREVIEW_")
+          ? 400
+          : 500;
+      return res
+        .status(status)
+        .send("Preview link không hợp lệ hoặc đã hết hạn");
+    }
+  },
+);
 app.get(
   [
     "/_lab/article-funnel-launch/:slug/:token/:stageKey",
@@ -1182,7 +1251,9 @@ app.get(
         code === "PREVIEW_TOKEN_EXPIRED" || code.startsWith("INVALID_PREVIEW_")
           ? 400
           : 500;
-      return res.status(status).send("Launch link khong hop le hoac da het han");
+      return res
+        .status(status)
+        .send("Launch link khong hop le hoac da het han");
     }
   },
 );
@@ -1239,7 +1310,9 @@ app.get(
         code === "PREVIEW_TOKEN_EXPIRED" || code.startsWith("INVALID_PREVIEW_")
           ? 400
           : 500;
-      return res.status(status).send("Bridge link khong hop le hoac da het han");
+      return res
+        .status(status)
+        .send("Bridge link khong hop le hoac da het han");
     }
   },
 );
@@ -1295,279 +1368,324 @@ app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
     return res.status(500).send("Khong the mo article funnel");
   }
 });
-app.get(["/af-bridge/:slug/:stageKey", "/af-bridge/:slug/:stageKey/"], async (req, res) => {
-  try {
-    const database = await getDb();
-    const publicBaseUrl = await getPublicBaseUrl();
-    const articleFunnel = await resolvePublishedArticleFunnelRequest(
-      database,
-      req,
-      req.params.slug,
-    );
-    if (!articleFunnel) {
-      return res
-        .status(404)
-        .sendFile(path.join(__dirname, "..", "public", "404.html"));
-    }
-    const config = normalizeArticleFunnelPreviewConfig(
-      articleFunnel.config_json || {},
-    );
-    const canonicalUrl = `${buildArticleFunnelPublicUrl(
-      articleFunnel.route_slug,
-      articleFunnel.domain_hostname,
-      publicBaseUrl,
-    ).replace(/\/+$/, "")}/bridge/${encodeURIComponent(req.params.stageKey || "")}`;
-    return await handleArticleFunnelStageLaunch({
-      req,
-      res,
-      config,
-      stageKey: String(req.params.stageKey || "").trim(),
-      canonicalUrl,
-      tracking: {
-        articleFunnelId: articleFunnel.id,
-        routeSlug: articleFunnel.route_slug,
-      },
-      launchOptions: {
-        preferPopup20sDirectBridgeFlow: true,
-      },
-    });
-  } catch (error) {
-    console.error("[article-funnel/published-bridge]", error);
-    return res.status(500).send("Khong the mo article funnel bridge");
-  }
-});
-app.get(["/af-go/:slug/:stageKey", "/af-go/:slug/:stageKey/"], async (req, res) => {
-  try {
-    const database = await getDb();
-    const publicBaseUrl = await getPublicBaseUrl();
-    const articleFunnel = await resolvePublishedArticleFunnelRequest(
-      database,
-      req,
-      req.params.slug,
-    );
-    if (!articleFunnel) {
-      return res
-        .status(404)
-        .sendFile(path.join(__dirname, "..", "public", "404.html"));
-    }
-    const config = normalizeArticleFunnelPreviewConfig(
-      articleFunnel.config_json || {},
-    );
-    const canonicalUrl = `${buildArticleFunnelPublicUrl(
-      articleFunnel.route_slug,
-      articleFunnel.domain_hostname,
-      publicBaseUrl,
-    ).replace(/\/+$/, "")}/go/${encodeURIComponent(req.params.stageKey || "")}`;
-    return await handleArticleFunnelStageDeeplinkRoute({
-      req,
-      res,
-      config,
-      stageKey: String(req.params.stageKey || "").trim(),
-      canonicalUrl,
-      tracking: {
-        articleFunnelId: articleFunnel.id,
-        routeSlug: articleFunnel.route_slug,
-      },
-    });
-  } catch (error) {
-    console.error("[article-funnel/published-go]", error);
-    return res.status(500).send("Khong the mo article funnel deeplink");
-  }
-});
-app.get(["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"], async (req, res) => {
-  try {
-    const database = await getDb();
-    const publicBaseUrl = await getPublicBaseUrl();
-    const articleFunnel = await resolvePublishedArticleFunnelRequest(
-      database,
-      req,
-      req.params.slug,
-    );
-    if (!articleFunnel) {
-      return res
-        .status(404)
-        .sendFile(path.join(__dirname, "..", "public", "404.html"));
-    }
-    const config = normalizeArticleFunnelPreviewConfig(
-      articleFunnel.config_json || {},
-    );
-    const canonicalUrl = `${buildArticleFunnelPublicUrl(
-      articleFunnel.route_slug,
-      articleFunnel.domain_hostname,
-      publicBaseUrl,
-    ).replace(/\/+$/, "")}/launch/${encodeURIComponent(req.params.stageKey || "")}`;
-    return await handleArticleFunnelStageLaunch({
-      req,
-      res,
-      config,
-      stageKey: String(req.params.stageKey || "").trim(),
-      canonicalUrl,
-      tracking: {
-        articleFunnelId: articleFunnel.id,
-        routeSlug: articleFunnel.route_slug,
-      },
-    });
-  } catch (error) {
-    console.error("[article-funnel/published-launch]", error);
-    return res.status(500).send("Khong the launch article funnel");
-  }
-});
-app.get(["/:slug/go/:stageKey", "/:slug/go/:stageKey/"], async (req, res, next) => {
-  try {
-    const routeSlug = String(req.params.slug || "").trim();
-    if (isReservedPublishedArticleSlug(routeSlug)) {
-      return next();
-    }
-    const database = await getDb();
-    const publicBaseUrl = await getPublicBaseUrl();
-    const conflictingLink = await findShortLinkSlugConflict(database, routeSlug);
-    if (conflictingLink) {
-      return next();
-    }
-    const articleFunnel = await resolvePublishedArticleFunnelRequest(
-      database,
-      req,
-      routeSlug,
-    );
-    if (
-      !articleFunnel ||
-      !canServePublishedArticleFunnelOnHost(
-        articleFunnel,
-        getRequestHostname(req),
+app.get(
+  ["/af-bridge/:slug/:stageKey", "/af-bridge/:slug/:stageKey/"],
+  async (req, res) => {
+    try {
+      const database = await getDb();
+      const publicBaseUrl = await getPublicBaseUrl();
+      const articleFunnel = await resolvePublishedArticleFunnelRequest(
+        database,
+        req,
+        req.params.slug,
+      );
+      if (!articleFunnel) {
+        return res
+          .status(404)
+          .sendFile(path.join(__dirname, "..", "public", "404.html"));
+      }
+      const config = normalizeArticleFunnelPreviewConfig(
+        articleFunnel.config_json || {},
+      );
+      const canonicalUrl = `${buildArticleFunnelPublicUrl(
+        articleFunnel.route_slug,
+        articleFunnel.domain_hostname,
         publicBaseUrl,
-      )
-    ) {
-      return next();
+      ).replace(
+        /\/+$/,
+        "",
+      )}/bridge/${encodeURIComponent(req.params.stageKey || "")}`;
+      return await handleArticleFunnelStageLaunch({
+        req,
+        res,
+        config,
+        stageKey: String(req.params.stageKey || "").trim(),
+        canonicalUrl,
+        tracking: {
+          articleFunnelId: articleFunnel.id,
+          routeSlug: articleFunnel.route_slug,
+        },
+        launchOptions: {
+          preferPopup20sDirectBridgeFlow: true,
+        },
+      });
+    } catch (error) {
+      console.error("[article-funnel/published-bridge]", error);
+      return res.status(500).send("Khong the mo article funnel bridge");
     }
-    const config = normalizeArticleFunnelPreviewConfig(
-      articleFunnel.config_json || {},
-    );
-    const canonicalUrl = `${buildArticleFunnelPublicUrl(
-      articleFunnel.route_slug,
-      articleFunnel.domain_hostname,
-      publicBaseUrl,
-    ).replace(/\/+$/, "")}/go/${encodeURIComponent(req.params.stageKey || "")}`;
-    return await handleArticleFunnelStageDeeplinkRoute({
-      req,
-      res,
-      config,
-      stageKey: String(req.params.stageKey || "").trim(),
-      canonicalUrl,
-      tracking: {
-        articleFunnelId: articleFunnel.id,
-        routeSlug: articleFunnel.route_slug,
-      },
-    });
-  } catch (error) {
-    console.error("[article-funnel/published-go-direct]", error);
-    return res.status(500).send("Khong the mo article funnel deeplink");
-  }
-});
-app.get(["/:slug/bridge/:stageKey", "/:slug/bridge/:stageKey/"], async (req, res, next) => {
-  try {
-    const routeSlug = String(req.params.slug || "").trim();
-    if (isReservedPublishedArticleSlug(routeSlug)) {
-      return next();
-    }
-    const database = await getDb();
-    const publicBaseUrl = await getPublicBaseUrl();
-    const conflictingLink = await findShortLinkSlugConflict(database, routeSlug);
-    if (conflictingLink) {
-      return next();
-    }
-    const articleFunnel = await resolvePublishedArticleFunnelRequest(
-      database,
-      req,
-      routeSlug,
-    );
-    if (
-      !articleFunnel ||
-      !canServePublishedArticleFunnelOnHost(
-        articleFunnel,
-        getRequestHostname(req),
+  },
+);
+app.get(
+  ["/af-go/:slug/:stageKey", "/af-go/:slug/:stageKey/"],
+  async (req, res) => {
+    try {
+      const database = await getDb();
+      const publicBaseUrl = await getPublicBaseUrl();
+      const articleFunnel = await resolvePublishedArticleFunnelRequest(
+        database,
+        req,
+        req.params.slug,
+      );
+      if (!articleFunnel) {
+        return res
+          .status(404)
+          .sendFile(path.join(__dirname, "..", "public", "404.html"));
+      }
+      const config = normalizeArticleFunnelPreviewConfig(
+        articleFunnel.config_json || {},
+      );
+      const canonicalUrl = `${buildArticleFunnelPublicUrl(
+        articleFunnel.route_slug,
+        articleFunnel.domain_hostname,
         publicBaseUrl,
-      )
-    ) {
-      return next();
+      ).replace(
+        /\/+$/,
+        "",
+      )}/go/${encodeURIComponent(req.params.stageKey || "")}`;
+      return await handleArticleFunnelStageDeeplinkRoute({
+        req,
+        res,
+        config,
+        stageKey: String(req.params.stageKey || "").trim(),
+        canonicalUrl,
+        tracking: {
+          articleFunnelId: articleFunnel.id,
+          routeSlug: articleFunnel.route_slug,
+        },
+      });
+    } catch (error) {
+      console.error("[article-funnel/published-go]", error);
+      return res.status(500).send("Khong the mo article funnel deeplink");
     }
-    const config = normalizeArticleFunnelPreviewConfig(
-      articleFunnel.config_json || {},
-    );
-    const canonicalUrl = `${buildArticleFunnelPublicUrl(
-      articleFunnel.route_slug,
-      articleFunnel.domain_hostname,
-      publicBaseUrl,
-    ).replace(/\/+$/, "")}/bridge/${encodeURIComponent(req.params.stageKey || "")}`;
-    return await handleArticleFunnelStageLaunch({
-      req,
-      res,
-      config,
-      stageKey: String(req.params.stageKey || "").trim(),
-      canonicalUrl,
-      tracking: {
-        articleFunnelId: articleFunnel.id,
-        routeSlug: articleFunnel.route_slug,
-      },
-      launchOptions: {
-        preferPopup20sDirectBridgeFlow: true,
-      },
-    });
-  } catch (error) {
-    console.error("[article-funnel/published-bridge-direct]", error);
-    return res.status(500).send("Khong the mo article funnel bridge");
-  }
-});
-app.get(["/:slug/launch/:stageKey", "/:slug/launch/:stageKey/"], async (req, res, next) => {
-  try {
-    const routeSlug = String(req.params.slug || "").trim();
-    if (isReservedPublishedArticleSlug(routeSlug)) {
-      return next();
-    }
-    const database = await getDb();
-    const publicBaseUrl = await getPublicBaseUrl();
-    const conflictingLink = await findShortLinkSlugConflict(database, routeSlug);
-    if (conflictingLink) {
-      return next();
-    }
-    const articleFunnel = await resolvePublishedArticleFunnelRequest(
-      database,
-      req,
-      routeSlug,
-    );
-    if (
-      !articleFunnel ||
-      !canServePublishedArticleFunnelOnHost(
-        articleFunnel,
-        getRequestHostname(req),
+  },
+);
+app.get(
+  ["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"],
+  async (req, res) => {
+    try {
+      const database = await getDb();
+      const publicBaseUrl = await getPublicBaseUrl();
+      const articleFunnel = await resolvePublishedArticleFunnelRequest(
+        database,
+        req,
+        req.params.slug,
+      );
+      if (!articleFunnel) {
+        return res
+          .status(404)
+          .sendFile(path.join(__dirname, "..", "public", "404.html"));
+      }
+      const config = normalizeArticleFunnelPreviewConfig(
+        articleFunnel.config_json || {},
+      );
+      const canonicalUrl = `${buildArticleFunnelPublicUrl(
+        articleFunnel.route_slug,
+        articleFunnel.domain_hostname,
         publicBaseUrl,
-      )
-    ) {
-      return next();
+      ).replace(
+        /\/+$/,
+        "",
+      )}/launch/${encodeURIComponent(req.params.stageKey || "")}`;
+      return await handleArticleFunnelStageLaunch({
+        req,
+        res,
+        config,
+        stageKey: String(req.params.stageKey || "").trim(),
+        canonicalUrl,
+        tracking: {
+          articleFunnelId: articleFunnel.id,
+          routeSlug: articleFunnel.route_slug,
+        },
+      });
+    } catch (error) {
+      console.error("[article-funnel/published-launch]", error);
+      return res.status(500).send("Khong the launch article funnel");
     }
-    const config = normalizeArticleFunnelPreviewConfig(
-      articleFunnel.config_json || {},
-    );
-    const canonicalUrl = `${buildArticleFunnelPublicUrl(
-      articleFunnel.route_slug,
-      articleFunnel.domain_hostname,
-      publicBaseUrl,
-    ).replace(/\/+$/, "")}/launch/${encodeURIComponent(req.params.stageKey || "")}`;
-    return await handleArticleFunnelStageLaunch({
-      req,
-      res,
-      config,
-      stageKey: String(req.params.stageKey || "").trim(),
-      canonicalUrl,
-      tracking: {
-        articleFunnelId: articleFunnel.id,
-        routeSlug: articleFunnel.route_slug,
-      },
-    });
-  } catch (error) {
-    console.error("[article-funnel/published-launch-direct]", error);
-    return res.status(500).send("Khong the launch article funnel");
-  }
-});
+  },
+);
+app.get(
+  ["/:slug/go/:stageKey", "/:slug/go/:stageKey/"],
+  async (req, res, next) => {
+    try {
+      const routeSlug = String(req.params.slug || "").trim();
+      if (isReservedPublishedArticleSlug(routeSlug)) {
+        return next();
+      }
+      const database = await getDb();
+      const publicBaseUrl = await getPublicBaseUrl();
+      const conflictingLink = await findShortLinkSlugConflict(
+        database,
+        routeSlug,
+      );
+      if (conflictingLink) {
+        return next();
+      }
+      const articleFunnel = await resolvePublishedArticleFunnelRequest(
+        database,
+        req,
+        routeSlug,
+      );
+      if (
+        !articleFunnel ||
+        !canServePublishedArticleFunnelOnHost(
+          articleFunnel,
+          getRequestHostname(req),
+          publicBaseUrl,
+        )
+      ) {
+        return next();
+      }
+      const config = normalizeArticleFunnelPreviewConfig(
+        articleFunnel.config_json || {},
+      );
+      const canonicalUrl = `${buildArticleFunnelPublicUrl(
+        articleFunnel.route_slug,
+        articleFunnel.domain_hostname,
+        publicBaseUrl,
+      ).replace(
+        /\/+$/,
+        "",
+      )}/go/${encodeURIComponent(req.params.stageKey || "")}`;
+      return await handleArticleFunnelStageDeeplinkRoute({
+        req,
+        res,
+        config,
+        stageKey: String(req.params.stageKey || "").trim(),
+        canonicalUrl,
+        tracking: {
+          articleFunnelId: articleFunnel.id,
+          routeSlug: articleFunnel.route_slug,
+        },
+      });
+    } catch (error) {
+      console.error("[article-funnel/published-go-direct]", error);
+      return res.status(500).send("Khong the mo article funnel deeplink");
+    }
+  },
+);
+app.get(
+  ["/:slug/bridge/:stageKey", "/:slug/bridge/:stageKey/"],
+  async (req, res, next) => {
+    try {
+      const routeSlug = String(req.params.slug || "").trim();
+      if (isReservedPublishedArticleSlug(routeSlug)) {
+        return next();
+      }
+      const database = await getDb();
+      const publicBaseUrl = await getPublicBaseUrl();
+      const conflictingLink = await findShortLinkSlugConflict(
+        database,
+        routeSlug,
+      );
+      if (conflictingLink) {
+        return next();
+      }
+      const articleFunnel = await resolvePublishedArticleFunnelRequest(
+        database,
+        req,
+        routeSlug,
+      );
+      if (
+        !articleFunnel ||
+        !canServePublishedArticleFunnelOnHost(
+          articleFunnel,
+          getRequestHostname(req),
+          publicBaseUrl,
+        )
+      ) {
+        return next();
+      }
+      const config = normalizeArticleFunnelPreviewConfig(
+        articleFunnel.config_json || {},
+      );
+      const canonicalUrl = `${buildArticleFunnelPublicUrl(
+        articleFunnel.route_slug,
+        articleFunnel.domain_hostname,
+        publicBaseUrl,
+      ).replace(
+        /\/+$/,
+        "",
+      )}/bridge/${encodeURIComponent(req.params.stageKey || "")}`;
+      return await handleArticleFunnelStageLaunch({
+        req,
+        res,
+        config,
+        stageKey: String(req.params.stageKey || "").trim(),
+        canonicalUrl,
+        tracking: {
+          articleFunnelId: articleFunnel.id,
+          routeSlug: articleFunnel.route_slug,
+        },
+        launchOptions: {
+          preferPopup20sDirectBridgeFlow: true,
+        },
+      });
+    } catch (error) {
+      console.error("[article-funnel/published-bridge-direct]", error);
+      return res.status(500).send("Khong the mo article funnel bridge");
+    }
+  },
+);
+app.get(
+  ["/:slug/launch/:stageKey", "/:slug/launch/:stageKey/"],
+  async (req, res, next) => {
+    try {
+      const routeSlug = String(req.params.slug || "").trim();
+      if (isReservedPublishedArticleSlug(routeSlug)) {
+        return next();
+      }
+      const database = await getDb();
+      const publicBaseUrl = await getPublicBaseUrl();
+      const conflictingLink = await findShortLinkSlugConflict(
+        database,
+        routeSlug,
+      );
+      if (conflictingLink) {
+        return next();
+      }
+      const articleFunnel = await resolvePublishedArticleFunnelRequest(
+        database,
+        req,
+        routeSlug,
+      );
+      if (
+        !articleFunnel ||
+        !canServePublishedArticleFunnelOnHost(
+          articleFunnel,
+          getRequestHostname(req),
+          publicBaseUrl,
+        )
+      ) {
+        return next();
+      }
+      const config = normalizeArticleFunnelPreviewConfig(
+        articleFunnel.config_json || {},
+      );
+      const canonicalUrl = `${buildArticleFunnelPublicUrl(
+        articleFunnel.route_slug,
+        articleFunnel.domain_hostname,
+        publicBaseUrl,
+      ).replace(
+        /\/+$/,
+        "",
+      )}/launch/${encodeURIComponent(req.params.stageKey || "")}`;
+      return await handleArticleFunnelStageLaunch({
+        req,
+        res,
+        config,
+        stageKey: String(req.params.stageKey || "").trim(),
+        canonicalUrl,
+        tracking: {
+          articleFunnelId: articleFunnel.id,
+          routeSlug: articleFunnel.route_slug,
+        },
+      });
+    } catch (error) {
+      console.error("[article-funnel/published-launch-direct]", error);
+      return res.status(500).send("Khong the launch article funnel");
+    }
+  },
+);
 app.get("/:slug", async (req, res, next) => {
   try {
     const routeSlug = String(req.params.slug || "").trim();
@@ -2665,7 +2783,8 @@ function readRecentArticleFunnelBridgeDebugEvents(limit = 50, requestId = "") {
   const normalizedRequestId = String(requestId || "").trim();
   const entries = normalizedRequestId
     ? recentArticleFunnelBridgeDebugEvents.filter(
-        (entry) => String(entry?.requestId || "").trim() === normalizedRequestId,
+        (entry) =>
+          String(entry?.requestId || "").trim() === normalizedRequestId,
       )
     : recentArticleFunnelBridgeDebugEvents;
   return entries.slice(-Math.max(1, Math.min(Number(limit) || 50, 200)));
@@ -2707,7 +2826,9 @@ const TIKTOK_PRODUCT_PATH_PATTERN =
   /\/(?:view\/product|(?:[a-z]{2}(?:-[a-z]{2})?\/)?pdp)\/(\d+)/i;
 
 function isTikTokOneLinkHostname(hostname = "") {
-  const normalizedHostname = String(hostname || "").trim().toLowerCase();
+  const normalizedHostname = String(hostname || "")
+    .trim()
+    .toLowerCase();
   return (
     normalizedHostname === "snssdk1180.onelink.me" ||
     normalizedHostname.endsWith(".onelink.me")
@@ -3300,9 +3421,15 @@ function canonicalizeShopeeProductUrl(input) {
     const legacyProductMatch = pathname.match(/-i\.(\d+)\.(\d+)/i);
     const opaanlpMatch = pathname.match(/^\/opaanlp\/(\d+)\/(\d+)/i);
     const shopId =
-      productPathMatch?.[1] || legacyProductMatch?.[1] || opaanlpMatch?.[1] || "";
+      productPathMatch?.[1] ||
+      legacyProductMatch?.[1] ||
+      opaanlpMatch?.[1] ||
+      "";
     const itemId =
-      productPathMatch?.[2] || legacyProductMatch?.[2] || opaanlpMatch?.[2] || "";
+      productPathMatch?.[2] ||
+      legacyProductMatch?.[2] ||
+      opaanlpMatch?.[2] ||
+      "";
 
     if (!shopId || !itemId) {
       return normalized;
@@ -3676,7 +3803,10 @@ function mergeTimelineRows(baseRows = [], extraRows = []) {
   for (const row of [...(baseRows || []), ...(extraRows || [])]) {
     const dayKey = String(row?.date || "").trim();
     if (!dayKey) continue;
-    timelineMap.set(dayKey, (timelineMap.get(dayKey) || 0) + Number(row?.clicks || 0));
+    timelineMap.set(
+      dayKey,
+      (timelineMap.get(dayKey) || 0) + Number(row?.clicks || 0),
+    );
   }
   return finalizeAnalyticsTimeline(timelineMap);
 }
@@ -3732,7 +3862,8 @@ function mergeCountryRows(countryRows = [], topCountryRows = []) {
     const cityName = normalizeAnalyticsText(row?.city, 120) || "Không rõ";
     entry.cities.set(
       cityName,
-      (entry.cities.get(cityName) || 0) + Number(row?.city_clicks || row?.clicks || 0),
+      (entry.cities.get(cityName) || 0) +
+        Number(row?.city_clicks || row?.clicks || 0),
     );
     countryMap.set(countryCode, entry);
   }
@@ -3746,7 +3877,8 @@ function mergePlatformRows(baseRows = [], extraRows = [], totalClicks = 0) {
       original_url: row?.original_url || "",
       link_type: row?.link_type || "",
     });
-    const key = String(row?.key || platform.key || "generic").trim() || "generic";
+    const key =
+      String(row?.key || platform.key || "generic").trim() || "generic";
     const existing = platformMap.get(key) || {
       key,
       label: row?.label || platform.label,
@@ -3886,17 +4018,23 @@ function buildYesterdayBreakdownFromAnalytics(
   const yesterdayDate = new Date(currentTime);
   yesterdayDate.setDate(yesterdayDate.getDate() - 1);
   const yesterdayKey = getAnalyticsDayKey(yesterdayDate);
-  const rawTimeline = Array.isArray(analytics?.timeline) ? analytics.timeline : [];
+  const rawTimeline = Array.isArray(analytics?.timeline)
+    ? analytics.timeline
+    : [];
   const uniqueTimeline = Array.isArray(analytics?.unique_timeline)
     ? analytics.unique_timeline
     : [];
   const rawDistribution = Array.isArray(analytics?.platforms?.distribution)
     ? analytics.platforms.distribution
     : [];
-  const rawTodayDistribution = Array.isArray(analytics?.platforms?.today_distribution)
+  const rawTodayDistribution = Array.isArray(
+    analytics?.platforms?.today_distribution,
+  )
     ? analytics.platforms.today_distribution
     : [];
-  const uniqueDistribution = Array.isArray(analytics?.platforms?.unique_distribution)
+  const uniqueDistribution = Array.isArray(
+    analytics?.platforms?.unique_distribution,
+  )
     ? analytics.platforms.unique_distribution
     : [];
   const uniqueTodayDistribution = Array.isArray(
@@ -3907,14 +4045,16 @@ function buildYesterdayBreakdownFromAnalytics(
 
   const readYesterdayPlatform = (key) => {
     const rawTotal = Number(
-      rawDistribution.find((item) => String(item?.key || "") === key)?.clicks || 0,
+      rawDistribution.find((item) => String(item?.key || "") === key)?.clicks ||
+        0,
     );
     const rawToday = Number(
       rawTodayDistribution.find((item) => String(item?.key || "") === key)
         ?.clicks_today || 0,
     );
     const uniqueTotal = Number(
-      uniqueDistribution.find((item) => String(item?.key || "") === key)?.clicks || 0,
+      uniqueDistribution.find((item) => String(item?.key || "") === key)
+        ?.clicks || 0,
     );
     const uniqueToday = Number(
       uniqueTodayDistribution.find((item) => String(item?.key || "") === key)
@@ -3944,7 +4084,8 @@ function buildYesterdayBreakdownFromAnalytics(
     ),
     raw_clicks_today: Math.max(
       Number(
-        rawTimeline.find((item) => String(item?.date || "") === todayKey)?.clicks || 0,
+        rawTimeline.find((item) => String(item?.date || "") === todayKey)
+          ?.clicks || 0,
       ),
       0,
     ),
@@ -4011,19 +4152,23 @@ async function measureAsyncTimingWithSoftTimeout(
 ) {
   const normalizedTimeoutMs = Math.max(Number(timeoutMs) || 0, 1);
   try {
-    return await measureAsyncTiming(label, async () => {
-      let timeoutId = null;
-      const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => {
-          reject(createStatsTimeoutError(label, normalizedTimeoutMs));
-        }, normalizedTimeoutMs);
-      });
-      try {
-        return await Promise.race([run(), timeoutPromise]);
-      } finally {
-        if (timeoutId) clearTimeout(timeoutId);
-      }
-    }, timings);
+    return await measureAsyncTiming(
+      label,
+      async () => {
+        let timeoutId = null;
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(createStatsTimeoutError(label, normalizedTimeoutMs));
+          }, normalizedTimeoutMs);
+        });
+        try {
+          return await Promise.race([run(), timeoutPromise]);
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+        }
+      },
+      timings,
+    );
   } catch (error) {
     if (error?.code !== "STATS_TIMEOUT") {
       throw error;
@@ -4798,8 +4943,7 @@ function normalizeUserAffiliateShopeeSources(input = []) {
       );
       return {
         id:
-          String(source.id || "").trim() ||
-          `shopee-${Date.now()}-${index + 1}`,
+          String(source.id || "").trim() || `shopee-${Date.now()}-${index + 1}`,
         label: label || `Acc ${index + 1}`,
         url: normalizedUrl || normalizedProductUrl,
         product_url: normalizedProductUrl || "",
@@ -4848,7 +4992,10 @@ async function normalizeUserAffiliateShopeeSourcesResolved(input = []) {
     });
   }
 
-  if (!resolvedSources.some((item) => item.is_default) && resolvedSources.length) {
+  if (
+    !resolvedSources.some((item) => item.is_default) &&
+    resolvedSources.length
+  ) {
     resolvedSources[0].is_default = true;
   }
   return resolvedSources;
@@ -5359,22 +5506,24 @@ async function resolveWorkspaceContext(
     membership: selected.membership,
     members,
     templates,
-    sourceLinks: links.map((link) => attachVideoOverlayPublicFields({
-      id: link.id,
-      short_url: buildLinkShortUrl(link, BASE_URL),
-      short_code: link.alias || link.short_code || "",
-      alias: link.alias || "",
-      original_url: link.original_url || "",
-      og_title: link.og_title || "",
-      og_desc: link.og_desc || "",
-      og_image: link.og_image || "",
-      link_type: link.link_type || "direct",
-      video_url: link.video_url || "",
-      video_overlay_text: link.video_overlay_text || "",
-      domain_hostname: link.domain_hostname || null,
-      created_at: link.created_at || null,
-      workspace_id: link.workspace_id || null,
-    })),
+    sourceLinks: links.map((link) =>
+      attachVideoOverlayPublicFields({
+        id: link.id,
+        short_url: buildLinkShortUrl(link, BASE_URL),
+        short_code: link.alias || link.short_code || "",
+        alias: link.alias || "",
+        original_url: link.original_url || "",
+        og_title: link.og_title || "",
+        og_desc: link.og_desc || "",
+        og_image: link.og_image || "",
+        link_type: link.link_type || "direct",
+        video_url: link.video_url || "",
+        video_overlay_text: link.video_overlay_text || "",
+        domain_hostname: link.domain_hostname || null,
+        created_at: link.created_at || null,
+        workspace_id: link.workspace_id || null,
+      }),
+    ),
   };
 }
 
@@ -5546,9 +5695,15 @@ function buildShopeeIosInAppWebUrl(originalUrl) {
     const opaanlpMatch = pathname.match(/^\/opaanlp\/(\d+)\/(\d+)/i);
 
     const shopId =
-      productPathMatch?.[1] || legacyProductMatch?.[1] || opaanlpMatch?.[1] || "";
+      productPathMatch?.[1] ||
+      legacyProductMatch?.[1] ||
+      opaanlpMatch?.[1] ||
+      "";
     const itemId =
-      productPathMatch?.[2] || legacyProductMatch?.[2] || opaanlpMatch?.[2] || "";
+      productPathMatch?.[2] ||
+      legacyProductMatch?.[2] ||
+      opaanlpMatch?.[2] ||
+      "";
 
     if (!shopId || !itemId) {
       return webUrl;
@@ -5570,22 +5725,18 @@ function buildDirectLaunchConfig(targetUrl) {
   const directWebUrl = launchInfo.fallback || normalizedTargetUrl || "";
   const isShopee = launchInfo.platform_name === "shopee";
   const isTikTok = launchInfo.platform_name === "tiktok";
-  const directIosFbUrl =
-    isShopee
-      ? buildShopeeIosInAppWebUrl(directWebUrl) || directWebUrl
-      : directWebUrl;
-  const directAppUrl =
-    isShopee
-      ? buildShopeeAppLinkUrl(directWebUrl)
-      : launchInfo.deeplink || directWebUrl;
-  const directIosUrl =
-    isShopee
-      ? directWebUrl
-      : launchInfo.deeplink_ios || directAppUrl || directWebUrl;
-  const directAndroidUrl =
-    isShopee
-      ? directWebUrl
-      : launchInfo.deeplink_android || directAppUrl || directWebUrl;
+  const directIosFbUrl = isShopee
+    ? buildShopeeIosInAppWebUrl(directWebUrl) || directWebUrl
+    : directWebUrl;
+  const directAppUrl = isShopee
+    ? buildShopeeAppLinkUrl(directWebUrl)
+    : launchInfo.deeplink || directWebUrl;
+  const directIosUrl = isShopee
+    ? directWebUrl
+    : launchInfo.deeplink_ios || directAppUrl || directWebUrl;
+  const directAndroidUrl = isShopee
+    ? directWebUrl
+    : launchInfo.deeplink_android || directAppUrl || directWebUrl;
 
   return {
     target_url: normalizedTargetUrl,
@@ -5596,16 +5747,14 @@ function buildDirectLaunchConfig(targetUrl) {
     direct_ios_fb_url: directIosFbUrl,
     direct_ios_browser_url: directWebUrl,
     direct_android_url: directAndroidUrl,
-    direct_android_intent_url:
-      isShopee
-        ? buildShopeeAndroidIntentUrl(directWebUrl)
+    direct_android_intent_url: isShopee
+      ? buildShopeeAndroidIntentUrl(directWebUrl)
+      : "",
+    direct_android_package: isShopee
+      ? SHOPEE_ANDROID_PACKAGE
+      : isTikTok
+        ? TIKTOK_ANDROID_PACKAGE
         : "",
-    direct_android_package:
-      isShopee
-        ? SHOPEE_ANDROID_PACKAGE
-        : isTikTok
-          ? TIKTOK_ANDROID_PACKAGE
-          : "",
   };
 }
 
@@ -5613,10 +5762,9 @@ function buildOverlayLaunchConfig(targetUrl) {
   const config = buildDirectLaunchConfig(targetUrl);
   if (config.direct_platform === "tiktok") {
     const isTikTokProductTarget = isTikTokProductUrl(config.direct_web_url);
-    const preferredIosUrl =
-      isTikTokProductTarget
-        ? config.direct_web_url
-        : config.direct_ios_url || config.direct_app_url || config.direct_web_url;
+    const preferredIosUrl = isTikTokProductTarget
+      ? config.direct_web_url
+      : config.direct_ios_url || config.direct_app_url || config.direct_web_url;
     return {
       ...config,
       direct_ios_fb_url: preferredIosUrl,
@@ -5631,23 +5779,19 @@ function applyArticleFunnelStageDirectOverrides(
   launchConfig,
   rawConfig,
 ) {
-  const normalizedStageKey = normalizeArticleFunnelStageKey(stage?.stage_key || "");
-  const config = launchConfig && typeof launchConfig === "object"
-    ? { ...launchConfig }
-    : {};
+  const normalizedStageKey = normalizeArticleFunnelStageKey(
+    stage?.stage_key || "",
+  );
+  const config =
+    launchConfig && typeof launchConfig === "object" ? { ...launchConfig } : {};
   const sourceConfig =
-    rawConfig && typeof rawConfig === "object"
-      ? rawConfig
-      : {};
+    rawConfig && typeof rawConfig === "object" ? rawConfig : {};
   const overlay =
     sourceConfig.overlay && typeof sourceConfig.overlay === "object"
       ? sourceConfig.overlay
       : {};
 
-  if (
-    normalizedStageKey === "20s" &&
-    config.direct_platform === "tiktok"
-  ) {
+  if (normalizedStageKey === "20s" && config.direct_platform === "tiktok") {
     const iosInAppOverride = String(
       sourceConfig.popup20sIosFbUrl ||
         sourceConfig.popup_20s_ios_fb_url ||
@@ -5665,10 +5809,7 @@ function applyArticleFunnelStageDirectOverrides(
     }
   }
 
-  if (
-    normalizedStageKey === "3s" &&
-    config.direct_platform === "shopee"
-  ) {
+  if (normalizedStageKey === "3s" && config.direct_platform === "shopee") {
     const iosInAppOverride = String(
       sourceConfig.popup3sIosFbUrl ||
         sourceConfig.popup_3s_ios_fb_url ||
@@ -5694,7 +5835,9 @@ function decodeHtmlEntities(input = "") {
 }
 
 function collapseWhitespace(input = "") {
-  return String(input || "").replace(/\s+/g, " ").trim();
+  return String(input || "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function stripHtmlTags(input = "") {
@@ -5738,15 +5881,20 @@ async function fetchArticleFunnelImportPayload(sourceUrl, fetchImpl = fetch) {
         signal: controller.signal,
         headers: {
           "user-agent": userAgent,
-          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "accept-language": "vi,en-US;q=0.9,en;q=0.8",
         },
       });
       lastStatus = Number(response?.status || 0) || lastStatus;
       if (!response?.ok) continue;
 
-      const finalUrl = normalizeImportSourceUrl(response.url || sourceUrl) || sourceUrl;
-      const item = extractArticleFunnelImportPayload(await response.text(), finalUrl);
+      const finalUrl =
+        normalizeImportSourceUrl(response.url || sourceUrl) || sourceUrl;
+      const item = extractArticleFunnelImportPayload(
+        await response.text(),
+        finalUrl,
+      );
       if (
         item.title !== "Article preview" ||
         item.description ||
@@ -5788,7 +5936,9 @@ function extractAttributeValue(fragment = "", attributeName = "") {
 function extractMetaContents(html = "", keys = []) {
   const normalizedKeys = new Set(
     (Array.isArray(keys) ? keys : []).map((key) =>
-      String(key || "").trim().toLowerCase(),
+      String(key || "")
+        .trim()
+        .toLowerCase(),
     ),
   );
   if (!normalizedKeys.size) return [];
@@ -5817,10 +5967,16 @@ function dedupeUrls(values = []) {
 }
 
 function pickImportedAttributeValue(fragment = "", attributeNames = []) {
-  for (const attributeName of Array.isArray(attributeNames) ? attributeNames : []) {
+  for (const attributeName of Array.isArray(attributeNames)
+    ? attributeNames
+    : []) {
     const candidate = extractAttributeValue(fragment, attributeName);
     const normalized = String(candidate || "").trim();
-    if (!normalized || normalized.startsWith("data:") || normalized.startsWith("blob:")) {
+    if (
+      !normalized ||
+      normalized.startsWith("data:") ||
+      normalized.startsWith("blob:")
+    ) {
       continue;
     }
     return normalized;
@@ -5855,7 +6011,9 @@ function extractArticleParagraphs(html = "") {
 }
 
 function isWeakImportDescription(input = "") {
-  const normalized = collapseWhitespace(String(input || "").trim()).toLowerCase();
+  const normalized = collapseWhitespace(
+    String(input || "").trim(),
+  ).toLowerCase();
   if (!normalized) return true;
   if (normalized.length < 24) return true;
   return /^(c[aậ]p nh[aậ]t|update|tin m[oớ]i)$/i.test(normalized);
@@ -5869,7 +6027,9 @@ function detectImportedSensitiveMediaType(
 ) {
   const safeHtml = String(html || "");
   const safeBlock = String(block || "");
-  const normalizedType = String(fallbackType || "image").trim().toLowerCase();
+  const normalizedType = String(fallbackType || "image")
+    .trim()
+    .toLowerCase();
   if (!safeBlock) return normalizedType;
   const start = Math.max(0, Number(blockIndex) - 420);
   const end = Math.min(
@@ -5919,7 +6079,8 @@ function isImportedVideoEmbedUrl(candidate = "") {
       (hostname === "player.vimeo.com" && pathname.startsWith("/video/")) ||
       ((hostname === "www.youtube.com" || hostname === "youtube.com") &&
         pathname.startsWith("/embed/")) ||
-      (hostname === "www.youtube-nocookie.com" && pathname.startsWith("/embed/"))
+      (hostname === "www.youtube-nocookie.com" &&
+        pathname.startsWith("/embed/"))
     );
   } catch {
     return false;
@@ -5972,10 +6133,19 @@ function extractOrderedArticleMedia(html = "", baseUrl = "") {
   for (const match of String(html || "").matchAll(imgRegex)) {
     const tag = String(match?.[0] || "");
     const width = Number.parseInt(extractAttributeValue(tag, "width"), 10) || 0;
-    const height = Number.parseInt(extractAttributeValue(tag, "height"), 10) || 0;
-    const rawClass = String(extractAttributeValue(tag, "class") || "").toLowerCase();
-    const rawAlt = String(extractAttributeValue(tag, "alt") || "").toLowerCase();
-    const src = pickImportedAttributeValue(tag, ["data-src", "data-original", "src"]);
+    const height =
+      Number.parseInt(extractAttributeValue(tag, "height"), 10) || 0;
+    const rawClass = String(
+      extractAttributeValue(tag, "class") || "",
+    ).toLowerCase();
+    const rawAlt = String(
+      extractAttributeValue(tag, "alt") || "",
+    ).toLowerCase();
+    const src = pickImportedAttributeValue(tag, [
+      "data-src",
+      "data-original",
+      "src",
+    ]);
     const normalizedSrc = String(src || "").toLowerCase();
     if (
       (width > 0 && width < 120) ||
@@ -6000,9 +6170,7 @@ function extractOrderedArticleMedia(html = "", baseUrl = "") {
   }
 
   return dedupeUrls(
-    items
-      .map((item) => JSON.stringify(item))
-      .map((serialized) => serialized),
+    items.map((item) => JSON.stringify(item)).map((serialized) => serialized),
   ).map((serialized) => JSON.parse(serialized));
 }
 
@@ -6044,21 +6212,31 @@ function extractArticleFunnelImportPayload(html = "", baseUrl = "") {
   ]).map((value) => absolutizeImportedUrl(value, baseUrl));
   const orderedMedia = extractOrderedArticleMedia(contentHtml, baseUrl);
   const fallbackOrderedMedia =
-    contentHtml === safeHtml ? [] : extractOrderedArticleMedia(safeHtml, baseUrl);
+    contentHtml === safeHtml
+      ? []
+      : extractOrderedArticleMedia(safeHtml, baseUrl);
   const videos = dedupeUrls([
-    ...orderedMedia.filter((item) => item.type === "video").map((item) => item.src),
+    ...orderedMedia
+      .filter((item) => item.type === "video")
+      .map((item) => item.src),
     ...orderedMedia
       .filter((item) => item.type === "video-embed")
       .map((item) => item.src),
-    ...fallbackOrderedMedia.filter((item) => item.type === "video").map((item) => item.src),
+    ...fallbackOrderedMedia
+      .filter((item) => item.type === "video")
+      .map((item) => item.src),
     ...fallbackOrderedMedia
       .filter((item) => item.type === "video-embed")
       .map((item) => item.src),
     ...metaVideos,
   ]);
   const images = dedupeUrls([
-    ...orderedMedia.filter((item) => item.type === "image").map((item) => item.src),
-    ...fallbackOrderedMedia.filter((item) => item.type === "image").map((item) => item.src),
+    ...orderedMedia
+      .filter((item) => item.type === "image")
+      .map((item) => item.src),
+    ...fallbackOrderedMedia
+      .filter((item) => item.type === "image")
+      .map((item) => item.src),
     ...metaImages,
   ]);
 
@@ -6077,12 +6255,16 @@ function extractArticleFunnelImportPayload(html = "", baseUrl = "") {
     if (blocks.length >= 8) break;
   }
   if (!blocks.length) {
-    videos.slice(0, 2).forEach((src) =>
-      blocks.push({ type: "video", src, caption: "", text: "" }),
-    );
-    images.slice(0, 6 - blocks.length).forEach((src) =>
-      blocks.push({ type: "image", src, caption: "", text: "" }),
-    );
+    videos
+      .slice(0, 2)
+      .forEach((src) =>
+        blocks.push({ type: "video", src, caption: "", text: "" }),
+      );
+    images
+      .slice(0, 6 - blocks.length)
+      .forEach((src) =>
+        blocks.push({ type: "image", src, caption: "", text: "" }),
+      );
   }
 
   return {
@@ -6119,7 +6301,9 @@ function createArticleFunnelPreviewLinkToken(payload) {
 }
 
 function resolveArticleFunnelPreviewToken(token) {
-  const cachedPayload = localArticleFunnelPreviewTokens.get(String(token || ""));
+  const cachedPayload = localArticleFunnelPreviewTokens.get(
+    String(token || ""),
+  );
   if (cachedPayload) {
     if (Number(cachedPayload.exp || 0) < Date.now()) {
       localArticleFunnelPreviewTokens.delete(String(token || ""));
@@ -6147,17 +6331,11 @@ function base64UrlDecode(input) {
 }
 
 function signArticleFunnelPreviewBuffer(buffer) {
-  return crypto
-    .createHmac("sha256", JWT_SECRET)
-    .update(buffer)
-    .digest();
+  return crypto.createHmac("sha256", JWT_SECRET).update(buffer).digest();
 }
 
 function signArticleFunnelPopupTestBuffer(buffer) {
-  return crypto
-    .createHmac("sha256", JWT_SECRET)
-    .update(buffer)
-    .digest();
+  return crypto.createHmac("sha256", JWT_SECRET).update(buffer).digest();
 }
 
 function encodeArticleFunnelPreviewToken(payload) {
@@ -6234,7 +6412,10 @@ function getArticleFunnelSnapshotTokenFromRequest(req) {
   return String(req?.query?.[ARTICLE_FUNNEL_SNAPSHOT_QUERY_KEY] || "").trim();
 }
 
-function decodeArticleFunnelPublishedSnapshotFromRequest(req, expectedRouteSlug = "") {
+function decodeArticleFunnelPublishedSnapshotFromRequest(
+  req,
+  expectedRouteSlug = "",
+) {
   const token = getArticleFunnelSnapshotTokenFromRequest(req);
   if (!token) return null;
   try {
@@ -6316,22 +6497,23 @@ function normalizeArticleFunnelBlocks(blocks) {
 }
 
 function normalizeArticleFunnelPreviewSlug(input = "") {
-  return String(input || "")
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//i, "")
-    .replace(/[\/_]+/g, "-")
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 90) || "article-preview";
+  return (
+    String(input || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//i, "")
+      .replace(/[\/_]+/g, "-")
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 90) || "article-preview"
+  );
 }
 
 function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
   const config = input && typeof input === "object" ? input : {};
-  const overlay = config.overlay && typeof config.overlay === "object"
-    ? config.overlay
-    : {};
+  const overlay =
+    config.overlay && typeof config.overlay === "object" ? config.overlay : {};
   const enablePopup3s =
     config.enablePopup3s === false ||
     config.enablePopup3s === "false" ||
@@ -6348,14 +6530,20 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
   const stage20Candidate =
     inputStages.find((stage, index) => {
       const rawStageKey = String(stage?.stage_key || "").trim();
-      return rawStageKey === "20s" || rawStageKey === "5s" || (!rawStageKey && index === 1);
+      return (
+        rawStageKey === "20s" ||
+        rawStageKey === "5s" ||
+        (!rawStageKey && index === 1)
+      );
     }) || null;
   const stage300Candidate =
     inputStages.find((stage, index) => {
       const rawStageKey = String(stage?.stage_key || "").trim();
       return rawStageKey === "300s" || (!rawStageKey && index === 2);
     }) || null;
-  const shareImage = String(config.share_image || config.shareImage || "").trim();
+  const shareImage = String(
+    config.share_image || config.shareImage || "",
+  ).trim();
   const overlayImage = String(
     overlay.image ||
       overlay.popup_3s_image ||
@@ -6404,14 +6592,18 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
           const parsedDelayMs = Number(stage?.delay_ms || 0) || 0;
           const delayMs =
             stageKey === "20s" &&
-              (rawStageKey === "5s" || parsedDelayMs === 5000 || parsedDelayMs === 15000)
+            (rawStageKey === "5s" ||
+              parsedDelayMs === 5000 ||
+              parsedDelayMs === 15000)
               ? 7000
               : parsedDelayMs || fallbackDelayMs;
-            return {
-              ...stage,
-              stage_key: stageKey,
-              delay_ms: delayMs,
-              overlay_image: String(stage?.overlay_image || "").trim() || getOverlayImageForStage(stageKey),
+          return {
+            ...stage,
+            stage_key: stageKey,
+            delay_ms: delayMs,
+            overlay_image:
+              String(stage?.overlay_image || "").trim() ||
+              getOverlayImageForStage(stageKey),
           };
         })
       : [
@@ -6423,25 +6615,27 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
               overlay.popup_3s_url || config.baseUrl || "",
             ),
           },
-          ...((overlay.popup_20s_url || overlay.popup_5s_url)
-            ? [{
-                stage_key: "20s",
-                delay_ms: 7000,
-                overlay_image: getOverlayImageForStage("20s"),
-                ...buildOverlayLaunchConfig(
-                  overlay.popup_20s_url || overlay.popup_5s_url || "",
-                ),
-              }]
+          ...(overlay.popup_20s_url || overlay.popup_5s_url
+            ? [
+                {
+                  stage_key: "20s",
+                  delay_ms: 7000,
+                  overlay_image: getOverlayImageForStage("20s"),
+                  ...buildOverlayLaunchConfig(
+                    overlay.popup_20s_url || overlay.popup_5s_url || "",
+                  ),
+                },
+              ]
             : []),
           ...(overlay.popup_300s_url
-            ? [{
-                stage_key: "300s",
-                delay_ms: 300000,
-                overlay_image: getOverlayImageForStage("300s"),
-                ...buildOverlayLaunchConfig(
-                  overlay.popup_300s_url || "",
-                ),
-              }]
+            ? [
+                {
+                  stage_key: "300s",
+                  delay_ms: 300000,
+                  overlay_image: getOverlayImageForStage("300s"),
+                  ...buildOverlayLaunchConfig(overlay.popup_300s_url || ""),
+                },
+              ]
             : []),
         ]);
 
@@ -6459,27 +6653,37 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
     if (stageKey === "3s") {
       if (!enablePopup3s) return false;
       return (
-        String(stage?.direct_platform || "").trim().toLowerCase() === "shopee" ||
-        isShopeeUrl(targetUrl)
+        String(stage?.direct_platform || "")
+          .trim()
+          .toLowerCase() === "shopee" || isShopeeUrl(targetUrl)
       );
     }
     return true;
   };
 
   return {
-    source_domain: String(config.sourceDomain || config.source_domain || "").trim(),
+    source_domain: String(
+      config.sourceDomain || config.source_domain || "",
+    ).trim(),
     slug: String(config.slug || "").trim(),
     reference_source_url: String(
-      config.reference_source_url || config.referenceSourceUrl || config.original_url || "",
+      config.reference_source_url ||
+        config.referenceSourceUrl ||
+        config.original_url ||
+        "",
     ).trim(),
     title: String(config.title || "").trim() || "Article preview",
     description: String(config.description || config.desc || "").trim(),
     enablePopup3s,
     share_image: shareImage,
     overlay_image: overlayImage,
-    group_label: String(config.group_label || config.groupLabel || "Group facebook").trim(),
+    group_label: String(
+      config.group_label || config.groupLabel || "Group facebook",
+    ).trim(),
     group_url: String(config.group_url || config.groupUrl || "").trim(),
-    backup_label: String(config.backup_label || config.backupLabel || "Page phu").trim(),
+    backup_label: String(
+      config.backup_label || config.backupLabel || "Page phu",
+    ).trim(),
     backup_url: String(config.backup_url || config.backupUrl || "").trim(),
     blocks: normalizeArticleFunnelBlocks(config.blocks),
     stages: normalizedStages
@@ -6516,11 +6720,20 @@ function normalizeArticleFunnelPreviewConfig(input, resolvedStages = null) {
             stage.direct_android_package || "",
           ).trim(),
         };
-        return applyArticleFunnelStageDirectOverrides(
+        const stageWithDirectOverrides = applyArticleFunnelStageDirectOverrides(
           { stage_key: normalizedStageKey },
           normalizedStage,
           config,
         );
+        if (
+          normalizedStageKey === "20s" &&
+          String(stageWithDirectOverrides.direct_platform || "")
+            .trim()
+            .toLowerCase() === "tiktok"
+        ) {
+          stageWithDirectOverrides.delay_ms = 2000;
+        }
+        return stageWithDirectOverrides;
       })
       .filter(shouldKeepArticleFunnelStage),
   };
@@ -6541,8 +6754,10 @@ async function resolveArticleFunnelConfig(rawConfig) {
           ) ||
           normalizeAffiliatePresetUrl(candidateUrl) ||
           candidateUrl;
-        if (inferAffiliatePlatformFromUrl(normalizedUrl) === "tiktok" &&
-            isTikTokShortShareUrl(normalizedUrl)) {
+        if (
+          inferAffiliatePlatformFromUrl(normalizedUrl) === "tiktok" &&
+          isTikTokShortShareUrl(normalizedUrl)
+        ) {
           finalUrl = String(normalizedUrl || candidateUrl).trim();
         } else {
           const health = await fetchAffiliateHealth(normalizedUrl);
@@ -6583,7 +6798,9 @@ function buildArticleFunnelPublicUrl(
   domainHostname,
   fallbackBaseUrl = BASE_URL,
 ) {
-  const baseUrl = domainHostname ? `https://${domainHostname}` : fallbackBaseUrl;
+  const baseUrl = domainHostname
+    ? `https://${domainHostname}`
+    : fallbackBaseUrl;
   return buildShortUrl(baseUrl, encodeURIComponent(routeSlug || ""));
 }
 
@@ -6687,11 +6904,7 @@ function isArticleFunnelPopupTestRequestAllowed(
   }
 }
 
-async function resolvePublishedArticleFunnelRequest(
-  database,
-  req,
-  routeSlug,
-) {
+async function resolvePublishedArticleFunnelRequest(database, req, routeSlug) {
   const snapshotArticleFunnel = decodeArticleFunnelPublishedSnapshotFromRequest(
     req,
     routeSlug,
@@ -6718,8 +6931,12 @@ function normalizeArticleFunnelStageKey(stageKey = "") {
 function decorateArticleFunnelStagesForClient(stages, tracking = {}) {
   const routeSlug = String(tracking?.routeSlug || "").trim();
   return (Array.isArray(stages) ? stages : []).map((stage) => {
-    const normalizedStageKey = normalizeArticleFunnelStageKey(stage?.stage_key || "");
-    const directPlatform = String(stage?.direct_platform || "").trim().toLowerCase();
+    const normalizedStageKey = normalizeArticleFunnelStageKey(
+      stage?.stage_key || "",
+    );
+    const directPlatform = String(stage?.direct_platform || "")
+      .trim()
+      .toLowerCase();
     const nextStage = {
       ...(stage && typeof stage === "object" ? stage : {}),
       stage_key: normalizedStageKey,
@@ -6774,12 +6991,20 @@ function canServePublishedArticleFunnelOnHost(
     return !requestHostname || requestHostname === targetHostname;
   }
   const fallbackHostname = normalizeDomainHost(fallbackBaseUrl);
-  return !requestHostname || !fallbackHostname || requestHostname === fallbackHostname;
+  return (
+    !requestHostname ||
+    !fallbackHostname ||
+    requestHostname === fallbackHostname
+  );
 }
 
 function isReservedPublishedArticleSlug(slug) {
   const value = String(slug || "").trim();
-  return !value || value.includes(".") || /^(api|uploads|admin|go|_lab)$/i.test(value);
+  return (
+    !value ||
+    value.includes(".") ||
+    /^(api|uploads|admin|go|_lab)$/i.test(value)
+  );
 }
 
 async function findShortLinkSlugConflict(database, slug) {
@@ -6797,9 +7022,8 @@ async function findArticleFunnelPublishConflict(database, slug, options = {}) {
   const draftLabId = Number(options.draftLabId || 0);
   if (!database || !normalizedSlug) return null;
 
-  const matchingLabs = await database.listArticleFunnelLabsByPublishedSlug(
-    normalizedSlug,
-  );
+  const matchingLabs =
+    await database.listArticleFunnelLabsByPublishedSlug(normalizedSlug);
   const conflictingLab = matchingLabs.find(
     (lab) => Number(lab?.id || 0) !== draftLabId,
   );
@@ -6915,7 +7139,8 @@ function resolveTikTokIosInAppTargets(stage, targetUrl, info) {
     appTarget: shouldPreferIosOverrideAsAppTarget
       ? iosOverrideUrl || nativeAppUrl || browserFallbackUrl
       : nativeAppUrl || browserFallbackUrl,
-    browserFallback: browserFallbackUrl || webFallbackUrl || normalizedTargetUrl,
+    browserFallback:
+      browserFallbackUrl || webFallbackUrl || normalizedTargetUrl,
     webFallback: webFallbackUrl || normalizedTargetUrl,
   };
 }
@@ -6936,9 +7161,7 @@ function buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info) {
       info?.fallback ||
       "",
   ).trim();
-  const iosInAppUrl = String(
-    resolvedTargets.appTarget || browserUrl,
-  ).trim();
+  const iosInAppUrl = String(resolvedTargets.appTarget || browserUrl).trim();
   const iosStoreFallbackUrl = String(
     stage?.direct_ios_fb_url || info?.ios_store || browserUrl,
   ).trim();
@@ -6956,11 +7179,7 @@ function buildArticleFunnelPopup20sDirectBridgeInfo(stage, targetUrl, info) {
     popup20s_ios_inapp_url: iosStoreFallbackUrl || iosInAppUrl || browserUrl,
     universal_link: String(info?.universal_link || browserUrl).trim(),
     platform_name:
-      String(
-        info?.platform_name ||
-          stage?.direct_platform ||
-          "tiktok",
-      )
+      String(info?.platform_name || stage?.direct_platform || "tiktok")
         .trim()
         .toLowerCase() || "tiktok",
   };
@@ -7118,9 +7337,7 @@ async function handleArticleFunnelStageLaunch({
         bridgeInfo.deeplink ||
         targetUrl,
       fallbackUrl:
-        bridgeInfo.popup20s_browser_url ||
-        bridgeInfo.fallback ||
-        targetUrl,
+        bridgeInfo.popup20s_browser_url || bridgeInfo.fallback || targetUrl,
       enabled: bridgeDebugEnabled,
     });
     const bridgedInfo = {
@@ -7521,9 +7738,15 @@ function buildArticleFunnelPreviewPage(
       use_deeplink_route: shouldUseArticleFunnelDeeplinkRoute(stage),
     })),
   );
-  const defaultOverlayImage = JSON.stringify(config.overlay_image || shareImage || "");
-  const launchBasePathJson = JSON.stringify(String(launchBasePath || "").trim());
-  const bridgeBasePathJson = JSON.stringify(String(bridgeBasePath || "").trim());
+  const defaultOverlayImage = JSON.stringify(
+    config.overlay_image || shareImage || "",
+  );
+  const launchBasePathJson = JSON.stringify(
+    String(launchBasePath || "").trim(),
+  );
+  const bridgeBasePathJson = JSON.stringify(
+    String(bridgeBasePath || "").trim(),
+  );
   const deeplinkBasePathJson = JSON.stringify(
     String(deeplinkBasePath || "").trim(),
   );
@@ -7536,7 +7759,7 @@ function buildArticleFunnelPreviewPage(
   const showPopupTestButtonJson = JSON.stringify(
     Boolean(
       trackingContext?.showPopupTestButton ||
-        trackingContext?.show_popup_test_button,
+      trackingContext?.show_popup_test_button,
     ),
   );
 
@@ -7599,17 +7822,30 @@ ${ogImageTag}
   .popup-test-fab{position:fixed;right:18px;bottom:18px;z-index:20;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:12px 16px;border:0;border-radius:999px;background:rgba(15,23,42,.92);box-shadow:0 18px 42px rgba(15,23,42,.28);color:#fff;font:600 14px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;cursor:pointer}
   .popup-test-fab[hidden]{display:none}
   .popup-test-fab:hover{background:#0f172a}
-  .facebook-inapp-gate{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px 18px;background:linear-gradient(180deg,#07111f 0%,#0b1727 100%);color:#f8fafc}
+  .facebook-inapp-gate{position:fixed;inset:0;z-index:100;overflow:auto;padding:42px 18px 56px;background:#10151f;color:#f8fafc}
   .facebook-inapp-gate[hidden]{display:none}
-  .facebook-inapp-gate-card{width:min(100%,430px);padding:28px 22px;border:1px solid rgba(148,163,184,.28);border-radius:24px;background:rgba(15,23,42,.82);box-shadow:0 24px 64px rgba(0,0,0,.42);text-align:center}
-  .facebook-inapp-gate-kicker{margin:0 0 12px;color:#93c5fd;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
-  .facebook-inapp-gate h2{margin:0;color:#fff;font-size:clamp(28px,8vw,38px);line-height:1.08;letter-spacing:-.045em}
-  .facebook-inapp-gate-lead{margin:16px 0 0;color:#cbd5e1;font-size:16px;line-height:1.6}
-  .facebook-inapp-steps{display:grid;gap:12px;margin:24px 0 0;text-align:left}
-  .facebook-inapp-step{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;align-items:start;padding:14px;border:1px solid rgba(96,165,250,.24);border-radius:16px;background:rgba(30,41,59,.7);color:#e2e8f0;font-size:15px;font-weight:700;line-height:1.5}
-  .facebook-inapp-step-number{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;font-size:14px}
-  .facebook-inapp-gate-open{width:100%;min-height:48px;margin:20px 0 0;border:0;border-radius:14px;background:linear-gradient(135deg,#2563eb,#7c3aed);box-shadow:0 12px 24px rgba(37,99,235,.26);color:#fff;font:800 16px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;cursor:pointer}
-  .facebook-inapp-gate-note{margin:20px 0 0;color:#94a3b8;font-size:13px;line-height:1.55}
+  .facebook-inapp-gate-shell{width:min(100%,430px);margin:0 auto}
+  .facebook-inapp-callout{position:relative;display:grid;justify-items:center;margin:0 -2px 88px;padding-right:42px}
+  .facebook-inapp-callout-copy{width:100%;padding:16px 12px 17px;border-radius:20px;background:#f8fafc;box-shadow:0 16px 32px rgba(0,0,0,.22);color:#141923;text-align:center}
+  .facebook-inapp-callout-copy strong,.facebook-inapp-callout-copy span{display:block;font-size:15px;font-weight:900;line-height:1.25;letter-spacing:-.025em}
+  .facebook-inapp-callout-copy span{margin-top:5px;color:#f22e54}
+  .facebook-inapp-callout-external{display:inline-grid;place-items:center;width:20px;height:20px;margin-left:4px;border-radius:3px;background:#3f93d0;color:#f8fafc;font-size:14px;vertical-align:1px}
+  .facebook-inapp-callout-arrow{position:absolute;right:-2px;top:-2px;width:58px;height:62px;overflow:visible}
+  .facebook-inapp-callout-arrow path{fill:none;stroke:#f22e54;stroke-width:6;stroke-linecap:round;stroke-linejoin:round}
+  .facebook-inapp-gate-card{padding:42px 28px 34px;border-radius:38px;background:#f8fafc;box-shadow:0 28px 68px rgba(0,0,0,.32);color:#141923;text-align:center}
+  .facebook-inapp-gate-kicker{display:none}
+  .facebook-inapp-gate h2{margin:0;color:#141923;font-size:clamp(32px,9vw,44px);line-height:1.1;letter-spacing:-.055em}
+  .facebook-inapp-gate-lead{margin:22px 0 0;color:#5d6879;font-size:18px;line-height:1.52;letter-spacing:-.015em}
+  .facebook-inapp-gate-lead strong{color:#141923}
+  .facebook-inapp-steps{display:grid;gap:25px;margin:31px 0 0;text-align:left}
+  .facebook-inapp-step{display:grid;grid-template-columns:42px minmax(0,1fr);gap:16px;align-items:start;color:#141923;font-size:18px;font-weight:800;line-height:1.28}
+  .facebook-inapp-step-number{display:grid;place-items:center;width:42px;height:42px;border-radius:999px;background:#f0f2f7;color:#141923;font-size:18px}
+  .facebook-inapp-step-copy{display:grid;gap:7px;padding-top:4px}
+  .facebook-inapp-step-copy small{color:#667183;font-size:16px;font-weight:500;line-height:1.48}
+  .facebook-inapp-step-highlight{display:inline-block;padding:2px 8px;border-radius:7px;background:#eef0f5;color:#141923;font-weight:900;white-space:nowrap}
+  .facebook-inapp-gate-open{width:100%;min-height:62px;margin:32px 0 0;border:0;border-radius:18px;background:#141923;box-shadow:none;color:#f8fafc;font:800 18px/1.1 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;cursor:pointer}
+  .facebook-inapp-gate-open:focus-visible{outline:3px solid #3b82f6;outline-offset:3px}
+  .facebook-inapp-gate-note{display:none}
   @media (max-width: 900px){
     .article{padding-top:28px}
     .article-description{margin-top:26px}
@@ -7619,6 +7855,16 @@ ${ogImageTag}
     .article{padding-inline:18px}
     .reveal-btn{width:calc(100% - 32px);min-width:0}
     .popup-test-fab{right:14px;bottom:14px;padding:11px 14px;font-size:13px}
+    .facebook-inapp-gate{padding:28px 12px 40px}
+    .facebook-inapp-callout{margin-bottom:64px;padding-right:36px}
+    .facebook-inapp-callout-copy{padding:14px 8px 15px;border-radius:18px}
+    .facebook-inapp-callout-copy strong,.facebook-inapp-callout-copy span{font-size:14px}
+    .facebook-inapp-callout-arrow{right:-4px;width:52px;height:56px}
+    .facebook-inapp-gate-card{padding:36px 24px 30px;border-radius:34px}
+    .facebook-inapp-gate h2{font-size:34px}
+    .facebook-inapp-gate-lead{font-size:17px}
+    .facebook-inapp-step{font-size:17px}
+    .facebook-inapp-step-copy small{font-size:15px}
   }
 </style>
 </head>
@@ -7639,16 +7885,21 @@ ${ogImageTag}
   <div class="overlay" id="overlay"><div class="overlay-stack" id="overlayStack"></div></div>
   <button type="button" class="popup-test-fab" id="popupTest20sBtn" hidden>Mở popup 20s</button>
   <section class="facebook-inapp-gate" id="facebookInAppGate" hidden aria-live="polite">
-    <div class="facebook-inapp-gate-card">
-      <p class="facebook-inapp-gate-kicker">Xem trải nghiệm đầy đủ</p>
-      <h2>Mở bằng trình duyệt bên ngoài</h2>
-      <p class="facebook-inapp-gate-lead">Facebook đang dùng trình duyệt tích hợp. Hãy mở Safari hoặc Chrome để xem video và nhận popup đúng lúc.</p>
-      <div class="facebook-inapp-steps">
-        <div class="facebook-inapp-step"><span class="facebook-inapp-step-number">1</span><span>Nhấn dấu ba chấm (...) ở góc trên bên phải.</span></div>
-        <div class="facebook-inapp-step"><span class="facebook-inapp-step-number">2</span><span>Chọn “Mở bằng trình duyệt bên ngoài” hoặc “Open in Safari”.</span></div>
+    <div class="facebook-inapp-gate-shell">
+      <div class="facebook-inapp-callout">
+        <div class="facebook-inapp-callout-copy"><strong>NHẤN DẤU 3 CHẤM (...) Ở ĐÂY <b class="facebook-inapp-callout-external" aria-hidden="true">↗</b></strong><span>RỒI CHỌN MỞ BẰNG TRÌNH DUYỆT BÊN NGOÀI</span></div>
+        <svg class="facebook-inapp-callout-arrow" aria-hidden="true" viewBox="0 0 58 62"><path d="M4 51c20-1 34-12 42-33M32 18h14v15" /></svg>
       </div>
-      <button type="button" class="facebook-inapp-gate-open" id="facebookInAppGateOpenBtn">Mở Safari</button>
-      <p class="facebook-inapp-gate-note">Video và popup sẽ tự chạy sau khi bạn mở lại link bằng trình duyệt ngoài.</p>
+      <div class="facebook-inapp-gate-card">
+        <p class="facebook-inapp-gate-kicker">Xem trải nghiệm đầy đủ</p>
+        <h2>Mở bằng trình duyệt<br>bên ngoài</h2>
+        <p class="facebook-inapp-gate-lead">Để trải nghiệm xem tốt nhất vui lòng truy cập trình duyệt bên ngoài. Bấm <strong>Mở (Open)</strong> trên thông báo xuất hiện để tiếp tục xem.</p>
+        <button type="button" class="facebook-inapp-gate-open" id="facebookInAppGateOpenBtn">Mở trình duyệt bên ngoài (Safari)</button>
+        <div class="facebook-inapp-steps">
+          <div class="facebook-inapp-step"><span class="facebook-inapp-step-number">1</span><span class="facebook-inapp-step-copy">Nếu thông báo không hiện<small>Bấm biểu tượng <b class="facebook-inapp-step-highlight">3 CHẤM (...)</b> ở góc trên bên phải màn hình.</small></span></div>
+          <div class="facebook-inapp-step"><span class="facebook-inapp-step-number">2</span><span class="facebook-inapp-step-copy">Chuyển sang Safari<small>Chọn <strong>Mở bằng trình duyệt bên ngoài</strong> hoặc <strong>Open in Safari</strong>.</small></span></div>
+        </div>
+      </div>
     </div>
   </section>
 <script>
@@ -7734,7 +7985,17 @@ ${ogImageTag}
     ) - vnOffsetMs;
   }
 
+  function shouldBypassPopupDismissal(stageKey) {
+    var stage = getStageByKey(stageKey);
+    return Boolean(
+      stage &&
+      String(stage.stage_key || '') === '20s' &&
+      String(stage.direct_platform || '').toLowerCase() === 'tiktok'
+    );
+  }
+
   function getPopupDismissUntil(stageKey) {
+    if (shouldBypassPopupDismissal(stageKey)) return 0;
     var cookieKey = getPopupDismissCookieName(stageKey) + '=';
     var hasCookie = document.cookie
       .split(';')
@@ -7755,6 +8016,7 @@ ${ogImageTag}
   }
 
   function setPopupDismissCookie(stageKey) {
+    if (shouldBypassPopupDismissal(stageKey)) return;
     var expiresAt = new Date(getNextVietnamMidnightTimestamp(Date.now()));
     document.cookie =
       getPopupDismissCookieName(stageKey) +
@@ -7772,6 +8034,7 @@ ${ogImageTag}
   }
 
   function hasPopupDismissCookie(stageKey) {
+    if (shouldBypassPopupDismissal(stageKey)) return false;
     return getPopupDismissUntil(stageKey) > Date.now();
   }
 
@@ -8892,7 +9155,9 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
           ),
         );
       }
-      if (Object.prototype.hasOwnProperty.call(body, "affiliate_shopee_sources")) {
+      if (
+        Object.prototype.hasOwnProperty.call(body, "affiliate_shopee_sources")
+      ) {
         nextSettings.affiliate_shopee_sources =
           await normalizeUserAffiliateShopeeSourcesResolved(
             body.affiliate_shopee_sources || [],
@@ -10023,13 +10288,17 @@ app.patch(
         linkId < 1 ||
         typeof enabled !== "boolean"
       ) {
-        return res.status(400).json({ error: "Yêu cầu chuyển URL không hợp lệ" });
+        return res
+          .status(400)
+          .json({ error: "Yêu cầu chuyển URL không hợp lệ" });
       }
 
       const database = await getDb();
       const link = await database.getLinkById(linkId);
       if (!link || Number(link.user_id) !== userId) {
-        return res.status(404).json({ error: "Không tìm thấy link của người dùng này" });
+        return res
+          .status(404)
+          .json({ error: "Không tìm thấy link của người dùng này" });
       }
 
       const update = buildAdminTikTokSourceOverrideUpdate(
@@ -10060,31 +10329,36 @@ app.patch(
   },
 );
 
-app.get("/api/admin/users/location-analytics", requireAdmin, async (req, res) => {
-  if (!(await checkAdmin(req, res))) return;
-  try {
-    const database = await getDb();
-    const locationAnalytics = await database.getAdminUserLocationAnalytics(5000);
-    const countries = (locationAnalytics?.countries || []).map((country) => ({
-      ...country,
-      country_name_en: getCountryEnglishNameFromCode(country.country_code),
-    }));
-    res.json({
-      locationAnalytics: {
-        total_users_with_location: Number(
-          locationAnalytics?.total_users_with_location || 0,
-        ),
-        total_users_without_location: Number(
-          locationAnalytics?.total_users_without_location || 0,
-        ),
-        countries,
-        top_countries: countries.slice(0, 8),
-      },
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+app.get(
+  "/api/admin/users/location-analytics",
+  requireAdmin,
+  async (req, res) => {
+    if (!(await checkAdmin(req, res))) return;
+    try {
+      const database = await getDb();
+      const locationAnalytics =
+        await database.getAdminUserLocationAnalytics(5000);
+      const countries = (locationAnalytics?.countries || []).map((country) => ({
+        ...country,
+        country_name_en: getCountryEnglishNameFromCode(country.country_code),
+      }));
+      res.json({
+        locationAnalytics: {
+          total_users_with_location: Number(
+            locationAnalytics?.total_users_with_location || 0,
+          ),
+          total_users_without_location: Number(
+            locationAnalytics?.total_users_without_location || 0,
+          ),
+          countries,
+          top_countries: countries.slice(0, 8),
+        },
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  },
+);
 
 app.get("/api/admin/payments", requireAdmin, async (req, res) => {
   if (!(await checkAdmin(req, res))) return;
@@ -10158,12 +10432,18 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
     }
     const allowedPlans = new Set(["free", "pro", "business", "admin"]);
     const allowedRoles = new Set(["user", "support", "admin"]);
-    const nextPlan = Object.prototype.hasOwnProperty.call(req.body || {}, "plan")
+    const nextPlan = Object.prototype.hasOwnProperty.call(
+      req.body || {},
+      "plan",
+    )
       ? String(plan || "")
           .trim()
           .toLowerCase()
       : "";
-    const nextRole = Object.prototype.hasOwnProperty.call(req.body || {}, "role")
+    const nextRole = Object.prototype.hasOwnProperty.call(
+      req.body || {},
+      "role",
+    )
       ? String(role || "")
           .trim()
           .toLowerCase()
@@ -10193,7 +10473,9 @@ app.patch("/api/admin/users/:id", requireAdmin, async (req, res) => {
       effectiveRole &&
       effectiveRole !== "admin" &&
       !effectivePlan &&
-      String(targetUser.plan || "").trim().toLowerCase() === "admin"
+      String(targetUser.plan || "")
+        .trim()
+        .toLowerCase() === "admin"
     ) {
       effectivePlan = "free";
     }
@@ -10881,7 +11163,9 @@ app.get("/api/links", async (req, res) => {
         short_url: buildLinkShortUrl(link, publicBaseUrl),
       })),
       labs: recentLabs.slice(0, limit).map((item) => {
-        const configJson = normalizeArticleFunnelLabConfigJson(item.config_json);
+        const configJson = normalizeArticleFunnelLabConfigJson(
+          item.config_json,
+        );
         const referenceSourceUrl = String(
           configJson.reference_source_url ||
             configJson.referenceSourceUrl ||
@@ -10903,7 +11187,8 @@ app.get("/api/links", async (req, res) => {
               )
             : "",
           published_test_20s_url:
-            item.published_route_slug && hasArticleFunnelStage(configJson, "20s")
+            item.published_route_slug &&
+            hasArticleFunnelStage(configJson, "20s")
               ? buildArticleFunnelPopupTestUrl(
                   item.published_route_slug,
                   normalizeDomainHost(configJson.source_domain),
@@ -11005,7 +11290,9 @@ app.patch("/api/links/:id", async (req, res) => {
         error: "Link video hiện chỉ hỗ trợ URL Shopee",
       });
     }
-    const existingOverlayConfig = parseVideoOverlayConfig(link.video_overlay_text);
+    const existingOverlayConfig = parseVideoOverlayConfig(
+      link.video_overlay_text,
+    );
     const updateFields = {
       og_title: normalizeShareTitleInput(og_title, 120),
       og_desc,
@@ -11087,8 +11374,7 @@ app.post("/api/extract-thumb", requireAuth, async (req, res) => {
 app.get("/api/stats/summary", async (req, res) => {
   try {
     const database = await getDb();
-    const compactMode =
-      String(req.query.compact || "").trim() === "1";
+    const compactMode = String(req.query.compact || "").trim() === "1";
     const [publicBaseUrl, user] = await Promise.all([
       getPublicBaseUrl(),
       resolveUser(req),
@@ -11236,8 +11522,9 @@ app.get("/api/stats/summary", async (req, res) => {
       }
       const todayKey = getAnalyticsDayKey(new Date());
       const uniqueClicksToday =
-        (analytics?.unique_timeline || []).find((item) => item.date === todayKey)
-          ?.clicks || 0;
+        (analytics?.unique_timeline || []).find(
+          (item) => item.date === todayKey,
+        )?.clicks || 0;
       const alerts = buildStatsAlertPayload({
         planName: user?.plan || "guest",
         linksToday: today.linksToday || 0,
@@ -12717,9 +13004,7 @@ function buildArticleFunnelPopup20sTikTokBridgePage(link, canonicalUrl, info) {
   const browserUrl = String(
     info?.popup20s_browser_url || info?.fallback || link.original_url || "",
   ).trim();
-  const iosInAppUrl = String(
-    info?.popup20s_ios_inapp_url || browserUrl,
-  ).trim();
+  const iosInAppUrl = String(info?.popup20s_ios_inapp_url || browserUrl).trim();
   const fallbackUrl = browserUrl || String(link.original_url || "").trim();
   const bridgeDebug =
     info?.bridge_debug && typeof info.bridge_debug === "object"

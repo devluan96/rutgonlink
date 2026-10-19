@@ -129,6 +129,22 @@ test("normalizeArticleFunnelPreviewConfig prefers explicit popup 20s stage image
   assert.equal(normalized.stages[1].delay_ms, 7000);
 });
 
+test("normalizeArticleFunnelPreviewConfig shows TikTok affiliate popup 20s after 2 seconds", () => {
+  const normalized = __testUtils.normalizeArticleFunnelPreviewConfig({
+    stages: [
+      {
+        stage_key: "20s",
+        delay_ms: 7000,
+        direct_platform: "tiktok",
+        target_url: "https://www.tiktok.com/view/product/1731062681949079816",
+      },
+    ],
+  });
+
+  assert.equal(normalized.stages[0].direct_platform, "tiktok");
+  assert.equal(normalized.stages[0].delay_ms, 2000);
+});
+
 test("buildOverlayLaunchConfig keeps TikTok product links web-first for iOS in-app", () => {
   const originalUrl =
     "https://www.tiktok.com/view/product/1731062681949079816?share_app_id=1180";
