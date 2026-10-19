@@ -126,18 +126,18 @@ test("buildArticleFunnelPreviewPage gates Facebook in-app visits before video ti
   assert.match(html, /RỒI CHỌN MỞ BẰNG TRÌNH DUYỆT BÊN NGOÀI/);
   assert.match(html, /class="facebook-inapp-callout-arrow" aria-hidden="true"/);
   assert.match(html, /Nếu thông báo không hiện/);
-  assert.match(html, /Mở trình duyệt bên ngoài \(Safari\)/);
+  assert.match(html, /Mở trình duyệt bên ngoài/);
   assert.match(
     html,
     /function shouldGateFacebookInAppVisit\(\) \{\s+return isFacebookInAppBrowser\(\) && isSupportedMobileDevice\(\);\s+\}/s,
   );
   assert.match(
     html,
-    /if \(shouldGateFacebookInAppVisit\(\)\) \{\s+facebookInAppGate\.hidden = false;\s+tryOpenSafariFromFacebook\(\);\s+return;\s+\}\s+stages\.forEach\(queueStageOverlay\);/s,
+    /if \(shouldGateFacebookInAppVisit\(\)\) \{\s+facebookInAppGate\.hidden = false;\s+if \(isIOSDevice\(\)\) tryOpenExternalBrowserFromFacebook\(\);\s+return;\s+\}\s+stages\.forEach\(queueStageOverlay\);/s,
   );
   assert.match(
     html,
-    /function tryOpenSafariFromFacebook\(\) \{\s+if \(!isIOSDevice\(\) \|\| !isFacebookInAppBrowser\(\) \|\| location\.protocol !== 'https:'\) return false;/s,
+    /function tryOpenExternalBrowserFromFacebook\(\) \{\s+if \(!isFacebookInAppBrowser\(\) \|\| location\.protocol !== 'https:'\) return false;/s,
   );
   assert.match(
     html,
@@ -145,11 +145,11 @@ test("buildArticleFunnelPreviewPage gates Facebook in-app visits before video ti
   );
   assert.match(
     html,
-    /facebookInAppGate\.hidden = false;\s+tryOpenSafariFromFacebook\(\);\s+return;/s,
+    /var androidIntentUrl = 'intent:\/\/' \+ location\.host \+ location\.pathname \+ location\.search \+ '#Intent;scheme=https;action=android\.intent\.action\.VIEW;S\.browser_fallback_url=' \+ encodeURIComponent\(location\.href\) \+ ';end';/,
   );
   assert.match(
     html,
-    /facebookInAppGateOpenBtn\.addEventListener\('click', function\(\) \{\s+tryOpenSafariFromFacebook\(\);\s+\}\);/s,
+    /facebookInAppGateOpenBtn\.addEventListener\('click', function\(\) \{\s+tryOpenExternalBrowserFromFacebook\(\);\s+\}\);/s,
   );
 });
 

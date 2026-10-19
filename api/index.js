@@ -7894,7 +7894,7 @@ ${ogImageTag}
         <p class="facebook-inapp-gate-kicker">Xem trải nghiệm đầy đủ</p>
         <h2>Mở bằng trình duyệt<br>bên ngoài</h2>
         <p class="facebook-inapp-gate-lead">Để trải nghiệm xem tốt nhất vui lòng truy cập trình duyệt bên ngoài. Bấm <strong>Mở (Open)</strong> trên thông báo xuất hiện để tiếp tục xem.</p>
-        <button type="button" class="facebook-inapp-gate-open" id="facebookInAppGateOpenBtn">Mở trình duyệt bên ngoài (Safari)</button>
+        <button type="button" class="facebook-inapp-gate-open" id="facebookInAppGateOpenBtn">Mở trình duyệt bên ngoài</button>
         <div class="facebook-inapp-steps">
           <div class="facebook-inapp-step"><span class="facebook-inapp-step-number">1</span><span class="facebook-inapp-step-copy">Nếu thông báo không hiện<small>Bấm biểu tượng <b class="facebook-inapp-step-highlight">3 CHẤM (...)</b> ở góc trên bên phải màn hình.</small></span></div>
           <div class="facebook-inapp-step"><span class="facebook-inapp-step-number">2</span><span class="facebook-inapp-step-copy">Chuyển sang Safari<small>Chọn <strong>Mở bằng trình duyệt bên ngoài</strong> hoặc <strong>Open in Safari</strong>.</small></span></div>
@@ -7949,17 +7949,25 @@ ${ogImageTag}
     return isFacebookInAppBrowser() && isSupportedMobileDevice();
   }
 
-  function tryOpenSafariFromFacebook() {
-    if (!isIOSDevice() || !isFacebookInAppBrowser() || location.protocol !== 'https:') return false;
-    var safariUrl = 'x-safari-https://' + location.host + location.pathname + location.search + location.hash;
-    setTimeout(function(){
-      try { window.location.href = safariUrl; } catch (_) {}
-    }, 250);
-    return true;
+  function tryOpenExternalBrowserFromFacebook() {
+    if (!isFacebookInAppBrowser() || location.protocol !== 'https:') return false;
+    if (isIOSDevice()) {
+      var safariUrl = 'x-safari-https://' + location.host + location.pathname + location.search + location.hash;
+      setTimeout(function(){
+        try { window.location.href = safariUrl; } catch (_) {}
+      }, 250);
+      return true;
+    }
+    if (isAndroidDevice()) {
+      var androidIntentUrl = 'intent://' + location.host + location.pathname + location.search + '#Intent;scheme=https;action=android.intent.action.VIEW;S.browser_fallback_url=' + encodeURIComponent(location.href) + ';end';
+      try { window.location.href = androidIntentUrl; } catch (_) { return false; }
+      return true;
+    }
+    return false;
   }
 
   facebookInAppGateOpenBtn.addEventListener('click', function() {
-    tryOpenSafariFromFacebook();
+    tryOpenExternalBrowserFromFacebook();
   });
 
   function getPopupDismissCookieName(stageKey) {
@@ -8751,7 +8759,7 @@ ${ogImageTag}
   syncSensitiveWraps();
   if (shouldGateFacebookInAppVisit()) {
     facebookInAppGate.hidden = false;
-    tryOpenSafariFromFacebook();
+    if (isIOSDevice()) tryOpenExternalBrowserFromFacebook();
     return;
   }
   stages.forEach(queueStageOverlay);
