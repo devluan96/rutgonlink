@@ -2974,6 +2974,23 @@ function buildTikTokPopup20sOneLink(destinationUrl) {
   }
 }
 
+function buildRegularTikTokLinkInfo(originalUrl, info) {
+  if (info?.platform_name !== "tiktok" || !isTikTokProductUrl(originalUrl)) {
+    return info;
+  }
+
+  const iosOneLink = buildTikTokPopup20sOneLink(originalUrl);
+  if (!isTikTokOneLinkHostname(new URL(iosOneLink).hostname)) {
+    return info;
+  }
+
+  const forcedIosOneLink = `${iosOneLink}&af_force_deeplink=true`;
+  return {
+    ...info,
+    deeplink_ios: forcedIosOneLink,
+  };
+}
+
 function detectPlatformDeep(originalUrl, platform) {
   let hostname = "";
   let pathname = "";
@@ -12116,7 +12133,10 @@ app.get("/:code", async (req, res) => {
       resolvedShopeeOriginalUrl === link.original_url
         ? link
         : { ...link, original_url: resolvedShopeeOriginalUrl };
-    const info = detectPlatformDeep(redirectLink.original_url, platform);
+    const info = buildRegularTikTokLinkInfo(
+      redirectLink.original_url,
+      detectPlatformDeep(redirectLink.original_url, platform),
+    );
     const isFacebookInApp = isFacebookInAppBrowser(ua);
 
     if (
@@ -13382,8 +13402,11 @@ function buildOgPage(link, baseUrl) {
     ? esc(link.og_image)
     : `${shortBaseUrl}/og-default.png`;
   const dest = link.original_url;
-  const info = detectPlatformDeep(dest, "ios");
   const isVideoLink = (link.link_type || "direct").trim() === "video";
+  const detectedInfo = detectPlatformDeep(dest, "ios");
+  const info = isVideoLink
+    ? detectedInfo
+    : buildRegularTikTokLinkInfo(dest, detectedInfo);
   const appMeta =
     !isVideoLink && info.platform_name !== "generic"
       ? buildAppLinkMetaTags(
@@ -14113,10 +14136,12 @@ body{overflow-x:hidden}
 module.exports = app;
 module.exports.__testUtils = {
   buildTikTokAppScheme,
+  buildRegularTikTokLinkInfo,
   detectPlatformDeep,
   canonicalizeShopeeProductUrl,
   buildDirectLaunchConfig,
   buildDirectBridgePage,
+  buildOgPage,
   buildOverlayLaunchConfig,
   applyArticleFunnelStageDirectOverrides,
   buildArticleFunnelPopup20sDirectBridgeInfo,
