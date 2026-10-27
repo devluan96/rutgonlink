@@ -10,6 +10,13 @@ const migrationPath = path.join(
   "migrations",
   "20261027_harden_payment_subscriptions.sql",
 );
+const rejectAwaitingMigrationPath = path.join(
+  __dirname,
+  "..",
+  "supabase",
+  "migrations",
+  "20261027_allow_reject_awaiting_payments.sql",
+);
 
 test("billing plan transitions allow renewals and upgrades but reject downgrades", () => {
   const { __testUtils } = require("../api/index");
@@ -102,4 +109,39 @@ test("example environment documents manual payment configuration", () => {
   assert.match(exampleEnv, /PAYMENT_BANK_ACCOUNT=/);
   assert.match(exampleEnv, /PAYMENT_ACCOUNT_HOLDER=/);
   assert.match(exampleEnv, /PAYMENT_CONTACT=/);
+});
+
+test("admins can reject awaiting or submitted payments but only approve submitted payments", () => {
+  const appSource = fs.readFileSync(
+    path.join(__dirname, "..", "public", "app.js"),
+    "utf8",
+  );
+  const cssSource = fs.readFileSync(
+    path.join(__dirname, "..", "public", "app.css"),
+    "utf8",
+  );
+
+  assert.match(appSource, /const canApprove = paymentStatus === "submitted";/);
+  assert.match(
+    appSource,
+    /const canReject = \["awaiting_payment", "submitted"\]\.includes\(paymentStatus\);/,
+  );
+  assert.match(appSource, /const canReview = status === "approved" \? canApprove : canReject;/);
+  assert.match(cssSource, /\.td-actions button:disabled[\s\S]*cursor:\s*not-allowed/);
+});
+
+test("follow-up migration records the real previous status when rejecting awaiting payments", () => {
+  const sql = fs.readFileSync(rejectAwaitingMigrationPath, "utf8");
+
+  assert.match(
+    sql,
+    /v_action = 'approved' AND v_request\.status <> 'submitted'/i,
+  );
+  assert.match(
+    sql,
+    /v_action = 'rejected'\s+AND v_request\.status NOT IN \('awaiting_payment', 'submitted'\)/i,
+  );
+  assert.match(sql, /v_previous_status := v_request\.status/i);
+  assert.match(sql, /previous_status, next_status/i);
+  assert.match(sql, /v_previous_status, v_action/i);
 });

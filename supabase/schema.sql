@@ -757,6 +757,7 @@ DECLARE
   v_request public.payment_requests%ROWTYPE;
   v_user public.users%ROWTYPE;
   v_action TEXT := lower(trim(COALESCE(p_action, '')));
+  v_previous_status TEXT;
   v_previous_plan TEXT;
   v_next_expiry TIMESTAMPTZ;
   v_period_months INTEGER;
@@ -773,7 +774,11 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'PAYMENT_REQUEST_NOT_FOUND';
   END IF;
-  IF v_request.status <> 'submitted' THEN
+  IF v_action = 'approved' AND v_request.status <> 'submitted' THEN
+    RAISE EXCEPTION 'PAYMENT_REQUEST_ALREADY_REVIEWED';
+  END IF;
+  IF v_action = 'rejected'
+     AND v_request.status NOT IN ('awaiting_payment', 'submitted') THEN
     RAISE EXCEPTION 'PAYMENT_REQUEST_ALREADY_REVIEWED';
   END IF;
   IF v_request.user_id IS NULL THEN
@@ -789,6 +794,7 @@ BEGIN
     RAISE EXCEPTION 'PAYMENT_USER_NOT_FOUND';
   END IF;
 
+  v_previous_status := v_request.status;
   v_previous_plan := COALESCE(v_user.plan, 'free');
   v_period_months := GREATEST(COALESCE(v_request.period_months, 1), 1);
 
@@ -823,7 +829,7 @@ BEGIN
       reviewed_by = p_admin_user_id,
       reviewed_at = now()
   WHERE id = v_request.id
-    AND status = 'submitted'
+    AND status = v_previous_status
   RETURNING * INTO v_request;
 
   IF NOT FOUND THEN
@@ -836,7 +842,7 @@ BEGIN
     amount, currency, reference_code, admin_note
   ) VALUES (
     v_request.id, v_request.user_id, p_admin_user_id, v_action,
-    'submitted', v_action, v_previous_plan,
+    v_previous_status, v_action, v_previous_plan,
     CASE WHEN v_action = 'approved' THEN v_request.plan ELSE v_previous_plan END,
     v_request.amount, v_request.currency, v_request.reference_code, v_request.admin_note
   );

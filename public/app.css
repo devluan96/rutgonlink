@@ -6297,6 +6297,14 @@
       .btn-del:hover {
         background: rgba(239, 68, 68, 0.2);
       }
+      .td-actions button:disabled {
+        cursor: not-allowed;
+        opacity: 0.38;
+        filter: saturate(0.45);
+      }
+      .td-actions button:disabled:hover {
+        background: initial;
+      }
       .badge-role {
         font-size: 10px;
         font-weight: 700;

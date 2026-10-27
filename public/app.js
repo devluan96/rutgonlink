@@ -4689,7 +4689,9 @@ function renderAdminPayments() {
   }
   body.innerHTML = pagination.rows
     .map((request) => {
-      const canReview = String(request.status || "") === "submitted";
+      const paymentStatus = String(request.status || "");
+      const canApprove = paymentStatus === "submitted";
+      const canReject = ["awaiting_payment", "submitted"].includes(paymentStatus);
       return `<tr>
             <td><code>${esc(request.reference_code || "—")}</code></td>
             <td>
@@ -4704,8 +4706,8 @@ function renderAdminPayments() {
             <td>${esc(formatAdminDateTime(request.submitted_at || request.created_at))}</td>
             <td class="td-orig" title="${esc(request.payer_note || request.admin_note || "")}">${esc(request.payer_note || request.transfer_note || "—")}</td>
             <td class="td-actions" style="display:flex;gap:6px;flex-wrap:wrap">
-              <button class="btn-cp" type="button" onclick="reviewAdminPayment(${request.id},'approved')" ${canReview ? "" : "disabled"}>Duyệt</button>
-              <button class="btn-del" type="button" onclick="reviewAdminPayment(${request.id},'rejected')" ${canReview ? "" : "disabled"}>Từ chối</button>
+              <button class="btn-cp" type="button" onclick="reviewAdminPayment(${request.id},'approved')" ${canApprove ? "" : 'disabled title="Chỉ duyệt yêu cầu đã xác nhận thanh toán"'}>Duyệt</button>
+              <button class="btn-del" type="button" onclick="reviewAdminPayment(${request.id},'rejected')" ${canReject ? "" : 'disabled title="Yêu cầu đã được xử lý"'}>Từ chối</button>
             </td>
           </tr>`;
     })
@@ -4722,8 +4724,17 @@ async function reviewAdminPayment(requestId, status) {
   const request = adminPayments.find(
     (entry) => Number(entry.id) === Number(requestId),
   );
-  if (!request || String(request.status || "") !== "submitted") {
-    toast("Chỉ yêu cầu đã gửi xác nhận mới được duyệt hoặc từ chối", "warn");
+  const paymentStatus = String(request?.status || "");
+  const canApprove = paymentStatus === "submitted";
+  const canReject = ["awaiting_payment", "submitted"].includes(paymentStatus);
+  const canReview = status === "approved" ? canApprove : canReject;
+  if (!request || !canReview) {
+    toast(
+      status === "approved"
+        ? "Chỉ yêu cầu đã xác nhận thanh toán mới được duyệt"
+        : "Chỉ yêu cầu chưa xử lý mới có thể bị từ chối",
+      "warn",
+    );
     return;
   }
   const label =
@@ -4734,7 +4745,9 @@ async function reviewAdminPayment(requestId, status) {
     note:
       status === "approved"
         ? "Nếu duyệt, hệ thống sẽ mở gói tương ứng cho user."
-        : "Yêu cầu sẽ chuyển sang trạng thái rejected.",
+        : paymentStatus === "awaiting_payment"
+          ? "Yêu cầu chưa xác nhận thanh toán sẽ bị đóng và user có thể tạo yêu cầu mới."
+          : "Yêu cầu sẽ chuyển sang trạng thái rejected.",
     confirmLabel: status === "approved" ? "Duyệt" : "Từ chối",
     tone: status === "approved" ? "primary" : "danger",
   });
