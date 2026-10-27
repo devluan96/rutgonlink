@@ -409,6 +409,12 @@ function clearPersistentStatsDataCaches() {
   } catch (_) {}
 }
 
+function clearPersistentPaymentAdminCache() {
+  try {
+    localStorage.removeItem(buildPersistentStatsCacheKey("admin-payments"));
+  } catch (_) {}
+}
+
 function hydrateStatsCachesFromPersistentStorage() {
   try {
     const defaultStatsPayload = readPersistentStatsCache("stats-payload", {
@@ -2398,6 +2404,7 @@ async function doRegister() {
 
 async function doLogout() {
   await fetch("/api/auth/logout", { method: "POST" });
+  clearPersistentPaymentAdminCache();
   user = null;
   syncLabSharedSettingsStorageFromUser();
   resetStatsDataCaches();
@@ -4161,6 +4168,7 @@ async function logoutAllDevices() {
     if (!response.ok) {
       throw new Error(data.error || "Không thể đăng xuất tất cả thiết bị");
     }
+    clearPersistentPaymentAdminCache();
     user = null;
     syncLabSharedSettingsStorageFromUser();
     billingConfig = null;
@@ -4205,6 +4213,7 @@ async function deleteAccount() {
     if (!response.ok) {
       throw new Error(data.error || "Không thể xóa tài khoản");
     }
+    clearPersistentPaymentAdminCache();
     user = null;
     syncLabSharedSettingsStorageFromUser();
     billingConfig = null;
@@ -5094,10 +5103,15 @@ function updateTopbar() {
   if (billingCurrentRole) billingCurrentRole.textContent = role || "user";
   const billingStatus = document.getElementById("billingStatus");
   if (billingStatus) {
-    billingStatus.textContent =
-      plan === "pro" || plan === "business" || plan === "admin"
-        ? "Đã kích hoạt"
-        : "Dùng thử";
+    if (plan === "admin") {
+      billingStatus.textContent = "Đã kích hoạt";
+    } else if ((plan === "pro" || plan === "business") && user?.plan_expires_at) {
+      billingStatus.textContent = `Hiệu lực đến ${formatAdminDateTime(user.plan_expires_at)}`;
+    } else if (plan === "pro" || plan === "business") {
+      billingStatus.textContent = "Đã kích hoạt (gói cũ không thời hạn)";
+    } else {
+      billingStatus.textContent = "Dùng thử";
+    }
   }
   const billingPromo = document.getElementById("billingPromo");
   if (billingPromo) {
@@ -11216,25 +11230,34 @@ function renderChart() {
 // ══════════════════════════════════════════════════
 function updatePricingUI() {
   const plan = user?.plan || "guest";
-  ["free", "pro", "business"].forEach((p) => {
-    const card = document.getElementById(
-      `plan${p.charAt(0).toUpperCase() + p.slice(1)}Card`,
-    );
-    const btn = document.getElementById(
-      `plan${p.charAt(0).toUpperCase() + p.slice(1)}Btn`,
-    );
+  const planRank = { guest: 0, free: 0, pro: 1, business: 2, admin: 3 };
+  const cards = {
+    free: ["planFreeCard", "planFreeBtn", "Gói miễn phí"],
+    pro: ["planProCard", "planProBtn", "Nâng cấp Pro →"],
+    business: ["planBizCard", "planBizBtn", "Nâng cấp Business →"],
+  };
+  Object.entries(cards).forEach(([p, [cardId, buttonId, defaultLabel]]) => {
+    const card = document.getElementById(cardId);
+    const btn = document.getElementById(buttonId);
     if (!card || !btn) return;
+    card.querySelector(".current-plan-badge")?.remove();
+    btn.disabled = false;
+    btn.textContent = defaultLabel;
     const isCurrent =
       (p === "free" && (plan === "free" || plan === "guest")) || plan === p;
     if (isCurrent) {
-      let b = card.querySelector(".current-plan-badge");
-      if (!b) {
-        b = document.createElement("div");
-        b.className = "current-plan-badge";
-        card.insertBefore(b, card.firstChild);
-      }
+      const b = document.createElement("div");
+      b.className = "current-plan-badge";
+      card.insertBefore(b, card.firstChild);
       b.textContent = "✓ Gói hiện tại";
-      btn.textContent = "Gói hiện tại";
+      if (p === "pro" || p === "business") {
+        btn.textContent = `Gia hạn ${p === "pro" ? "Pro" : "Business"} →`;
+      } else {
+        btn.textContent = "Gói hiện tại";
+        btn.disabled = true;
+      }
+    } else if ((planRank[p] || 0) < (planRank[plan] || 0)) {
+      btn.textContent = "Không thể hạ gói tại đây";
       btn.disabled = true;
     }
   });
@@ -11976,8 +11999,7 @@ function hydrateAdminSectionFromPersistentCache(section) {
     adminRedirects = Array.isArray(payload.events) ? payload.events : [];
     renderAdminRedirects(adminRedirects, payload.file || "logs/redirect.log");
   } else if (section === "payments") {
-    adminPayments = Array.isArray(payload.requests) ? payload.requests : [];
-    renderAdminPayments();
+    return false;
   } else {
     return false;
   }
@@ -12077,7 +12099,7 @@ async function loadAdminData(force = false) {
         fetch("/api/admin/payments").then(async (response) => {
           if (!response.ok) return;
           const payload = await response.json();
-          writePersistentStatsCache(`admin-payments`, payload);
+          clearPersistentPaymentAdminCache();
           adminPayments = payload.requests || [];
           renderAdminPayments();
           markAdminSectionLoaded("payments");

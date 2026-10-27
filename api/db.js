@@ -119,6 +119,8 @@ const USER_AUTH_SELECT = [
   'lab_shared_settings_json',
   'can_use_lab',
   'plan',
+  'plan_started_at',
+  'plan_expires_at',
   'role',
   'two_factor_enabled',
   'two_factor_secret',
@@ -127,6 +129,9 @@ const USER_AUTH_SELECT = [
   'session_revoked_after',
   'created_at',
 ].join(',');
+const USER_AUTH_LEGACY_SELECT = USER_AUTH_SELECT.split(',')
+  .filter((column) => !['plan_started_at', 'plan_expires_at'].includes(column))
+  .join(',');
 const LINK_DETAIL_SELECT = [
   'id',
   'short_code',
@@ -167,6 +172,7 @@ function check(error, context='') {
   // Unique violation
   if (error.code === '23505') {
     if (context === 'user') throw new Error('EMAIL_EXISTS');
+    if (context === 'payment_request') throw new Error('PAYMENT_REQUEST_ACTIVE_EXISTS');
     throw new Error('SHORT_CODE_EXISTS');
   }
   throw new Error(error.message || JSON.stringify(error));
@@ -635,31 +641,67 @@ async function init() {
     },
 
     async getUserByEmail(email) {
-      const { data } = await sb
+      let { data, error } = await sb
         .from('users')
         .select(USER_AUTH_SELECT)
         .eq('email', email)
         .maybeSingle();
+      if (isMissingAnyColumnError(error, ['plan_started_at', 'plan_expires_at'])) {
+        ({ data, error } = await sb
+          .from('users')
+          .select(USER_AUTH_LEGACY_SELECT)
+          .eq('email', email)
+          .maybeSingle());
+      }
+      check(error, 'user_auth');
       return data;
     },
 
     async getUserById(id) {
-      const { data } = await sb
+      let { data, error } = await sb
         .from('users')
         .select(USER_AUTH_SELECT)
         .eq('id', id)
         .maybeSingle();
+      if (isMissingAnyColumnError(error, ['plan_started_at', 'plan_expires_at'])) {
+        ({ data, error } = await sb
+          .from('users')
+          .select(USER_AUTH_LEGACY_SELECT)
+          .eq('id', id)
+          .maybeSingle());
+      }
+      check(error, 'user_auth');
       return data;
     },
 
     async updateUserPlan(userId, plan) {
-      const { error } = await sb.from('users').update({ plan }).eq('id', userId);
+      const updates = { plan };
+      if (plan === 'free' || plan === 'admin') {
+        updates.plan_started_at = null;
+        updates.plan_expires_at = null;
+      }
+      let { error } = await sb.from('users').update(updates).eq('id', userId);
+      if (isMissingAnyColumnError(error, ['plan_started_at', 'plan_expires_at'])) {
+        ({ error } = await sb.from('users').update({ plan }).eq('id', userId));
+      }
       check(error);
     },
 
     async updateUserRole(userId, role) {
       const { error } = await sb.from('users').update({ role }).eq('id', userId);
       check(error);
+    },
+
+    async expireUserPlanIfDue(userId) {
+      const now = new Date().toISOString();
+      const { error } = await sb
+        .from('users')
+        .update({ plan: 'free', plan_started_at: null, plan_expires_at: null })
+        .eq('id', userId)
+        .in('plan', ['pro', 'business'])
+        .not('plan_expires_at', 'is', null)
+        .lte('plan_expires_at', now);
+      check(error, 'user_plan_expiry');
     },
 
     async updateUserLabAccess(userId, canUseLab) {
@@ -799,7 +841,14 @@ async function init() {
 
     async getAllUsers() {
       const requiredColumns = ['id', 'email', 'name', 'plan', 'role', 'created_at'];
-      const activeOptionalColumns = ['phone', 'avatar_url', 'can_use_lab', 'updated_at'];
+      const activeOptionalColumns = [
+        'phone',
+        'avatar_url',
+        'can_use_lab',
+        'plan_started_at',
+        'plan_expires_at',
+        'updated_at',
+      ];
       const omittedColumns = [];
 
       while (true) {
@@ -870,6 +919,8 @@ async function init() {
         'user_id',
         'plan',
         'amount',
+        'currency',
+        'period_months',
         'status',
         'reference_code',
         'transfer_note',
@@ -896,6 +947,8 @@ async function init() {
         'user_id',
         'plan',
         'amount',
+        'currency',
+        'period_months',
         'status',
         'reference_code',
         'transfer_note',
@@ -922,6 +975,8 @@ async function init() {
         'user_id',
         'plan',
         'amount',
+        'currency',
+        'period_months',
         'status',
         'reference_code',
         'transfer_note',
@@ -953,6 +1008,8 @@ async function init() {
         'user_name',
         'plan',
         'amount',
+        'currency',
+        'period_months',
         'status',
         'reference_code',
         'transfer_note',
@@ -970,6 +1027,17 @@ async function init() {
         .limit(safeLimit);
       check(error, 'payment_request_list');
       return data || [];
+    },
+
+    async reviewPaymentRequest({ requestId, adminUserId, action, adminNote = null }) {
+      const { data, error } = await sb.rpc('review_payment_request', {
+        p_request_id: requestId,
+        p_admin_user_id: adminUserId,
+        p_action: action,
+        p_admin_note: adminNote,
+      });
+      check(error, 'payment_review');
+      return Array.isArray(data) ? data[0] || null : data;
     },
 
     async getWorkspaceByOwnerUserId(ownerUserId) {

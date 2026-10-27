@@ -103,6 +103,12 @@ const SUPABASE_SERVICE_ROLE_KEY = (
 const SUPABASE_ANON_KEY = (process.env.SUPABASE_ANON_KEY || "").trim();
 const GUEST_SESSION_COOKIE = "guest_session";
 const GUEST_SESSION_MAX_AGE = 30 * 24 * 3600 * 1000;
+const AUTH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "lax",
+  secure: process.env.NODE_ENV === "production",
+  path: "/",
+};
 const ANALYTICS_TIME_ZONE = (
   process.env.APP_TIME_ZONE || "Asia/Ho_Chi_Minh"
 ).trim();
@@ -246,9 +252,30 @@ const PLANS = {
   },
 };
 const BILLING_PLANS = {
-  pro: { code: "pro", label: "Pro", amount: 99000 },
-  business: { code: "business", label: "Business", amount: 299000 },
+  pro: { code: "pro", label: "Pro", amount: 99000, period_months: 1 },
+  business: {
+    code: "business",
+    label: "Business",
+    amount: 299000,
+    period_months: 1,
+  },
 };
+const BILLING_PLAN_RANK = { free: 0, pro: 1, business: 2, admin: 3 };
+
+function getEffectiveUserPlan(user, now = new Date()) {
+  const plan = String(user?.plan || "free").trim().toLowerCase() || "free";
+  if (plan === "admin" || !["pro", "business"].includes(plan)) return plan;
+  if (!user?.plan_expires_at) return plan;
+  const expiresAt = Date.parse(user.plan_expires_at);
+  if (!Number.isFinite(expiresAt)) return plan;
+  return expiresAt <= now.getTime() ? "free" : plan;
+}
+
+function canPurchaseBillingPlan(currentPlan, targetPlan) {
+  const currentRank = BILLING_PLAN_RANK[String(currentPlan || "free")] ?? 0;
+  const targetRank = BILLING_PLAN_RANK[String(targetPlan || "")] ?? -1;
+  return targetRank > 0 && currentRank < BILLING_PLAN_RANK.admin && targetRank >= currentRank;
+}
 function readEnvValue(...names) {
   for (const name of names) {
     const value = String(process.env[name] || "").trim();
@@ -341,10 +368,8 @@ app.use((req, res, next) => {
 
   req.guestSessionId = nanoid(24);
   res.cookie(GUEST_SESSION_COOKIE, req.guestSessionId, {
-    httpOnly: true,
-    sameSite: "lax",
+    ...AUTH_COOKIE_OPTIONS,
     maxAge: GUEST_SESSION_MAX_AGE,
-    path: "/",
   });
   next();
 });
@@ -2238,6 +2263,11 @@ async function resolveUserFromTokenPayload(tokenPayload) {
   if (user.role === "admin" || isAdminEmail(user.email)) {
     user.plan = "admin";
     user.role = "admin";
+  } else if (getEffectiveUserPlan(user) === "free" && user.plan !== "free") {
+    await database.expireUserPlanIfDue(user.id);
+    user.plan = "free";
+    user.plan_started_at = null;
+    user.plan_expires_at = null;
   }
   return user;
 }
@@ -2569,7 +2599,7 @@ async function requireAuth(req, res, next) {
     const payload = jwt.verify(token, JWT_SECRET);
     const user = await resolveUserFromTokenPayload(payload);
     if (!user) {
-      res.clearCookie("token");
+      res.clearCookie("token", AUTH_COOKIE_OPTIONS);
       return res
         .status(401)
         .json({ error: "Phiên đăng nhập không còn hợp lệ" });
@@ -5045,6 +5075,8 @@ function buildAuthUserPayload(user, isAdmin = false) {
     lab_shared_settings: normalizeUserLabSharedSettings(settingsBundle),
     can_use_lab: isAdmin ? true : !!user.can_use_lab,
     plan: isAdmin ? "admin" : user.plan,
+    plan_started_at: isAdmin ? null : user.plan_started_at || null,
+    plan_expires_at: isAdmin ? null : user.plan_expires_at || null,
     role: isAdmin ? "admin" : user.role || "user",
     two_factor_enabled: !!user.two_factor_enabled,
     created_at: user.created_at,
@@ -8818,9 +8850,8 @@ async function issueAuthSession(req, res, user, isAdmin = false) {
     expiresIn: "30d",
   });
   res.cookie("token", token, {
-    httpOnly: true,
+    ...AUTH_COOKIE_OPTIONS,
     maxAge: 30 * 24 * 3600 * 1000,
-    sameSite: "lax",
   });
   res.json({ user: buildAuthUserPayload(user, isAdmin) });
 }
@@ -9065,7 +9096,7 @@ app.post("/api/auth/supabase", async (req, res) => {
 });
 
 app.post("/api/auth/logout", (_, res) => {
-  res.clearCookie("token");
+  res.clearCookie("token", AUTH_COOKIE_OPTIONS);
   res.json({ ok: true });
 });
 
@@ -9075,7 +9106,7 @@ app.post("/api/auth/logout-all", requireAuth, async (req, res) => {
     if (!currentUser) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
     await database.revokeUserSessions(currentUser.id, new Date().toISOString());
-    res.clearCookie("token");
+    res.clearCookie("token", AUTH_COOKIE_OPTIONS);
     res.json({ ok: true });
   } catch (e) {
     res
@@ -9232,7 +9263,7 @@ app.delete("/api/auth/me", requireAuth, async (req, res) => {
     if (!currentUser) return res.status(401).json({ error: "Chưa đăng nhập" });
     const database = await getDb();
     await database.deleteUser(currentUser.id);
-    res.clearCookie("token");
+    res.clearCookie("token", AUTH_COOKIE_OPTIONS);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: "Không thể xóa tài khoản: " + e.message });
@@ -9464,6 +9495,11 @@ app.post("/api/billing/requests", requireAuth, async (req, res) => {
     if (!planMeta) {
       return res.status(400).json({ error: "Gói thanh toán không hợp lệ" });
     }
+    if (!canPurchaseBillingPlan(getEffectiveUserPlan(user), planMeta.code)) {
+      return res.status(409).json({
+        error: "Không thể thanh toán để chuyển xuống gói thấp hơn hoặc thay đổi gói admin",
+      });
+    }
     const database = await getDb();
     const activeRequest = await database.getLatestActivePaymentRequestByUser(
       user.id,
@@ -9487,6 +9523,8 @@ app.post("/api/billing/requests", requireAuth, async (req, res) => {
         {
           plan: planMeta.code,
           amount: planMeta.amount,
+          currency: "VND",
+          period_months: planMeta.period_months,
           transfer_note: transferNote,
           payer_note:
             String(req.body?.payer_note || activeRequest.payer_note || "")
@@ -9512,6 +9550,8 @@ app.post("/api/billing/requests", requireAuth, async (req, res) => {
       user_name: user.name || null,
       plan: planMeta.code,
       amount: planMeta.amount,
+      currency: "VND",
+      period_months: planMeta.period_months,
       status: "awaiting_payment",
       reference_code: referenceCode,
       transfer_note: transferNote,
@@ -9525,6 +9565,11 @@ app.post("/api/billing/requests", requireAuth, async (req, res) => {
       config: getPaymentConfig(),
     });
   } catch (e) {
+    if (e.message === "PAYMENT_REQUEST_ACTIVE_EXISTS") {
+      return res.status(409).json({
+        error: "Bạn đã có yêu cầu thanh toán đang hoạt động. Vui lòng tải lại trang.",
+      });
+    }
     res
       .status(500)
       .json({ error: "Không thể tạo yêu cầu thanh toán: " + e.message });
@@ -10405,39 +10450,29 @@ app.patch("/api/admin/payments/:id", requireAdmin, async (req, res) => {
     const action = String(req.body?.status || "")
       .trim()
       .toLowerCase();
-    const paymentRequest = await database.getPaymentRequestById(requestId);
-    if (!paymentRequest) {
-      return res
-        .status(404)
-        .json({ error: "Không tìm thấy yêu cầu thanh toán" });
-    }
     if (!["approved", "rejected"].includes(action)) {
       return res.status(400).json({ error: "Trạng thái duyệt không hợp lệ" });
     }
-    if (paymentRequest.status !== "submitted") {
-      return res.status(400).json({
-        error: "Chỉ yêu cầu đã gửi xác nhận mới được duyệt hoặc từ chối",
-      });
-    }
-    const patch = {
-      status: action,
-      admin_note:
-        String(req.body?.admin_note || "")
-          .trim()
-          .slice(0, 240) || null,
-      reviewed_by: adminUser.id,
-      reviewed_at: new Date().toISOString(),
-    };
-    const updated = await database.updatePaymentRequest(requestId, patch);
-    if (action === "approved") {
-      const planMeta = getBillingPlanMeta(updated.plan);
-      if (planMeta) {
-        await database.updateUserPlan(updated.user_id, planMeta.code);
-      }
-    }
+    const updated = await database.reviewPaymentRequest({
+      requestId,
+      adminUserId: adminUser.id,
+      action,
+      adminNote: String(req.body?.admin_note || "").trim().slice(0, 240) || null,
+    });
     const requests = await database.listPaymentRequests(300);
     res.json({ request: updated, requests });
   } catch (e) {
+    if (/PAYMENT_REQUEST_NOT_FOUND|PAYMENT_USER_NOT_FOUND/.test(e.message || "")) {
+      return res.status(404).json({ error: "Không tìm thấy yêu cầu hoặc người dùng thanh toán" });
+    }
+    if (/PAYMENT_REQUEST_ALREADY_REVIEWED/.test(e.message || "")) {
+      return res.status(409).json({
+        error: "Yêu cầu đã được xử lý bởi một phiên quản trị khác. Vui lòng tải lại.",
+      });
+    }
+    if (/PAYMENT_PLAN_DOWNGRADE_NOT_ALLOWED/.test(e.message || "")) {
+      return res.status(409).json({ error: "Không thể duyệt yêu cầu hạ gói" });
+    }
     res.status(500).json({ error: e.message });
   }
 });
@@ -14165,6 +14200,8 @@ module.exports.__testUtils = {
   shouldAssignGuestSession,
   clearShopeeShortUrlCache,
   resolveShopeeShortUrl,
+  canPurchaseBillingPlan,
+  getEffectiveUserPlan,
 };
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
