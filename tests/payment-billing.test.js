@@ -15,7 +15,7 @@ const rejectAwaitingMigrationPath = path.join(
   "..",
   "supabase",
   "migrations",
-  "20261027_allow_reject_awaiting_payments.sql",
+  "20261027_reject_awaiting_payments.sql",
 );
 
 test("billing plan transitions allow renewals and upgrades but reject downgrades", () => {
