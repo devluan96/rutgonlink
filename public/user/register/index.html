@@ -14,14 +14,14 @@
     <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" sizes="any" />
     <link rel="shortcut icon" href="/favicon.svg?v=2" />
     <link rel="stylesheet" href="/app.css?v=20260619c" />
-    <link rel="stylesheet" href="/auth.css?v=20260619c" />
+    <link rel="stylesheet" href="/auth.css?v=20261028d" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <script type="module" src="/auth.js?v=20260730b" defer></script>
+    <script type="module" src="/auth.js?v=20261028b" defer></script>
   </head>
   <body class="auth-page">
     <main
@@ -44,17 +44,17 @@
               />
               <div class="auth-brand-copy">
                 <strong>BocLink</strong>
-                <span>Rút gọn link, QR, bio và tracking.</span>
+                <span>Link gọn. Dữ liệu rõ. Bán hàng nhanh.</span>
               </div>
             </div>
 
-            <div class="auth-kicker">Bắt đầu miễn phí, không rườm rà</div>
+            <div class="auth-kicker">Một workspace, mọi công cụ</div>
 
             <div class="auth-hero-copy">
-              <h1>Bắt đầu với một tài khoản gọn nhẹ.</h1>
+              <h1>Tạo một lần. Dùng cho mọi chiến dịch.</h1>
               <p>
-                Tạo tài khoản để quản lý link ngắn, QR và bio page trong một workspace.
-                Bạn cũng có thể đăng ký nhanh bằng Google / Gmail qua Supabase.
+                Thiết lập workspace để tạo link, QR, bio page và theo dõi hiệu quả bán hàng
+                ngay từ chiến dịch đầu tiên.
               </p>
             </div>
 
@@ -120,8 +120,8 @@
                   </svg>
                 </span>
                 <div>
-                  <strong>Tạo tài khoản nhanh</strong>
-                  <span>Thiết lập xong là có thể bắt đầu ngay.</span>
+                  <strong>Bắt đầu trong vài phút</strong>
+                  <span>Tạo tài khoản và xuất bản link đầu tiên ngay.</span>
                 </div>
               </article>
               <article class="auth-metric">
@@ -150,8 +150,8 @@
                   </svg>
                 </span>
                 <div>
-                  <strong>Link, QR và bio</strong>
-                  <span>Tất cả công cụ chạy trong cùng một không gian.</span>
+                  <strong>Một workspace duy nhất</strong>
+                  <span>Link, QR, bio page và tracking luôn đồng bộ.</span>
                 </div>
               </article>
               <article class="auth-metric">
@@ -184,8 +184,8 @@
                   </svg>
                 </span>
                 <div>
-                  <strong>Google / Gmail</strong>
-                  <span>Đăng ký nhanh bằng Supabase OAuth.</span>
+                  <strong>Đăng ký an toàn</strong>
+                  <span>Dùng Google hoặc tạo tài khoản BocLink riêng.</span>
                 </div>
               </article>
             </div>
@@ -194,14 +194,14 @@
           <section class="auth-card">
             <div class="auth-card-top">
               <span class="auth-route-badge">Bắt đầu miễn phí</span>
-              <h2>Tạo tài khoản</h2>
-              <p>Tạo tài khoản mới để quản lý link, QR và bio page của bạn.</p>
+              <h2>Tạo tài khoản BocLink</h2>
+              <p>Bắt đầu miễn phí bằng Google hoặc email của bạn.</p>
             </div>
 
-            <div id="authErr" class="auth-error" aria-live="polite"></div>
+            <div id="authErr" class="auth-error" role="alert" aria-live="polite" tabindex="-1"></div>
 
             <div class="auth-oauth">
-              <div class="auth-oauth-label">Tiếp tục bằng Google / Gmail</div>
+              <div class="auth-oauth-label">Tiếp tục bằng Google</div>
               <button id="oauthButton" class="auth-oauth-button" type="button">
                 <span class="auth-oauth-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none">
@@ -211,14 +211,14 @@
                     />
                   </svg>
                 </span>
-                <span id="oauthButtonLabel">Tiếp tục bằng Google / Gmail</span>
+                <span id="oauthButtonLabel">Tiếp tục bằng Google</span>
               </button>
               <p id="oauthHint" class="auth-oauth-hint" hidden></p>
             </div>
 
             <div class="auth-divider"><span>hoặc</span></div>
 
-            <form id="authForm" class="auth-form" autocomplete="on">
+            <form id="authForm" class="auth-form" autocomplete="on" novalidate>
               <div class="auth-field">
                 <label class="auth-label" for="regName">Họ tên</label>
                 <input
@@ -228,7 +228,11 @@
                   class="auth-input"
                   placeholder="Nguyễn Văn A"
                   autocomplete="name"
+                  aria-describedby="regNameError"
+                  data-auth-validate
+                  required
                 />
+                <p id="regNameError" class="auth-field-error" hidden></p>
               </div>
               <div class="auth-field">
                 <label class="auth-label" for="regEmail">Email</label>
@@ -239,18 +243,38 @@
                   class="auth-input"
                   placeholder="name@domain.com"
                   autocomplete="email"
+                  aria-describedby="regEmailError"
+                  data-auth-validate
+                  required
                 />
+                <p id="regEmailError" class="auth-field-error" hidden></p>
               </div>
               <div class="auth-field">
                 <label class="auth-label" for="regPass">Mật khẩu</label>
-                <input
-                  type="password"
-                  id="regPass"
-                  name="password"
-                  class="auth-input"
-                  placeholder="Tạo mật khẩu"
-                  autocomplete="new-password"
-                />
+                <div class="auth-password-control">
+                  <input
+                    type="password"
+                    id="regPass"
+                    name="password"
+                    class="auth-input"
+                    placeholder="Tạo mật khẩu"
+                    autocomplete="new-password"
+                    minlength="6"
+                    aria-describedby="regPassHelp regPassError"
+                    data-auth-validate
+                    required
+                  />
+                  <button
+                    class="auth-password-toggle"
+                    type="button"
+                    aria-label="Hiện mật khẩu"
+                    aria-pressed="false"
+                    data-password-target="regPass"
+                  >Hiện</button>
+                </div>
+                <p id="regPassHelp" class="auth-field-hint">Ít nhất 6 ký tự.</p>
+                <p id="regCapsHint" class="auth-caps-hint" role="status" aria-live="polite" hidden>Caps Lock đang bật.</p>
+                <p id="regPassError" class="auth-field-error" hidden></p>
               </div>
               <button class="auth-submit" type="submit">Đăng ký</button>
             </form>
@@ -261,8 +285,9 @@
             </div>
 
             <p class="auth-note">
-              Bằng việc tiếp tục, bạn đồng ý với điều khoản sử dụng và chính sách bảo mật
-              của BocLink.click.
+              Bằng việc tiếp tục, bạn đồng ý với
+              <a href="/terms">Điều khoản sử dụng</a> và
+              <a href="/privacy">Chính sách bảo mật</a> của BocLink.click.
             </p>
           </section>
         </div>

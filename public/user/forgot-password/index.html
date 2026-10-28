@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="theme-color" content="#3b82f6" />
+    <title>Quên mật khẩu - BocLink</title>
+    <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
+    <link rel="stylesheet" href="/app.css?v=20260619c" />
+    <link rel="stylesheet" href="/auth.css?v=20261028d" />
+    <script src="/password-reset.js?v=20261028a" defer></script>
+  </head>
+  <body class="auth-page">
+    <main id="passwordResetPage" class="auth-page-shell" data-reset-mode="request">
+      <div class="auth-stage">
+        <div class="auth-shell auth-shell--recovery">
+          <section class="auth-hero">
+            <a class="auth-brand" href="/" aria-label="Về trang chủ BocLink">
+              <img class="auth-brand-mark" src="/favicon.svg?v=2" alt="" />
+              <span class="auth-brand-copy"><strong>BocLink</strong><span>Khôi phục tài khoản an toàn</span></span>
+            </a>
+            <div class="auth-kicker">Liên kết dùng một lần</div>
+            <div class="auth-hero-copy">
+              <h1>Lấy lại quyền truy cập.</h1>
+              <p>Nhập email đã đăng ký. BocLink sẽ gửi một liên kết có hiệu lực trong 30 phút.</p>
+            </div>
+            <div class="auth-recovery-points" aria-label="Thông tin bảo mật">
+              <span>Không tiết lộ tài khoản có tồn tại</span>
+              <span>Token chỉ dùng được một lần</span>
+              <span>Session cũ bị thu hồi sau khi đổi mật khẩu</span>
+            </div>
+          </section>
+          <section class="auth-card">
+            <div class="auth-card-top">
+              <span class="auth-route-badge">Khôi phục tài khoản</span>
+              <h2>Quên mật khẩu?</h2>
+              <p>Nhập email bạn dùng với BocLink.</p>
+            </div>
+            <div id="passwordResetMessage" class="auth-status" role="status" aria-live="polite" tabindex="-1" hidden></div>
+            <form id="passwordResetForm" class="auth-form" novalidate>
+              <div class="auth-field">
+                <label class="auth-label" for="resetEmail">Email</label>
+                <input class="auth-input" id="resetEmail" name="email" type="email" autocomplete="email" placeholder="name@domain.com" required />
+              </div>
+              <button class="auth-submit" type="submit">Gửi liên kết đặt lại</button>
+            </form>
+            <div class="auth-foot"><a class="auth-link" href="/login">Quay lại đăng nhập</a></div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

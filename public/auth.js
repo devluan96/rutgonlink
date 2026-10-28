@@ -94,11 +94,83 @@
     oauthHint.textContent = "";
   };
 
+  const getFieldErrorElement = (input) =>
+    document.getElementById(`${input?.id || ""}Error`);
+
+  const getFieldValidationMessage = (input) => {
+    const value = input.value.trim();
+    if (!value) {
+      if (input.id === "regName") return "Nhập họ tên.";
+      if (input.type === "email") return "Nhập email.";
+      return "Nhập mật khẩu.";
+    }
+    if (input.type === "email" && input.validity.typeMismatch) {
+      return "Email chưa đúng định dạng.";
+    }
+    if (input.id === "regPass" && value.length < 6) {
+      return "Mật khẩu cần ít nhất 6 ký tự.";
+    }
+    return "";
+  };
+
+  const validateField = (input) => {
+    const message = getFieldValidationMessage(input);
+    const errorElement = getFieldErrorElement(input);
+    input.setAttribute("aria-invalid", message ? "true" : "false");
+    input.classList.toggle("is-invalid", !!message);
+    if (errorElement) {
+      errorElement.textContent = message;
+      errorElement.hidden = !message;
+    }
+    return !message;
+  };
+
+  const setupFormEnhancements = () => {
+    if (!form) return;
+
+    form.querySelectorAll("[data-auth-validate]").forEach((input) => {
+      input.addEventListener("blur", () => {
+        input.dataset.touched = "true";
+        validateField(input);
+      });
+      input.addEventListener("input", () => {
+        if (input.dataset.touched === "true" || input.getAttribute("aria-invalid") === "true") {
+          validateField(input);
+        }
+      });
+    });
+
+    form.querySelectorAll("[data-password-target]").forEach((toggle) => {
+      const input = document.getElementById(toggle.dataset.passwordTarget || "");
+      if (!input) return;
+      toggle.addEventListener("click", () => {
+        const showing = input.type === "text";
+        input.type = showing ? "password" : "text";
+        toggle.textContent = showing ? "Hiện" : "Ẩn";
+        toggle.setAttribute("aria-label", showing ? "Hiện mật khẩu" : "Ẩn mật khẩu");
+        toggle.setAttribute("aria-pressed", showing ? "false" : "true");
+        input.focus({ preventScroll: true });
+      });
+
+      const capsHint = document.getElementById(
+        input.id === "regPass" ? "regCapsHint" : "loginCapsHint",
+      );
+      const updateCapsLock = (event) => {
+        if (capsHint) capsHint.hidden = !event.getModifierState?.("CapsLock");
+      };
+      input.addEventListener("keydown", updateCapsLock);
+      input.addEventListener("keyup", updateCapsLock);
+      input.addEventListener("blur", () => {
+        if (capsHint) capsHint.hidden = true;
+      });
+    });
+  };
+
   const setBusy = (busy) => {
     if (submitBtn) submitBtn.disabled = busy;
     if (oauthButton) oauthButton.disabled = busy;
-    form?.querySelectorAll("input").forEach((input) => {
-      input.disabled = busy;
+    form?.querySelectorAll("input, .auth-password-toggle").forEach((control) => {
+      control.disabled = busy;
     });
   };
 
@@ -168,12 +240,12 @@
       const titleEl = authCardTop.querySelector("h2");
       const copyEl = authCardTop.querySelector("p");
       if (titleEl) {
-        titleEl.textContent = active ? "Xác thực 2 lớp" : "Đăng nhập";
+        titleEl.textContent = active ? "Xác thực 2 lớp" : "Đăng nhập BocLink";
       }
       if (copyEl) {
         copyEl.textContent = active
           ? `Nhập mã OTP đang hiển thị trong ứng dụng xác thực cho ${pendingTwoFactor?.email || "tài khoản của bạn"}.`
-          : "Vào lại bảng điều khiển để tiếp tục theo dõi link, QR và bio.";
+          : "Tiếp tục bằng Google hoặc tài khoản của bạn.";
       }
     }
     if (submitBtn) {
@@ -232,19 +304,6 @@
       return isAdmin ? target : "/dashboard";
     }
     return target;
-  };
-
-  const syncPointer = (event) => {
-    const rect = root.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = ((event.clientY - rect.top) / rect.height) * 2 - 1;
-    root.style.setProperty("--auth-mx", x.toFixed(3));
-    root.style.setProperty("--auth-my", y.toFixed(3));
-  };
-
-  const resetPointer = () => {
-    root.style.setProperty("--auth-mx", "0");
-    root.style.setProperty("--auth-my", "0");
   };
 
   const readFormPayload = () => {
@@ -517,6 +576,19 @@
       await submitTwoFactorCode();
       return;
     }
+    const validationInputs = [...form.querySelectorAll("[data-auth-validate]")];
+    validationInputs.forEach((input) => {
+      input.dataset.touched = "true";
+      validateField(input);
+    });
+    const invalidInput = validationInputs.find(
+      (input) => input.getAttribute("aria-invalid") === "true",
+    );
+    if (invalidInput) {
+      setError("Kiểm tra lại các thông tin được đánh dấu.");
+      invalidInput.focus();
+      return;
+    }
     const payload = readFormPayload();
     if (!payload.email || !payload.password) {
       setError("Vui lòng nhập đầy đủ");
@@ -529,11 +601,8 @@
     await submitAuth(payload);
   });
 
-  root.addEventListener("pointermove", syncPointer);
-  root.addEventListener("pointerleave", resetPointer);
-  root.addEventListener("blur", resetPointer, true);
-
   ensureLoadingOverlay();
   updateTwoFactorUi();
+  setupFormEnhancements();
   void initSupabaseOAuth();
 })();

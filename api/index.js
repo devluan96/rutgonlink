@@ -18,6 +18,13 @@ const cookieParser = require("cookie-parser");
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const { init: initDb } = require("./db");
+const {
+  PASSWORD_RESET_TTL_MS,
+  createPasswordResetToken,
+  hashPasswordResetToken,
+  resolvePasswordResetBaseUrl,
+  sendPasswordResetEmail,
+} = require("./passwordReset");
 const { isAffiliateShortenUrl } = require("../affiliate");
 
 const app = express();
@@ -101,6 +108,13 @@ const SUPABASE_SERVICE_ROLE_KEY = (
   process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 ).trim();
 const SUPABASE_ANON_KEY = (process.env.SUPABASE_ANON_KEY || "").trim();
+const RESEND_API_KEY = (process.env.RESEND_API_KEY || "").trim();
+const PASSWORD_RESET_FROM = (
+  process.env.PASSWORD_RESET_FROM || "BocLink <no-reply@boclink.click>"
+).trim();
+const PASSWORD_RESET_BASE_URL = (
+  process.env.PASSWORD_RESET_BASE_URL || BASE_URL
+).trim();
 const GUEST_SESSION_COOKIE = "guest_session";
 const GUEST_SESSION_MAX_AGE = 30 * 24 * 3600 * 1000;
 const AUTH_COOKIE_OPTIONS = {
@@ -578,6 +592,31 @@ app.get(
   serveAuthHtml(
     path.join(__dirname, "..", "public", "user", "register", "index.html"),
   ),
+);
+const serveNoIndexPage = (filePath) => (_req, res) => {
+  res.set("Cache-Control", "private, max-age=60, must-revalidate");
+  res.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+  res.sendFile(filePath);
+};
+app.get(
+  ["/forgot-password", "/forgot-password/"],
+  serveNoIndexPage(
+    path.join(__dirname, "..", "public", "user", "forgot-password", "index.html"),
+  ),
+);
+app.get(
+  ["/reset-password", "/reset-password/"],
+  serveNoIndexPage(
+    path.join(__dirname, "..", "public", "user", "reset-password", "index.html"),
+  ),
+);
+app.get(
+  ["/terms", "/terms/"],
+  serveNoIndexPage(path.join(__dirname, "..", "public", "terms.html")),
+);
+app.get(
+  ["/privacy", "/privacy/"],
+  serveNoIndexPage(path.join(__dirname, "..", "public", "privacy.html")),
 );
 app.get(["/user/login", "/user/login/"], redirectToCanonical("/login"));
 app.get("/user/login/index.html", redirectToCanonical("/login"));
@@ -8902,17 +8941,150 @@ async function verifySupabaseAccessToken(accessToken) {
   return response.json();
 }
 
-app.post("/api/auth/register", async (req, res) => {
+const AUTH_EMAIL_MAX_LENGTH = 320;
+const AUTH_PASSWORD_MAX_LENGTH = 128;
+const AUTH_NAME_MAX_LENGTH = 100;
+
+function normalizeAuthEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isValidAuthEmail(value) {
+  return (
+    value.length <= AUTH_EMAIL_MAX_LENGTH &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+  );
+}
+
+const PASSWORD_RESET_RESPONSE =
+  "Nếu địa chỉ email này đã đăng ký, BocLink đã gửi liên kết đặt lại mật khẩu. Hãy kiểm tra cả thư rác.";
+const passwordResetRequestBuckets = new Map();
+
+function allowPasswordResetRequest(req) {
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const key = String(req.ip || req.socket?.remoteAddress || "unknown");
+  const recent = (passwordResetRequestBuckets.get(key) || []).filter(
+    (timestamp) => now - timestamp < windowMs,
+  );
+  if (recent.length >= 5) {
+    passwordResetRequestBuckets.set(key, recent);
+    return false;
+  }
+  recent.push(now);
+  passwordResetRequestBuckets.set(key, recent);
+  if (passwordResetRequestBuckets.size > 5000) {
+    for (const [bucketKey, timestamps] of passwordResetRequestBuckets) {
+      if (!timestamps.some((timestamp) => now - timestamp < windowMs)) {
+        passwordResetRequestBuckets.delete(bucketKey);
+      }
+      if (passwordResetRequestBuckets.size <= 4000) break;
+    }
+  }
+  return true;
+}
+
+app.post("/api/auth/password-reset-requests", async (req, res) => {
+  const email = normalizeAuthEmail(req.body?.email);
+  if (!isValidAuthEmail(email)) {
+    return res.status(400).json({ error: "Email chưa đúng định dạng" });
+  }
+  if (!allowPasswordResetRequest(req)) {
+    return res.status(429).json({
+      error: "Bạn đã yêu cầu quá nhiều lần. Vui lòng thử lại sau 15 phút.",
+    });
+  }
+  if (!RESEND_API_KEY || !PASSWORD_RESET_FROM) {
+    return res.status(503).json({
+      error: "Dịch vụ gửi email đặt lại mật khẩu chưa được cấu hình.",
+    });
+  }
+
   try {
     const database = await getDb();
-    const { email, password, name } = req.body;
+    const user = await database.getUserByEmail(email);
+    if (!user) return res.json({ ok: true, message: PASSWORD_RESET_RESPONSE });
+
+    const token = createPasswordResetToken();
+    const created = await database.createPasswordResetToken({
+      userId: user.id,
+      tokenHash: hashPasswordResetToken(token),
+      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS).toISOString(),
+    });
+    if (created) {
+      try {
+        await sendPasswordResetEmail({
+          apiKey: RESEND_API_KEY,
+          from: PASSWORD_RESET_FROM,
+          to: user.email,
+          baseUrl: resolvePasswordResetBaseUrl({
+            configuredBaseUrl: PASSWORD_RESET_BASE_URL,
+            requestProtocol: req.protocol,
+            requestHost: req.get("host"),
+            isProduction: process.env.NODE_ENV === "production",
+          }),
+          token,
+          name: user.name,
+        });
+      } catch (error) {
+        console.error("[password-reset] Email delivery failed", error?.message);
+      }
+    }
+    return res.json({ ok: true, message: PASSWORD_RESET_RESPONSE });
+  } catch (error) {
+    console.error("[password-reset] Request failed", error?.message);
+    return res.status(500).json({ error: "Không thể xử lý yêu cầu lúc này." });
+  }
+});
+
+app.post("/api/auth/password-resets", async (req, res) => {
+  const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+  const password =
+    typeof req.body?.password === "string" ? req.body.password : "";
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+    return res.status(400).json({ error: "Liên kết đặt lại không hợp lệ hoặc đã hết hạn." });
+  }
+  if (password.length < 8 || password.length > AUTH_PASSWORD_MAX_LENGTH) {
+    return res.status(400).json({ error: "Mật khẩu mới phải có từ 8 đến 128 ký tự." });
+  }
+
+  try {
+    const database = await getDb();
+    const passwordHash = await bcrypt.hash(password, 12);
+    const consumed = await database.consumePasswordResetToken({
+      tokenHash: hashPasswordResetToken(token),
+      passwordHash,
+    });
+    if (!consumed) {
+      return res.status(400).json({ error: "Liên kết đặt lại không hợp lệ hoặc đã hết hạn." });
+    }
+    res.clearCookie("token", AUTH_COOKIE_OPTIONS);
+    return res.json({ ok: true, message: "Mật khẩu đã được cập nhật." });
+  } catch (error) {
+    console.error("[password-reset] Consume failed", error?.message);
+    return res.status(500).json({ error: "Không thể cập nhật mật khẩu lúc này." });
+  }
+});
+
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const email = normalizeAuthEmail(req.body?.email);
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    const name = String(req.body?.name || "").trim();
     if (!email || !password)
       return res.status(400).json({ error: "Email và mật khẩu là bắt buộc" });
+    if (!isValidAuthEmail(email))
+      return res.status(400).json({ error: "Email chưa đúng định dạng" });
     if (password.length < 6)
       return res
         .status(400)
         .json({ error: "Mật khẩu phải có ít nhất 6 ký tự" });
-    const normalEmail = email.toLowerCase().trim();
+    if (password.length > AUTH_PASSWORD_MAX_LENGTH)
+      return res.status(400).json({ error: "Mật khẩu không được quá 128 ký tự" });
+    if (name.length > AUTH_NAME_MAX_LENGTH)
+      return res.status(400).json({ error: "Họ tên không được quá 100 ký tự" });
+    const database = await getDb();
+    const normalEmail = email;
     const hashed = await bcrypt.hash(password, 10);
     const isAdmin = isAdminEmail(normalEmail);
     const user = await database.createUser(
@@ -8935,11 +9107,14 @@ app.post("/api/auth/register", async (req, res) => {
 
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const database = await getDb();
-    const { email, password } = req.body;
+    const email = normalizeAuthEmail(req.body?.email);
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (!email || !password)
       return res.status(400).json({ error: "Email và mật khẩu là bắt buộc" });
-    const user = await database.getUserByEmail(email.toLowerCase().trim());
+    if (!isValidAuthEmail(email) || password.length > AUTH_PASSWORD_MAX_LENGTH)
+      return res.status(401).json({ error: "Email hoặc mật khẩu không đúng" });
+    const database = await getDb();
+    const user = await database.getUserByEmail(email);
     if (!user)
       return res.status(401).json({ error: "Email hoặc mật khẩu không đúng" });
     const ok = await bcrypt.compare(password, user.password);

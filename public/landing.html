@@ -2,6 +2,25 @@
 <html lang="vi">
   <head>
     <meta charset="utf-8" />
+    <script>
+      (() => {
+        const query = new URLSearchParams(window.location.search);
+        const fragment = new URLSearchParams(window.location.hash.slice(1));
+        const isSupabaseCallback =
+          query.has("code") ||
+          query.has("error") ||
+          query.has("error_description") ||
+          fragment.has("access_token") ||
+          fragment.has("error") ||
+          fragment.has("error_description");
+        if (!isSupabaseCallback) return;
+
+        const callbackUrl = new URL("/login", window.location.origin);
+        callbackUrl.search = window.location.search;
+        callbackUrl.hash = window.location.hash;
+        window.location.replace(callbackUrl.toString());
+      })();
+    </script>
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, shrink-to-fit=no"

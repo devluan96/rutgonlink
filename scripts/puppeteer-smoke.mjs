@@ -326,7 +326,62 @@ async function main() {
       const oauthLabel = await page.$eval("#oauthButtonLabel", (el) =>
         el.textContent.trim(),
       );
-      assert.equal(oauthLabel, "Tiếp tục bằng Google / Gmail");
+      assert.equal(oauthLabel, "Tiếp tục bằng Google");
+
+      const authPageBackgrounds = await page.evaluate(() => ({
+        html: getComputedStyle(document.documentElement).backgroundColor,
+        body: getComputedStyle(document.body).backgroundColor,
+        bodyHeight: document.body.getBoundingClientRect().height,
+        contentHeight: document.documentElement.scrollHeight,
+      }));
+      assert.equal(authPageBackgrounds.html, authPageBackgrounds.body);
+      assert.ok(authPageBackgrounds.bodyHeight >= authPageBackgrounds.contentHeight);
+
+      const registerPassword = await page.$eval("#regPass", (el) => ({
+        required: el.required,
+        minLength: el.minLength,
+        describedBy: el.getAttribute("aria-describedby"),
+      }));
+      assert.deepEqual(registerPassword, {
+        required: true,
+        minLength: 6,
+        describedBy: "regPassHelp regPassError",
+      });
+      assert.equal(
+        await page.$eval("#regPassHelp", (el) => el.textContent.trim()),
+        "Ít nhất 6 ký tự.",
+      );
+
+      await page.click('[data-password-target="regPass"]');
+      assert.equal(await page.$eval("#regPass", (el) => el.type), "text");
+      assert.equal(
+        await page.$eval('[data-password-target="regPass"]', (el) =>
+          el.getAttribute("aria-pressed"),
+        ),
+        "true",
+      );
+
+      await page.click("#authForm .auth-submit");
+      assert.equal(await page.evaluate(() => document.activeElement?.id), "regName");
+      assert.equal(
+        await page.$eval("#regName", (el) => el.getAttribute("aria-invalid")),
+        "true",
+      );
+
+      const invalidRegistration = await page.evaluate(async () => {
+        const response = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Test User",
+            email: "not-an-email",
+            password: "P@ssw0rd123",
+          }),
+        });
+        return { status: response.status, data: await response.json() };
+      });
+      assert.equal(invalidRegistration.status, 400);
+      assert.equal(invalidRegistration.data.error, "Email chưa đúng định dạng");
     });
 
     logSmokeStep("check login page");
@@ -353,7 +408,11 @@ async function main() {
       const oauthLabel = await page.$eval("#oauthButtonLabel", (el) =>
         el.textContent.trim(),
       );
-      assert.equal(oauthLabel, "Tiếp tục bằng Google / Gmail");
+      assert.equal(oauthLabel, "Tiếp tục bằng Google");
+
+      assert.equal(await page.$eval("#loginEmail", (el) => el.type), "email");
+      await page.click('[data-password-target="loginPass"]');
+      assert.equal(await page.$eval("#loginPass", (el) => el.type), "text");
     });
 
     logSmokeStep("check canonical auth redirects");
@@ -368,6 +427,17 @@ async function main() {
       assert.equal(current.pathname, "/register");
       assert.equal(current.searchParams.get("next"), "/create");
     });
+
+    logSmokeStep("check Supabase landing callback recovery");
+    await runPageCheck(
+      browser,
+      "/#access_token=&token_type=bearer",
+      async (page) => {
+        const current = new URL(page.url());
+        assert.equal(current.pathname, "/login");
+        assert.equal(current.hash, "#access_token=&token_type=bearer");
+      },
+    );
 
     await runPageCheck(
       browser,

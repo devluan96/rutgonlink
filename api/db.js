@@ -676,6 +676,25 @@ async function init() {
       return data;
     },
 
+    async createPasswordResetToken({ userId, tokenHash, expiresAt }) {
+      const { data, error } = await sb.rpc('create_password_reset_token', {
+        p_user_id: userId,
+        p_token_hash: tokenHash,
+        p_expires_at: expiresAt,
+      });
+      check(error, 'password_reset_token');
+      return data === true;
+    },
+
+    async consumePasswordResetToken({ tokenHash, passwordHash }) {
+      const { data, error } = await sb.rpc('consume_password_reset_token', {
+        p_token_hash: tokenHash,
+        p_password_hash: passwordHash,
+      });
+      check(error, 'password_reset_token');
+      return data === true;
+    },
+
     async updateUserPlan(userId, plan) {
       const updates = { plan };
       if (plan === 'free' || plan === 'admin') {

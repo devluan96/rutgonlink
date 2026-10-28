@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <meta name="theme-color" content="#3b82f6" />
+    <title>Tạo mật khẩu mới - BocLink</title>
+    <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
+    <link rel="stylesheet" href="/app.css?v=20260619c" />
+    <link rel="stylesheet" href="/auth.css?v=20261028d" />
+    <script src="/password-reset.js?v=20261028a" defer></script>
+  </head>
+  <body class="auth-page">
+    <main id="passwordResetPage" class="auth-page-shell" data-reset-mode="reset">
+      <div class="auth-stage">
+        <div class="auth-shell auth-shell--recovery">
+          <section class="auth-hero">
+            <a class="auth-brand" href="/" aria-label="Về trang chủ BocLink">
+              <img class="auth-brand-mark" src="/favicon.svg?v=2" alt="" />
+              <span class="auth-brand-copy"><strong>BocLink</strong><span>Bảo vệ workspace của bạn</span></span>
+            </a>
+            <div class="auth-kicker">Bước cuối cùng</div>
+            <div class="auth-hero-copy">
+              <h1>Tạo mật khẩu mới.</h1>
+              <p>Dùng mật khẩu riêng, đủ dài và chưa từng dùng cho tài khoản khác.</p>
+            </div>
+            <div class="auth-recovery-points" aria-label="Yêu cầu mật khẩu">
+              <span>Tối thiểu 8 ký tự</span>
+              <span>Liên kết hết hạn sau 30 phút</span>
+              <span>Tự động đăng xuất các phiên cũ</span>
+            </div>
+          </section>
+          <section class="auth-card">
+            <div class="auth-card-top">
+              <span class="auth-route-badge">Bảo mật tài khoản</span>
+              <h2>Đặt mật khẩu mới</h2>
+              <p>Nhập lại hai lần để tránh sai sót.</p>
+            </div>
+            <div id="passwordResetMessage" class="auth-status" role="status" aria-live="polite" tabindex="-1" hidden></div>
+            <form id="passwordResetForm" class="auth-form" novalidate>
+              <div class="auth-field">
+                <label class="auth-label" for="newPassword">Mật khẩu mới</label>
+                <div class="auth-password-control">
+                  <input class="auth-input" id="newPassword" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+                  <button class="auth-password-toggle" type="button" aria-label="Hiện mật khẩu" aria-pressed="false" data-password-target="newPassword">Hiện</button>
+                </div>
+                <p class="auth-field-hint">Từ 8 đến 128 ký tự.</p>
+              </div>
+              <div class="auth-field">
+                <label class="auth-label" for="confirmPassword">Nhập lại mật khẩu</label>
+                <div class="auth-password-control">
+                  <input class="auth-input" id="confirmPassword" name="confirmation" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+                  <button class="auth-password-toggle" type="button" aria-label="Hiện mật khẩu" aria-pressed="false" data-password-target="confirmPassword">Hiện</button>
+                </div>
+              </div>
+              <button class="auth-submit" type="submit">Lưu mật khẩu mới</button>
+            </form>
+            <div id="resetSuccessAction" class="auth-foot" hidden><a class="auth-link" href="/login">Đăng nhập bằng mật khẩu mới</a></div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
