@@ -190,12 +190,14 @@ function isMissingRelationError(error, relationName) {
 function isMissingColumnError(error, columnName) {
   const normalizedColumn = String(columnName || '').trim();
   if (!error || !normalizedColumn) return false;
+  const escapedColumn = normalizedColumn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const message = String(error.message || '');
+  const mentionsColumn = new RegExp(`\\b${escapedColumn}\\b`, 'i').test(message);
   return Boolean(
-    error.code === '42703' ||
-      error.code === 'PGRST204' ||
-      new RegExp(`column .*${normalizedColumn}|${normalizedColumn}.*does not exist|schema cache`, 'i').test(
-        error.message || '',
-      ),
+    mentionsColumn &&
+      (error.code === '42703' ||
+        error.code === 'PGRST204' ||
+        /column|does not exist|schema cache/i.test(message)),
   );
 }
 
@@ -2608,6 +2610,7 @@ module.exports = {
     CLICK_DEDUP_WINDOW_MS,
     buildArticleFunnelClickStats,
     fetchPaginatedRows,
+    isMissingColumnError,
     normalizeClickAnalyticsOptions,
     finalizeClickAnalyticsSummaryPayload,
   },

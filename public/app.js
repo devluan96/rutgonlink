@@ -12026,11 +12026,12 @@ async function loadAdminData(force = false) {
   try {
     let statsPayload = null;
     let redirectPayload = null;
-    const sectionsToFetch = getAdminSectionsForLoad().filter(
-      (section) =>
-        shouldFetchAdminSection(section, force) &&
-        (force || !hydrateAdminSectionFromPersistentCache(section)),
-    );
+    const sectionsToFetch = getAdminSectionsForLoad().filter((section) => {
+      if (!shouldFetchAdminSection(section, force)) return false;
+      if (force) return true;
+      const hydratedFromCache = hydrateAdminSectionFromPersistentCache(section);
+      return section === "users" || !hydratedFromCache;
+    });
     const tasks = [];
     if (sectionsToFetch.includes("overview")) {
       tasks.push(
@@ -13053,6 +13054,7 @@ async function adminSetLabAccess(userId, checkboxEl) {
           }
         : userItem,
     );
+    writePersistentStatsCache("admin-users", { users: adminUsers });
     renderAdminUsers();
     toast(
       nextValue ? "✅ Đã cấp quyền dùng lab" : "✅ Đã thu hồi quyền dùng lab",
