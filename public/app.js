@@ -960,6 +960,7 @@ function normalizeAppPage(page) {
     .trim()
     .replace(/^#/, "")
     .replace(/^\/+/, "");
+  if (raw === "pricing") return "payment";
   return KNOWN_APP_PAGES.has(raw) ? raw : "dashboard";
 }
 
@@ -998,7 +999,7 @@ function getAppPageFromLocation() {
   if (pathname.startsWith("/")) {
     const directPage = pathname.slice(1);
     if (KNOWN_APP_PAGES.has(directPage)) {
-      return directPage;
+      return normalizeAppPage(directPage);
     }
   }
   return normalizeAppPage(hashPage || "dashboard");
@@ -2916,6 +2917,36 @@ function formatAccountDateTime(value) {
   }
 }
 
+function syncWorkspaceNavigation() {
+  const bioNav = document.getElementById("bioNavItem");
+  if (bioNav) bioNav.hidden = true;
+
+  const membership = teamWorkspaceData?.membership;
+  const plan = String(user?.plan || "free").toLowerCase();
+  const role = String(user?.role || "user").toLowerCase();
+  const canUseTeam =
+    plan === "business" ||
+    plan === "admin" ||
+    role === "admin" ||
+    membership?.status === "active" ||
+    teamWorkspaceData?.invitation_pending === true;
+  const teamNav = document.getElementById("teamNavItem");
+  if (teamNav) teamNav.hidden = !canUseTeam;
+}
+
+function setTeamSection(section, trigger) {
+  const nextSection = section === "templates" ? "templates" : "members";
+  document.querySelectorAll("[data-team-section]").forEach((button) => {
+    const isActive = button.dataset.teamSection === nextSection;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+  document.querySelectorAll("[data-team-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.teamPanel !== nextSection;
+  });
+  trigger?.focus({ preventScroll: true });
+}
+
 function updateTopbar() {
   const plan = user?.plan || "guest";
   const role = user?.role || "user";
@@ -2994,6 +3025,7 @@ function updateTopbar() {
   const sf = document.getElementById("sidebarFooter");
   sf.style.display =
     plan === "pro" || plan === "business" || isAdmin ? "none" : "";
+  syncWorkspaceNavigation();
 
   renderNotificationCenter();
   updatePricingUI();
@@ -5188,6 +5220,7 @@ function updateTopbar() {
     sf.style.display =
       plan === "pro" || plan === "business" || isAdmin ? "none" : "";
   }
+  syncWorkspaceNavigation();
   renderSupportConversation();
   updatePricingUI();
   if (document.getElementById("page-account")?.classList.contains("active")) {
@@ -6385,7 +6418,7 @@ function renderForm(containerId) {
             ? `
           <div style="text-align:center;padding:12px;color:var(--text3);font-size:13px">
             🔒 Yêu cầu gói <strong style="color:var(--brand)">Pro</strong>.
-            <span style="color:var(--brand);cursor:pointer;text-decoration:underline" onclick="navigate('pricing')">Nâng cấp →</span>
+            <span style="color:var(--brand);cursor:pointer;text-decoration:underline" onclick="navigate('payment')">Nâng cấp →</span>
           </div>`
             : `
           <!-- 2 cột: ảnh | tiêu đề + mô tả + preview -->
@@ -7043,6 +7076,7 @@ function renderTeamWorkspaceViews({
 
 function applyTeamWorkspacePayload(payload, renderOptions) {
   const nextState = setTeamWorkspaceData(payload);
+  syncWorkspaceNavigation();
   renderTeamWorkspaceViews(renderOptions);
   return nextState;
 }
@@ -9271,7 +9305,7 @@ function showAffiliateShortenPrompt(cid, message, mode = "guest") {
   if (mode === "confirm") {
     errEl.innerHTML =
       `${safeMessage} ` +
-      `<span class="upgrade-link" onclick="navigate('pricing')">Xem gói Pro →</span>`;
+      `<span class="upgrade-link" onclick="navigate('payment')">Xem gói Pro →</span>`;
     errEl.classList.add("show");
     return;
   }
@@ -9442,7 +9476,7 @@ async function doShorten(cid, confirmAffiliate = false) {
       errEl.innerHTML =
         data.error +
         (data.upgrade
-          ? ` <span class="upgrade-link" onclick="navigate('pricing')">Xem gói Pro →</span>`
+          ? ` <span class="upgrade-link" onclick="navigate('payment')">Xem gói Pro →</span>`
           : "");
       errEl.classList.add("show");
       return;

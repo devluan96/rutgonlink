@@ -1014,7 +1014,7 @@
         <aside class="sidebar" id="sidebar">
           <nav class="snav">
             <div class="sgroup">Tổng quan</div>
-            <div class="sitem active" onclick="navigate('dashboard', this)">
+            <button class="sitem active" type="button" onclick="navigate('dashboard', this)">
               <svg
                 width="15"
                 height="15"
@@ -1029,8 +1029,8 @@
                 <rect x="14" y="14" width="7" height="7" />
               </svg>
               <span class="slabel">Bảng điều khiển</span>
-            </div>
-            <div class="sitem" onclick="navigate('stats', this)">
+            </button>
+            <button class="sitem" type="button" onclick="navigate('stats', this)">
               <svg
                 width="15"
                 height="15"
@@ -1044,9 +1044,9 @@
                 <line x1="6" y1="20" x2="6" y2="14" />
               </svg>
               <span class="slabel">Thống kê</span>
-            </div>
+            </button>
             <div class="sgroup" style="margin-top: 6px">Quản lý liên kết</div>
-            <div class="sitem" onclick="navigate('links', this)">
+            <button class="sitem" type="button" onclick="navigate('links', this)">
               <svg
                 width="15"
                 height="15"
@@ -1064,8 +1064,8 @@
               </svg>
               <span class="slabel">Liên kết</span>
               <span class="sbadge" id="navCount">0</span>
-            </div>
-            <div class="sitem" onclick="navigate('create', this)">
+            </button>
+            <button class="sitem" type="button" onclick="navigate('create', this)">
               <svg
                 width="15"
                 height="15"
@@ -1079,8 +1079,8 @@
                 <line x1="8" y1="12" x2="16" y2="12" />
               </svg>
               <span class="slabel">Tạo liên kết</span>
-            </div>
-            <div class="sitem" onclick="navigate('qr', this)">
+            </button>
+            <button class="sitem" type="button" onclick="navigate('qr', this)">
               <svg
                 width="15"
                 height="15"
@@ -1096,8 +1096,8 @@
                 <path d="M16 16h5v5" />
               </svg>
               <span class="slabel">Mã QR</span>
-            </div>
-            <div class="sitem" onclick="navigate('bio', this)">
+            </button>
+            <button class="sitem" id="bioNavItem" type="button" onclick="navigate('bio', this)" hidden>
               <svg
                 width="15"
                 height="15"
@@ -1110,8 +1110,8 @@
                 <path d="M4 21c1.7-4 5-6 8-6s6.3 2 8 6" />
               </svg>
               <span class="slabel">Trang tiểu sử</span>
-            </div>
-            <div class="sitem" onclick="navigate('team', this)">
+            </button>
+            <button class="sitem" id="teamNavItem" type="button" onclick="navigate('team', this)" hidden>
               <svg
                 width="15"
                 height="15"
@@ -1126,10 +1126,11 @@
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
               <span class="slabel">Làm việc nhóm</span>
-            </div>
-            <div
+            </button>
+            <button
               class="sitem"
               id="adminNavItem"
+              type="button"
               onclick="navigate('admin', this)"
               style="display: none"
             >
@@ -1147,13 +1148,13 @@
                 <path d="M7 17h6"></path>
               </svg>
               <span class="slabel">Quản trị</span>
-            </div>
+            </button>
           </nav>
           <div class="sfooter" id="sidebarFooter">
             <div class="upgrade-box">
               <h4>✨ Nâng cấp Pro</h4>
               <p>Deeplink Shopee & TikTok, Custom OG Preview, Upload ảnh.</p>
-              <button class="btn-up" onclick="navigate('pricing')">
+              <button class="btn-up" onclick="openPaymentPage()">
                 Xem gói Pro →
               </button>
             </div>
@@ -1185,7 +1186,7 @@
                     Tải lại
                   </button>
                   <button class="cf active" data-days="1" data-stats-range="1" onclick="setChartDays(1, this)">
-                    HN
+                    Hôm nay
                   </button>
                   <button class="cf" data-days="7" data-stats-range="7" onclick="setChartDays(7, this)">
                     7N
@@ -1196,7 +1197,7 @@
                 </div>
               </div>
             </div>
-            <div class="sg">
+            <div class="sg dashboard-summary-grid">
               <div class="sc">
                 <div class="sc-top">
                   <span class="sc-lbl" id="dClicksLabel">Click unique hôm nay</span>
@@ -1250,70 +1251,18 @@
                 <div class="sc-sub" id="dTiktokSub">So với hôm qua</div>
               </div>
             </div>
-            <div class="dash-hero" style="margin-bottom: 18px">
-              <div class="dash-hero-top">
-                <div class="dash-hero-copy">
-                  <div class="dash-hero-kicker">Bước tiếp theo</div>
-                  <div class="dash-hero-title">
-                    Tạo link ở một chỗ, xem dữ liệu ở một chỗ
-                  </div>
-                  <div class="dash-hero-desc">
-                    Dashboard chỉ giữ phần tổng quan và điều hướng nhanh. Phần
-                    tạo link, OG preview và video overlay đã được dồn về trang
-                    <strong>Tạo liên kết</strong> để giảm rối khi sử dụng.
-                  </div>
-                  <div class="dash-actions">
-                    <button
-                      class="dash-action primary"
-                      onclick="navigate('create')"
-                    >
-                      + Tạo link mới
-                    </button>
-                    <button class="dash-action" onclick="navigate('links')">
-                      Xem danh sách link
-                    </button>
-                    <button class="dash-action" onclick="navigate('stats')">
-                      Mở thống kê chi tiết
-                    </button>
-                  </div>
-                </div>
-                <div class="act-card" style="min-width: 220px; flex: 0 0 280px">
-                  <h3>
-                    Lộ trình ngắn
-                    <span style="color: var(--text3); font-size: 11px"
-                      >3 bước</span
-                    >
-                  </h3>
-                  <div class="dash-steps">
-                    <div class="dash-step">
-                      <div class="dash-step-badge">1</div>
-                      <div>
-                        <div class="dash-step-title">Tạo link</div>
-                        <div class="dash-step-desc">
-                          Dán URL và chọn kiểu link phù hợp.
-                        </div>
-                      </div>
-                    </div>
-                    <div class="dash-step">
-                      <div class="dash-step-badge">2</div>
-                      <div>
-                        <div class="dash-step-title">Tối ưu preview</div>
-                        <div class="dash-step-desc">
-                          Chỉnh OG, alias hoặc video overlay nếu cần.
-                        </div>
-                      </div>
-                    </div>
-                    <div class="dash-step">
-                      <div class="dash-step-badge">3</div>
-                      <div>
-                        <div class="dash-step-title">Theo dõi hiệu quả</div>
-                        <div class="dash-step-desc">
-                          Kiểm tra click trong tab Thống kê hoặc Liên kết.
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            <div class="dashboard-primary-actions" aria-label="Thao tác nhanh">
+              <div>
+                <strong>Tiếp tục công việc</strong>
+                <span>Tạo link mới hoặc mở danh sách đang quản lý.</span>
+              </div>
+              <div class="dash-actions">
+                <button class="dash-action primary" type="button" onclick="navigate('create')">
+                  Tạo link mới
+                </button>
+                <button class="dash-action" type="button" onclick="navigate('links')">
+                  Xem danh sách link
+                </button>
               </div>
             </div>
             <div class="chart-card">
@@ -1322,46 +1271,12 @@
               </div>
               <div class="ch-wrap"><canvas id="clickChart"></canvas></div>
             </div>
-            <div class="sf-grid">
-              <div class="act-card">
+            <div class="act-card dashboard-activity-card">
+              <div class="chart-head">
                 <h3>Hoạt động gần đây</h3>
-                <div id="dashActivity"></div>
+                <button class="text-action" type="button" onclick="navigate('stats')">Xem thống kê</button>
               </div>
-              <div class="act-card">
-                <h3>
-                  Điều hướng nhanh
-                  <span style="color: var(--text3); font-size: 11px">Tabs</span>
-                </h3>
-                <div class="dash-steps" style="margin-top: 0">
-                  <div class="dash-step">
-                    <div class="dash-step-badge">→</div>
-                    <div>
-                      <div class="dash-step-title">Tạo liên kết</div>
-                      <div class="dash-step-desc">
-                        Tạo mới, deeplink, OG preview và video overlay.
-                      </div>
-                    </div>
-                  </div>
-                  <div class="dash-step">
-                    <div class="dash-step-badge">→</div>
-                    <div>
-                      <div class="dash-step-title">Liên kết</div>
-                      <div class="dash-step-desc">
-                        Tìm, lọc và quản lý link đã tạo.
-                      </div>
-                    </div>
-                  </div>
-                  <div class="dash-step">
-                    <div class="dash-step-badge">→</div>
-                    <div>
-                      <div class="dash-step-title">Billing</div>
-                      <div class="dash-step-desc">
-                        So sánh gói và nâng cấp từ menu tài khoản.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <div id="dashActivity"></div>
             </div>
           </div>
 
@@ -1475,7 +1390,7 @@
             </div>
             <div class="tool-grid">
               <div class="tool-card">
-                <div class="tool-kicker">QR 3D</div>
+                <div class="tool-kicker">QR Studio</div>
                 <div class="tool-head">
                   <div>
                     <h3>Tạo mã QR nhanh</h3>
@@ -1518,9 +1433,6 @@
                   </div>
                 </div>
                 <div class="billing-actions">
-                  <button class="user-btn primary" type="button" onclick="generateQr()">
-                    Tạo / cập nhật
-                  </button>
                   <button class="user-btn secondary" type="button" onclick="copyQrUrl()">
                     Sao chép URL
                   </button>
@@ -1662,7 +1574,7 @@
           <div class="page" id="page-team">
             <div class="ph">
               <h1>Làm việc nhóm</h1>
-              <p>Gom người, quy trình và quick action cho workspace vào cùng một chỗ.</p>
+              <p>Quản lý thành viên và mẫu link dùng chung trong workspace.</p>
             </div>
             <div class="sg">
               <div class="sc"><div class="sc-top"><span class="sc-lbl">Thành viên</span><div class="sc-icon" style="background: rgba(59, 130, 246, 0.12)">👥</div></div><div class="sc-val" id="teamSeatCount">0</div><div class="sc-sub" id="teamSeatHint">Workspace cá nhân</div></div>
@@ -1671,7 +1583,15 @@
               <div class="sc"><div class="sc-top"><span class="sc-lbl">Workspace</span><div class="sc-icon" style="background: rgba(139, 92, 246, 0.12)">🧭</div></div><div class="sc-val" id="teamWorkspaceName">BocLink</div><div class="sc-sub" id="teamWorkspaceStatus">Owner + editor + analyst trong một luồng.</div></div>
             </div>
             <div id="teamInvitationBanner" style="display: none; margin-bottom: 18px"></div>
-            <div class="tbl-card" id="teamMembersCard" style="margin-bottom: 18px">
+            <div class="page-subtabs team-section-tabs" role="tablist" aria-label="Khu vực làm việc nhóm">
+              <button class="page-subtab-btn active" type="button" role="tab" aria-selected="true" data-team-section="members" onclick="setTeamSection('members', this)">
+                Thành viên
+              </button>
+              <button class="page-subtab-btn" type="button" role="tab" aria-selected="false" data-team-section="templates" onclick="setTeamSection('templates', this)">
+                Mẫu dùng chung
+              </button>
+            </div>
+            <div class="tbl-card" id="teamMembersCard" data-team-panel="members" style="margin-bottom: 18px">
               <div class="tbl-head"><h3>Thành viên workspace</h3><span style="font-size: 12px; color: var(--text3)" id="teamOwnerLabel">Owner</span></div>
               <div class="card-p" id="teamInviteControls" style="border-bottom: 1px solid var(--border)">
                 <div class="team-invite-grid">
@@ -1685,7 +1605,7 @@
                 <table class="mobile-card-table"><thead><tr><th>Người dùng</th><th>Vai trò</th><th>Trạng thái</th><th>Focus</th><th>Hoạt động gần nhất</th><th></th></tr></thead><tbody id="teamMemberBody"><tr><td colspan="6" class="tbl-empty">⏳ Đang tải team workspace...</td></tr></tbody></table>
               </div>
             </div>
-            <div class="tbl-card" id="teamTemplatesCard" style="margin-bottom: 18px">
+            <div class="tbl-card" id="teamTemplatesCard" data-team-panel="templates" style="margin-bottom: 18px" hidden>
               <div class="tbl-head"><h3>Mẫu link chung (<span id="teamTemplateCount">0</span>)</h3><span style="font-size: 12px; color: var(--text3)" id="teamTemplateHint">Snapshot metadata chung cho team</span></div>
               <div class="card-p" style="border-bottom: 1px solid var(--border)">
                 <div class="fg" style="margin-bottom: 0">
@@ -1727,13 +1647,6 @@
               <div style="overflow-x: auto">
                 <table><thead><tr><th>Mẫu chia sẻ</th></tr></thead><tbody id="teamTemplateBody"><tr><td colspan="1" class="tbl-empty">⏳ Đang tải mẫu link chung...</td></tr></tbody></table>
               </div>
-            </div>
-            <div class="team-panel-stack">
-              <div class="team-panel-grid">
-                <div class="integration-card"><div class="integration-card-top"><div><div class="integration-name">Quy trình giao việc</div><div class="integration-desc">Chia nhỏ công việc theo role để không dồn mọi thứ vào một người.</div></div><span class="integration-status success">Đề xuất</span></div><div class="integration-tags"><span>Owner</span><span>Editor</span><span>Analyst</span></div><div class="card-p" style="padding: 0; border: 0"><div class="user-note">1. Owner chốt rule, domain, pricing.</div><div class="user-note">2. Editor tạo/sửa link, QR, bio.</div><div class="user-note">3. Analyst đọc stats và phản hồi nhanh.</div></div></div>
-                <div class="integration-card"><div class="integration-card-top"><div><div class="integration-name">Domain & phê duyệt</div><div class="integration-desc">Giữ domain chính, bio public và affiliate confirmation theo cùng chuẩn.</div></div><span class="integration-status" id="teamDomainLabel">boclink.click</span></div><div class="integration-tags"><span>Domain</span><span>Approval</span><span>Affiliate</span></div><div class="integration-actions"><button class="user-btn secondary" type="button" onclick="navigate('links')">Xem liên kết</button><button class="user-btn secondary" type="button" onclick="navigate('bio')">Mô phỏng bio</button></div></div>
-              </div>
-              <div class="integration-card team-quick-card"><div class="integration-card-top"><div><div class="integration-name">Quick action</div><div class="integration-desc">Chuyển nhanh sang các tab nhóm thường xuyên phối hợp.</div></div><span class="integration-status warning">Nhẹ & nhanh</span></div><div class="integration-actions"><button class="user-btn primary" type="button" onclick="navigate('create')">Tạo link</button><button class="user-btn secondary" type="button" onclick="navigate('links')">Rà link</button><button class="user-btn secondary" type="button" onclick="navigate('stats')">Xem stats</button></div></div>
             </div>
           </div>
 
@@ -2380,96 +2293,6 @@
             </div>
           </div>
 
-          <!-- PRICING -->
-          <div class="page" id="page-pricing">
-            <div class="ph">
-              <h1>Billing</h1>
-              <p>Theo dõi gói hiện tại và lựa chọn nâng cấp phù hợp</p>
-            </div>
-            <div class="pricing-grid">
-              <!-- FREE -->
-              <div class="plan-card" id="planFreeCard">
-                <div class="plan-name">Free</div>
-                <div class="plan-price">0<span>đ/tháng</span></div>
-                <div class="plan-desc">Dùng thử không cần đăng ký</div>
-                <ul class="plan-features">
-                  <li><span class="ck">✅</span> 10 link/ngày</li>
-                  <li>
-                    <span class="ck no">❌</span> Deeplink Shopee & TikTok
-                  </li>
-                  <li><span class="ck no">❌</span> Custom OG Preview</li>
-                  <li><span class="ck no">❌</span> Upload ảnh banner</li>
-                  <li><span class="ck no">❌</span> Thống kê nâng cao</li>
-                </ul>
-                <button class="btn-plan free-btn" id="planFreeBtn">
-                  Gói hiện tại
-                </button>
-              </div>
-              <!-- PRO -->
-              <div class="plan-card featured" id="planProCard">
-                <div class="plan-featured-badge">⭐ Phổ biến nhất</div>
-                <div class="plan-name" style="color: var(--brand)">Pro</div>
-                <div class="plan-price">99.000<span>đ/tháng</span></div>
-                <div class="plan-desc">
-                  Đầy đủ tính năng cho affiliate marketer
-                </div>
-                <ul class="plan-features">
-                  <li><span class="ck">✅</span> 500 link/ngày</li>
-                  <li>
-                    <span class="ck">✅</span>
-                    <strong>Deeplink Shopee & TikTok</strong>
-                  </li>
-                  <li>
-                    <span class="ck">✅</span>
-                    <strong>Custom OG Preview</strong>
-                  </li>
-                  <li><span class="ck">✅</span> Upload ảnh banner</li>
-                  <li><span class="ck">✅</span> Custom alias</li>
-                </ul>
-                <button
-                  class="btn-plan pro-btn"
-                  id="planProBtn"
-                  onclick="contactUpgrade('pro')"
-                >
-                  Nâng cấp Pro →
-                </button>
-              </div>
-              <!-- BUSINESS -->
-              <div class="plan-card" id="planBizCard">
-                <div class="plan-name" style="color: var(--purple)">
-                  Business
-                </div>
-                <div class="plan-price">299.000<span>đ/tháng</span></div>
-                <div class="plan-desc">Không giới hạn cho team & agency</div>
-                <ul class="plan-features">
-                  <li><span class="ck">✅</span> Không giới hạn link</li>
-                  <li><span class="ck">✅</span> Tất cả tính năng Pro</li>
-                  <li><span class="ck">✅</span> API access</li>
-                  <li><span class="ck">✅</span> Priority support</li>
-                  <li><span class="ck">✅</span> Custom domain (sắp có)</li>
-                </ul>
-                <button
-                  class="btn-plan biz-btn"
-                  id="planBizBtn"
-                  onclick="contactUpgrade('business')"
-                >
-                  Liên hệ →
-                </button>
-              </div>
-            </div>
-            <p
-              style="
-                text-align: center;
-                color: var(--text3);
-                font-size: 12px;
-                margin-top: 16px;
-              "
-            >
-              Liên hệ nâng cấp qua Zalo:
-              <a href="#" style="color: var(--brand)">0969.361.607</a>
-            </p>
-          </div>
-
           <!-- STATS PAGE -->
           <div class="page" id="page-stats">
             <div class="ph">
@@ -2488,7 +2311,7 @@
                     Tải lại
                   </button>
                   <button class="cf active" data-days="1" data-stats-range="1" onclick="setChartDays(1, this)">
-                    HN
+                    Hôm nay
                   </button>
                   <button class="cf" data-days="7" data-stats-range="7" onclick="setChartDays(7, this)">
                     7N
@@ -2499,7 +2322,7 @@
                 </div>
               </div>
             </div>
-            <div class="sg">
+            <div class="sg stats-summary-grid">
               <div class="sc">
                 <div class="sc-top">
                   <span class="sc-lbl" id="stTotalClicksLabel">Click unique hôm nay</span>
@@ -3088,6 +2911,59 @@
                 </div>
               </section>
 
+              <section class="billing-plan-section" id="billingPlansSection" aria-labelledby="billingPlansTitle">
+                <div class="billing-plan-heading">
+                  <div>
+                    <div class="account-kicker">Chọn gói</div>
+                    <h2 id="billingPlansTitle">So sánh gói dịch vụ</h2>
+                  </div>
+                  <p>Nâng cấp và theo dõi thanh toán trong cùng một nơi.</p>
+                </div>
+                <div class="pricing-grid">
+                  <div class="plan-card" id="planFreeCard">
+                    <div class="plan-name">Free</div>
+                    <div class="plan-price">0<span>đ/tháng</span></div>
+                    <div class="plan-desc">Bắt đầu với nhu cầu cơ bản</div>
+                    <ul class="plan-features">
+                      <li><span class="ck">✓</span> 10 link/ngày</li>
+                      <li><span class="ck no">×</span> Deeplink Shopee & TikTok</li>
+                      <li><span class="ck no">×</span> Custom OG Preview</li>
+                      <li><span class="ck no">×</span> Upload ảnh banner</li>
+                    </ul>
+                    <button class="btn-plan free-btn" id="planFreeBtn" type="button">Gói hiện tại</button>
+                  </div>
+                  <div class="plan-card featured" id="planProCard">
+                    <div class="plan-featured-badge">Phổ biến</div>
+                    <div class="plan-name plan-name-brand">Pro</div>
+                    <div class="plan-price">99.000<span>đ/tháng</span></div>
+                    <div class="plan-desc">Dành cho affiliate làm việc hằng ngày</div>
+                    <ul class="plan-features">
+                      <li><span class="ck">✓</span> 500 link/ngày</li>
+                      <li><span class="ck">✓</span> Deeplink Shopee & TikTok</li>
+                      <li><span class="ck">✓</span> Custom OG Preview</li>
+                      <li><span class="ck">✓</span> Upload ảnh và custom alias</li>
+                    </ul>
+                    <button class="btn-plan pro-btn" id="planProBtn" type="button" onclick="contactUpgrade('pro')">
+                      Nâng cấp Pro →
+                    </button>
+                  </div>
+                  <div class="plan-card" id="planBizCard">
+                    <div class="plan-name plan-name-business">Business</div>
+                    <div class="plan-price">299.000<span>đ/tháng</span></div>
+                    <div class="plan-desc">Dành cho team và agency</div>
+                    <ul class="plan-features">
+                      <li><span class="ck">✓</span> Không giới hạn link</li>
+                      <li><span class="ck">✓</span> Tất cả tính năng Pro</li>
+                      <li><span class="ck">✓</span> Team workspace</li>
+                      <li><span class="ck">✓</span> API và hỗ trợ ưu tiên</li>
+                    </ul>
+                    <button class="btn-plan biz-btn" id="planBizBtn" type="button" onclick="contactUpgrade('business')">
+                      Nâng cấp Business →
+                    </button>
+                  </div>
+                </div>
+              </section>
+
               <section class="account-card" id="accountBillingSection">
                 <div class="account-card-head">
                   <div>
@@ -3096,13 +2972,6 @@
                       Xem trạng thái gói hiện tại, tạo yêu cầu mới và rà lại lịch sử giao dịch đã gửi.
                     </p>
                   </div>
-                  <button
-                    class="user-btn secondary"
-                    type="button"
-                    onclick="navigate('pricing')"
-                  >
-                    Xem bảng giá
-                  </button>
                 </div>
                 <div class="account-billing-grid">
                   <div class="account-billing-stat">
