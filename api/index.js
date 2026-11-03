@@ -1382,6 +1382,8 @@ app.get(
 );
 app.get(["/af/:slug", "/af/:slug/"], async (req, res) => {
   try {
+    const desktopNotFound = sendArticleFunnelDesktopNotFound(req, res);
+    if (desktopNotFound) return desktopNotFound;
     const database = await getDb();
     const publicBaseUrl = await getPublicBaseUrl();
     const articleFunnel = await resolvePublishedArticleFunnelRequest(
@@ -1436,6 +1438,8 @@ app.get(
   ["/af-bridge/:slug/:stageKey", "/af-bridge/:slug/:stageKey/"],
   async (req, res) => {
     try {
+      const desktopNotFound = sendArticleFunnelDesktopNotFound(req, res);
+      if (desktopNotFound) return desktopNotFound;
       const database = await getDb();
       const publicBaseUrl = await getPublicBaseUrl();
       const articleFunnel = await resolvePublishedArticleFunnelRequest(
@@ -1483,6 +1487,8 @@ app.get(
   ["/af-go/:slug/:stageKey", "/af-go/:slug/:stageKey/"],
   async (req, res) => {
     try {
+      const desktopNotFound = sendArticleFunnelDesktopNotFound(req, res);
+      if (desktopNotFound) return desktopNotFound;
       const database = await getDb();
       const publicBaseUrl = await getPublicBaseUrl();
       const articleFunnel = await resolvePublishedArticleFunnelRequest(
@@ -1527,6 +1533,8 @@ app.get(
   ["/af-launch/:slug/:stageKey", "/af-launch/:slug/:stageKey/"],
   async (req, res) => {
     try {
+      const desktopNotFound = sendArticleFunnelDesktopNotFound(req, res);
+      if (desktopNotFound) return desktopNotFound;
       const database = await getDb();
       const publicBaseUrl = await getPublicBaseUrl();
       const articleFunnel = await resolvePublishedArticleFunnelRequest(
@@ -1599,6 +1607,8 @@ app.get(
       ) {
         return next();
       }
+      const desktopNotFound = sendArticleFunnelDesktopNotFound(req, res);
+      if (desktopNotFound) return desktopNotFound;
       const config = normalizeArticleFunnelPreviewConfig(
         articleFunnel.config_json || {},
       );
@@ -1659,6 +1669,8 @@ app.get(
       ) {
         return next();
       }
+      const desktopNotFound = sendArticleFunnelDesktopNotFound(req, res);
+      if (desktopNotFound) return desktopNotFound;
       const config = normalizeArticleFunnelPreviewConfig(
         articleFunnel.config_json || {},
       );
@@ -1722,6 +1734,8 @@ app.get(
       ) {
         return next();
       }
+      const desktopNotFound = sendArticleFunnelDesktopNotFound(req, res);
+      if (desktopNotFound) return desktopNotFound;
       const config = normalizeArticleFunnelPreviewConfig(
         articleFunnel.config_json || {},
       );
@@ -1773,6 +1787,8 @@ app.get("/:slug", async (req, res, next) => {
     ) {
       return next();
     }
+    const desktopNotFound = sendArticleFunnelDesktopNotFound(req, res);
+    if (desktopNotFound) return desktopNotFound;
     const config = normalizeArticleFunnelPreviewConfig(
       articleFunnel.config_json || {},
     );
@@ -2736,6 +2752,29 @@ function isSocialBot(ua = "") {
   return /twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|vkshare|zalo|vibebot|line[\s/]|baiduspider|googlebot|applebot|bingbot|yandexbot|pinterestbot|snapchat|ia_archiver|AhrefsBot|SemrushBot|rogerbot/i.test(
     ua,
   );
+}
+
+function shouldBlockArticleFunnelDesktopRequest(req = {}) {
+  const headers = req?.headers || {};
+  const userAgent = String(headers["user-agent"] || "").trim();
+  const clientHintMobile = String(headers["sec-ch-ua-mobile"] || "").trim();
+
+  if (isSocialBot(userAgent) || clientHintMobile === "?1") return false;
+
+  const isPhoneOrTablet =
+    /android|iphone|ipad|ipod|mobile|tablet|kindle|silk|playbook|windows phone|opera mini|opera mobi/i.test(
+      userAgent,
+    );
+  return !isPhoneOrTablet;
+}
+
+function sendArticleFunnelDesktopNotFound(req, res) {
+  if (!shouldBlockArticleFunnelDesktopRequest(req)) return false;
+  res.set("Cache-Control", "no-store");
+  res
+    .status(404)
+    .sendFile(path.join(__dirname, "..", "public", "lab-404.html"));
+  return true;
 }
 
 function isFacebookInAppBrowser(ua = "") {
@@ -7874,6 +7913,8 @@ ${ogImageTag}
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{margin:0;background:#fff;color:#000;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+  html.popup-open,body.popup-open{overflow:hidden;overscroll-behavior:none}
+  body.popup-open{position:fixed;width:100%;left:0;right:0}
   a{color:inherit}
   .article{min-height:100vh;padding:48px var(--page-gutter) 60px;background:#fff}
   .article-inner{width:min(100%,1440px);margin:0 auto}
@@ -7900,7 +7941,7 @@ ${ogImageTag}
   .follow-row.is-centered{text-align:center}
   .follow-row strong{font-weight:700}
   .follow-row a{text-decoration:underline;text-underline-offset:3px}
-  .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.6);z-index:30}
+  .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.86);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);z-index:30}
   .overlay.show{display:flex}
   .overlay-stack{position:relative;width:min(100%,352px);min-height:320px}
   .overlay-card{position:absolute;inset:auto 0 0 0;width:min(100%,328px);margin:0 auto;border-radius:22px;overflow:hidden;background:#fff;box-shadow:0 32px 70px rgba(0,0,0,.44)}
@@ -8002,12 +8043,29 @@ ${ogImageTag}
   var snapshotToken = ${snapshotTokenJson};
   var canShowPopupTestButton = ${showPopupTestButtonJson};
   var pendingStages = [];
+  var popupScrollY = 0;
   var overlayEl = document.getElementById('overlay');
   var overlayStackEl = document.getElementById('overlayStack');
   var previewBlocksEl = document.getElementById('previewBlocks');
   var popupTest20sBtn = document.getElementById('popupTest20sBtn');
   var facebookInAppGate = document.getElementById('facebookInAppGate');
   var facebookInAppGateOpenBtn = document.getElementById('facebookInAppGateOpenBtn');
+
+  function lockPageScroll() {
+    if (document.body.classList.contains('popup-open')) return;
+    popupScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.documentElement.classList.add('popup-open');
+    document.body.classList.add('popup-open');
+    document.body.style.top = '-' + popupScrollY + 'px';
+  }
+
+  function unlockPageScroll() {
+    if (!document.body.classList.contains('popup-open')) return;
+    document.documentElement.classList.remove('popup-open');
+    document.body.classList.remove('popup-open');
+    document.body.style.top = '';
+    window.scrollTo(0, popupScrollY);
+  }
 
   function getUserAgent() {
     return navigator.userAgent || '';
@@ -8703,10 +8761,12 @@ ${ogImageTag}
 
   function renderOverlayStack(){
     if(!pendingStages.length){
+      unlockPageScroll();
       overlayEl.classList.remove('show');
       overlayStackEl.innerHTML='';
       return;
     }
+    lockPageScroll();
     overlayEl.classList.add('show');
     overlayStackEl.innerHTML = pendingStages.map(function(stage,index){
       var launchUrl = getNativeAnchorHref(stage);
@@ -8794,13 +8854,6 @@ ${ogImageTag}
     }
     handleStageLaunch(stageKey, fallbackUrl);
   }
-
-  overlayEl.addEventListener('click', function(event){
-    if(event.target === overlayEl){
-      pendingStages = [];
-      renderOverlayStack();
-    }
-  });
 
   overlayStackEl.addEventListener('click', function(event){
     var closeButton = event.target.closest('[data-overlay-close]');
@@ -14371,6 +14424,8 @@ module.exports.__testUtils = {
   fetchArticleFunnelImportPayload,
   buildAdminTikTokSourceOverrideUpdate,
   findArticleFunnelPublishConflict,
+  shouldBlockArticleFunnelDesktopRequest,
+  sendArticleFunnelDesktopNotFound,
   recordArticleFunnelStageClick,
   shouldAssignGuestSession,
   clearShopeeShortUrlCache,

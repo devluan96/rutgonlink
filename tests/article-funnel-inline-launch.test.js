@@ -251,6 +251,47 @@ test("buildArticleFunnelPreviewPage keeps popup test button hidden for non-admin
   );
 });
 
+test("buildArticleFunnelPreviewPage locks scrolling and obscures content while a popup is visible", () => {
+  const html = __testUtils.buildArticleFunnelPreviewPage(
+    {
+      title: "Demo popup lock",
+      stages: [
+        {
+          stage_key: "20s",
+          delay_ms: 2000,
+          direct_platform: "tiktok",
+          direct_web_url: "https://vt.tiktok.com/demo/",
+        },
+      ],
+    },
+    "https://example.com/demo-popup-lock",
+    "/demo-popup-lock/launch",
+  );
+
+  assert.match(
+    html,
+    /html\.popup-open,body\.popup-open\{overflow:hidden;overscroll-behavior:none\}/,
+  );
+  assert.match(
+    html,
+    /body\.popup-open\{position:fixed;width:100%;left:0;right:0\}/,
+  );
+  assert.match(
+    html,
+    /\.overlay\{[^}]*background:rgba\(0,0,0,\.86\);[^}]*backdrop-filter:blur\(12px\)/,
+  );
+  assert.match(html, /function lockPageScroll\(\) \{/);
+  assert.match(html, /function unlockPageScroll\(\) \{/);
+  assert.match(
+    html,
+    /if\(!pendingStages\.length\)\{\s+unlockPageScroll\(\);[\s\S]*?return;\s+\}\s+lockPageScroll\(\);/,
+  );
+  assert.doesNotMatch(
+    html,
+    /if\(event\.target === overlayEl\)\{\s+pendingStages = \[\];/,
+  );
+});
+
 test("buildArticleFunnelPreviewPage routes TikTok 20s through the launch helper like regular deeplinks", () => {
   const html = __testUtils.buildArticleFunnelPreviewPage(
     {
