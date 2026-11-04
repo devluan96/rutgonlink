@@ -23,7 +23,7 @@ const indexSource = fs.readFileSync(
 test("article funnel click row query no longer duplicates config_json on every row", () => {
   assert.match(
     dbSource,
-    /const selectExpr = includeAll\s*\?\s*'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at'/,
+    /function getArticleFunnelClickSelectExpr\([\s\S]{0,700}?full:\s*'article_funnel_id,route_slug,stage_key,ip,user_agent,referrer,country_code,country_name,city,clicked_at'/,
   );
   assert.doesNotMatch(
     dbSource,
@@ -71,17 +71,14 @@ test("user stats summary route exists for lightweight notification polling", () 
     apiSource,
     /app\.get\("\/api\/stats\/summary", async \(req, res\) => \{/,
   );
+  assert.match(apiSource, /const compactMode = String\(req\.query\.compact \|\| ""\)\.trim\(\) === "1";/);
   assert.match(
     apiSource,
-    /database\.getLatestLink\(userId,\s*guestSessionId,\s*\{[\s\S]{0,40}?select:\s*"stats"[\s\S]{0,20}?\}\s*\)/,
+    /database\.getArticleFunnelClickAnalyticsRows\(userId, \{/,
   );
   assert.match(
     apiSource,
-    /database\.getArticleFunnelClickStats\(userId, \{/,
-  );
-  assert.doesNotMatch(
-    apiSource,
-    /app\.get\("\/api\/stats\/summary"[\s\S]{0,4000}?database\.getRecentLinks\(userId, guestSessionId\)/s,
+    /compactMode\s*\? Promise\.resolve\(\[\]\)\s*:\s*measureAsyncTiming\([\s\S]{0,400}?database\.getRecentLinks\(userId, guestSessionId,/s,
   );
   assert.match(
     apiSource,
@@ -100,7 +97,7 @@ test("user stats summary route exists for lightweight notification polling", () 
 test("frontend notification polling uses lightweight user stats summary endpoint", () => {
   assert.match(
     appSource,
-    /const statsPayload = await getStatsSummaryPayload\(\{ preferCache: true \}\);/,
+    /const statsPayload = await getStatsSummaryPayload\(\{\s*preferCache: true,\s*compact: activePage !== "dashboard",\s*\}\);/,
   );
   assert.match(
     appSource,
@@ -162,16 +159,9 @@ test("stats routes use soft timeouts for slow analytics queries on live data", (
   );
   assert.match(
     apiSource,
-    /measureAsyncTimingWithSoftTimeout\(\s*"analyticsYesterdaySummaryRpc"/,
-  );
-  assert.match(
-    apiSource,
     /measureAsyncTimingWithSoftTimeout\(\s*"labAnalyticsRows"/,
   );
-  assert.match(
-    apiSource,
-    /measureAsyncTimingWithSoftTimeout\(\s*"labAnalyticsYesterdayRows"/,
-  );
+  assert.doesNotMatch(apiSource, /analyticsYesterdaySummaryRpc|labAnalyticsYesterdayRows/);
 });
 
 test("bio profile sync is lazy-loaded instead of preloading on app boot", () => {

@@ -195,7 +195,7 @@ const articleFunnelLabPendingOpenIdStorageKey =
   "rutgonlink-lab-pending-open-id";
 const articleFunnelLabDebugStorageKey = "rutgonlink-lab-debug";
 const articleFunnelLabSrcdocAssetUrl =
-  "/article-funnel-lab-srcdoc.js?v=20261019-preview";
+  "/article-funnel-lab-srcdoc.js?v=20261104-edit-state";
 const linksSubtabStorageKey = "rutgonlink-links-subtab";
 let createSubtab =
   localStorage.getItem(createSubtabStorageKey) === "lab" ? "lab" : "standard";
@@ -6004,10 +6004,6 @@ async function resetCreateLabEmbed() {
     toast(error?.message || "Không thể tải lab editor", "err");
     return;
   }
-  postLabEditorMessage("createLabIframe", {
-    type: "article-funnel-lab:load-lab",
-    labId: 0,
-  });
 }
 
 function postLabEditorMessage(frameId, payload) {
@@ -6037,7 +6033,7 @@ function postLabEditorMessage(frameId, payload) {
   })();
 }
 
-function openExistingLabInCreateEditor(labId) {
+async function openExistingLabInCreateEditor(labId) {
   if (!canUseLabTabs()) {
     navigate("create");
     return;
@@ -6060,28 +6056,22 @@ function openExistingLabInCreateEditor(labId) {
       updatedAt: new Date().toISOString(),
     }),
   );
-  navigate("create");
   createSubtab = "lab";
   localStorage.setItem(createSubtabStorageKey, createSubtab);
+  navigate("create");
   syncCreateSubtabUI();
   const frame = document.getElementById("createLabIframe");
   if (frame) {
     frame.dataset.pendingLabId = String(
       Number.isInteger(normalizedId) && normalizedId > 0 ? normalizedId : 0,
     );
-    refreshLabEmbed("createLabIframe");
   }
-  if (normalizedId > 0) {
-    postLabEditorMessage("createLabIframe", {
-      type: "article-funnel-lab:load-lab",
-      labId: normalizedId,
-    });
-    return;
+  try {
+    await refreshLabEmbed("createLabIframe");
+  } catch (error) {
+    console.error("openExistingLabInCreateEditor failed", error);
+    toast(error?.message || "Không thể mở lab để chỉnh sửa", "err");
   }
-  postLabEditorMessage("createLabIframe", {
-    type: "article-funnel-lab:load-lab",
-    labId: 0,
-  });
 }
 
 function postLabSharedSettingsToFrame(frameId, settings) {

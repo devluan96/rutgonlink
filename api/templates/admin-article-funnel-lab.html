@@ -3810,6 +3810,8 @@
         let generatedPublishedDomainNote = "";
         let selectedLabId = Number(initialDraftSnapshot.meta?.selectedLabId || 0);
         let latestLabLoadRequestId = 0;
+        let pendingLabLoadId = 0;
+        let failedLabLoadId = 0;
         let labDebugState = {};
         let sourceManagedDeepMode = false;
         let labItems = [];
@@ -5654,21 +5656,50 @@
           return `Cập nhật: ${updatedAt}${publishedText}${clickText}`;
         }
 
+        function setLabLoadButtonDisabled(button, disabled) {
+          if (!button) return;
+          if (disabled) {
+            button.dataset.labLoadDisabled = "true";
+            button.disabled = true;
+            return;
+          }
+          if (button.dataset.labLoadDisabled === "true") {
+            delete button.dataset.labLoadDisabled;
+            button.disabled = false;
+          }
+        }
+
         function syncEditorModeUI() {
+          const isLoadingLab = pendingLabLoadId > 0;
+          const didLabLoadFail = failedLabLoadId > 0;
           const isEditing = Number(selectedLabId || 0) > 0;
           const editorTitle = document.querySelector(
             ".panel.editor .page-header h1",
           );
           if (editorTitle) {
-            editorTitle.textContent = isEditing ? "Sửa lab" : "Tạo lab";
+            editorTitle.textContent = isLoadingLab
+              ? "Đang tải lab"
+              : didLabLoadFail
+                ? "Không tải được lab"
+                : isEditing
+                  ? "Sửa lab"
+                  : "Tạo lab";
           }
           const createBtn = document.getElementById("createDbLabBtn");
           if (createBtn) {
-            createBtn.textContent = isEditing ? "Lưu lab" : "Tạo lab";
+            createBtn.textContent = isLoadingLab
+              ? "Đang tải..."
+              : didLabLoadFail
+                ? "Thử tải lại"
+                : isEditing
+                  ? "Lưu lab"
+                  : "Tạo lab";
+            setLabLoadButtonDisabled(createBtn, isLoadingLab);
           }
           const saveBtn = document.getElementById("saveDbLabBtn");
           if (saveBtn) {
             saveBtn.textContent = "Lưu lab";
+            setLabLoadButtonDisabled(saveBtn, isLoadingLab || didLabLoadFail);
           }
         }
 
@@ -5822,7 +5853,7 @@
               els.labNameInput.value = "";
               openLabHome();
             }
-            await refreshDbLabs({ preserveSelected: false });
+            await refreshDbLabs();
             showToast(
               successMessage ||
                 (ids.length === 1
@@ -6030,15 +6061,15 @@
           }
         }
 
-        async function refreshDbLabs(options = {}) {
-          const preserveSelected = options.preserveSelected !== false;
+        async function refreshDbLabs() {
           try {
             const response = await fetch("/api/admin/article-funnel-labs");
             if (!response.ok) throw new Error("lab_list_failed");
             const data = await response.json();
             labItems = Array.isArray(data.items) ? data.items : [];
             if (
-              !preserveSelected ||
+              pendingLabLoadId <= 0 &&
+              selectedLabId > 0 &&
               !labItems.some(
                 (item) => Number(item.id) === Number(selectedLabId),
               )
@@ -6062,6 +6093,8 @@
             error: "",
           });
           if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+            pendingLabLoadId = 0;
+            failedLabLoadId = 0;
             selectedLabId = 0;
             updateLabDebugState({
               source: "loadDbLab:invalid",
@@ -6070,6 +6103,10 @@
             renderLabOptions();
             return;
           }
+          pendingLabLoadId = normalizedId;
+          failedLabLoadId = 0;
+          syncEditorModeUI();
+          openLabEditor();
           try {
             const response = await fetch(
               `/api/admin/article-funnel-labs/${normalizedId}`,
@@ -6100,6 +6137,8 @@
             Object.assign(state, nextState);
             sourceManagedDeepMode = false;
             selectedLabId = Number(item.id) || 0;
+            pendingLabLoadId = 0;
+            failedLabLoadId = 0;
             els.labNameInput.value = item.name || item.title || "";
             resetTimers();
             clearResolvedCache();
@@ -6128,12 +6167,15 @@
             showToast("Đã mở lab để chỉnh sửa");
           } catch (error) {
             if (requestId !== latestLabLoadRequestId) return;
+            pendingLabLoadId = 0;
+            failedLabLoadId = normalizedId;
+            selectedLabId = 0;
             updateLabDebugState({
               source: "loadDbLab:error",
               requestedLabId: normalizedId,
               error: String(error?.message || "unknown"),
             });
-            createDbLab();
+            syncEditorModeUI();
             showToast(
               error?.message
                 ? `Không tải được lab này: ${error.message}`
@@ -6144,6 +6186,8 @@
 
         async function createDbLab() {
           latestLabLoadRequestId += 1;
+          pendingLabLoadId = 0;
+          failedLabLoadId = 0;
           Object.keys(state).forEach((key) => delete state[key]);
           Object.assign(state, clone(defaultState));
           sourceManagedDeepMode = false;
@@ -6178,6 +6222,8 @@
           Object.keys(state).forEach((key) => delete state[key]);
           Object.assign(state, clone(defaultState));
           sourceManagedDeepMode = false;
+          pendingLabLoadId = 0;
+          failedLabLoadId = 0;
           selectedLabId = 0;
           els.labNameInput.value = "";
           resetTimers();
@@ -6384,7 +6430,7 @@
             if (!response.ok) throw new Error("lab_delete_failed");
             selectedLabId = 0;
             els.labNameInput.value = "";
-            await refreshDbLabs({ preserveSelected: false });
+            await refreshDbLabs();
             openLabHome();
             showToast("Đã xóa lab");
           } catch {
@@ -8695,7 +8741,7 @@
               ).trim();
               renderPreviewShell();
             }
-            await refreshDbLabs({ preserveSelected: true });
+            await refreshDbLabs();
             showToast("Đã publish lại link ngắn");
             return true;
           } catch (error) {
@@ -9029,6 +9075,10 @@
           .getElementById("createDbLabBtn")
           .addEventListener("click", async (event) => {
             if (event.currentTarget.disabled) return;
+            if (failedLabLoadId > 0) {
+              loadDbLab(failedLabLoadId);
+              return;
+            }
             if (embedMode) {
               const isCreating = !selectedLabId;
               setPrimaryLabActionBusy(true, {
@@ -9407,7 +9457,7 @@
         render();
         loadDomainOptions();
         loadAffiliatePresets();
-        refreshDbLabs({ preserveSelected: Number(selectedLabId || 0) > 0 });
+        refreshDbLabs();
       })();
     </script>
   </body>

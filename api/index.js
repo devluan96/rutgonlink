@@ -723,10 +723,9 @@ app.get(
       });
       const items = await Promise.all(
         rows.map(async (item) => {
-          const configJson =
-            item.config_json && typeof item.config_json === "object"
-              ? item.config_json
-              : {};
+          const configJson = normalizeArticleFunnelLabConfigJson(
+            item.config_json,
+          );
           const publishedArticleFunnel = item.published_route_slug
             ? await database.getArticleFunnelBySlug(item.published_route_slug)
             : null;
@@ -11836,7 +11835,7 @@ app.get("/api/stats/summary", async (req, res) => {
           timings,
         ),
         userId
-          ? measureAsyncTiming(
+          ? measureAsyncTimingWithSoftTimeout(
               "labAnalyticsRows",
               () =>
                 database.getArticleFunnelClickAnalyticsRows(userId, {
@@ -11844,6 +11843,7 @@ app.get("/api/stats/summary", async (req, res) => {
                   unlimited: true,
                 }),
               timings,
+              { fallbackValue: [] },
             )
           : Promise.resolve([]),
         user
@@ -12051,7 +12051,7 @@ app.get("/api/stats", async (req, res) => {
           timings,
         ),
         userId
-          ? measureAsyncTiming(
+          ? measureAsyncTimingWithSoftTimeout(
               "labAnalyticsRows",
               () =>
                 database.getArticleFunnelClickAnalyticsRows(userId, {
@@ -12059,6 +12059,7 @@ app.get("/api/stats", async (req, res) => {
                   unlimited: true,
                 }),
               timings,
+              { fallbackValue: [] },
             )
           : Promise.resolve([]),
         user

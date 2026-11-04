@@ -32,7 +32,7 @@ test("app lab access logic allows explicitly granted users and stores popup 3s d
   );
   assert.match(
     appJs,
-    /function getAffiliateShopeeSourceProductUrl\(source = null\) \{\s+return String\(source\?\.product_url \|\| source\?\.productUrl \|\| source\?\.url \|\| ""\)\.trim\(\);\s+\}/s,
+    /function getAffiliateShopeeSourceProductUrl\(source = null\) \{[\s\S]{0,160}?source\?\.product_url \|\| source\?\.productUrl \|\| source\?\.url \|\| ""[\s\S]{0,40}?\.trim\(\);[\s\S]{0,10}?\}/,
   );
   assert.match(
     appJs,
@@ -48,7 +48,10 @@ test("db user fallback preserves can_use_lab when only other optional columns ar
     "utf8",
   );
 
-  assert.match(dbJs, /const activeOptionalColumns = \['phone', 'avatar_url', 'can_use_lab', 'updated_at'\];/);
+  assert.match(
+    dbJs,
+    /const activeOptionalColumns = \[[\s\S]{0,180}?'phone',[\s\S]{0,80}?'avatar_url',[\s\S]{0,80}?'can_use_lab',[\s\S]{0,120}?'updated_at',[\s\S]{0,20}?\];/,
+  );
   assert.match(dbJs, /const missingColumn = activeOptionalColumns\.find\(\(columnName\) =>\s+isMissingColumnError\(error, columnName\),\s+\);/s);
   assert.match(dbJs, /return Array\.isArray\(data\)\s+\? data\.map\(\(row\) => normalizeLegacyAdminUserRow\(row\)\)\s+: \[\];/s);
   assert.doesNotMatch(dbJs, /can_use_lab:\s*false/);
@@ -62,11 +65,38 @@ test("article funnel lab list scopes admins to their own labs", () => {
 
   assert.match(
     indexJs,
-    /app\.get\("\/api\/admin\/article-funnel-labs", requireArticleFunnelLab, async \(req, res\) => \{[\s\S]*?createdByUserId:\s*req\.currentUser\?\.id \|\| 0,/,
+    /app\.get\(\s*"\/api\/admin\/article-funnel-labs",\s*requireArticleFunnelLab,\s*async \(req, res\) => \{[\s\S]*?createdByUserId:\s*req\.currentUser\?\.id \|\| 0,/,
   );
   assert.doesNotMatch(
     indexJs,
-    /app\.get\("\/api\/admin\/article-funnel-labs", requireArticleFunnelLab, async \(req, res\) => \{[\s\S]*?createdByUserId:\s*isAdminUserRecord\(req\.currentUser\)/,
+    /app\.get\(\s*"\/api\/admin\/article-funnel-labs",\s*requireArticleFunnelLab,\s*async \(req, res\) => \{[\s\S]*?createdByUserId:\s*isAdminUserRecord\(req\.currentUser\)/,
+  );
+});
+
+test("opening an existing lab keeps edit intent until the detail request settles", () => {
+  const appJs = fs.readFileSync(
+    path.join(__dirname, "..", "public", "app.js"),
+    "utf8",
+  );
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(appJs, /async function openExistingLabInCreateEditor\(labId\)/);
+  assert.match(
+    appJs,
+    /async function openExistingLabInCreateEditor\(labId\)[\s\S]{0,1800}?await refreshLabEmbed\("createLabIframe"\)/,
+  );
+  assert.match(templateHtml, /let pendingLabLoadId = 0;/);
+  assert.match(templateHtml, /dataset\.labLoadDisabled/);
+  assert.match(
+    templateHtml,
+    /if \(\s*pendingLabLoadId <= 0 &&\s*selectedLabId > 0 &&[\s\S]{0,240}?!labItems\.some\([\s\S]{0,180}?selectedLabId[\s\S]{0,100}?selectedLabId = 0;/,
+  );
+  assert.doesNotMatch(
+    templateHtml,
+    /catch \(error\) \{[\s\S]{0,500}?createDbLab\(\);[\s\S]{0,300}?Kh[^\n]*t[^\n]*i[^\n]*lab n[^\n]*y/,
   );
 });
 
@@ -83,7 +113,7 @@ test("article funnel lab APIs normalize legacy string config_json payloads", () 
   assert.match(indexJs, /function normalizeArticleFunnelLabConfigJson\(rawConfig\)/);
   assert.match(
     indexJs,
-    /const configJson = normalizeArticleFunnelLabConfigJson\(item\.config_json\);/,
+    /const configJson = normalizeArticleFunnelLabConfigJson\(\s*item\.config_json,?\s*\);/,
   );
   assert.match(
     indexJs,
