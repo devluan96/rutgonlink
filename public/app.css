@@ -1792,6 +1792,33 @@
       .account-security-setup {
         margin-top: 14px;
       }
+      .account-security-divider {
+        height: 1px;
+        margin: 22px 0;
+        background: var(--border);
+      }
+      .account-password-form {
+        display: grid;
+        gap: 14px;
+      }
+      .account-password-heading {
+        display: grid;
+        gap: 4px;
+      }
+      .account-password-heading strong {
+        color: var(--text);
+        font-size: 14px;
+      }
+      .account-password-heading span {
+        color: var(--text3);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .account-password-fields {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
       .account-qr-wrap {
         display: grid;
         grid-template-columns: 180px minmax(0, 1fr);
@@ -5961,6 +5988,7 @@
         .account-profile-grid,
         .account-grid,
         .account-qr-wrap,
+        .account-password-fields,
         .account-verify-row,
         .account-device-meta {
           grid-template-columns: 1fr;

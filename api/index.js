@@ -9012,6 +9012,7 @@ function isValidAuthEmail(value) {
 const PASSWORD_RESET_RESPONSE =
   "Nếu địa chỉ email này đã đăng ký, BocLink đã gửi liên kết đặt lại mật khẩu. Hãy kiểm tra cả thư rác.";
 const passwordResetRequestBuckets = new Map();
+const passwordChangeAttemptBuckets = new Map();
 
 function allowPasswordResetRequest(req) {
   const now = Date.now();
@@ -9032,6 +9033,35 @@ function allowPasswordResetRequest(req) {
         passwordResetRequestBuckets.delete(bucketKey);
       }
       if (passwordResetRequestBuckets.size <= 4000) break;
+    }
+  }
+  return true;
+}
+
+function getPasswordChangeAttemptKey(req, userId) {
+  const address = String(req.ip || req.socket?.remoteAddress || "unknown");
+  return `${userId}:${address}`;
+}
+
+function allowPasswordChangeAttempt(req, userId) {
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const key = getPasswordChangeAttemptKey(req, userId);
+  const recent = (passwordChangeAttemptBuckets.get(key) || []).filter(
+    (timestamp) => now - timestamp < windowMs,
+  );
+  if (recent.length >= 5) {
+    passwordChangeAttemptBuckets.set(key, recent);
+    return false;
+  }
+  recent.push(now);
+  passwordChangeAttemptBuckets.set(key, recent);
+  if (passwordChangeAttemptBuckets.size > 5000) {
+    for (const [bucketKey, timestamps] of passwordChangeAttemptBuckets) {
+      if (!timestamps.some((timestamp) => now - timestamp < windowMs)) {
+        passwordChangeAttemptBuckets.delete(bucketKey);
+      }
+      if (passwordChangeAttemptBuckets.size <= 4000) break;
     }
   }
   return true;
@@ -9116,6 +9146,69 @@ app.post("/api/auth/password-resets", async (req, res) => {
   } catch (error) {
     console.error("[password-reset] Consume failed", error?.message);
     return res.status(500).json({ error: "Không thể cập nhật mật khẩu lúc này." });
+  }
+});
+
+app.patch("/api/auth/password", requireAuth, async (req, res) => {
+  const currentUser = req.currentUser;
+  const currentPassword =
+    typeof req.body?.current_password === "string"
+      ? req.body.current_password
+      : "";
+  const newPassword =
+    typeof req.body?.new_password === "string" ? req.body.new_password : "";
+
+  if (!currentPassword || !newPassword) {
+    return res
+      .status(400)
+      .json({ error: "Mật khẩu hiện tại và mật khẩu mới là bắt buộc." });
+  }
+  if (newPassword.length < 8 || newPassword.length > AUTH_PASSWORD_MAX_LENGTH) {
+    return res
+      .status(400)
+      .json({ error: "Mật khẩu mới phải có từ 8 đến 128 ký tự." });
+  }
+  if (currentPassword.length > AUTH_PASSWORD_MAX_LENGTH) {
+    return res.status(400).json({ error: "Mật khẩu hiện tại không đúng." });
+  }
+  if (newPassword === currentPassword) {
+    return res
+      .status(400)
+      .json({ error: "Mật khẩu mới phải khác mật khẩu hiện tại." });
+  }
+  if (!allowPasswordChangeAttempt(req, currentUser.id)) {
+    return res.status(429).json({
+      error: "Bạn đã thử quá nhiều lần. Vui lòng thử lại sau 15 phút.",
+    });
+  }
+
+  try {
+    const currentPasswordMatches = await bcrypt.compare(
+      currentPassword,
+      currentUser.password,
+    );
+    if (!currentPasswordMatches) {
+      return res.status(401).json({ error: "Mật khẩu hiện tại không đúng." });
+    }
+
+    const database = await getDb();
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await database.changeUserPassword(
+      currentUser.id,
+      passwordHash,
+      new Date().toISOString(),
+    );
+    passwordChangeAttemptBuckets.delete(
+      getPasswordChangeAttemptKey(req, currentUser.id),
+    );
+    res.clearCookie("token", AUTH_COOKIE_OPTIONS);
+    return res.json({
+      ok: true,
+      message: "Mật khẩu đã được thay đổi. Vui lòng đăng nhập lại.",
+    });
+  } catch (error) {
+    console.error("[password-change] Failed", error?.message);
+    return res.status(500).json({ error: "Không thể đổi mật khẩu lúc này." });
   }
 });
 

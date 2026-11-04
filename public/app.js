@@ -4225,6 +4225,85 @@ async function logoutAllDevices() {
   }
 }
 
+function getAccountPasswordChangeErrorMessage(error) {
+  const message = String(error?.message || "").trim();
+  if (/failed to fetch|networkerror|load failed/i.test(message)) {
+    return "Không thể kết nối tới máy chủ. Nếu server vừa khởi động lại, hãy tải lại trang và thử lại.";
+  }
+  return message || "Không thể đổi mật khẩu lúc này.";
+}
+
+async function changeAccountPassword(event) {
+  event?.preventDefault();
+  const currentPassword =
+    document.getElementById("accountCurrentPassword")?.value || "";
+  const newPassword =
+    document.getElementById("accountNewPassword")?.value || "";
+  const confirmPassword =
+    document.getElementById("accountConfirmPassword")?.value || "";
+  const button = document.getElementById("accountChangePasswordBtn");
+  const hint = document.getElementById("accountPasswordHint");
+
+  const showPasswordHint = (message, tone = "") => {
+    if (!hint) return;
+    hint.className = `account-note${tone ? ` ${tone}` : ""}`;
+    hint.textContent = message;
+  };
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    showPasswordHint("Vui lòng nhập đầy đủ ba trường mật khẩu.", "warn");
+    return;
+  }
+  if (newPassword.length < 8 || newPassword.length > 128) {
+    showPasswordHint("Mật khẩu mới phải có từ 8 đến 128 ký tự.", "warn");
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showPasswordHint("Hai lần nhập mật khẩu mới chưa trùng khớp.", "warn");
+    return;
+  }
+  if (newPassword === currentPassword) {
+    showPasswordHint("Mật khẩu mới phải khác mật khẩu hiện tại.", "warn");
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Đang đổi...";
+  }
+  try {
+    const response = await fetch("/api/auth/password", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Không thể đổi mật khẩu lúc này.");
+    }
+
+    document.getElementById("accountCurrentPassword").value = "";
+    document.getElementById("accountNewPassword").value = "";
+    document.getElementById("accountConfirmPassword").value = "";
+    showPasswordHint(
+      data.message || "Mật khẩu đã được thay đổi. Vui lòng đăng nhập lại.",
+      "ok",
+    );
+    toast("✅ Đã đổi mật khẩu", "ok");
+    window.setTimeout(() => window.location.assign("/login"), 900);
+  } catch (error) {
+    showPasswordHint(getAccountPasswordChangeErrorMessage(error), "err");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Đổi mật khẩu";
+    }
+  }
+}
+
 async function deleteAccount() {
   const confirmed = await showConfirmDialog({
     title: "Xóa tài khoản",

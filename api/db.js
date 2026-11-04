@@ -695,6 +695,20 @@ async function init() {
       return data === true;
     },
 
+    async changeUserPassword(userId, passwordHash, revokedAt = new Date().toISOString()) {
+      const { error: resetTokenError } = await sb
+        .from('password_reset_tokens')
+        .delete()
+        .eq('user_id', userId);
+      check(resetTokenError, 'password_reset_token');
+
+      const { error } = await sb
+        .from('users')
+        .update({ password: passwordHash, session_revoked_after: revokedAt })
+        .eq('id', userId);
+      check(error, 'user_password');
+    },
+
     async updateUserPlan(userId, plan) {
       const updates = { plan };
       if (plan === 'free' || plan === 'admin') {

@@ -257,7 +257,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>
-    <link rel="stylesheet" href="/app.css?v=20260702a" />
+    <link rel="stylesheet" href="/app.css?v=20261104a" />
   </head>
   <body class="app-shell-booting">
     <div id="appBootSplash" role="status" aria-live="polite">
@@ -2705,6 +2705,82 @@
                       Xác minh
                     </button>
                   </div>
+
+                  <div class="account-security-divider"></div>
+                  <form
+                    class="account-password-form"
+                    onsubmit="changeAccountPassword(event)"
+                  >
+                    <div class="account-password-heading">
+                      <strong>Đổi mật khẩu</strong>
+                      <span
+                        >Sau khi đổi, tất cả thiết bị sẽ cần đăng nhập lại.</span
+                      >
+                    </div>
+                    <div class="account-password-fields">
+                      <div>
+                        <label class="fl" for="accountCurrentPassword"
+                          >Mật khẩu hiện tại</label
+                        >
+                        <input
+                          class="fi"
+                          id="accountCurrentPassword"
+                          type="password"
+                          autocomplete="current-password"
+                          maxlength="128"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label class="fl" for="accountNewPassword"
+                          >Mật khẩu mới</label
+                        >
+                        <input
+                          class="fi"
+                          id="accountNewPassword"
+                          type="password"
+                          autocomplete="new-password"
+                          minlength="8"
+                          maxlength="128"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label class="fl" for="accountConfirmPassword"
+                          >Nhập lại mật khẩu mới</label
+                        >
+                        <input
+                          class="fi"
+                          id="accountConfirmPassword"
+                          type="password"
+                          autocomplete="new-password"
+                          minlength="8"
+                          maxlength="128"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div class="account-actions">
+                      <button
+                        class="user-btn primary"
+                        id="accountChangePasswordBtn"
+                        type="submit"
+                      >
+                        Đổi mật khẩu
+                      </button>
+                      <a class="user-btn secondary" href="/forgot-password"
+                        >Quên mật khẩu hiện tại?</a
+                      >
+                    </div>
+                    <div
+                      class="account-note"
+                      id="accountPasswordHint"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      Dùng ít nhất 8 ký tự và không dùng lại mật khẩu hiện tại.
+                    </div>
+                  </form>
                   </section>
                 </div>
 
@@ -3536,7 +3612,7 @@
     <div class="toast" id="toast"></div>
 
     <script src="/shared-client.js"></script>
-    <script src="/app.js?v=20260820c"></script>
+    <script src="/app.js?v=20261104b"></script>
   </body>
 </html>
 
