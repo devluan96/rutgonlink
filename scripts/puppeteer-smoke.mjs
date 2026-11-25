@@ -307,35 +307,18 @@ async function main() {
       const mode = await page.$eval("#authPage", (el) => el.dataset.authMode);
       assert.equal(mode, "register");
 
-      const metricCount = await page.$$eval(".auth-metric", (els) => els.length);
-      assert.equal(metricCount, 3);
-
-      const sceneLink = await page.$eval(".auth-scene-link strong", (el) =>
+      const sceneTitle = await page.$eval("#welcome-title", (el) =>
         el.textContent.trim(),
       );
-      assert.equal(sceneLink, "https://boclink.click/start");
+      assert.equal(sceneTitle, "Khởi đầu cùng BocLink");
 
-      const iconColor = await page.$eval(".auth-scene-link-icon", (el) =>
-        getComputedStyle(el).color,
-      );
-      assert.ok(
-        isWhiteColor(iconColor),
-        `Expected register scene icon to be white, got ${iconColor}`,
-      );
+      assert.equal(await page.$("#theme-toggle") !== null, true);
+      assert.equal(await page.$("#halloween-spider") !== null, true);
 
       const oauthLabel = await page.$eval("#oauthButtonLabel", (el) =>
         el.textContent.trim(),
       );
       assert.equal(oauthLabel, "Tiếp tục bằng Google");
-
-      const authPageBackgrounds = await page.evaluate(() => ({
-        html: getComputedStyle(document.documentElement).backgroundColor,
-        body: getComputedStyle(document.body).backgroundColor,
-        bodyHeight: document.body.getBoundingClientRect().height,
-        contentHeight: document.documentElement.scrollHeight,
-      }));
-      assert.equal(authPageBackgrounds.html, authPageBackgrounds.body);
-      assert.ok(authPageBackgrounds.bodyHeight >= authPageBackgrounds.contentHeight);
 
       const registerPassword = await page.$eval("#regPass", (el) => ({
         required: el.required,
@@ -389,21 +372,13 @@ async function main() {
       const mode = await page.$eval("#authPage", (el) => el.dataset.authMode);
       assert.equal(mode, "login");
 
-      const metricCount = await page.$$eval(".auth-metric", (els) => els.length);
-      assert.equal(metricCount, 3);
-
-      const sceneLink = await page.$eval(".auth-scene-link strong", (el) =>
+      const sceneTitle = await page.$eval("#welcome-title", (el) =>
         el.textContent.trim(),
       );
-      assert.equal(sceneLink, "https://boclink.click/short");
+      assert.equal(sceneTitle, "BocLink về đêm");
 
-      const iconColor = await page.$eval(".auth-scene-link-icon", (el) =>
-        getComputedStyle(el).color,
-      );
-      assert.ok(
-        isWhiteColor(iconColor),
-        `Expected login scene icon to be white, got ${iconColor}`,
-      );
+      assert.equal(await page.$("#theme-toggle") !== null, true);
+      assert.equal(await page.$("#halloween-spider") !== null, true);
 
       const oauthLabel = await page.$eval("#oauthButtonLabel", (el) =>
         el.textContent.trim(),

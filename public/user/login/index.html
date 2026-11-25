@@ -1,283 +1,58 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
   <head>
-    <meta charset="UTF-8" />
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="Đăng nhập BocLink để quản lý link rút gọn, QR code, bio link và theo dõi click trong dashboard."
-    />
     <meta name="robots" content="noindex, nofollow, noarchive" />
-    <meta name="theme-color" content="#0d1117" />
+    <meta name="theme-color" content="#172b33" />
     <link rel="canonical" href="__BASE_URL__/login" />
     <title>Đăng nhập - BocLink</title>
-    <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" sizes="any" />
-    <link rel="shortcut icon" href="/favicon.svg?v=2" />
+    <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
     <link rel="stylesheet" href="/app.css?v=20260619c" />
     <link rel="stylesheet" href="/auth.css?v=20261028d" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <link rel="stylesheet" href="/auth-halloween.css?v=20261125a" />
+    <script src="/halloween/resources.js?v=20261125a" defer></script>
+    <script src="/halloween/scene.js?v=20261125a" defer></script>
+    <script src="/halloween/spider.js?v=20261125a" defer></script>
+    <script src="/halloween/wolf.js?v=20261125a" defer></script>
     <script type="module" src="/auth.js?v=20261028b" defer></script>
   </head>
   <body class="auth-page">
-    <main
-      id="authPage"
-      class="auth-page-shell"
-      data-auth-mode="login"
-      data-supabase-url="__SUPABASE_URL__"
-      data-supabase-anon-key="__SUPABASE_ANON_KEY__"
-    >
-      <div class="auth-stage">
-        <div class="auth-shell">
-          <section class="auth-hero">
-            <div class="auth-brand">
-              <img
-                src="/favicon.svg?v=2"
-                alt="BocLink"
-                class="auth-brand-mark"
-                width="56"
-                height="56"
-              />
-              <div class="auth-brand-copy">
-                <strong>BocLink</strong>
-                <span>Link gọn. Dữ liệu rõ. Bán hàng nhanh.</span>
-              </div>
-            </div>
-
-            <div class="auth-kicker">Workspace của bạn, sẵn sàng</div>
-
-            <div class="auth-hero-copy">
-              <h1>Mọi liên kết, luôn trong tầm nhìn.</h1>
-              <p>
-                Quay lại workspace để quản lý link, QR, bio page và theo dõi hiệu quả
-                chiến dịch từ một nơi duy nhất.
-              </p>
-            </div>
-
-            <div class="auth-scene" aria-hidden="true">
-              <div class="auth-scene-orb auth-scene-orb--one"></div>
-              <div class="auth-scene-orb auth-scene-orb--two"></div>
-              <div class="auth-scene-orb auth-scene-orb--three"></div>
-
-              <div class="auth-scene-chip auth-scene-chip--left">Smart Link</div>
-              <div class="auth-scene-chip auth-scene-chip--right">QR Live</div>
-              <div class="auth-scene-chip auth-scene-chip--bottom">Bio + Tracking</div>
-
-              <div class="auth-scene-card">
-                <div class="auth-scene-card-head">
-                  <strong>BocLink</strong>
-                  <span>Live</span>
-                </div>
-
-                <div class="auth-scene-link">
-                  <span class="auth-scene-link-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none">
-                      <path
-                        d="M10 14a4 4 0 0 1 0-5.66l2.34-2.34a4 4 0 1 1 5.66 5.66L16 13.66"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                      <path
-                        d="M14 10a4 4 0 0 0 0 5.66l-2.34 2.34a4 4 0 1 1-5.66-5.66L8 10.34"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </span>
-                  <div>
-                    <strong>https://boclink.click/short</strong>
-                    <span>1.57M lượt nhấp, cập nhật theo thời gian thực</span>
-                  </div>
-                </div>
-
-                <div class="auth-scene-grid">
-                  <div class="auth-scene-mini auth-scene-mini--chart"></div>
-                  <div class="auth-scene-mini auth-scene-mini--qr">
-                    <div class="auth-scene-qr"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="auth-metrics">
-              <article class="auth-metric">
-                <span class="auth-metric-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M12 3l2.7 5.6 6.2.9-4.5 4.4 1.1 6.2L12 17.9 6.5 20l1.1-6.2L3 9.5l6.3-.9L12 3Z"
-                      stroke="currentColor"
-                      stroke-width="1.6"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </span>
-                <div>
-                  <strong>Tiếp tục đúng chỗ</strong>
-                  <span>Mở lại workspace và công việc gần nhất của bạn.</span>
-                </div>
-              </article>
-              <article class="auth-metric">
-                <span class="auth-metric-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M4 7.5A3.5 3.5 0 0 1 7.5 4H12v7H4V7.5Z"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                    />
-                    <path
-                      d="M12 4h4.5A3.5 3.5 0 0 1 20 7.5V12h-8V4Z"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                    />
-                    <path
-                      d="M4 12h8v8H7.5A3.5 3.5 0 0 1 4 16.5V12Z"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                    />
-                    <path
-                      d="M12 12h8v4.5A3.5 3.5 0 0 1 16.5 20H12v-8Z"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                    />
-                  </svg>
-                </span>
-                <div>
-                  <strong>Dữ liệu rõ ràng</strong>
-                  <span>Theo dõi lượt nhấp và hiệu quả chiến dịch theo thời gian thực.</span>
-                </div>
-              </article>
-              <article class="auth-metric">
-                <span class="auth-metric-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M12 3v18"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                    />
-                    <path
-                      d="M4 8h8"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                    />
-                    <path
-                      d="M4 16h8"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                    />
-                    <path
-                      d="M16 6h4M16 18h4"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                    />
-                  </svg>
-                </span>
-                <div>
-                  <strong>Đăng nhập an toàn</strong>
-                  <span>Tiếp tục bằng Google hoặc tài khoản BocLink của bạn.</span>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section class="auth-card">
-            <div class="auth-card-top">
-              <span class="auth-route-badge">Chào mừng trở lại</span>
-              <h2>Đăng nhập BocLink</h2>
-              <p>Tiếp tục bằng Google hoặc tài khoản của bạn.</p>
-            </div>
-
-            <div id="authErr" class="auth-error" role="alert" aria-live="polite" tabindex="-1"></div>
-
-            <div class="auth-oauth">
-              <div class="auth-oauth-label">Tiếp tục bằng Google</div>
-              <button id="oauthButton" class="auth-oauth-button" type="button">
-                <span class="auth-oauth-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M21.35 11.1H12v2.9h5.4c-.23 1.24-1.6 3.63-5.4 3.63a5.95 5.95 0 1 1 0-11.9c1.7 0 2.84.72 3.49 1.34l2.37-2.29C16.41 3.35 14.47 2.5 12 2.5a9.5 9.5 0 1 0 0 19c5.66 0 9.42-3.98 9.42-9.6 0-.64-.07-1.12-.07-1.8Z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                </span>
-                <span id="oauthButtonLabel">Tiếp tục bằng Google</span>
-              </button>
-              <p id="oauthHint" class="auth-oauth-hint" hidden></p>
-            </div>
-
-            <div class="auth-divider"><span>hoặc</span></div>
-
-            <form id="authForm" class="auth-form" autocomplete="on" novalidate>
-              <div class="auth-field">
-                <label class="auth-label" for="loginEmail">Email</label>
-                <input
-                  type="email"
-                  id="loginEmail"
-                  name="email"
-                  class="auth-input"
-                  placeholder="name@domain.com"
-                  autocomplete="username"
-                  aria-describedby="loginEmailError"
-                  data-auth-validate
-                  required
-                />
-                <p id="loginEmailError" class="auth-field-error" hidden></p>
-              </div>
-              <div class="auth-field">
-                <label class="auth-label" for="loginPass">Mật khẩu</label>
-                <div class="auth-password-control">
-                  <input
-                    type="password"
-                    id="loginPass"
-                    name="password"
-                    class="auth-input"
-                    placeholder="Nhập mật khẩu"
-                    autocomplete="current-password"
-                    aria-describedby="loginPassError"
-                    data-auth-validate
-                    required
-                  />
-                  <button
-                    class="auth-password-toggle"
-                    type="button"
-                    aria-label="Hiện mật khẩu"
-                    aria-pressed="false"
-                    data-password-target="loginPass"
-                  >Hiện</button>
-                </div>
-                <p id="loginCapsHint" class="auth-caps-hint" role="status" aria-live="polite" hidden>Caps Lock đang bật.</p>
-                <p id="loginPassError" class="auth-field-error" hidden></p>
-              </div>
-              <div class="auth-form-tools">
-                <a class="auth-link" href="/forgot-password">Quên mật khẩu?</a>
-              </div>
-              <button class="auth-submit" type="submit">Đăng nhập</button>
-            </form>
-
-            <div class="auth-foot">
-              <span>Chưa có tài khoản?</span>
-              <a class="auth-link" href="/register">Đăng ký ngay</a>
-            </div>
-
-            <p class="auth-note">
-              Bằng việc tiếp tục, bạn đồng ý với
-              <a href="/terms">Điều khoản sử dụng</a> và
-              <a href="/privacy">Chính sách bảo mật</a> của BocLink.click.
-            </p>
-          </section>
-        </div>
+    <div class="landscape-scene page-landscape" aria-hidden="true">
+      <img class="scene-land scene-day" src="/halloween/images/background-day.svg" alt="" />
+      <img class="scene-land scene-night" src="/halloween/images/background-night.svg" alt="" />
+      <div class="sky-flight">
+        <span class="sky-bat bat-1"><span class="flyer-facing" data-svg="/halloween/images/bat.svg"></span></span><span class="sky-bat bat-2"><span class="flyer-facing" data-svg="/halloween/images/bat.svg"></span></span><span class="sky-bat bat-3"><span class="flyer-facing" data-svg="/halloween/images/bat.svg"></span></span><span class="sky-bat bat-4"><span class="flyer-facing" data-svg="/halloween/images/bat.svg"></span></span><span class="sky-bat bat-5"><span class="flyer-facing" data-svg="/halloween/images/bat.svg"></span></span><span class="sky-bat bat-6"><span class="flyer-facing" data-svg="/halloween/images/bat.svg"></span></span>
+        <span class="sky-witch"><span class="flyer-facing"><img src="/halloween/images/witch.svg" alt="" draggable="false" /></span></span>
+      </div>
+    </div>
+    <main id="authPage" class="login-shell" data-auth-mode="login" data-supabase-url="__SUPABASE_URL__" data-supabase-anon-key="__SUPABASE_ANON_KEY__">
+      <div class="halloween-vines" id="halloween-vines" aria-hidden="true"></div>
+      <div class="login-card">
+        <section class="scene-panel" aria-labelledby="welcome-title">
+          <div class="landscape-scene" aria-hidden="true">
+            <div class="scene-sky-objects"><div class="scene-sun"></div><div class="scene-moon"></div></div>
+            <img class="scene-land scene-day" src="/halloween/images/panel-day.svg" alt="" /><img class="scene-land scene-night" src="/halloween/images/panel-night.svg" alt="" />
+            <div class="sky-flight"><span class="sky-bat bat-1"><span class="flyer-facing" data-svg="/halloween/images/bat.svg"></span></span><span class="sky-bat bat-2"><span class="flyer-facing" data-svg="/halloween/images/bat.svg"></span></span><span class="sky-bat bat-3"><span class="flyer-facing" data-svg="/halloween/images/bat.svg"></span></span></div>
+          </div>
+          <div class="summit-stage" aria-hidden="true"></div>
+          <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false" aria-label="Bật đêm Halloween"><span class="theme-toggle-thumb" aria-hidden="true"></span><span data-svg="/halloween/images/icon-sun.svg"></span><span data-svg="/halloween/images/icon-moon.svg"></span></button>
+          <div class="scene-copy"><h1 id="welcome-title">BocLink về đêm</h1><p>Đăng nhập để quản lý link, QR và chiến dịch của bạn.</p></div>
+        </section>
+        <section class="form-panel" aria-labelledby="login-title">
+          <div class="auth-card-top"><span class="auth-route-badge">Chào mừng trở lại</span><h2 id="login-title">Đăng nhập BocLink</h2><p>Tiếp tục bằng Google hoặc tài khoản của bạn.</p></div>
+          <div id="authErr" class="auth-error" role="alert" aria-live="polite" tabindex="-1"></div>
+          <div class="auth-oauth"><button id="oauthButton" class="auth-oauth-button" type="button"><span class="auth-oauth-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21.35 11.1H12v2.9h5.4c-.23 1.24-1.6 3.63-5.4 3.63a5.95 5.95 0 1 1 0-11.9c1.7 0 2.84.72 3.49 1.34l2.37-2.29C16.41 3.35 14.47 2.5 12 2.5a9.5 9.5 0 1 0 0 19c5.66 0 9.42-3.98 9.42-9.6 0-.64-.07-1.12-.07-1.8Z" fill="currentColor" /></svg></span><span id="oauthButtonLabel">Tiếp tục bằng Google</span></button><p id="oauthHint" class="auth-oauth-hint" hidden></p></div>
+          <div class="auth-divider"><span>hoặc</span></div>
+          <form id="authForm" class="login-form auth-form" autocomplete="on" novalidate>
+            <div class="auth-field field"><label class="auth-label" for="loginEmail">Email</label><input type="email" id="loginEmail" name="email" class="auth-input" placeholder="Email" autocomplete="username" aria-describedby="loginEmailError" data-auth-validate required /><div class="email-owl" id="email-owl" aria-hidden="true"><span data-svg="/halloween/images/owl.svg"></span></div><p id="loginEmailError" class="auth-field-error" hidden></p></div>
+            <div class="auth-field field password"><label class="auth-label" for="loginPass">Mật khẩu</label><div class="auth-password-control"><input type="password" id="loginPass" name="password" class="auth-input" placeholder="Mật khẩu" autocomplete="current-password" aria-describedby="loginPassError" data-auth-validate required /><button class="auth-password-toggle eye" id="show-password" type="button" aria-label="Hiện mật khẩu" aria-pressed="false" data-password-target="loginPass"></button></div><p id="loginCapsHint" class="auth-caps-hint" role="status" aria-live="polite" hidden>Caps Lock đang bật.</p><p id="loginPassError" class="auth-field-error" hidden></p></div>
+            <div class="auth-form-tools"><a class="auth-link" href="/forgot-password">Quên mật khẩu?</a></div><button class="auth-submit submit" type="submit"><span>Đăng nhập</span> <img src="/halloween/images/icon-arrow.svg" alt="" width="17" height="17" /></button>
+          </form>
+          <div class="auth-foot"><span>Chưa có tài khoản?</span> <a class="auth-link" href="/register">Đăng ký ngay</a></div><p class="auth-note">Bằng việc tiếp tục, bạn đồng ý với <a class="auth-link" href="/terms">Điều khoản sử dụng</a> và <a class="auth-link" href="/privacy">Chính sách bảo mật</a> của BocLink.</p>
+        </section>
       </div>
     </main>
+    <canvas id="halloween-spider" aria-hidden="true"></canvas><div class="flash-beam" id="flash-beam" aria-hidden="true"></div><div class="password-reveal" id="password-reveal" aria-hidden="true"><span id="reveal-text"></span></div><div class="flashlight" id="flashlight" aria-hidden="true"><img src="/halloween/images/flashlight.svg" alt="" width="33" height="33" /></div>
   </body>
 </html>
