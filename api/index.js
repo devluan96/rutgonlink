@@ -962,7 +962,9 @@ app.post(
         req.body?.config && typeof req.body.config === "object"
           ? req.body.config
           : req.body;
-      const previewConfig = await resolveArticleFunnelConfig(rawConfig);
+      const previewConfig = await resolveArticleFunnelConfig(
+        applyUserTikTokIosLabVtPreset(rawConfig, req.currentUser),
+      );
       const expiresAt = Date.now() + ARTICLE_FUNNEL_PREVIEW_TOKEN_TTL_MS;
       const token = createArticleFunnelPreviewLinkToken({
         v: 1,
@@ -995,7 +997,9 @@ app.post(
         req.body?.config && typeof req.body.config === "object"
           ? req.body.config
           : req.body;
-      const publishedConfig = await resolveArticleFunnelConfig(rawConfig);
+      const publishedConfig = await resolveArticleFunnelConfig(
+        applyUserTikTokIosLabVtPreset(rawConfig, req.currentUser),
+      );
       const routeSlug = normalizeArticleFunnelPreviewSlug(
         publishedConfig.slug || publishedConfig.title,
       );
@@ -3081,6 +3085,23 @@ function buildTikTokPopup20sOneLink(destinationUrl) {
   }
 }
 
+function buildTikTokVRedirectUrl(destinationUrl) {
+  try {
+    const normalizedUrl = String(destinationUrl || "").trim();
+    if (!normalizedUrl) return "";
+    const hostname = new URL(normalizedUrl).hostname.toLowerCase();
+    if (hostname === "tiktokv.com" || hostname === "www.tiktokv.com") {
+      return normalizedUrl;
+    }
+    if (hostname !== "vt.tiktok.com" && hostname !== "vm.tiktok.com") {
+      return normalizedUrl;
+    }
+    return `https://www.tiktokv.com/redirect/?redirect_url=${encodeURIComponent(normalizedUrl)}`;
+  } catch {
+    return String(destinationUrl || "").trim();
+  }
+}
+
 function buildRegularTikTokLinkInfo(originalUrl, info) {
   if (info?.platform_name !== "tiktok" || !isTikTokProductUrl(originalUrl)) {
     return info;
@@ -5025,12 +5046,64 @@ app.get("/api/debug", (req, res) =>
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 
+function normalizeTikTokLabIosVtUrl(input) {
+  const normalizedUrl = normalizeAffiliatePresetUrl(input, "tiktok");
+  if (!normalizedUrl) return "";
+  try {
+    const hostname = new URL(normalizedUrl).hostname.toLowerCase();
+    return hostname === "vt.tiktok.com" || hostname === "vm.tiktok.com"
+      ? normalizedUrl
+      : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+function applyUserTikTokIosLabVtPreset(rawConfig, user = {}) {
+  const config =
+    rawConfig && typeof rawConfig === "object" && !Array.isArray(rawConfig)
+      ? { ...rawConfig }
+      : {};
+  const overlay =
+    config.overlay && typeof config.overlay === "object" ? config.overlay : {};
+  const existingOverride = String(
+    config.popup20sIosFbUrl ||
+      config.popup_20s_ios_fb_url ||
+      overlay.popup_20s_ios_fb_url ||
+      "",
+  ).trim();
+  const applyPreset = (url) => ({
+    ...config,
+    popup20sIosFbUrl: url,
+    popup_20s_ios_fb_url: url,
+    overlay: {
+      ...overlay,
+      popup_20s_ios_fb_url: url,
+    },
+  });
+  const validExistingVtUrl = normalizeTikTokLabIosVtUrl(existingOverride);
+  if (validExistingVtUrl) {
+    return applyPreset(validExistingVtUrl);
+  }
+
+  const legacySettings = user?.lab_shared_settings_json;
+  const presetUrl = normalizeTikTokLabIosVtUrl(
+    user?.affiliate_tiktok_ios_lab_vt_url ||
+      legacySettings?.tiktokIosLabVtUrl ||
+      "",
+  );
+  return presetUrl ? applyPreset(presetUrl) : config;
+}
+
 function normalizeUserLabSharedSettings(input = {}) {
   const source =
     input && typeof input === "object" && !Array.isArray(input) ? input : {};
   return {
     popup3sUrl: String(source.popup3sUrl || "").trim(),
     popup3sIosFbUrl: String(source.popup3sIosFbUrl || "").trim(),
+    tiktokIosLabVtUrl: normalizeTikTokLabIosVtUrl(
+      source.tiktokIosLabVtUrl || "",
+    ),
     overlayImage: String(source.overlayImage || "").trim(),
     overlay20sImage: String(source.overlay20sImage || "").trim(),
     overlay300sImage: String(source.overlay300sImage || "").trim(),
@@ -5148,6 +5221,8 @@ function buildAuthUserPayload(user, isAdmin = false) {
     avatar_url: user.avatar_url || null,
     affiliate_shopee_url: user.affiliate_shopee_url || null,
     affiliate_tiktok_url: user.affiliate_tiktok_url || null,
+    affiliate_tiktok_ios_lab_vt_url:
+      user.affiliate_tiktok_ios_lab_vt_url || null,
     affiliate_shopee_sources: settingsBundle.affiliate_shopee_sources,
     lab_shared_settings: normalizeUserLabSharedSettings(settingsBundle),
     can_use_lab: isAdmin ? true : !!user.can_use_lab,
@@ -5916,19 +5991,29 @@ function applyArticleFunnelStageDirectOverrides(
     sourceConfig.overlay && typeof sourceConfig.overlay === "object"
       ? sourceConfig.overlay
       : {};
+  const persistedTikTokIosFbTarget = String(
+    config.direct_ios_fb_url || "",
+  ).trim();
+  const persistedTikTokIosFbOverride =
+    /^https:\/\/(?:www\.)?(?:tiktokv\.com|vt\.tiktok\.com|vm\.tiktok\.com)(?:\/|$)/i.test(
+      persistedTikTokIosFbTarget,
+    ) ? persistedTikTokIosFbTarget : "";
 
   if (normalizedStageKey === "20s" && config.direct_platform === "tiktok") {
     const iosInAppOverride = String(
       sourceConfig.popup20sIosFbUrl ||
         sourceConfig.popup_20s_ios_fb_url ||
         overlay.popup_20s_ios_fb_url ||
+        persistedTikTokIosFbOverride ||
         "",
     ).trim();
     const autoWrappedOneLink = buildTikTokPopup20sOneLink(
       config.direct_web_url || config.target_url || "",
     );
     if (iosInAppOverride || autoWrappedOneLink) {
-      config.direct_ios_fb_url = iosInAppOverride || autoWrappedOneLink;
+      config.direct_ios_fb_url = buildTikTokVRedirectUrl(
+        iosInAppOverride || autoWrappedOneLink,
+      );
     }
     if (autoWrappedOneLink) {
       config.direct_android_url = autoWrappedOneLink;
@@ -8094,6 +8179,30 @@ ${ogImageTag}
     return isFacebookInAppBrowser() && isSupportedMobileDevice();
   }
 
+  function hasTikTokIosInAppDirectLaunch(stage) {
+    if (!stage) return false;
+    var targetUrl = String(stage.direct_ios_fb_url || '').trim();
+    if (!targetUrl) return false;
+    try {
+      var hostname = new URL(targetUrl).hostname.toLowerCase();
+      return hostname === 'vt.tiktok.com' ||
+        hostname === 'vm.tiktok.com' ||
+        hostname === 'tiktokv.com' ||
+        hostname === 'www.tiktokv.com';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function shouldBypassFacebookInAppGateForTikTokPopup() {
+    if (!isIOSDevice()) return false;
+    return stages.some(function(stage) {
+      return String(stage.stage_key || '') === '20s' &&
+        String(stage.direct_platform || '').toLowerCase() === 'tiktok' &&
+        hasTikTokIosInAppDirectLaunch(stage);
+    });
+  }
+
   function tryOpenExternalBrowserFromFacebook() {
     if (!isFacebookInAppBrowser() || location.protocol !== 'https:') return false;
     if (isIOSDevice()) {
@@ -8723,9 +8832,9 @@ ${ogImageTag}
             ? getNativePopupDirectAppLaunchUrl(stage)
             : '';
         if (isTikTokPopup20s && isInApp && stage.direct_ios_fb_url) {
-          navigateWindowLocation(stage.direct_ios_fb_url, {
-            preferTopLevel: true,
-          });
+          setTimeout(function() {
+            openViaAnchor(stage.direct_ios_fb_url, '_blank', 'noopener noreferrer');
+          }, 250);
         } else if (isInApp && directAppTarget) {
           navigateWindowLocation(directAppTarget, {
             preferTopLevel: true,
@@ -8897,7 +9006,7 @@ ${ogImageTag}
 
   renderBlocks();
   syncSensitiveWraps();
-  if (shouldGateFacebookInAppVisit()) {
+  if (shouldGateFacebookInAppVisit() && !shouldBypassFacebookInAppGateForTikTokPopup()) {
     facebookInAppGate.hidden = false;
     if (isIOSDevice()) tryOpenExternalBrowserFromFacebook();
     return;
@@ -9510,6 +9619,26 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
       updates.affiliate_tiktok_url = tiktokAffiliateUrl;
     }
     if (
+      Object.prototype.hasOwnProperty.call(
+        body,
+        "affiliate_tiktok_ios_lab_vt_url",
+      )
+    ) {
+      const tiktokIosLabVtInput = String(
+        body.affiliate_tiktok_ios_lab_vt_url || "",
+      ).trim();
+      const tiktokIosLabVtUrl = tiktokIosLabVtInput
+        ? normalizeTikTokLabIosVtUrl(tiktokIosLabVtInput)
+        : null;
+      if (tiktokIosLabVtInput && !tiktokIosLabVtUrl) {
+        return res.status(400).json({
+          error:
+            "Link TikTok VT cho Lab iPhone/Facebook phải là vt.tiktok.com hoặc vm.tiktok.com",
+        });
+      }
+      updates.affiliate_tiktok_ios_lab_vt_url = tiktokIosLabVtUrl;
+    }
+    if (
       Object.prototype.hasOwnProperty.call(body, "lab_shared_settings") ||
       Object.prototype.hasOwnProperty.call(body, "lab_shared_settings_json") ||
       Object.prototype.hasOwnProperty.call(body, "affiliate_shopee_sources")
@@ -9524,11 +9653,23 @@ app.patch("/api/auth/me", requireAuth, async (req, res) => {
         Object.prototype.hasOwnProperty.call(body, "lab_shared_settings") ||
         Object.prototype.hasOwnProperty.call(body, "lab_shared_settings_json")
       ) {
+        const sharedSettingsInput =
+          body.lab_shared_settings_json || body.lab_shared_settings || {};
+        const rawTikTokIosLabVtUrl = String(
+          sharedSettingsInput?.tiktokIosLabVtUrl || "",
+        ).trim();
+        if (
+          rawTikTokIosLabVtUrl &&
+          !normalizeTikTokLabIosVtUrl(rawTikTokIosLabVtUrl)
+        ) {
+          return res.status(400).json({
+            error:
+              "Link TikTok VT cho Lab iPhone/Facebook phải là vt.tiktok.com hoặc vm.tiktok.com",
+          });
+        }
         Object.assign(
           nextSettings,
-          normalizeUserLabSharedSettings(
-            body.lab_shared_settings_json || body.lab_shared_settings || {},
-          ),
+          normalizeUserLabSharedSettings(sharedSettingsInput),
         );
       }
       if (
@@ -14502,6 +14643,9 @@ module.exports.__testUtils = {
   buildOverlayLaunchConfig,
   applyArticleFunnelStageDirectOverrides,
   buildArticleFunnelPopup20sDirectBridgeInfo,
+  normalizeTikTokLabIosVtUrl,
+  applyUserTikTokIosLabVtPreset,
+  normalizeUserLabSharedSettings,
   resolveTikTokIosInAppTargets,
   buildArticleFunnelPopup20sTikTokBridgePage,
   decorateArticleFunnelStagesForClient,

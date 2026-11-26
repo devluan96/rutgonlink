@@ -116,6 +116,7 @@ const USER_AUTH_SELECT = [
   'avatar_url',
   'affiliate_shopee_url',
   'affiliate_tiktok_url',
+  'affiliate_tiktok_ios_lab_vt_url',
   'lab_shared_settings_json',
   'can_use_lab',
   'plan',
@@ -774,6 +775,10 @@ async function init() {
       if (Object.prototype.hasOwnProperty.call(profile, 'affiliate_tiktok_url')) {
         payload.affiliate_tiktok_url = profile.affiliate_tiktok_url || null;
       }
+      if (Object.prototype.hasOwnProperty.call(profile, 'affiliate_tiktok_ios_lab_vt_url')) {
+        payload.affiliate_tiktok_ios_lab_vt_url =
+          profile.affiliate_tiktok_ios_lab_vt_url || null;
+      }
       if (Object.prototype.hasOwnProperty.call(profile, 'lab_shared_settings_json')) {
         payload.lab_shared_settings_json =
           profile.lab_shared_settings_json &&
@@ -787,6 +792,11 @@ async function init() {
       if (isMissingColumnError(error, 'lab_shared_settings_json')) {
         throw new Error(
           'DB schema chưa cập nhật cột lab_shared_settings_json. Hãy chạy migration 20260718_add_user_lab_shared_settings.sql',
+        );
+      }
+      if (isMissingColumnError(error, 'affiliate_tiktok_ios_lab_vt_url')) {
+        throw new Error(
+          'DB schema chưa cập nhật cột affiliate_tiktok_ios_lab_vt_url. Hãy chạy migration 20261126_add_tiktok_ios_lab_vt_affiliate.sql',
         );
       }
       check(error);

@@ -3817,7 +3817,9 @@
         let labItems = [];
         let selectedLabIds = new Set();
         let availableDomains = [];
-        let affiliatePresets = { shopee: "", tiktok: "", shopeeSources: [] };
+        const embeddedAffiliateUser =
+          window.__ARTICLE_FUNNEL_LAB_BOOTSTRAP__?.user || {};
+        let affiliatePresets = mapAffiliatePresetsFromUser(embeddedAffiliateUser);
         let lastAutoSlug = "";
         let slugEditedManually = false;
         let confirmDialogResolver = null;
@@ -4253,6 +4255,18 @@
               changed = true;
             }
           }
+          if (!String(state.popup20sIosFbUrl || "").trim()) {
+            const tiktokIosLabVtUrl = String(
+              affiliatePresets.tiktokIosLabVtUrl || "",
+            ).trim();
+            if (tiktokIosLabVtUrl) {
+              state.popup20sIosFbUrl = tiktokIosLabVtUrl;
+              if (els.popup20sIosFbInput) {
+                els.popup20sIosFbInput.value = tiktokIosLabVtUrl;
+              }
+              changed = true;
+            }
+          }
           if (!changed) return;
           clearGeneratedPreviewLink();
           clearGeneratedPublishedLink();
@@ -4420,6 +4434,9 @@
           return {
             shopee: String(user.affiliate_shopee_url || "").trim(),
             tiktok: String(user.affiliate_tiktok_url || "").trim(),
+            tiktokIosLabVtUrl: String(
+              user.affiliate_tiktok_ios_lab_vt_url || "",
+            ).trim(),
             shopeeSources: Array.isArray(user.affiliate_shopee_sources)
               ? user.affiliate_shopee_sources
                   .map((item) => ({
@@ -4445,26 +4462,14 @@
             if (!response.ok) {
               throw new Error(data.error || "Không thể tải affiliate preset");
             }
-            const user = data.user || {};
-            affiliatePresets = {
-              shopee: String(user.affiliate_shopee_url || "").trim(),
-              tiktok: String(user.affiliate_tiktok_url || "").trim(),
-              shopeeSources: Array.isArray(user.affiliate_shopee_sources)
-                ? user.affiliate_shopee_sources
-                    .map((item) => ({
-                      id: String(item?.id || "").trim(),
-                      label: String(item?.label || item?.name || "").trim(),
-                      url: String(item?.url || "").trim(),
-                      opaanlp_url: String(
-                        item?.opaanlp_url || item?.opaanlpUrl || "",
-                      ).trim(),
-                      is_default: Boolean(item?.is_default),
-                    }))
-                    .filter((item) => item.url)
-                : [],
-            };
+            affiliatePresets = mapAffiliatePresetsFromUser(data.user || {});
           } catch (_) {
-            affiliatePresets = { shopee: "", tiktok: "", shopeeSources: [] };
+            affiliatePresets = {
+              shopee: "",
+              tiktok: "",
+              tiktokIosLabVtUrl: "",
+              shopeeSources: [],
+            };
           }
           syncAffiliatePresetButtons();
           hydrateAffiliateDefaults();

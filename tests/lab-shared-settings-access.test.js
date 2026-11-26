@@ -32,6 +32,10 @@ test("app lab access logic allows explicitly granted users and stores popup 3s d
   );
   assert.match(
     appJs,
+    /tiktokIosLabVtUrl:\s*String\(source\.tiktokIosLabVtUrl \|\| ""\)\.trim\(\)/,
+  );
+  assert.match(
+    appJs,
     /function getAffiliateShopeeSourceProductUrl\(source = null\) \{[\s\S]{0,160}?source\?\.product_url \|\| source\?\.productUrl \|\| source\?\.url \|\| ""[\s\S]{0,40}?\.trim\(\);[\s\S]{0,10}?\}/,
   );
   assert.match(
@@ -70,6 +74,48 @@ test("article funnel lab list scopes admins to their own labs", () => {
   assert.doesNotMatch(
     indexJs,
     /app\.get\(\s*"\/api\/admin\/article-funnel-labs",\s*requireArticleFunnelLab,\s*async \(req, res\) => \{[\s\S]*?createdByUserId:\s*isAdminUserRecord\(req\.currentUser\)/,
+  );
+});
+
+test("TikTok VT Lab preset is saved separately and hydrates only the iPhone Lab field", () => {
+  const indexHtml = fs.readFileSync(
+    path.join(__dirname, "..", "public", "index.html"),
+    "utf8",
+  );
+  const appJs = fs.readFileSync(
+    path.join(__dirname, "..", "public", "app.js"),
+    "utf8",
+  );
+  const templateHtml = fs.readFileSync(
+    path.join(__dirname, "..", "api", "templates", "admin-article-funnel-lab.html"),
+    "utf8",
+  );
+
+  assert.match(indexHtml, /id="accountAffiliateTikTokIosLabVtInput"/);
+  assert.match(indexHtml, /\/app\.js\?v=20261126-vt-lab-autofill/);
+  assert.match(
+    appJs,
+    /affiliate_tiktok_ios_lab_vt_url:/,
+  );
+  assert.match(
+    appJs,
+    /article-funnel-lab-srcdoc\.js\?v=20261126-vt-lab-autofill/,
+  );
+  assert.match(
+    templateHtml,
+    /user\.affiliate_tiktok_ios_lab_vt_url/,
+  );
+  assert.match(
+    templateHtml,
+    /state\.popup20sIosFbUrl = tiktokIosLabVtUrl/,
+  );
+  assert.match(
+    templateHtml,
+    /window\.__ARTICLE_FUNNEL_LAB_BOOTSTRAP__\?\.user/,
+  );
+  assert.match(
+    templateHtml,
+    /let affiliatePresets = mapAffiliatePresetsFromUser\(embeddedAffiliateUser\);/,
   );
 });
 

@@ -195,7 +195,7 @@ const articleFunnelLabPendingOpenIdStorageKey =
   "rutgonlink-lab-pending-open-id";
 const articleFunnelLabDebugStorageKey = "rutgonlink-lab-debug";
 const articleFunnelLabSrcdocAssetUrl =
-  "/article-funnel-lab-srcdoc.js?v=20261104-edit-state";
+  "/article-funnel-lab-srcdoc.js?v=20261126-vt-lab-autofill";
 const linksSubtabStorageKey = "rutgonlink-links-subtab";
 let createSubtab =
   localStorage.getItem(createSubtabStorageKey) === "lab" ? "lab" : "standard";
@@ -3653,8 +3653,12 @@ function renderAccountAffiliateSettings(options = {}) {
   const preserveInputValues = !!options.preserveInputValues;
   const shopeeInput = document.getElementById("accountAffiliateShopeeInput");
   const tiktokInput = document.getElementById("accountAffiliateTikTokInput");
+  const tiktokIosLabVtInput = document.getElementById(
+    "accountAffiliateTikTokIosLabVtInput",
+  );
   const currentShopeeValue = shopeeInput?.value || "";
   const currentTikTokValue = tiktokInput?.value || "";
+  const currentTikTokIosLabVtValue = tiktokIosLabVtInput?.value || "";
   const shopeeSources = preserveInputValues
     ? getAffiliateShopeeDraftSources()
     : getUserAffiliateShopeeSources();
@@ -3667,6 +3671,11 @@ function renderAccountAffiliateSettings(options = {}) {
     tiktokInput.value = preserveInputValues
       ? currentTikTokValue
       : getUserAffiliatePresetUrl("tiktok");
+  }
+  if (tiktokIosLabVtInput) {
+    tiktokIosLabVtInput.value = preserveInputValues
+      ? currentTikTokIosLabVtValue
+      : String(user?.affiliate_tiktok_ios_lab_vt_url || "").trim();
   }
   renderAffiliateShopeeSourcesManager(shopeeSources);
   [
@@ -3970,6 +3979,10 @@ async function saveAccountAffiliateSettings() {
         affiliate_tiktok_url:
           document
             .getElementById("accountAffiliateTikTokInput")
+            ?.value.trim() || "",
+        affiliate_tiktok_ios_lab_vt_url:
+          document
+            .getElementById("accountAffiliateTikTokIosLabVtInput")
             ?.value.trim() || "",
       }),
     });
@@ -5715,6 +5728,7 @@ function normalizeLabSharedSettings(input = {}) {
   return {
     popup3sUrl: String(source.popup3sUrl || "").trim(),
     popup3sIosFbUrl: String(source.popup3sIosFbUrl || "").trim(),
+    tiktokIosLabVtUrl: String(source.tiktokIosLabVtUrl || "").trim(),
     overlayImage: String(source.overlayImage || "").trim(),
     overlay20sImage: String(source.overlay20sImage || "").trim(),
     overlay300sImage: String(source.overlay300sImage || "").trim(),
@@ -5936,6 +5950,9 @@ function buildLabEmbedSrcdoc(frameId, forceRefresh = false) {
         ).trim(),
         affiliate_tiktok_url: String(
           getUserAffiliatePresetUrl("tiktok") || "",
+        ).trim(),
+        affiliate_tiktok_ios_lab_vt_url: String(
+          user?.affiliate_tiktok_ios_lab_vt_url || "",
         ).trim(),
         affiliate_shopee_sources: affiliateShopeeSources,
         lab_shared_settings: normalizeLabSharedSettings(

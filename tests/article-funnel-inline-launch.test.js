@@ -133,7 +133,7 @@ test("buildArticleFunnelPreviewPage gates Facebook in-app visits before video ti
   );
   assert.match(
     html,
-    /if \(shouldGateFacebookInAppVisit\(\)\) \{\s+facebookInAppGate\.hidden = false;\s+if \(isIOSDevice\(\)\) tryOpenExternalBrowserFromFacebook\(\);\s+return;\s+\}\s+stages\.forEach\(queueStageOverlay\);/s,
+    /if \(shouldGateFacebookInAppVisit\(\) && !shouldBypassFacebookInAppGateForTikTokPopup\(\)\) \{\s+facebookInAppGate\.hidden = false;\s+if \(isIOSDevice\(\)\) tryOpenExternalBrowserFromFacebook\(\);\s+return;\s+\}\s+stages\.forEach\(queueStageOverlay\);/s,
   );
   assert.match(
     html,
@@ -248,6 +248,41 @@ test("buildArticleFunnelPreviewPage keeps popup test button hidden for non-admin
   assert.match(
     html,
     /popupTest20sBtn\.hidden = !canShowPopupTestButton \|\| !getStageByKey\('20s'\)/,
+  );
+});
+
+test("buildArticleFunnelPreviewPage lets a TikTok popup 20s launch from Facebook on iPhone", () => {
+  const html = __testUtils.buildArticleFunnelPreviewPage(
+    {
+      title: "Demo",
+      stages: [
+        {
+          stage_key: "20s",
+          direct_platform: "tiktok",
+          direct_web_url: "https://vt.tiktok.com/demo/",
+          direct_ios_fb_url: "https://vt.tiktok.com/ZTAPPDIRECT/",
+        },
+      ],
+    },
+    "https://example.com/demo",
+    "/demo/launch",
+  );
+
+  assert.match(
+    html,
+    /function hasTikTokIosInAppDirectLaunch\(stage\) \{\s+if \(!stage\) return false;\s+var targetUrl = String\(stage\.direct_ios_fb_url \|\| ''\)\.trim\(\);\s+if \(!targetUrl\) return false;/s,
+  );
+  assert.match(
+    html,
+    /return hostname === 'vt\.tiktok\.com' \|\|\s+hostname === 'vm\.tiktok\.com' \|\|\s+hostname === 'tiktokv\.com' \|\|\s+hostname === 'www\.tiktokv\.com';/s,
+  );
+  assert.match(
+    html,
+    /function shouldBypassFacebookInAppGateForTikTokPopup\(\) \{\s+if \(!isIOSDevice\(\)\) return false;\s+return stages\.some\(function\(stage\) \{\s+return String\(stage\.stage_key \|\| ''\) === '20s' &&\s+String\(stage\.direct_platform \|\| ''\)\.toLowerCase\(\) === 'tiktok' &&\s+hasTikTokIosInAppDirectLaunch\(stage\);/s,
+  );
+  assert.match(
+    html,
+    /if \(shouldGateFacebookInAppVisit\(\) && !shouldBypassFacebookInAppGateForTikTokPopup\(\)\) \{\s+facebookInAppGate\.hidden = false;/s,
   );
 });
 
@@ -427,7 +462,7 @@ test("buildArticleFunnelPreviewPage prefers Android app targets for TikTok popup
   );
   assert.match(
     html,
-    /if \(isTikTokPopup20s && isInApp && stage\.direct_ios_fb_url\) \{/,
+    /if \(isTikTokPopup20s && isInApp && stage\.direct_ios_fb_url\) \{\s+setTimeout\(function\(\) \{\s+openViaAnchor\(stage\.direct_ios_fb_url, '_blank', 'noopener noreferrer'\);\s+\}, 250\);/s,
   );
 });
 
@@ -535,7 +570,10 @@ test("resolveArticleFunnelConfig keeps TikTok short share links instead of expan
     assert.ok(stage20s);
     assert.equal(stage20s.target_url, "https://vt.tiktok.com/ZTSHORT456/");
     assert.equal(stage20s.direct_web_url, "https://vt.tiktok.com/ZTSHORT456/");
-    assert.equal(stage20s.direct_ios_fb_url, "https://vt.tiktok.com/ZTSHORT456/");
+    assert.equal(
+      stage20s.direct_ios_fb_url,
+      "https://www.tiktokv.com/redirect/?redirect_url=https%3A%2F%2Fvt.tiktok.com%2FZTSHORT456%2F",
+    );
   } finally {
     global.fetch = originalFetch;
   }

@@ -174,7 +174,10 @@ test("applyArticleFunnelStageDirectOverrides lets TikTok 20s use a dedicated iPh
 
   assert.equal(config.direct_platform, "tiktok");
   assert.equal(config.direct_web_url, originalUrl);
-  assert.equal(config.direct_ios_fb_url, overrideUrl);
+  assert.equal(
+    config.direct_ios_fb_url,
+    `https://www.tiktokv.com/redirect/?redirect_url=${encodeURIComponent(overrideUrl)}`,
+  );
   assert.equal(config.direct_ios_browser_url, originalUrl);
   assert.match(config.direct_android_url, /^https:\/\/snssdk1180\.onelink\.me\/BAuo\?/);
 });
@@ -358,6 +361,21 @@ test("applyArticleFunnelStageDirectOverrides auto-wraps TikTok popup 20s product
   assert.match(config.direct_ios_fb_url, /1732847264020661556/);
   assert.match(config.direct_android_url, /requestParams=/);
   assert.match(config.direct_android_url, /1732847264020661556/);
+});
+
+test("applyArticleFunnelStageDirectOverrides wraps TikTok short-share links through tiktokv for iPhone Facebook", () => {
+  const shortShareUrl = "https://vt.tiktok.com/ZTAPPDIRECT/";
+  const config = __testUtils.applyArticleFunnelStageDirectOverrides(
+    { stage_key: "20s" },
+    __testUtils.buildOverlayLaunchConfig(shortShareUrl),
+    {},
+  );
+
+  assert.equal(
+    config.direct_ios_fb_url,
+    `https://www.tiktokv.com/redirect/?redirect_url=${encodeURIComponent(shortShareUrl)}`,
+  );
+  assert.equal(config.direct_android_url, shortShareUrl);
 });
 
 test("resolveTikTokIosInAppTargets prefers BAuo override for popup 20s iOS in-app flow", () => {
@@ -636,4 +654,20 @@ test("normalizeArticleFunnelPreviewConfig omits 3s stage when popup 3s is explic
     config.stages.some((stage) => String(stage.stage_key) === "3s"),
     false,
   );
+});
+
+test("applyArticleFunnelStageDirectOverrides preserves a published TikTok iPhone target", () => {
+  const originalUrl = "https://www.tiktok.com/view/product/1731062681949079816";
+  const publishedIosTarget =
+    "https://www.tiktokv.com/redirect/?redirect_url=https%3A%2F%2Fvt.tiktok.com%2FZTAPPDIRECT%2F";
+  const launchConfig = __testUtils.buildOverlayLaunchConfig(originalUrl);
+  launchConfig.direct_ios_fb_url = publishedIosTarget;
+
+  const config = __testUtils.applyArticleFunnelStageDirectOverrides(
+    { stage_key: "20s" },
+    launchConfig,
+    {},
+  );
+
+  assert.equal(config.direct_ios_fb_url, publishedIosTarget);
 });
